@@ -1,9 +1,20 @@
 <?php
 /*
- * UnDash - configuration.
- * config.json holds the layout (no secrets). secrets.json holds variables and per-service credentials; neither ever leaves
- * the server in clear text: stored secrets are sent to the browser as UND_KEEP and put back when the browser returns UND_KEEP.
+ * UnDash - configuration (schema version UND_SCHEMA, documented in docs/CONFIG.md).
+ *
+ * Where it lives
+ *   The configuration directory defaults to /mnt/user/appdata/undash and is set in /boot/config/plugins/undash/undash.cfg.
+ *   Every save is mirrored to the flash drive, so UnDash keeps working while the array (and with it /mnt/user) is stopped.
+ *   Reads prefer the configuration directory and fall back to the flash copy.
+ *
+ * Files in the configuration directory
+ *   config.json   layout, preferences, appearance (no secrets)
+ *   secrets.json  variables and per-widget credentials (never sent to the browser in clear text)
+ *   custom.css    the user's custom CSS
+ *   backups/      a snapshot of the three files before every save, import and restore (newest 15 kept)
  */
+
+define('UND_SCHEMA', 2);
 
 /** Every widget type: [label, credential fields it uses, needs url]. */
 function und_types() {
@@ -23,40 +34,262 @@ function und_types() {
   ];
 }
 
+/** Dashboard sections, in their default order. */
+function und_section_ids() { return ['overview', 'alerts', 'favorites', 'metrics', 'docker', 'vms', 'storage', 'services']; }
+
+/** System metrics the overview can show, in their default order. */
+function und_metric_ids() { return ['cpu', 'cores', 'temp', 'memory', 'swap', 'array', 'storage', 'network', 'uptime', 'load', 'host', 'os', 'docker', 'vms', 'ups']; }
+
 function und_default_config() {
-  $svc = function ($name, $type, $icon = '', $extra = []) { return $extra + ['id' => und_id(), 'name' => $name, 'type' => $type, 'icon' => $icon, 'href' => '', 'url' => '', 'fields' => [], 'options' => new stdClass()]; };
+  $svc = function ($name, $type, $icon = '') { return ['id' => und_id(), 'name' => $name, 'type' => $type, 'icon' => $icon, 'href' => '', 'url' => '', 'fields' => [], 'options' => new stdClass()]; };
+  $sections = [];
+  foreach (und_section_ids() as $id) $sections[] = ['id' => $id, 'visible' => true, 'width' => in_array($id, ['docker', 'vms'], true) ? 'full' : 'full', 'collapsed' => false];
+  $metrics = [];
+  foreach (und_metric_ids() as $id) $metrics[] = ['id' => $id, 'visible' => !in_array($id, ['cores', 'swap', 'ups'], true)];
   return [
-    'general' => ['title' => 'UnDash', 'refresh_system' => 5, 'refresh_services' => 15, 'disk_path' => '/mnt/user', 'search' => 'duckduckgo',
-                  'background' => '', 'blur' => 4, 'brightness' => 75, 'show_resources' => true, 'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'theme' => 'dark'],
+    'schema' => UND_SCHEMA,
+    'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo',
+                  'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
+    'appearance' => ['theme' => 'default', 'accent' => '#f15a2c', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'brightness' => 75, 'css_enabled' => true],
+    'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
+    'docker' => ['layout' => 'list', 'sort' => 'name', 'show' => ['status', 'cpu', 'memory', 'uptime', 'image', 'update'], 'hide_stopped' => false, 'items' => new stdClass()],
+    'vms' => ['layout' => 'list', 'show' => ['status', 'cpus', 'memory'], 'items' => new stdClass()],
     'groups' => [
-      ['id' => und_id(), 'name' => 'System', 'columns' => 4, 'header' => false, 'services' => [
-        $svc('System information', 'system_info', 'sh-unraid'), $svc('CPU Usage', 'cpu'), $svc('Memory Usage', 'memory'), $svc('UPS', 'ups')]],
-      ['id' => und_id(), 'name' => 'Server', 'columns' => 3, 'header' => true, 'services' => [
-        $svc('Docker', 'docker_summary', 'sh-docker'), $svc('Virtual machines', 'vm_summary', 'sh-qemu'), $svc('Storage', 'storage', 'sh-unraid')]],
+      ['id' => und_id(), 'name' => 'Services', 'columns' => 4, 'header' => true, 'services' => [$svc('UPS', 'ups')]],
     ],
   ];
 }
 
 function und_id() { return bin2hex(random_bytes(4)); }
 
-function und_load_config() {
-  $c = und_read_json(UND_CFG, null);
-  if (!is_array($c) || !isset($c['groups'])) return und_default_config();
-  return und_normalize($c);
+/* ---------- location ---------- */
+
+/** undash.cfg on the flash drive: CONFIG_DIR, PORT, BIND, STANDALONE. */
+function und_loc() {
+  $d = ['CONFIG_DIR' => '/mnt/user/appdata/undash', 'PORT' => '9099', 'BIND' => '0.0.0.0', 'STANDALONE' => 'yes'];
+  $v = @parse_ini_string(und_read_flash('undash.cfg'));
+  $v = is_array($v) ? $v + $d : $d;
+  if (!und_valid_cfg_dir($v['CONFIG_DIR'])) $v['CONFIG_DIR'] = $d['CONFIG_DIR'];
+  $p = (int)$v['PORT']; $v['PORT'] = (string)($p >= 1024 && $p <= 65535 ? $p : 9099);
+  if (!filter_var($v['BIND'], FILTER_VALIDATE_IP)) $v['BIND'] = '0.0.0.0';
+  $v['STANDALONE'] = $v['STANDALONE'] === 'no' ? 'no' : 'yes';
+  return $v;
 }
 
-/** Clamp and fill a config that came from disk or from the browser. */
+/** The configuration directory must be an absolute path on a user share, a pool or the flash plugin folder: never anything else. */
+function und_valid_cfg_dir($p) {
+  $p = (string)$p;
+  if (strpos($p, '..') !== false || strpos($p, "\0") !== false) return false;
+  return preg_match('#^(/mnt/[A-Za-z0-9_.-]+(/[A-Za-z0-9_. -]+)*|' . preg_quote(UND_DIR, '#') . ')/?$#', $p) === 1;
+}
+
+function und_read_flash($name) { $s = @file_get_contents(UND_DIR . '/' . $name); return $s === false ? '' : $s; }
+
+function und_save_loc(array $v) {
+  $cur = und_loc();
+  foreach (['CONFIG_DIR', 'PORT', 'BIND', 'STANDALONE'] as $k) if (isset($v[$k])) $cur[$k] = (string)$v[$k];
+  if (!und_valid_cfg_dir($cur['CONFIG_DIR'])) return ['error' => 'The configuration directory must be a path under /mnt (for example /mnt/user/appdata/undash).'];
+  $p = (int)$cur['PORT'];
+  if ($p < 1024 || $p > 65535) return ['error' => 'The port must be between 1024 and 65535.'];
+  if (!filter_var($cur['BIND'], FILTER_VALIDATE_IP)) return ['error' => 'The listen address must be an IP address (0.0.0.0 = all).'];
+  $txt = '';
+  foreach (['CONFIG_DIR', 'PORT', 'BIND', 'STANDALONE'] as $k) $txt .= $k . '="' . str_replace('"', '', $cur[$k]) . "\"\n";
+  @mkdir(UND_DIR, 0755, true);
+  if (@file_put_contents(UND_DIR . '/undash.cfg', $txt) === false) return ['error' => 'Could not write ' . UND_DIR . '/undash.cfg.'];
+  return ['ok' => true, 'loc' => $cur];
+}
+
+/**
+ * The directory UnDash writes to: the configured directory when it can be used, else the flash folder.
+ * A missing directory is created only when its parent exists (so a stopped array never creates a stray folder on the RAM disk).
+ */
+function und_store_dir() {
+  static $cache = [];
+  $dir = rtrim(und_loc()['CONFIG_DIR'], '/');
+  if (isset($cache[$dir])) return $cache[$dir];
+  $ok = false;
+  if ($dir === UND_DIR) $ok = true;
+  elseif (is_dir($dir)) $ok = is_writable($dir);
+  elseif (is_dir(dirname($dir)) && is_writable(dirname($dir)) && und_array_mounted($dir)) $ok = @mkdir($dir, 0755, true);
+  if ($ok) und_migrate_into($dir);
+  return $cache[$dir] = $ok ? $dir : UND_DIR;
+}
+
+/** /mnt/user (and pools) only exist while the array is started; before that /mnt is a plain RAM-disk folder. */
+function und_array_mounted($dir) {
+  if (isset($GLOBALS['UND_FS'])) return true;
+  if (strpos($dir, '/mnt/') !== 0) return true;
+  $top = '/mnt/' . explode('/', substr($dir, 5))[0];
+  foreach (@file('/proc/mounts', FILE_IGNORE_NEW_LINES) ?: [] as $l) { $c = explode(' ', $l); if (($c[1] ?? '') === $top) return true; }
+  return false;
+}
+
+/** First use of a configuration directory: copy the flash files into it, never over existing ones. */
+function und_migrate_into($dir) {
+  if ($dir === UND_DIR) return;
+  foreach (['config.json', 'secrets.json', 'custom.css'] as $f) {
+    if (!is_file("$dir/$f") && is_file(UND_DIR . "/$f")) { @copy(UND_DIR . "/$f", "$dir/$f"); if ($f === 'secrets.json') @chmod("$dir/$f", 0600); }
+  }
+}
+
+function und_file($name) {
+  $d = und_store_dir();
+  return is_file("$d/$name") || $d === UND_DIR ? "$d/$name" : UND_DIR . "/$name";
+}
+
+/** Write one file to the configuration directory and mirror it to the flash drive. */
+function und_store_write($name, $content, $private = false) {
+  $dirs = array_unique([und_store_dir(), UND_DIR]);
+  $ok = false;
+  foreach ($dirs as $i => $d) {
+    @mkdir($d, 0755, true);
+    $f = "$d/$name";
+    if (is_file($f) && @file_get_contents($f) === $content) { if ($i === 0) $ok = true; continue; }
+    $tmp = $f . '.tmp' . getmypid();
+    $w = @file_put_contents($tmp, $content) !== false;
+    if ($w && $private) @chmod($tmp, 0600);
+    $w = $w && @rename($tmp, $f);
+    if (!$w) @unlink($tmp);
+    if ($i === 0) $ok = $w;
+  }
+  return $ok;
+}
+
+/* ---------- backups ---------- */
+
+function und_backup_dir() { return und_store_dir() . '/backups'; }
+
+/** Snapshot config, secrets and CSS before they change. Returns the backup id. */
+function und_backup($reason) {
+  $dir = und_backup_dir();
+  @mkdir($dir, 0700, true);
+  $id = date('Ymd-His') . '-' . substr(und_id(), 0, 4);
+  $snap = ['undash_backup' => 1, 'schema' => UND_SCHEMA, 'created' => time(), 'reason' => und_clip((string)$reason, 80),
+           'config' => und_read_json(und_file('config.json'), null), 'secrets' => und_read_json(und_file('secrets.json'), null), 'css' => (string)@file_get_contents(und_file('custom.css'))];
+  if ($snap['config'] === null && $snap['secrets'] === null && $snap['css'] === '') return null;
+  @file_put_contents("$dir/$id.json", json_encode($snap, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+  @chmod("$dir/$id.json", 0600);
+  $all = glob("$dir/*.json") ?: [];
+  sort($all);
+  foreach (array_slice($all, 0, max(0, count($all) - 15)) as $old) @unlink($old);
+  return $id;
+}
+
+function und_backups() {
+  $out = [];
+  foreach (array_reverse(glob(und_backup_dir() . '/*.json') ?: []) as $f) {
+    $j = und_read_json($f, []);
+    $out[] = ['id' => basename($f, '.json'), 'created' => (int)($j['created'] ?? filemtime($f)), 'reason' => (string)($j['reason'] ?? ''), 'schema' => (int)($j['schema'] ?? 0)];
+  }
+  return $out;
+}
+
+function und_restore($id) {
+  if (!preg_match('/^\d{8}-\d{6}-[a-f0-9]{4}$/', (string)$id)) return ['error' => 'Unknown backup.'];
+  $f = und_backup_dir() . "/$id.json";
+  $j = und_read_json($f, null);
+  if (!is_array($j) || empty($j['undash_backup'])) return ['error' => 'That backup cannot be read.'];
+  und_backup('before restoring ' . $id);
+  if (is_array($j['config'])) und_save_config($j['config'], false);
+  if (is_array($j['secrets'])) und_save_secrets($j['secrets']);
+  und_save_css((string)($j['css'] ?? ''), false);
+  return ['ok' => true];
+}
+
+/* ---------- load / save ---------- */
+
+function und_load_config() {
+  $c = und_read_json(und_file('config.json'), null);
+  if (!is_array($c) || !isset($c['groups'])) return und_normalize(und_default_config());
+  return und_normalize(und_migrate($c));
+}
+
+/** Bring an older schema up to date. Version 1 (2026.10.29) had general.theme, refresh_system and no dashboard sections. */
+function und_migrate(array $c) {
+  $v = (int)($c['schema'] ?? 1);
+  if ($v < 2) {
+    $g = isset($c['general']) && is_array($c['general']) ? $c['general'] : [];
+    $theme = (string)($g['theme'] ?? 'dark');
+    $c['appearance'] = ['theme' => $theme === 'light' ? 'light' : 'default', 'background' => (string)($g['background'] ?? ''), 'blur' => $g['blur'] ?? 4, 'brightness' => $g['brightness'] ?? 75];
+    if (isset($g['refresh_system'])) $g['refresh'] = 2;     // the new default; version 1 only allowed 5 s or more
+    if (isset($g['show_resources']) && !$g['show_resources']) $c['dashboard']['sections'] = [['id' => 'metrics', 'visible' => false]];
+    unset($g['theme'], $g['background'], $g['blur'], $g['brightness'], $g['refresh_system'], $g['show_resources']);
+    $c['general'] = $g;
+    // the old "System" group of Glances-style cards is now the built-in overview
+    foreach ((array)($c['groups'] ?? []) as $i => $gr) {
+      $native = 0;
+      foreach ((array)($gr['services'] ?? []) as $s) if (in_array($s['type'] ?? '', ['system_info', 'cpu', 'memory'], true)) $native++;
+      if ($native && $native === count($gr['services'])) unset($c['groups'][$i]);
+    }
+    $c['groups'] = array_values((array)($c['groups'] ?? []));
+    $c['schema'] = 2;
+  }
+  return $c;
+}
+
+function und_hex($c, $d) { return preg_match('/^#[0-9a-fA-F]{6}$/', (string)$c) ? strtolower($c) : $d; }
+
+/** Clamp and fill a config that came from disk, the browser or an import. Unknown keys are dropped. */
 function und_normalize(array $c) {
   $d = und_default_config();
   $g = (isset($c['general']) && is_array($c['general']) ? $c['general'] : []) + $d['general'];
+  $g = array_intersect_key($g, $d['general']);
   $g['title'] = und_clip(trim((string)$g['title']), 60) ?: 'UnDash';
-  foreach (['refresh_system' => [2, 300], 'refresh_services' => [5, 3600], 'blur' => [0, 40], 'brightness' => [10, 100], 'os_check_hours' => [1, 168]] as $k => $r) $g[$k] = max($r[0], min($r[1], (int)$g[$k]));
-  foreach (['show_resources', 'show_search', 'show_date'] as $k) $g[$k] = !empty($g[$k]);
-  $g['disk_path'] = preg_match('#^/mnt/[A-Za-z0-9_./ -]*$#', (string)$g['disk_path']) ? (string)$g['disk_path'] : '/mnt/user';
-  $g['theme'] = in_array($g['theme'], ['dark', 'light', 'midnight'], true) ? $g['theme'] : 'dark';
-  $g['search'] = in_array($g['search'], ['duckduckgo', 'google', 'bing', 'startpage', 'brave'], true) ? $g['search'] : 'duckduckgo';
-  $g['background'] = preg_match('#^(https?://|/)[^"\'<>\s]*$#', (string)$g['background']) ? (string)$g['background'] : '';
+  foreach (['refresh' => [1, 300], 'refresh_services' => [5, 3600], 'os_check_hours' => [1, 168]] as $k => $r) $g[$k] = max($r[0], min($r[1], (int)$g[$k]));
+  foreach (['show_search', 'show_date'] as $k) $g[$k] = !empty($g[$k]);
+  $g['background_poll'] = in_array($g['background_poll'], ['slow', 'pause', 'normal'], true) ? $g['background_poll'] : 'slow';
+  $g['disk_path'] = preg_match('#^/mnt/[A-Za-z0-9_./ -]*$#', (string)$g['disk_path']) && strpos($g['disk_path'], '..') === false ? (string)$g['disk_path'] : '/mnt/user';
+  $g['search'] = in_array($g['search'], ['duckduckgo', 'google', 'bing', 'startpage', 'brave', 'none'], true) ? $g['search'] : 'duckduckgo';
   $g['ups_name'] = preg_match('/^[A-Za-z0-9_.@:-]{1,64}$/', (string)$g['ups_name']) ? (string)$g['ups_name'] : 'ups';
+
+  $a = (isset($c['appearance']) && is_array($c['appearance']) ? $c['appearance'] : []) + $d['appearance'];
+  $a = array_intersect_key($a, $d['appearance']);
+  $a['theme'] = in_array($a['theme'], ['default', 'light', 'amoled'], true) ? $a['theme'] : 'default';
+  $a['accent'] = und_hex($a['accent'], '#f15a2c');
+  $a['density'] = $a['density'] === 'compact' ? 'compact' : 'comfortable';
+  $a['background'] = preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
+  $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(10, min(100, (int)$a['brightness']));
+  $a['css_enabled'] = !empty($a['css_enabled']);
+
+  // sections and metrics: keep the user's order, drop unknown ids, append new ones at the end
+  $db = isset($c['dashboard']) && is_array($c['dashboard']) ? $c['dashboard'] : [];
+  $order = function ($list, $known, $defaults, $fields) {
+    $out = []; $seen = [];
+    foreach ((array)$list as $x) {
+      if (!is_array($x) || !in_array($x['id'] ?? '', $known, true) || isset($seen[$x['id']])) continue;
+      $seen[$x['id']] = 1;
+      $def = null; foreach ($defaults as $dd) if ($dd['id'] === $x['id']) $def = $dd;
+      $row = ['id' => $x['id']];
+      foreach ($fields as $f => $type) {
+        $v = array_key_exists($f, $x) ? $x[$f] : $def[$f];
+        $row[$f] = $type === 'bool' ? !empty($v) : (in_array($v, $type, true) ? $v : $def[$f]);
+      }
+      $out[] = $row;
+    }
+    foreach ($defaults as $dd) if (!isset($seen[$dd['id']])) $out[] = $dd;
+    return $out;
+  };
+  $sections = $order($db['sections'] ?? [], und_section_ids(), $d['dashboard']['sections'], ['visible' => 'bool', 'width' => ['full', 'half'], 'collapsed' => 'bool']);
+  $metrics = $order($db['metrics'] ?? [], und_metric_ids(), $d['dashboard']['metrics'], ['visible' => 'bool']);
+
+  $items = function ($list, $extra = []) {
+    $out = [];
+    foreach ((array)$list as $name => $p) {
+      if (!is_array($p) || !is_string($name) || $name === '' || strlen($name) > 200 || preg_match('/[\x00-\x1f]/', $name)) continue;
+      $row = ['label' => und_clip(trim((string)($p['label'] ?? '')), 60), 'icon' => und_clip((string)($p['icon'] ?? ''), 300), 'description' => und_clip(trim((string)($p['description'] ?? '')), 200),
+              'hidden' => !empty($p['hidden']), 'favorite' => !empty($p['favorite'])];
+      if ($row['label'] === '' && $row['icon'] === '' && $row['description'] === '' && !$row['hidden'] && !$row['favorite']) continue;
+      $out[$name] = $row;
+    }
+    return $out ? $out : new stdClass();
+  };
+  $dk = (isset($c['docker']) && is_array($c['docker']) ? $c['docker'] : []) + $d['docker'];
+  $docker = ['layout' => $dk['layout'] === 'cards' ? 'cards' : 'list', 'sort' => in_array($dk['sort'], ['name', 'status', 'cpu', 'memory'], true) ? $dk['sort'] : 'name',
+             'show' => array_values(array_intersect((array)$dk['show'], ['status', 'cpu', 'memory', 'uptime', 'image', 'update', 'ports', 'restarts', 'network'])),
+             'hide_stopped' => !empty($dk['hide_stopped']), 'items' => $items($dk['items'] ?? [])];
+  $vm = (isset($c['vms']) && is_array($c['vms']) ? $c['vms'] : []) + $d['vms'];
+  $vms = ['layout' => $vm['layout'] === 'cards' ? 'cards' : 'list', 'show' => array_values(array_intersect((array)$vm['show'], ['status', 'cpus', 'memory', 'os', 'autostart'])), 'items' => $items($vm['items'] ?? [])];
+
   $types = und_types(); $groups = [];
   foreach ((array)($c['groups'] ?? []) as $gr) {
     if (!is_array($gr)) continue;
@@ -67,25 +300,61 @@ function und_normalize(array $c) {
       $opt = isset($s['options']) && is_array($s['options']) ? $s['options'] : [];
       $out['services'][] = ['id' => preg_match('/^[a-f0-9]{8}$/', (string)($s['id'] ?? '')) ? $s['id'] : und_id(), 'name' => und_clip(trim((string)($s['name'] ?? '')), 60) ?: $types[$s['type']][0],
         'type' => $s['type'], 'icon' => und_clip((string)($s['icon'] ?? ''), 300), 'href' => und_clip((string)($s['href'] ?? ''), 500), 'url' => und_clip((string)($s['url'] ?? ''), 500),
+        'description' => und_clip(trim((string)($s['description'] ?? '')), 200), 'hidden' => !empty($s['hidden']), 'favorite' => !empty($s['favorite']), 'span' => (int)($s['span'] ?? 1) === 2 ? 2 : 1,
         'fields' => array_values(array_filter(array_map('strval', (array)($s['fields'] ?? [])), function ($f) { return preg_match('/^[A-Za-z0-9_]{1,40}$/', $f); })),
         'options' => $opt ? $opt : new stdClass()];
     }
     $groups[] = $out;
   }
-  return ['general' => $g, 'groups' => $groups];
+  return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics], 'docker' => $docker, 'vms' => $vms, 'groups' => $groups];
 }
 
-function und_save_config(array $c) { return und_write_json(UND_CFG, und_normalize($c)); }
+function und_save_config(array $c, $backup = true) {
+  if ($backup) und_backup('settings saved');
+  return und_store_write('config.json', json_encode(und_normalize($c), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR));
+}
+
+/** Every widget id in a config (used to drop credentials of widgets that were removed). */
+function und_service_ids(array $cfg) { $ids = []; foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) $ids[] = $s['id']; return $ids; }
+
+/* ---------- custom CSS ---------- */
+
+/**
+ * Custom CSS is only ever CSS: it is inserted with textContent inside the app's own <style>, nested under .und so it cannot
+ * restyle Unraid's page. Things that could load or run something else are removed: @import, url() to other sites,
+ * legacy expression() / behavior / -moz-binding, javascript: and a closing </style>.
+ */
+function und_sanitize_css($css) {
+  $css = str_replace("\0", '', (string)$css);
+  if (strlen($css) > 102400) $css = substr($css, 0, 102400);
+  $css = preg_replace('#</\s*style#i', '', $css);
+  $css = preg_replace('/@import[^;]*;?/i', '/* @import removed */', $css);
+  $css = preg_replace('/expression\s*\(|behavior\s*:|-moz-binding|javascript\s*:/i', '/* removed */', $css);
+  $css = preg_replace_callback('/url\(\s*([\'"]?)(.*?)\1\s*\)/i', function ($m) {
+    return preg_match('#^(data:image/|/|\./|[A-Za-z0-9_.-]+\.(png|jpe?g|gif|svg|webp|woff2?)$|https://)#i', trim($m[2])) && !preg_match('/^javascript:/i', trim($m[2])) ? $m[0] : 'none';
+  }, $css);
+  return $css;
+}
+
+function und_load_css() { return und_sanitize_css((string)@file_get_contents(und_file('custom.css'))); }
+
+function und_save_css($css, $backup = true) {
+  if ($backup) und_backup('custom CSS saved');
+  return und_store_write('custom.css', und_sanitize_css($css));
+}
 
 /* ---------- secrets ---------- */
 
 function und_secrets() {
-  $s = isset($GLOBALS['UND_TEST_SECRETS']) ? $GLOBALS['UND_TEST_SECRETS'] : und_read_json(UND_SECRETS, []);
+  $s = isset($GLOBALS['UND_TEST_SECRETS']) ? $GLOBALS['UND_TEST_SECRETS'] : und_read_json(und_file('secrets.json'), []);
   return ['vars' => isset($s['vars']) && is_array($s['vars']) ? $s['vars'] : [], 'svc' => isset($s['svc']) && is_array($s['svc']) ? $s['svc'] : []];
 }
-function und_save_secrets(array $s) { return und_write_json(UND_SECRETS, $s, true); }
+function und_save_secrets(array $s) {
+  $s = ['vars' => isset($s['vars']) && is_array($s['vars']) ? $s['vars'] : [], 'svc' => isset($s['svc']) && is_array($s['svc']) ? $s['svc'] : []];
+  return und_store_write('secrets.json', json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), true);
+}
 
-function und_var_is_secret($name) { return preg_match('/KEY|TOKEN|PASS|SECRET/i', $name) === 1; }
+function und_var_is_secret($name) { return preg_match('/KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i', $name) === 1; }
 
 /** What the browser may see: secret variables and stored credentials are replaced by UND_KEEP. */
 function und_secrets_view(array $s) {
@@ -94,7 +363,7 @@ function und_secrets_view(array $s) {
   $svc = [];
   foreach ($s['svc'] as $id => $c) foreach (['key', 'password', 'username'] as $f) {
     if (!isset($c[$f]) || $c[$f] === '') continue;
-    $svc[$id][$f] = ($f === 'username' || und_has($c[$f], '{{')) ? $c[$f] : UND_KEEP;
+    $svc[$id][$f] = ($f === 'username' || preg_match('/^\{\{\s*[A-Za-z0-9_]+\s*\}\}$/', $c[$f])) ? $c[$f] : UND_KEEP;
   }
   return ['vars' => $vars, 'svc' => (object)$svc];
 }
@@ -152,9 +421,33 @@ function und_find_service(array $cfg, $group, $name, $type = null) {
   return null;
 }
 
-/** The layout sent to the browser: hrefs resolved (they are links the user clicks anyway), nothing else. */
+/** The layout sent to the browser: hrefs resolved (they are links the user clicks anyway), nothing secret. */
 function und_layout_view(array $cfg) {
   $vars = und_secrets()['vars'];
-  foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) $s['href_resolved'] = und_resolve($s['href'], $vars);
+  foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) {
+    $h = und_resolve($s['href'], $vars);
+    // a link that would carry a secret variable is not resolved for the browser
+    if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s['href'], $m)) foreach ($m[1] as $n) if (und_var_is_secret($n)) $h = '';
+    $s['href_resolved'] = preg_match('#^(https?://|/)#i', $h) ? $h : '';
+  }
   return $cfg;
+}
+
+/* ---------- validation ---------- */
+
+/** Problems a user can fix: widgets without a URL, unknown variables, calendar sources that no longer exist. */
+function und_validate(array $cfg) {
+  $issues = []; $vars = und_secrets()['vars']; $types = und_types(); $ids = array_flip(und_service_ids($cfg));
+  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) {
+    $where = '"' . $s['name'] . '" in "' . $g['name'] . '"';
+    if (!empty($types[$s['type']][2]) && trim($s['url']) === '') $issues[] = ['level' => 'warn', 'msg' => "$where has no API URL."];
+    foreach (['url', 'href'] as $f) if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s[$f], $m)) foreach ($m[1] as $n) {
+      $n = strtoupper($n);
+      if (!isset($vars[$n]) && $n !== 'UNRAID_IP') $issues[] = ['level' => 'bad', 'msg' => "$where uses {{" . $n . '}}, which is not defined.'];
+      elseif (isset($vars[$n]) && $vars[$n] === '') $issues[] = ['level' => 'warn', 'msg' => "$where uses {{" . $n . '}}, which is empty.'];
+    }
+    if ($s['type'] === 'calendar') foreach ((array)($s['options']['integrations'] ?? []) as $in) if (!isset($ids[$in['service'] ?? ''])) $issues[] = ['level' => 'warn', 'msg' => "$where refers to a Radarr/Sonarr widget that was removed."];
+  }
+  if (und_store_dir() !== rtrim(und_loc()['CONFIG_DIR'], '/')) $issues[] = ['level' => 'warn', 'msg' => 'The configuration directory ' . und_loc()['CONFIG_DIR'] . ' is not available (is the array started?). Settings are read from and saved to the flash drive until it is.'];
+  return $issues;
 }

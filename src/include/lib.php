@@ -16,8 +16,6 @@ define('UND_VERSION', '@@VERSION@@');
 define('UND_NAME',    'UnDash');
 if (!defined('UND_ROOT')) define('UND_ROOT',    '/usr/local/emhttp/plugins/undash');
 if (!defined('UND_DIR')) define('UND_DIR',     '/boot/config/plugins/undash');
-define('UND_CFG',     UND_DIR . '/config.json');
-define('UND_SECRETS', UND_DIR . '/secrets.json');
 if (!defined('UND_TMP')) define('UND_TMP',     '/tmp/undash');
 define('UND_DM',      '/usr/local/emhttp/plugins/dynamix.docker.manager');
 define('UND_UPDSTATUS', '/var/lib/docker/unraid-update-status.json');
@@ -161,7 +159,7 @@ unset($__ident);
 
 } // UND_LIB_LOADED
 
-foreach (['config', 'system', 'docker', 'vm', 'services', 'import'] as $__m) {
+foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops'] as $__m) {
   $__f = __DIR__ . '/' . $__m . '.php';
   if (is_file($__f)) require_once $__f;
 }

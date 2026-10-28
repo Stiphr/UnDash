@@ -143,9 +143,9 @@ function und_hp_convert($servicesYaml, $settingsYaml = '', $envText = '') {
               if (in_array($t, ['emby', 'jellyfin'], true) && isset($w['enableBlocks']) && !$w['enableBlocks']) $s['options']['hide_blocks'] = true;
             } elseif ($t === 'glances') {
               $m = (string)($w['metric'] ?? 'info');
-              $s['type'] = $m === 'cpu' ? 'cpu' : ($m === 'memory' ? 'memory' : (strpos($m, 'fs') === 0 || strpos($m, 'disk') === 0 ? 'storage' : 'system_info'));
-              $s['url'] = '';
-              if (!in_array($m, ['info', 'cpu', 'memory'], true)) $warn[] = "\"$sName\": Glances metric \"$m\" is shown with UnDash's built-in " . $s['type'] . ' card.';
+              // the dashboard's own system overview shows these now
+              $warn[] = "\"$sName\" (Glances $m) is covered by UnDash's built-in system overview and was not imported as a widget.";
+              continue;
             } elseif ($t === 'calendar') {
               $s['type'] = 'calendar';
               $s['options'] = ['max_events' => (int)($w['maxEvents'] ?? 8), 'previous_days' => (int)($w['previousDays'] ?? 0), 'days_ahead' => 30, 'integrations' => []];
@@ -192,10 +192,11 @@ function und_hp_convert($servicesYaml, $settingsYaml = '', $envText = '') {
   foreach (array_unique(array_map('strtoupper', $m[1])) as $n) $vars[$n] = $env[$n] ?? null;
   foreach ($vars as $n => $v) if ($v === null && preg_match('/SERVER_IP$/', $n)) $vars[$n] = und_server_ip();
   $count = 0; foreach ($groups as $gg) $count += count($gg['services']);
+  // only the widgets are replaced: appearance, dashboard sections and container/VM preferences stay as they are
   $cfg = und_load_config();
-  $g = $cfg['general'];
-  if (!empty($settings['title'])) $g['title'] = (string)$settings['title'];
-  return ['config' => ['general' => $g, 'groups' => $groups], 'secrets' => $secrets, 'vars' => $vars, 'warnings' => $warn, 'groups' => count($groups), 'services' => $count];
+  if (!empty($settings['title'])) $cfg['general']['title'] = (string)$settings['title'];
+  $cfg['groups'] = $groups;
+  return ['config' => $cfg, 'secrets' => $secrets, 'vars' => $vars, 'warnings' => $warn, 'groups' => count($groups), 'services' => $count];
 }
 
 /** Save an import: replaces the layout; keeps stored variable values unless the .env gave a new one. */
