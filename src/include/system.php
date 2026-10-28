@@ -4,15 +4,20 @@
  * Rates (CPU, network) are the difference to the previous sample, kept in /tmp/undash so every poll is cheap.
  */
 
+/** Jiffies for the whole CPU ("cpu") and for every core ("cpu0", "cpu1" ...). */
 function und_cpu_sample() {
+  $out = [];
   foreach (explode("\n", und_read('/proc/stat')) as $l) {
-    if (und_starts($l, 'cpu ')) {
-      $p = array_map('intval', preg_split('/\s+/', trim(substr($l, 4))));
-      $idle = ($p[3] ?? 0) + ($p[4] ?? 0);
-      return ['total' => array_sum(array_slice($p, 0, 8)), 'idle' => $idle];
-    }
+    if (!preg_match('/^cpu(\d*)\s+(.+)$/', $l, $m)) continue;
+    $p = array_map('intval', preg_split('/\s+/', trim($m[2])));
+    $out[$m[1] === '' ? 'all' : (int)$m[1]] = [array_sum(array_slice($p, 0, 8)), ($p[3] ?? 0) + ($p[4] ?? 0)];
   }
-  return null;
+  return $out ?: null;
+}
+
+function und_cpu_pct($now, $prev) {
+  $dTot = $now[0] - $prev[0]; $dIdle = $now[1] - $prev[1];
+  return $dTot > 0 ? max(0, min(100, round(100 * ($dTot - $dIdle) / $dTot, 1))) : 0;
 }
 
 function und_net_iface() {
@@ -47,22 +52,24 @@ function und_rates() {
     $now = microtime(true); $cpu = und_cpu_sample(); $net = $if ? und_net_sample($if) : null;
   }
   $dt = max(0.05, $now - $prev['t']);
-  $pct = null;
-  if ($cpu && !empty($prev['cpu'])) {
-    $dTot = $cpu['total'] - $prev['cpu']['total']; $dIdle = $cpu['idle'] - $prev['cpu']['idle'];
-    $pct = $dTot > 0 ? max(0, min(100, round(100 * ($dTot - $dIdle) / $dTot, 1))) : 0;
+  $pct = null; $cores = [];
+  if ($cpu && !empty($prev['cpu']['all'])) {
+    $pct = und_cpu_pct($cpu['all'], $prev['cpu']['all']);
+    foreach ($cpu as $k => $v) if ($k !== 'all' && isset($prev['cpu'][$k])) $cores[] = und_cpu_pct($v, $prev['cpu'][$k]);
   }
   $rx = $tx = null;
   if ($net && !empty($prev['net']) && ($prev['if'] ?? '') === $if) { $rx = max(0, ($net['rx'] - $prev['net']['rx']) / $dt); $tx = max(0, ($net['tx'] - $prev['net']['tx']) / $dt); }
   und_write_json($f, ['t' => $now, 'cpu' => $cpu, 'net' => $net, 'if' => $if]);
-  return ['cpu' => $pct, 'rx' => $rx, 'tx' => $tx, 'iface' => $if];
+  return ['cpu' => $pct, 'cores' => $cores, 'rx' => $rx, 'tx' => $tx, 'iface' => $if];
 }
 
 function und_meminfo() {
   $m = [];
   foreach (explode("\n", und_read('/proc/meminfo')) as $l) if (preg_match('/^(\w+):\s+(\d+)/', $l, $x)) $m[$x[1]] = (float)$x[2] * 1024;
   $total = $m['MemTotal'] ?? 0; $avail = $m['MemAvailable'] ?? ($m['MemFree'] ?? 0);
-  return ['total' => $total, 'used' => max(0, $total - $avail), 'free' => $avail, 'pct' => $total ? round(100 * ($total - $avail) / $total, 1) : null];
+  $st = $m['SwapTotal'] ?? 0; $sf = $m['SwapFree'] ?? 0;
+  return ['total' => $total, 'used' => max(0, $total - $avail), 'free' => $avail, 'pct' => $total ? round(100 * ($total - $avail) / $total, 1) : null,
+          'swap_total' => $st, 'swap_used' => max(0, $st - $sf)];
 }
 
 function und_cpu_model() {
@@ -100,20 +107,34 @@ function und_disk($path) {
   return ['path' => $path, 'total' => $t, 'free' => $f, 'used' => $t - $f, 'pct' => round(100 * ($t - $f) / $t, 1)];
 }
 
-/** Everything the top bar and the System cards need, in one call. */
+/** Everything the overview needs, in one cheap call (no Docker, no network). */
 function und_system(array $cfg) {
   $r = und_rates(); $mem = und_meminfo(); $v = und_var_ini();
   $hist = und_read_json(und_tmp('hist.json'), []);
   $now = time();
-  if ($r['cpu'] !== null && (empty($hist) || $now - (int)end($hist)[0] >= 2)) { $hist[] = [$now, $r['cpu'], $mem['used']]; $hist = array_slice($hist, -90); und_write_json(und_tmp('hist.json'), $hist); }
+  if ($r['cpu'] !== null && (empty($hist) || $now - (int)end($hist)[0] >= 2)) { $hist[] = [$now, $r['cpu'], $mem['used'], $r['rx'], $r['tx']]; $hist = array_slice($hist, -150); und_write_json(und_tmp('hist.json'), $hist); }
   $load = preg_split('/\s+/', trim(und_read('/proc/loadavg')));
   return [
-    'now' => $now, 'name' => (string)($v['NAME'] ?? gethostname()), 'os' => und_os_version(), 'kernel' => trim((string)preg_replace('/^Linux version (\S+).*$/s', '$1', und_read('/proc/version'))),
-    'cpu' => ['pct' => $r['cpu'], 'model' => und_cpu_model(), 'threads' => und_cpu_threads(), 'temp' => und_cpu_temp(), 'load' => array_map('floatval', array_slice($load, 0, 3))],
+    'now' => $now, 'name' => (string)($v['NAME'] ?? gethostname()), 'ip' => und_server_ip(), 'os' => und_os_version(), 'kernel' => trim((string)preg_replace('/^Linux version (\S+).*$/s', '$1', und_read('/proc/version'))),
+    'cpu' => ['pct' => $r['cpu'], 'cores' => $r['cores'], 'model' => und_cpu_model(), 'threads' => und_cpu_threads(), 'temp' => und_cpu_temp(), 'load' => array_map('floatval', array_slice($load, 0, 3))],
     'mem' => $mem, 'net' => ['rx' => $r['rx'], 'tx' => $r['tx'], 'iface' => $r['iface']], 'disk' => und_disk($cfg['general']['disk_path']),
-    'uptime' => und_uptime(), 'array' => ['state' => (string)($v['mdState'] ?? ''), 'resync' => (int)($v['mdResync'] ?? 0), 'resync_pos' => (float)($v['mdResyncPos'] ?? 0), 'resync_size' => (float)($v['mdResyncSize'] ?? 0)],
-    'hist' => $hist, 'os_update' => und_os_cached(),
+    'uptime' => und_uptime(), 'array' => und_array_info($v), 'hist' => $hist, 'os_update' => und_os_cached(),
   ];
+}
+
+/** Array state plus totals and a health summary from Unraid's disks.ini (cheap: a RAM-disk file). */
+function und_array_info(array $v) {
+  $st = und_storage(); $size = 0; $free = 0; $bad = 0; $hot = 0; $errors = 0;
+  foreach ($st['array'] as $d) { $size += $d['size']; $free += $d['free']; }
+  foreach (array_merge($st['parity'], $st['array'], $st['pools']) as $d) {
+    if ($d['health'] === 'bad') $bad++;
+    if ($d['temp'] !== null && $d['temp'] >= 50) $hot++;
+    $errors += $d['errors'];
+  }
+  $resync = (int)($v['mdResync'] ?? 0);
+  return ['state' => (string)($v['mdState'] ?? ''), 'resync' => $resync, 'resync_pct' => $resync && (float)($v['mdResyncSize'] ?? 0) > 0 ? round(100 * (float)$v['mdResyncPos'] / (float)$v['mdResyncSize'], 1) : null,
+          'resync_action' => (string)($v['mdResyncAction'] ?? ''), 'size' => $size, 'free' => $free, 'disks' => count($st['array']), 'parity' => count($st['parity']), 'pools' => $st['pools'],
+          'bad' => $bad, 'hot' => $hot, 'errors' => $errors, 'mover' => is_file('/var/run/mover.pid')];
 }
 
 /* ---------- array & pools ---------- */
@@ -125,7 +146,10 @@ function und_storage() {
   foreach ($d as $name => $x) {
     if (!is_array($x) || ($x['status'] ?? '') === 'DISK_NP' || ($x['status'] ?? '') === 'DISK_NP_DSBL') continue;
     $row = ['name' => (string)$name, 'device' => (string)($x['device'] ?? ''), 'status' => (string)($x['status'] ?? ''), 'temp' => is_numeric($x['temp'] ?? '') ? (int)$x['temp'] : null,
-            'size' => (float)($x['fsSize'] ?? 0) * 1024, 'free' => (float)($x['fsFree'] ?? 0) * 1024, 'fs' => (string)($x['fsType'] ?? ''), 'spun' => ($x['spundown'] ?? '0') !== '1'];
+            'size' => (float)($x['fsSize'] ?? 0) * 1024, 'free' => (float)($x['fsFree'] ?? 0) * 1024, 'fs' => (string)($x['fsType'] ?? ''), 'spun' => ($x['spundown'] ?? '0') !== '1',
+            'errors' => (int)($x['numErrors'] ?? 0), 'color' => (string)($x['color'] ?? '')];
+    // Unraid's own disk colour: green = ok, yellow = emulated / being rebuilt, red = disabled; plus read/write errors
+    $row['health'] = ($row['status'] !== 'DISK_OK' || strpos($row['color'], 'red') === 0) ? 'bad' : ((strpos($row['color'], 'yellow') === 0 || $row['errors'] > 0) ? 'warn' : 'ok');
     $type = (string)($x['type'] ?? '');
     if ($type === 'Parity') $out['parity'][] = $row;
     elseif ($type === 'Data') $out['array'][] = $row;

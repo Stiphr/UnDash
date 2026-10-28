@@ -1,0 +1,47 @@
+#!/bin/bash
+# UnDash - start / stop the standalone dashboard port (default 9099).
+# Settings come from /boot/config/plugins/undash/undash.cfg (PORT, BIND, STANDALONE); they are read, never sourced.
+EM=/usr/local/emhttp/plugins/undash
+CFG=/boot/config/plugins/undash/undash.cfg
+PIDF=/var/run/undash.pid
+
+val() { sed -n "s/^$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}\$/\1/p" "$CFG" 2>/dev/null | tail -1; }
+PORT=$(val PORT); BIND=$(val BIND); ON=$(val STANDALONE)
+[[ "$PORT" =~ ^[0-9]{4,5}$ ]] && (( PORT >= 1024 && PORT <= 65535 )) || PORT=9099
+[[ "$BIND" =~ ^[0-9a-fA-F.:]+$ ]] || BIND=0.0.0.0
+[[ "$ON" == "no" ]] || ON=yes
+
+running() { [[ -f $PIDF ]] && kill -0 "$(cat $PIDF)" 2>/dev/null && grep -q "undash/standalone" "/proc/$(cat $PIDF)/cmdline" 2>/dev/null; }
+
+start() {
+  [[ $ON == yes ]] || { echo "UnDash standalone port is turned off"; return 0; }
+  running && { echo "UnDash already listening (pid $(cat $PIDF))"; return 0; }
+  if ss -ltn "sport = :$PORT" 2>/dev/null | grep -q LISTEN; then
+    echo "Port $PORT is already in use; UnDash's standalone port was not started" | tee -a /var/log/undash.log
+    logger -t undash "port $PORT is already in use; standalone dashboard not started"
+    return 1
+  fi
+  mkdir -p /tmp/undash
+  # 4 workers so slow app APIs or a log download never block the dashboard; access logs are not kept, errors go to syslog
+  PHP_CLI_SERVER_WORKERS=4 setsid nohup /usr/bin/php -d error_log=syslog -d display_errors=0 -d expose_php=0 \
+    -S "$BIND:$PORT" -t "$EM/standalone" "$EM/standalone/router.php" > /dev/null 2>&1 &
+  echo $! > $PIDF
+  sleep 0.5
+  running && echo "UnDash listening on $BIND:$PORT" || { echo "UnDash standalone port failed to start"; return 1; }
+}
+
+stop() {
+  if running; then
+    pkill -P "$(cat $PIDF)" 2>/dev/null; kill "$(cat $PIDF)" 2>/dev/null; sleep 0.3
+    echo "UnDash standalone port stopped"
+  fi
+  rm -f $PIDF
+}
+
+case "$1" in
+  start) start ;;
+  stop) stop ;;
+  restart) stop; start ;;
+  status) running && echo "running on $BIND:$PORT (pid $(cat $PIDF))" || echo "stopped" ;;
+  *) echo "usage: $0 start|stop|restart|status"; exit 1 ;;
+esac
