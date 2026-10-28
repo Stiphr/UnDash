@@ -1,0 +1,13 @@
+Menu="UnDash:1"
+Title="UnDash"
+Tag="tachometer"
+Markdown="false"
+Tabs="false"
+---
+<?php
+$und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js');
+?>
+<link rel="stylesheet" href="/plugins/undash/assets/app.css<?=$und_v?>">
+<div id="und" class="und"><div class="und-loading">Loading UnDash&hellip;</div></div>
+<script>window.UND_CSRF = <?=json_encode($var['csrf_token'] ?? '')?>;</script>
+<script src="/plugins/undash/assets/app.js<?=$und_v?>"></script>
