@@ -1,0 +1,8 @@
+###2026.10.29
+- First release: a Homepage-style dashboard that runs as a native Unraid plugin (no Docker container).
+- System cards and top bar from the kernel and Unraid's own state: CPU, memory, disk, network, temperature, uptime, UPS (NUT or apcupsd).
+- Docker: start, stop, restart, pause/resume, update (Unraid's own update_container), update all, check for updates, live logs.
+- VMs: start, stop, force stop, restart, pause/resume, hibernate, VNC console.
+- Unraid OS: shows the installed version, checks for a newer release and installs it from the dashboard.
+- Widgets for Radarr, Sonarr, Lidarr, Readarr, Bazarr, Prowlarr, Overseerr/Jellyseerr, Autobrr, Wizarr, qBittorrent, SABnzbd, Emby, Jellyfin, Plex, Tautulli, AdGuard, Pi-hole, Nginx Proxy Manager, Immich, PeaNUT, calendars and custom JSON APIs.
+- Import from a gethomepage/homepage services.yaml, settings.yaml and .env.
