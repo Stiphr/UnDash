@@ -1,3 +1,8 @@
+###2026.10.31a
+- Apps (Plex, Emby, Tautulli, AdGuard, Immich …) now sit right below Arr Stack and Downloads as one grid of compact cards; group titles and the old Services shortcut links are off by default (Settings > Dashboard > Apps).
+- Containers: a compact multi-column grid instead of a full-width table, showing the running containers by default. Pick your own set with "Selected" (⋯ menu or Settings), choose the columns and which details each container shows. Table and card layouts are still there.
+- Settings schema 4; existing settings are migrated.
+
 ###2026.10.30b
 - Redesign: a compact System overview bar first (click a tile for details: per-core CPU, history, disks), then Media, Arr Stack and Download Clients, then containers, VMs and other apps.
 - Media: upcoming movies (with cinema / digital / physical release), upcoming episodes, recently added movies and episodes, as poster rows from Radarr and Sonarr.
