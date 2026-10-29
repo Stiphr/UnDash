@@ -165,10 +165,12 @@ $cfg['groups'][] = ['id' => 'abcdef01', 'name' => 'Apps', 'columns' => 3, 'heade
   ['id' => 'abcdef02', 'name' => 'Radarr', 'type' => 'radarr', 'url' => 'http://admin:hunter2@10.0.0.2:7878/?apikey=PLAINKEY123&x=1', 'href' => 'http://10.0.0.2:7878', 'fields' => [], 'options' => []],
   ['id' => 'abcdef03', 'name' => 'Custom', 'type' => 'customapi', 'url' => 'http://{{SERVER_IP}}/api?token={{TOKEN_VAR}}', 'href' => '', 'fields' => [], 'options' => ['headers' => ['X-Api-Key' => 'HEADERSECRET', 'X-Ref' => '{{SOME_KEY}}']]]]];
 und_save_config($cfg);
-und_save_secrets(['vars' => ['SERVER_IP' => '10.0.0.2', 'RADARR_API_KEY' => 'VARSECRET1', 'QBIT_PASSWORD' => 'VARSECRET2'], 'svc' => ['abcdef02' => ['key' => 'SVCSECRET', 'username' => 'u', 'password' => 'PWSECRET']]]);
+und_save_secrets(['vars' => ['SERVER_IP' => '10.0.0.2', 'RADARR_API_KEY' => 'VARSECRET1', 'QBIT_PASSWORD' => 'VARSECRET2', 'NPM_USERNAME' => 'LOGINNAME1', 'QBIT_LOGIN' => 'LOGINNAME2', 'CONTACT' => 'someone@example.org'],
+  'svc' => ['abcdef02' => ['key' => 'SVCSECRET', 'username' => 'u', 'password' => 'PWSECRET']]]);
 und_save_css('.card{color:red}');
 $red = json_encode(und_export('redacted'));
-foreach (['VARSECRET1', 'VARSECRET2', 'SVCSECRET', 'PWSECRET', 'hunter2', 'PLAINKEY123', 'HEADERSECRET'] as $s) t("redacted export has no $s", strpos($red, $s) === false);
+foreach (['VARSECRET1', 'VARSECRET2', 'SVCSECRET', 'PWSECRET', 'hunter2', 'PLAINKEY123', 'HEADERSECRET', 'LOGINNAME1', 'LOGINNAME2', 'someone@example.org'] as $s) t("redacted export has no $s", strpos($red, $s) === false);
+t('login and e-mail variables are kept by name, only emptied', strpos($red, '"NPM_USERNAME":""') !== false && strpos($red, '"CONTACT":""') !== false);
 t('redacted export keeps layout', strpos($red, '"Radarr"') !== false && strpos($red, '"Apps"') !== false);
 t('redacted export keeps non-secret variables', strpos($red, '10.0.0.2') !== false);
 t('redacted export keeps variable references', strpos($red, '{{TOKEN_VAR}}') !== false && strpos($red, '{{SOME_KEY}}') !== false);
@@ -201,6 +203,17 @@ t('import took a backup first', (function () { foreach (und_backups() as $b) if 
 $fullArr = json_decode($full, true); $fullArr['secrets']['abcdef02']['key'] = 'NEWKEY';
 und_import_apply(json_encode($fullArr));
 t('full import replaces credentials', und_secrets()['svc']['abcdef02']['key'] === 'NEWKEY');
+// the Unraid API address: a shared (redacted) layout must not redirect a working connection, a restore (full) may
+$sx = und_secrets(); $sx['unraid'] = ['url' => 'http://10.9.9.9/graphql', 'key' => 'MYKEY']; und_save_secrets($sx);
+$redArr['unraid'] = ['url' => 'http://192.168.1.10/graphql'];
+und_import_apply(json_encode($redArr));
+t('a redacted import keeps the existing Unraid API address and key', und_secrets()['unraid']['url'] === 'http://10.9.9.9/graphql' && und_secrets()['unraid']['key'] === 'MYKEY');
+$sx = und_secrets(); $sx['unraid'] = ['url' => '', 'key' => '']; und_save_secrets($sx);
+und_import_apply(json_encode($redArr));
+t('... and fills it in when none is set', und_secrets()['unraid']['url'] === 'http://192.168.1.10/graphql');
+$fullArr['unraid'] = ['url' => 'http://10.1.1.1/graphql', 'key' => 'RESTOREDKEY'];
+und_import_apply(json_encode($fullArr));
+t('a full import (restore) replaces the address and key', und_secrets()['unraid']['url'] === 'http://10.1.1.1/graphql' && und_secrets()['unraid']['key'] === 'RESTOREDKEY');
 t('layout-only (old export) files are accepted', !isset(und_import_parse(json_encode(['groups' => [], 'general' => ['title' => 'x']]))['error']));
 
 /* ---------------- Docker ---------------- */

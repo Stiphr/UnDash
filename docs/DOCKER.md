@@ -48,8 +48,11 @@ Without the update permissions the dashboard still shows everything; the buttons
 
 ## 2. Install the container
 
-**With the template** (Docker > Add Container > Template URL):
-`https://raw.githubusercontent.com/Stiphr/UnDash/main/templates/undash.xml`
+**With the template**: download it into Unraid's user templates (Unraid terminal), then Docker > Add Container > Template > **UnDash**:
+
+```bash
+wget -O /boot/config/plugins/dockerMan/templates-user/my-UnDash.xml https://raw.githubusercontent.com/Stiphr/UnDash/main/templates/undash.xml
+```
 
 | Setting | Default | Notes |
 |---|---|---|
