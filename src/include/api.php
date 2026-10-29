@@ -128,6 +128,7 @@ switch ($action) {
          'loc' => $loc, 'store' => und_store_dir(), 'flash' => UND_DIR, 'metrics' => und_metric_ids(), 'sections' => und_section_ids()]);
   }
   case 'save': {
+    $lk = und_config_lock();
     $cfg = $J('config');
     if (!$cfg || !isset($cfg['groups'])) fail('Nothing to save.');
     $norm = und_normalize($cfg);
@@ -138,6 +139,7 @@ switch ($action) {
   }
   /* small preference changes made on the dashboard itself (favourite, hide, collapse, layout): no backup, no secrets */
   case 'prefs': {
+    $lk = und_config_lock();
     $cfg = und_load_config();
     $kind = $P('kind'); $key = $P('key'); $val = $J('value') ?: [];
     if ($kind === 'docker' || $kind === 'vms') {

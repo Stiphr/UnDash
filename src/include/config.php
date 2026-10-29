@@ -376,6 +376,14 @@ function und_normalize(array $c) {
           'docker' => $docker, 'vms' => $vms, 'groups' => $groups];
 }
 
+/** Serialises read-change-write of config.json (two quick dashboard clicks must not lose one). Released when the request ends. */
+function und_config_lock() {
+  @mkdir(und_tmp('locks'), 0755, true);
+  $fp = @fopen(und_tmp('locks/config.lock'), 'c');
+  if ($fp) flock($fp, LOCK_EX);
+  return $fp;
+}
+
 function und_save_config(array $c, $backup = true) {
   if ($backup) und_backup('settings saved');
   return und_store_write('config.json', json_encode(und_normalize($c), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR));

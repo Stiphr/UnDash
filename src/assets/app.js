@@ -347,20 +347,26 @@
   }
   function balanceHalves() {
     (R.packs || []).forEach(function (p) {
-      var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
-      p.w.classList.toggle('one', !!one);
-      unlevel(p);                                           // measure the natural heights, not the stretched ones
-      p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
-      var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
-      var move = want.join() !== now.join();
-      if (move && !one) {
-        // only move when it clearly helps, so sections do not jump back and forth
-        var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
-        if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
-      }
-      if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
-      if (!one) level(p);
+      // measuring resets the media lists for a moment; keep where the user scrolled them
+      var lists = [].slice.call(p.w.querySelectorAll('.mlist')), tops = lists.map(function (l) { return l.scrollTop; });
+      balancePack(p);
+      lists.forEach(function (l, i) { if (l.scrollTop !== tops[i]) l.scrollTop = tops[i]; });
     });
+  }
+  function balancePack(p) {
+    var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
+    p.w.classList.toggle('one', !!one);
+    unlevel(p);                                           // measure the natural heights, not the stretched ones
+    p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
+    var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
+    var move = want.join() !== now.join();
+    if (move && !one) {
+      // only move when it clearly helps, so sections do not jump back and forth
+      var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
+      if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
+    }
+    if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
+    if (!one) level(p);
   }
   /* Smart height: the shorter column ends level with the taller one. Media in the shorter column shows more items
      (its lists grow); otherwise the column's last box stretches. */
@@ -512,6 +518,9 @@
     root.querySelectorAll('.w[data-name]').forEach(function (w) { var m = matches(w.getAttribute('data-name')); w.style.display = m ? '' : 'none'; w.setAttribute('data-match', m && S.q ? '1' : '0'); });
     root.querySelectorAll('.grp').forEach(function (gr) { var any = [].some.call(gr.querySelectorAll('.w[data-name]'), function (w) { return w.style.display !== 'none'; }); gr.style.display = any || !S.q ? '' : 'none'; });
     root.querySelectorAll('.rowi[data-name],.tile[data-name]').forEach(function (r) { r.setAttribute('data-match', S.q ? '1' : '0'); });
+    // Arr Stack rows and download clients filter by app name; media lists repaint from what they already loaded
+    root.querySelectorAll('.aitem[data-name],.card.dl[data-name]').forEach(function (el) { el.style.display = matches(el.getAttribute('data-name')) ? '' : 'none'; });
+    if (R.media) Object.keys(R.media.w).forEach(function (k) { var x = R.media.w[k]; if (x.last) paintMedia(k, x.last); });
   }
 
   /* ================= sections ================= */
@@ -830,7 +839,7 @@
     var sig = JSON.stringify(items.map(function (x) { return [x[0], x[1].name, x[1].state, x[1].health, x[1].webui, x[1].ops, S.busy[(x[0] === 'd' ? 'd:' : 'v:') + x[1].name], x[0] === 's' ? null : pref(x[0] === 'd' ? 'docker' : 'vms', x[1].name)]; }));
     if (r.sig === sig) return; r.sig = sig;
     clear(r.list);
-    if (!items.length) { r.list.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, S.q ? 'No favorites match the filter.' : 'Star containers, VMs or services (⋯ menu or Settings) to pin them here.')); return; }
+    if (!items.length) { r.list.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, S.q ? 'No favorites match the filter.' : 'Star containers, VMs or services (gear menu or Settings) to pin them here.')); return; }
     items.forEach(function (x) {
       var it = x[1], el;
       if (x[0] === 'd') {
@@ -908,7 +917,7 @@
     r.filters = h('div', { class: 'seg', role: 'group', 'aria-label': 'Show containers' });
     DFILTERS.forEach(function (f) {
       if (f[0] === 'selected' && !D.selected.length) return;
-      var b = h('button', { type: 'button', class: S.fd === f[0] ? 'on' : '', 'aria-pressed': S.fd === f[0] ? 'true' : 'false', title: f[0] === 'selected' ? 'The containers you picked (⋯ > Show in "Selected")' : null, onclick: function () {
+      var b = h('button', { type: 'button', class: S.fd === f[0] ? 'on' : '', 'aria-pressed': S.fd === f[0] ? 'true' : 'false', title: f[0] === 'selected' ? 'The containers you picked (gear > Show in "Selected")' : null, onclick: function () {
         S.fd = f[0]; S.fdSet = true; [].forEach.call(r.filters.childNodes, function (x) { x.className = x === b ? 'on' : ''; x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); r.fSig = null; paintDocker(S.live || {});
       } }, f[1]);
       r.filters.appendChild(b);
@@ -1339,6 +1348,7 @@
   }
   function paintMedia(k, j) {
     var x = R.media && R.media.w[k]; if (!x) return;
+    x.last = j;
     var sig = JSON.stringify([j, S.q]); if (x.sig === sig) return; x.sig = sig;
     clear(x.row); clear(x.link);
     if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
@@ -1831,7 +1841,7 @@
         h('div', { class: 'inl', style: { 'margin-bottom': '6px' } }, pf,
           btn('Select running', function () { D2.selected = all.filter(function (x) { return x.state === 'running'; }).map(function (x) { return x.name; }); txt(selCount, D2.selected.length + ' selected'); drawPick(); dirty(); }, 'sm'),
           btn('Clear', function () { D2.selected = []; txt(selCount, '0 selected'); drawPick(); dirty(); }, 'sm ghost')),
-        pick, h('div', { class: 'hint' }, 'Also from the dashboard: ⋯ > Show in "Selected".'))));
+        pick, h('div', { class: 'hint' }, 'Also from the dashboard: gear > Show in "Selected".'))));
     var A2 = c.apps;
     b.appendChild(set('Apps', 'Plex, Emby, Immich, AdGuard and your other apps, below Arr Stack and Downloads.', h('div', { class: 'grid2' },
       F('Columns', sIn(A2, 'columns', dirty, [[0, 'Automatic'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']]))),

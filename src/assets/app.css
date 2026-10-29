@@ -116,7 +116,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 
 /* alerts */
 .und .alerts{display:flex;flex-direction:column;gap:6px}
-.und .alert{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-left:3px solid var(--warn);background:var(--panel);border-radius:6px;padding:8px 12px;font-size:13px;flex-wrap:wrap}
+.und .alert{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-left:3px solid var(--warn);background:var(--panel);border-radius:var(--radius);padding:8px 12px;font-size:13px;flex-wrap:wrap}
 .und .alert.bad{border-left-color:var(--bad)}.und .alert.info{border-left-color:var(--accent)}.und .alert.ok{border-left-color:var(--ok)}
 .und .alert .grow{min-width:0}.und .alert>svg{color:var(--ok)}
 
@@ -248,7 +248,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0 18px}
 .und .switch{display:flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0;font-size:13.5px}
 .und .inl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.und .olist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.und .olist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 .und .olist .oi{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-bottom:1px solid var(--line);background:var(--panel);min-height:42px;flex-wrap:wrap}
 .und .olist .oi:last-child{border-bottom:0}.und .olist .oi .t{flex:1;min-width:120px}
 .und .olist .oi img{width:22px;height:22px;object-fit:contain;flex:none}
@@ -277,7 +277,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .toast.bad{border-left-color:var(--bad)}
 .und .toast.act{display:flex;align-items:center;gap:12px}.und .toast.act>span{flex:1;min-width:0}
 .und .ign-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.und .ign-bar input{flex:1 1 220px;min-width:0}
-.und .olist.ign-list{border:0;border-radius:0}.und .ign-list .oi.ign{border:1px solid var(--line);border-radius:6px;margin-bottom:6px}
+.und .olist.ign-list{border:0;border-radius:0}.und .ign-list .oi.ign{border:1px solid var(--line);border-radius:var(--radius);margin-bottom:6px}
 .und .ign-h{margin:14px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .und .oi.ign{align-items:center;gap:10px}.und .oi.ign .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.und .oi.ign.expired{opacity:.6}
 .und .ign-dur{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px}
@@ -510,7 +510,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   .und .cgrid,.und .agrid{grid-template-columns:1fr}
   .und .ci .acts .btn.ic.sm{width:34px;min-width:34px!important;min-height:34px!important}
 }
-.und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--panel-2)}
+.und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);padding:6px 10px;background:var(--panel-2)}
 .und .switch.pk{margin:3px 0;font-size:13px;min-width:0}
 
 /* ---------- Fluent Dark: frosted glass with blue accents (from Homepage custom.css) ---------- */
