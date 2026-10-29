@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "2026.10.31e">
+<!ENTITY version "2026.11.01">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,12 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###2026.11.01
+- Less wasted space: the System tiles and the Apps cards now fill the whole row, app cards are only as tall as their content, and sections sit closer together.
+- Half-width sections that follow each other (e.g. Media, Arr Stack, Downloads) are stacked in two balanced columns, so a short section no longer leaves a gap beside a tall one.
+- Media shows four columns from a narrower width; in narrow columns the Radarr / Sonarr link shrinks to its icon so the title fits.
+- The Launcher section is removed (a saved Launcher entry is dropped from the layout).
+
 ###2026.10.31e
 - System tiles are separate cards with bigger numbers; CPU, memory, network and disk temperature show their recent history as a small chart under the value.
 - New Launcher section (right after System): one-click icons for every app with a link, with a status dot taken from the container of the same name. Hide or move it in Settings > Dashboard.
@@ -102,7 +108,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '2026.10.31e');
+define('UND_VERSION', '2026.11.01');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -271,7 +277,7 @@ foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>ad1560a215e453c7d67dbba08e23a54a52269b4838c10db018ee0ad10a9aa79c</SHA256>
+<SHA256>8056bc59d6924b6f095afd25b81ea8c7e5941f976eac60a941176615adc7c32f</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -312,7 +318,7 @@ function und_types() {
 }
 
 /** Dashboard sections, in their default order. */
-function und_section_ids() { return ['overview', 'launcher', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'apps', 'docker', 'vms']; }
+function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'apps', 'docker', 'vms']; }
 
 /** System metrics the overview can show, in their default order. */
 function und_metric_ids() { return ['cpu', 'memory', 'storage', 'network', 'health', 'disks', 'uptime', 'ups', 'cores', 'swap', 'load', 'path', 'docker', 'vms']; }
@@ -589,13 +595,6 @@ function und_normalize(array $c) {
     return $out;
   };
   $sections = $order($db['sections'] ?? [], und_section_ids(), $d['dashboard']['sections'], ['visible' => 'bool', 'width' => ['full', 'half'], 'collapsed' => 'bool']);
-  // a section added in a later version goes where it belongs by default, not at the bottom
-  $had = array_column(array_filter((array)($db['sections'] ?? []), 'is_array'), 'id');
-  if ($had && !in_array('launcher', $had, true)) {
-    $l = null; foreach ($sections as $i => $x) if ($x['id'] === 'launcher') { $l = $x; array_splice($sections, $i, 1); break; }
-    $at = 0; foreach ($sections as $i => $x) if ($x['id'] === 'overview') $at = $i + 1;
-    array_splice($sections, $at, 0, [$l]);
-  }
   $metrics = $order($db['metrics'] ?? [], und_metric_ids(), $d['dashboard']['metrics'], ['visible' => 'bool']);
 
   $items = function ($list, $extra = []) {
@@ -817,7 +816,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>ee3cf261f7410dc73d72a92d07e504c763df12baecc2fb0117a623acaefab627</SHA256>
+<SHA256>f040982bf140fc1b340d7334ad1707e9afeda78a810a8d87b54eea8a4752cf89</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -3706,6 +3705,9 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 /* ---------- sections ---------- */
 .und .sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px var(--gap);align-items:start}
 .und .sec{grid-column:1/-1;min-width:0}.und .sec.half{grid-column:auto}
+.und .hcols{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--gap);align-items:start;min-width:0}
+.und .hcol{display:flex;flex-direction:column;gap:16px;min-width:0}
+.und .hcols.one{grid-template-columns:minmax(0,1fr)}.und .hcols.one>.hcol:empty{display:none}
 .und .sec-h{display:flex;align-items:center;gap:8px;margin:0 0 8px;min-height:30px;flex-wrap:wrap}
 .und .sec-h h2{display:flex;align-items:center;gap:8px;font:600 15px/1.3 var(--font);color:var(--title);margin:0;padding:0;border:0;background:none;text-transform:none;letter-spacing:0}
 .und .sec-h h2 button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border-radius:4px}
@@ -3775,7 +3777,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .tile .stats{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;flex-wrap:wrap}
 .und .tile .acts{justify-content:flex-start;flex-wrap:wrap}
 .und .more{display:flex;justify-content:center;padding:8px}
-.und .favs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:var(--gap)}
+.und .favs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
 .und .fav{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:9px 10px;min-width:0;box-shadow:var(--shadow)}
 .und .fav img,.und .fav .ph{width:26px;height:26px;border-radius:5px;object-fit:contain;flex:none;background:var(--panel-2)}
 .und .fav .t{flex:1;min-width:0}
@@ -3939,13 +3941,13 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 /* ================= 2026.10.30 redesign ================= */
 .und [hidden]{display:none!important}
 .und .t-ok{color:var(--ok)}.und .t-warn{color:var(--warn)}.und .t-bad{color:var(--bad)}
-.und .sections{gap:18px var(--gap)}
+.und .sections{gap:16px var(--gap)}
 .und .sec-h{margin-bottom:6px;min-height:28px}
 .und .sec-h h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .und .sec-h h2 button{color:var(--text)}
 
 /* stats bar */
-.und .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px}
+.und .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
 .und .stats.is-stale{opacity:.6}
 .und button.stat{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;padding:11px 13px 13px;background:var(--panel);cursor:pointer;position:relative;min-width:0;min-height:92px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;isolation:isolate}
 .und button.stat>.k,.und button.stat>.v,.und button.stat>.s{position:relative;z-index:1}
@@ -3977,29 +3979,18 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .detail .cores{height:60px;margin:0;grid-auto-columns:minmax(4px,1fr)}
 .und .stale{font-size:12px;color:var(--warn);margin:0 0 6px}
 
-/* launcher: app icons with a status dot */
-.und .launch{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px}
-.und a.lnk{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px 8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);color:var(--text);text-decoration:none!important;min-width:0;transition:border-color .15s,background .15s}
-.und a.lnk:hover{border-color:var(--accent);background:var(--panel-2)}
-.und a.lnk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.und .lic{position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center}
-.und .lic img{width:34px;height:34px;object-fit:contain}
-.und .lph{width:34px;height:34px;border-radius:8px;background:var(--panel-2);color:var(--muted);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;text-transform:uppercase}
-.und .ldot{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;border:2px solid var(--panel);background:var(--off)}
-.und .ldot.ok{background:var(--ok)}.und .ldot.warn{background:var(--warn)}.und .ldot.bad{background:var(--bad)}
-.und .ln{font-size:11.5px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
-.und a.lnk:hover .ln{color:var(--title)}
-
 /* media: four equal columns, by the section's own width (a half-width section gets 2 or 1) */
 .und .mbody{container-type:inline-size}
 .und .media{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--gap)}
 @container (min-width:560px){.und .media{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@container (min-width:1080px){.und .media{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@container (min-width:880px){.und .media{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .und .mw{padding:10px 0 6px;min-width:0;display:flex;flex-direction:column}
 .und .mw .mh{display:flex;align-items:center;gap:8px;padding:0 12px 8px;min-width:0}
 .und .mw .mh h3{margin:0;font:600 13px/1.3 var(--font);color:var(--title);border:0;padding:0;background:none;text-transform:none;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .mw .mh .count{font-size:12px;color:var(--muted)}
 .und .mw .mh .btn{flex:none}
+.und .mw{container-type:inline-size}
+@container (max-width:280px){.und .mw .mh .btn .lbl{display:none}.und .mw .mh{padding-right:8px}}
 .und .mlist{display:flex;flex-direction:column;overflow-y:auto;max-height:var(--media-h,372px);min-height:120px;padding:0 6px;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
 .und .mlist:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .und .mlist>.empty{margin:auto 0;padding:16px 8px;text-align:center}
@@ -4080,7 +4071,6 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 @media (max-width:640px){
   .und .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
   .und button.stat{min-height:76px;padding:9px 10px 10px}.und .stat .v{font-size:18px}
-  .und .launch{grid-template-columns:repeat(auto-fill,minmax(64px,1fr))}
   .und .ai{display:none}.und .an{min-width:0;flex:1}
   .und .adet{padding-left:12px}
 }
@@ -4106,10 +4096,11 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .ci.st-exited .cname,.und .ci.st-created .cname,.und .ci.st-dead .cname{color:var(--muted);font-weight:500}
 
 /* apps: compact cards in one grid */
-.und .agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--gap)}
+.und .agrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;align-items:start}
 .und .agrid.fixed{grid-template-columns:repeat(var(--ac),minmax(0,1fr))}
 .und .card.ac{padding:10px 12px;min-height:0}
-.und .ac .ch{margin-bottom:8px;min-height:26px;gap:8px}
+.und .ac .cb{flex:0 0 auto}.und .ac .blocks{margin-top:0}
+.und .ac .ch{margin-bottom:8px;min-height:24px;gap:8px}
 .und .ac .ch .aico{width:22px;height:22px;padding:0;background:transparent}
 .und .ac .ch .nm{font-size:13.5px;font-weight:600}
 .und .ac .ch .sub{margin-left:auto}
@@ -4119,7 +4110,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .ac .blk:first-child{border-left:0}
 .und .ac .blk .v{font-size:14px;font-weight:600;color:var(--title)}
 .und .ac .blk .l{font-size:9.5px;font-weight:600;color:var(--muted);letter-spacing:.02em;white-space:normal;line-height:1.2;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.und .ac .blk .v{font-size:15px}
+.und .ac .blk .v{font-size:14px}
 .und .ac .streams{margin-top:0}
 .und .ac .stream{font-size:12px}
 .und .ac button.err{padding:5px 8px!important;text-align:left}
@@ -4134,7 +4125,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--panel-2)}
 .und .switch.pk{margin:3px 0;font-size:13px;min-width:0}
 ]]></INLINE>
-<SHA256>a3ed40a80c9e598f3a3ce2278bd1fc7e58bd7fcf9eac89d2b8226f604510e8dc</SHA256>
+<SHA256>7e558d5e31b768aa350e15b99b394932419eadae61d976a072f137170b86c60e</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -4410,8 +4401,49 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     root.appendChild(R.sections);
     S.L.dashboard.sections.forEach(function (sec) { if (sec.visible) buildSection(sec); });
     if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Dashboard.'));
+    packHalves();
     paintAll(); paintLive();
   }
+
+  /* Half-width sections next to each other go into two columns, each section into the shorter one (in order), so a short
+     section does not leave a hole beside a tall one. Re-balanced when content loads or a section collapses. */
+  var NARROW = window.matchMedia ? window.matchMedia('(max-width:1100px)') : null;
+  function packHalves() {
+    if (S.packRO) S.packRO.disconnect();
+    R.packs = [];
+    var kids = [].slice.call(R.sections.children), run = [];
+    function flush() {
+      if (run.length >= 2) {
+        var w = h('div', { class: 'hcols' }), c0 = h('div', { class: 'hcol' }), c1 = h('div', { class: 'hcol' });
+        R.sections.insertBefore(w, run[0]); w.appendChild(c0); w.appendChild(c1);
+        run.forEach(function (el, i) { (i % 2 ? c1 : c0).appendChild(el); });
+        R.packs.push({ w: w, cols: [c0, c1], items: run.slice() });
+      }
+      run = [];
+    }
+    kids.forEach(function (el) { if (el.classList.contains('half')) run.push(el); else flush(); });
+    flush();
+    if (!R.packs.length || !window.ResizeObserver) return;
+    S.packRO = new ResizeObserver(function () { clearTimeout(S.packT); S.packT = setTimeout(balanceHalves, 150); });
+    R.packs.forEach(function (p) { p.items.forEach(function (el) { S.packRO.observe(el); }); });
+    balanceHalves();
+  }
+  function balanceHalves() {
+    (R.packs || []).forEach(function (p) {
+      var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
+      p.w.classList.toggle('one', !!one);
+      p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
+      var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
+      if (want.join() === now.join()) return;
+      if (!one) {
+        // only move when it clearly helps, so sections do not jump back and forth
+        var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
+        if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) return;
+      }
+      p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
+    });
+  }
+  if (NARROW) (NARROW.addEventListener ? NARROW.addEventListener('change', function () { balanceHalves(); }) : NARROW.addListener(balanceHalves));
 
   function webSearch(q) {
     var E = { duckduckgo: 'https://duckduckgo.com/?q=', google: 'https://www.google.com/search?q=', bing: 'https://www.bing.com/search?q=', startpage: 'https://www.startpage.com/do/search?q=', brave: 'https://search.brave.com/search?q=' };
@@ -4419,7 +4451,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   }
   function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
-  var TITLES = { overview: 'System', launcher: 'Launcher', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
+  var TITLES = { overview: 'System', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
   function buildSection(sec) {
     var tools = h('div', { class: 'tools' });
     var count = h('span', { class: 'count' });
@@ -4439,7 +4471,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   /* which parts the live request needs, so hidden sections cost nothing */
   function parts() {
     var p = ['system'];
-    if (R.docker || R.favorites || R.alerts || R.launcher || tileOn('docker')) p.push('docker');
+    if (R.docker || R.favorites || R.alerts || tileOn('docker')) p.push('docker');
     if (R.vms || R.favorites || tileOn('vms')) p.push('vms');
     if (tileOn('ups')) p.push('ups');
     return p.join(',');
@@ -4507,11 +4539,12 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var y = S.live || {};
     if (R.overview && open('overview')) paintOverview(y);
     if (R.alerts) paintAlerts(y);
-    if (R.launcher && open('launcher')) paintLauncher(y);
     if (R.favorites && open('favorites')) paintFavs(y);
     if (R.docker && open('docker')) paintDocker(y);
     if (R.vms && open('vms')) paintVms(y);
     paintCounts(y);
+    // ResizeObserver does not run in a background tab; the live refresh catches up instead
+    if (R.packs && R.packs.length) balanceHalves();
   }
   function paintCounts(y) {
     if (R.docker && y.docker && y.docker.containers) {
@@ -4834,36 +4867,6 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
       ignHold({ del: ids });
       if (okMsg) toast(okMsg);
       return j;
-    });
-  }
-
-  /* ---- launcher: one icon per app with a link, the dot comes from the container of the same name ---- */
-  BUILD.launcher = function (r) {
-    r.grid = h('div', { class: 'launch', role: 'list' }); r.items = [];
-    S.L.groups.forEach(function (g) { g.services.forEach(function (s) {
-      if (s.hidden || !s.href_resolved) return;
-      var dot = h('span', { class: 'ldot', hidden: true }), u = iconUrl(s.icon);
-      var a = h('a', { class: 'lnk', role: 'listitem', href: s.href_resolved, target: '_blank', rel: 'noopener', title: s.name + (s.description ? ' · ' + s.description : ''), 'data-name': s.name },
-        h('span', { class: 'lic' }, u ? img(u, 'aico') : h('span', { class: 'lph' }, s.name.slice(0, 2)), dot), h('span', { class: 'ln' }, s.name));
-      r.items.push({ s: s, a: a, dot: dot, keys: lkeys(s.name) }); r.grid.appendChild(a);
-    }); });
-    if (!r.items.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'Apps with a link (Settings > Apps) show up here as one-click icons.'));
-    txt(r.count, r.items.length ? String(r.items.length) : '');
-    r.body.appendChild(r.grid);
-  };
-  /* "Radarr Movies" matches a container called radarr; "Seerr Requests" matches seerr; a longer container name only when nothing matches exactly */
-  function lkeys(n) { var a = String(n).toLowerCase(), k = [a.replace(/[^a-z0-9]/g, '')], f = a.split(/[\s_.-]+/)[0].replace(/[^a-z0-9]/g, ''); if (f && f !== k[0]) k.push(f); return k; }
-  function paintLauncher(y) {
-    var r = R.launcher, cs = (y.docker && y.docker.containers) || [], by = {};
-    cs.forEach(function (c) { by[c.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = c; });
-    r.items.forEach(function (x) {
-      var c = null; x.keys.some(function (k) { return (c = by[k] || null); });
-      // then a container named the app plus a short extra word: Emby -> EmbyServer, Adguard -> AdGuard-Home (but not Unraid -> Unraid-Cloudflared-Tunnel)
-      if (!c && x.keys[0].length >= 4) { var best = ''; Object.keys(by).forEach(function (k) { if (k.indexOf(x.keys[0]) === 0 && k.length - x.keys[0].length <= 6 && (!best || k.length < best.length)) best = k; }); c = best ? by[best] : null; }
-      var st = !c ? '' : c.health === 'unhealthy' || c.state === 'restarting' ? 'bad' : c.state === 'running' ? (c.health === 'starting' ? 'warn' : 'ok') : c.state === 'paused' ? 'warn' : 'off';
-      x.dot.hidden = !st; x.dot.className = 'ldot ' + st;
-      x.dot.setAttribute('title', c ? c.name + ': ' + (c.health && c.health !== 'none' ? c.health : c.state) : '');
-      x.a.style.display = matches(x.s.name) ? '' : 'none';
     });
   }
 
@@ -5382,7 +5385,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var x = R.media && R.media.w[k]; if (!x) return;
     var sig = JSON.stringify([j, S.q]); if (x.sig === sig) return; x.sig = sig;
     clear(x.row); clear(x.link);
-    if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name }, j.app.name, ic('web')));
+    if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
     if (j.error && !(j.items || []).length) { x.row.appendChild(h('div', { class: 'empty ' + (j.unconfigured ? '' : 'err-t') }, j.error)); txt(x.count, ''); return; }
     var items = (j.items || []).filter(function (it) { return matches(it.title + ' ' + (it.sub || '')); });
     txt(x.count, String(j.items.length));
@@ -5723,7 +5726,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
-  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', launcher: 'One-click icons for your apps, with a status dot from the matching container', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
+  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
     docker: 'Every container, found automatically', vms: 'Every VM, found automatically', apps: 'Plex, Immich, AdGuard, links and other apps' };
   var MET_DESC = { cpu: 'Usage and temperature', memory: 'RAM used and available', storage: 'Array (or pools) capacity', network: 'Download and upload speed', health: 'Array state, disk problems, parity checks',
@@ -6285,7 +6288,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   });
 })();
 ]]></INLINE>
-<SHA256>1f09f6a43f23fa8a6237ec78ffa892dc3ea78312854d127e79af5e94fbc78d3b</SHA256>
+<SHA256>6f34525c7fb699136ec3f4f5cb43cdfef4c1dcab353ab717fdcaac7df8d5fc06</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">

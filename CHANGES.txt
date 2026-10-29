@@ -1,3 +1,9 @@
+###2026.11.01
+- Less wasted space: the System tiles and the Apps cards now fill the whole row, app cards are only as tall as their content, and sections sit closer together.
+- Half-width sections that follow each other (e.g. Media, Arr Stack, Downloads) are stacked in two balanced columns, so a short section no longer leaves a gap beside a tall one.
+- Media shows four columns from a narrower width; in narrow columns the Radarr / Sonarr link shrinks to its icon so the title fits.
+- The Launcher section is removed (a saved Launcher entry is dropped from the layout).
+
 ###2026.10.31e
 - System tiles are separate cards with bigger numbers; CPU, memory, network and disk temperature show their recent history as a small chart under the value.
 - New Launcher section (right after System): one-click icons for every app with a link, with a status dot taken from the container of the same name. Hide or move it in Settings > Dashboard.

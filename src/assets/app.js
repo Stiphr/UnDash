@@ -270,8 +270,49 @@
     root.appendChild(R.sections);
     S.L.dashboard.sections.forEach(function (sec) { if (sec.visible) buildSection(sec); });
     if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Dashboard.'));
+    packHalves();
     paintAll(); paintLive();
   }
+
+  /* Half-width sections next to each other go into two columns, each section into the shorter one (in order), so a short
+     section does not leave a hole beside a tall one. Re-balanced when content loads or a section collapses. */
+  var NARROW = window.matchMedia ? window.matchMedia('(max-width:1100px)') : null;
+  function packHalves() {
+    if (S.packRO) S.packRO.disconnect();
+    R.packs = [];
+    var kids = [].slice.call(R.sections.children), run = [];
+    function flush() {
+      if (run.length >= 2) {
+        var w = h('div', { class: 'hcols' }), c0 = h('div', { class: 'hcol' }), c1 = h('div', { class: 'hcol' });
+        R.sections.insertBefore(w, run[0]); w.appendChild(c0); w.appendChild(c1);
+        run.forEach(function (el, i) { (i % 2 ? c1 : c0).appendChild(el); });
+        R.packs.push({ w: w, cols: [c0, c1], items: run.slice() });
+      }
+      run = [];
+    }
+    kids.forEach(function (el) { if (el.classList.contains('half')) run.push(el); else flush(); });
+    flush();
+    if (!R.packs.length || !window.ResizeObserver) return;
+    S.packRO = new ResizeObserver(function () { clearTimeout(S.packT); S.packT = setTimeout(balanceHalves, 150); });
+    R.packs.forEach(function (p) { p.items.forEach(function (el) { S.packRO.observe(el); }); });
+    balanceHalves();
+  }
+  function balanceHalves() {
+    (R.packs || []).forEach(function (p) {
+      var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
+      p.w.classList.toggle('one', !!one);
+      p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
+      var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
+      if (want.join() === now.join()) return;
+      if (!one) {
+        // only move when it clearly helps, so sections do not jump back and forth
+        var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
+        if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) return;
+      }
+      p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
+    });
+  }
+  if (NARROW) (NARROW.addEventListener ? NARROW.addEventListener('change', function () { balanceHalves(); }) : NARROW.addListener(balanceHalves));
 
   function webSearch(q) {
     var E = { duckduckgo: 'https://duckduckgo.com/?q=', google: 'https://www.google.com/search?q=', bing: 'https://www.bing.com/search?q=', startpage: 'https://www.startpage.com/do/search?q=', brave: 'https://search.brave.com/search?q=' };
@@ -279,7 +320,7 @@
   }
   function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
-  var TITLES = { overview: 'System', launcher: 'Launcher', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
+  var TITLES = { overview: 'System', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
   function buildSection(sec) {
     var tools = h('div', { class: 'tools' });
     var count = h('span', { class: 'count' });
@@ -299,7 +340,7 @@
   /* which parts the live request needs, so hidden sections cost nothing */
   function parts() {
     var p = ['system'];
-    if (R.docker || R.favorites || R.alerts || R.launcher || tileOn('docker')) p.push('docker');
+    if (R.docker || R.favorites || R.alerts || tileOn('docker')) p.push('docker');
     if (R.vms || R.favorites || tileOn('vms')) p.push('vms');
     if (tileOn('ups')) p.push('ups');
     return p.join(',');
@@ -367,11 +408,12 @@
     var y = S.live || {};
     if (R.overview && open('overview')) paintOverview(y);
     if (R.alerts) paintAlerts(y);
-    if (R.launcher && open('launcher')) paintLauncher(y);
     if (R.favorites && open('favorites')) paintFavs(y);
     if (R.docker && open('docker')) paintDocker(y);
     if (R.vms && open('vms')) paintVms(y);
     paintCounts(y);
+    // ResizeObserver does not run in a background tab; the live refresh catches up instead
+    if (R.packs && R.packs.length) balanceHalves();
   }
   function paintCounts(y) {
     if (R.docker && y.docker && y.docker.containers) {
@@ -694,36 +736,6 @@
       ignHold({ del: ids });
       if (okMsg) toast(okMsg);
       return j;
-    });
-  }
-
-  /* ---- launcher: one icon per app with a link, the dot comes from the container of the same name ---- */
-  BUILD.launcher = function (r) {
-    r.grid = h('div', { class: 'launch', role: 'list' }); r.items = [];
-    S.L.groups.forEach(function (g) { g.services.forEach(function (s) {
-      if (s.hidden || !s.href_resolved) return;
-      var dot = h('span', { class: 'ldot', hidden: true }), u = iconUrl(s.icon);
-      var a = h('a', { class: 'lnk', role: 'listitem', href: s.href_resolved, target: '_blank', rel: 'noopener', title: s.name + (s.description ? ' · ' + s.description : ''), 'data-name': s.name },
-        h('span', { class: 'lic' }, u ? img(u, 'aico') : h('span', { class: 'lph' }, s.name.slice(0, 2)), dot), h('span', { class: 'ln' }, s.name));
-      r.items.push({ s: s, a: a, dot: dot, keys: lkeys(s.name) }); r.grid.appendChild(a);
-    }); });
-    if (!r.items.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'Apps with a link (Settings > Apps) show up here as one-click icons.'));
-    txt(r.count, r.items.length ? String(r.items.length) : '');
-    r.body.appendChild(r.grid);
-  };
-  /* "Radarr Movies" matches a container called radarr; "Seerr Requests" matches seerr; a longer container name only when nothing matches exactly */
-  function lkeys(n) { var a = String(n).toLowerCase(), k = [a.replace(/[^a-z0-9]/g, '')], f = a.split(/[\s_.-]+/)[0].replace(/[^a-z0-9]/g, ''); if (f && f !== k[0]) k.push(f); return k; }
-  function paintLauncher(y) {
-    var r = R.launcher, cs = (y.docker && y.docker.containers) || [], by = {};
-    cs.forEach(function (c) { by[c.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = c; });
-    r.items.forEach(function (x) {
-      var c = null; x.keys.some(function (k) { return (c = by[k] || null); });
-      // then a container named the app plus a short extra word: Emby -> EmbyServer, Adguard -> AdGuard-Home (but not Unraid -> Unraid-Cloudflared-Tunnel)
-      if (!c && x.keys[0].length >= 4) { var best = ''; Object.keys(by).forEach(function (k) { if (k.indexOf(x.keys[0]) === 0 && k.length - x.keys[0].length <= 6 && (!best || k.length < best.length)) best = k; }); c = best ? by[best] : null; }
-      var st = !c ? '' : c.health === 'unhealthy' || c.state === 'restarting' ? 'bad' : c.state === 'running' ? (c.health === 'starting' ? 'warn' : 'ok') : c.state === 'paused' ? 'warn' : 'off';
-      x.dot.hidden = !st; x.dot.className = 'ldot ' + st;
-      x.dot.setAttribute('title', c ? c.name + ': ' + (c.health && c.health !== 'none' ? c.health : c.state) : '');
-      x.a.style.display = matches(x.s.name) ? '' : 'none';
     });
   }
 
@@ -1242,7 +1254,7 @@
     var x = R.media && R.media.w[k]; if (!x) return;
     var sig = JSON.stringify([j, S.q]); if (x.sig === sig) return; x.sig = sig;
     clear(x.row); clear(x.link);
-    if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name }, j.app.name, ic('web')));
+    if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
     if (j.error && !(j.items || []).length) { x.row.appendChild(h('div', { class: 'empty ' + (j.unconfigured ? '' : 'err-t') }, j.error)); txt(x.count, ''); return; }
     var items = (j.items || []).filter(function (it) { return matches(it.title + ' ' + (it.sub || '')); });
     txt(x.count, String(j.items.length));
@@ -1583,7 +1595,7 @@
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
-  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', launcher: 'One-click icons for your apps, with a status dot from the matching container', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
+  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
     docker: 'Every container, found automatically', vms: 'Every VM, found automatically', apps: 'Plex, Immich, AdGuard, links and other apps' };
   var MET_DESC = { cpu: 'Usage and temperature', memory: 'RAM used and available', storage: 'Array (or pools) capacity', network: 'Download and upload speed', health: 'Array state, disk problems, parity checks',
