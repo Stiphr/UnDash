@@ -2,8 +2,8 @@
 /*
  * UnDash - ignored alerts. Alerts are still worked out on every refresh; an ignore rule only hides a matching alert
  * from the dashboard, so monitoring never stops and an ignored alert comes back as soon as its rule is removed or runs
- * out while the condition is still there. Rules live in ignores.json in the configuration directory (mirrored to the
- * flash drive like config.json), so they survive plugin updates and container re-creation.
+ * out while the condition is still there. Rules live in config.yaml (ignored_alerts), so they survive plugin updates and
+ * container re-creation.
  *
  * A rule hides either one alert (kind "instance", key "<category>:<resource>", e.g. "disk.hot:disk3") or every alert
  * of a category (kind "type", key "<category>"). until is a Unix time, or null for "permanently".
@@ -22,7 +22,6 @@ const UND_IGNORE_MAX = 500;
 const UND_IGNORE_MIN_S = 300;            // 5 minutes
 const UND_IGNORE_MAX_S = 366 * 86400;    // a year; longer than that is "permanently"
 
-function und_ignore_file() { return und_file('ignores.json'); }
 
 /** Valid rules only: anything malformed in the file is dropped instead of breaking the dashboard. */
 function und_ignore_clean($list) {
@@ -47,7 +46,7 @@ function und_ignore_clean($list) {
 /** Container names, disk names, versions, array states: letters, digits and a few separators. */
 function und_ignore_res_ok($res) { return is_string($res) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_.+@ -]{0,127}$/', $res) === 1; }
 
-function und_ignores() { return und_ignore_clean(und_read_json(und_ignore_file(), [])); }
+function und_ignores() { return und_ignore_clean(und_doc()['ignored_alerts'] ?? []); }
 
 /** The rules still in force at $now (what the live refresh sends with every answer). */
 function und_ignores_active($now = null) {
@@ -57,19 +56,16 @@ function und_ignores_active($now = null) {
 
 /** Read, change and write the rules under one lock, so two browser tabs cannot lose each other's changes. */
 function und_ignore_edit(callable $fn) {
-  @mkdir(und_tmp('locks'), 0755, true);
-  $fp = @fopen(und_tmp('locks/ignores.lock'), 'c');
-  if (!$fp || !flock($fp, LOCK_EX)) { if ($fp) fclose($fp); return ['error' => 'The ignore list is busy. Try again.']; }
-  try {
-    $list = und_ignores();
-    $res = $fn($list);
-    if (isset($res['error'])) return $res;
-    // keep expired rules a month so Settings can show them, then let them go
-    $old = time() - 30 * 86400;
-    $list = array_values(array_filter($list, function ($r) use ($old) { return $r['until'] === null || $r['until'] > $old; }));
-    if (!und_store_write('ignores.json', json_encode(und_ignore_clean($list), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))) return ['error' => 'The ignore list could not be saved.'];
-    return $res + ['ok' => true];
-  } finally { flock($fp, LOCK_UN); fclose($fp); }
+  und_config_lock();
+  $list = und_ignores();
+  $res = $fn($list);
+  if (isset($res['error'])) return $res;
+  // keep expired rules a month so Settings can show them, then let them go
+  $old = time() - 30 * 86400;
+  $list = array_values(array_filter($list, function ($r) use ($old) { return $r['until'] === null || $r['until'] > $old; }));
+  $clean = und_ignore_clean($list);
+  if (!und_doc_write(['ignored_alerts' => $clean ? $clean : null])) return ['error' => 'The ignore list could not be saved.'];
+  return $res + ['ok' => true];
 }
 
 /** duration: seconds, or "permanent". Ignoring the same alert again replaces the old rule. */

@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.5.2">
+<!ENTITY version "0.6.0">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,15 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.6.0
+- Settings in two files: config.yaml holds everything you set (apps, layout, theme, preferences, ignored alerts, custom CSS) and never a key or password; .env holds the API keys, user names and passwords. Your current settings are converted on first start, with a backup; the old files are kept in data/legacy.
+- Settings &gt; Apps rebuilt: Add app (pick a type, enter the address and key, Test), and edit, hide, reorder or remove any app from one list grouped by where it shows (Arr Stack, Downloads, Media, Apps). Apps still missing an address or key are marked. Keys go to .env on their own; the old Variables list is gone (an optional "Shared values" box remains for values several apps use).
+- Preview next to Save: see the dashboard with your unsaved changes, then save, go back or discard.
+- qui (autobrr/qui) as a download client: totals of every qBittorrent instance in qui (downloading, seeding, idle, cross-seed, stalled, paused, checking, tracker issues, errors), speeds, one line per instance and the active downloads. Needs a qui API key.
+- Backup &amp; import: download config.yaml (safe to share) and .env (private); import either one, or a settings export of an older version. Moving from another dashboard: "Coming from Homepage?" converts its services.yaml.
+- An app without its own link opens its address when clicked. config.yaml can be edited by hand, including { inline } maps. Check configuration also lists apps without a key.
+- The example setup is now examples/config.yaml.
+
 ###0.5.2
 - Redacted exports now also leave out user names, logins and e-mail addresses (they were kept before), so they are safe to share.
 - Importing a redacted export (a shared layout) no longer replaces your Unraid API address; a full export (a restore) still does.
@@ -151,7 +160,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.5.2');
+define('UND_VERSION', '0.6.0');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -325,13 +334,13 @@ unset($__ident);
 
 } // UND_LIB_LOADED
 
-foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'health', 'playing', 'requests'] as $__m) {
+foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'health', 'playing', 'requests'] as $__m) {
   $__f = __DIR__ . '/' . $__m . '.php';
   if (is_file($__f)) require_once $__f;
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>30d183470d4fc84f5a3c71159e69fdc4f7657aa244e139357c57b5185470b92b</SHA256>
+<SHA256>b038693afd62726935a225703c34a05c9399b9a65f76246180fff58eab63d48d</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -344,14 +353,13 @@ unset($__m, $__f);
  *   Every save is mirrored to the flash drive, so UnDash keeps working while the array (and with it /mnt/user) is stopped.
  *   Reads prefer the configuration directory and fall back to the flash copy.
  *
- * Files in the configuration directory
- *   config.json   layout, preferences, appearance (no secrets)
- *   secrets.json  variables and per-widget credentials (never sent to the browser in clear text)
- *   custom.css    the user's custom CSS
- *   backups/      a snapshot of the three files before every save, import and restore (newest 15 kept)
+ * Files in the configuration directory (see include/store.php)
+ *   config.yaml   everything you set up; credentials only as references like {{RADARR_API_KEY}}
+ *   .env          the values of those references, the Unraid API key (never sent to the browser in clear text)
+ *   data/         backups (both files, before every save, import and restore; newest 15) and the alert history
  */
 
-define('UND_SCHEMA', 4);
+define('UND_SCHEMA', 5);
 
 /** Every widget type: [label, credential fields it uses, needs url]. */
 function und_types() {
@@ -363,7 +371,7 @@ function und_types() {
     'radarr' => ['Radarr', ['key'], true], 'sonarr' => ['Sonarr', ['key'], true], 'lidarr' => ['Lidarr', ['key'], true],
     'readarr' => ['Readarr', ['key'], true], 'bazarr' => ['Bazarr', ['key'], true], 'prowlarr' => ['Prowlarr', ['key'], true],
     'overseerr' => ['Overseerr / Jellyseerr', ['key'], true], 'autobrr' => ['Autobrr', ['key'], true], 'wizarr' => ['Wizarr', ['key'], true],
-    'qbittorrent' => ['qBittorrent', ['username', 'password'], true], 'sabnzbd' => ['SABnzbd', ['key'], true],
+    'qbittorrent' => ['qBittorrent', ['username', 'password'], true], 'sabnzbd' => ['SABnzbd', ['key'], true], 'qui' => ['qui (qBittorrent manager)', ['key'], true],
     'emby' => ['Emby', ['key'], true], 'jellyfin' => ['Jellyfin', ['key'], true], 'plex' => ['Plex', ['key'], true], 'tautulli' => ['Tautulli', ['key'], true],
     'adguard' => ['AdGuard Home', ['username', 'password'], true], 'pihole' => ['Pi-hole', ['key'], true], 'npm' => ['Nginx Proxy Manager', ['username', 'password'], true],
     'immich' => ['Immich', ['key'], true], 'peanut' => ['PeaNUT', ['key', 'username', 'password'], true],
@@ -475,8 +483,10 @@ function und_array_mounted($dir) {
 /** First use of a configuration directory: copy the flash files into it, never over existing ones. */
 function und_migrate_into($dir) {
   if ($dir === UND_DIR) return;
-  foreach (['config.json', 'secrets.json', 'custom.css', 'ignores.json'] as $f) {
-    if (!is_file("$dir/$f") && is_file(UND_DIR . "/$f")) { @copy(UND_DIR . "/$f", "$dir/$f"); if ($f === 'secrets.json') @chmod("$dir/$f", 0600); }
+  // files of older versions only where there are no new ones yet (they are converted on first use)
+  $old = is_file("$dir/config.yaml") || is_file(UND_DIR . '/config.yaml') ? [] : ['config.json', 'secrets.json', 'custom.css', 'ignores.json'];
+  foreach (array_merge(['config.yaml', '.env'], $old) as $f) {
+    if (!is_file("$dir/$f") && is_file(UND_DIR . "/$f")) { @copy(UND_DIR . "/$f", "$dir/$f"); if ($f === 'secrets.json' || $f === '.env') @chmod("$dir/$f", 0600); }
   }
 }
 
@@ -505,16 +515,16 @@ function und_store_write($name, $content, $private = false) {
 
 /* ---------- backups ---------- */
 
-function und_backup_dir() { return und_store_dir() . '/backups'; }
+function und_backup_dir() { return und_data_dir() . '/backups'; }
 
-/** Snapshot config, secrets and CSS before they change. Returns the backup id. */
+/** Snapshot both settings files before they change. Returns the backup id. */
 function und_backup($reason) {
   $dir = und_backup_dir();
   @mkdir($dir, 0700, true);
   $id = date('Ymd-His') . '-' . substr(und_id(), 0, 4);
-  $snap = ['undash_backup' => 1, 'schema' => UND_SCHEMA, 'created' => time(), 'reason' => und_clip((string)$reason, 80),
-           'config' => und_read_json(und_file('config.json'), null), 'secrets' => und_read_json(und_file('secrets.json'), null), 'css' => (string)@file_get_contents(und_file('custom.css'))];
-  if ($snap['config'] === null && $snap['secrets'] === null && $snap['css'] === '') return null;
+  $y = (string)@file_get_contents(und_file('config.yaml')); $e = (string)@file_get_contents(und_file('.env'));
+  if ($y === '' && $e === '') return null;
+  $snap = ['undash_backup' => 2, 'schema' => UND_SCHEMA, 'created' => time(), 'reason' => und_clip((string)$reason, 80), 'yaml' => $y, 'env' => $e];
   @file_put_contents("$dir/$id.json", json_encode($snap, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
   @chmod("$dir/$id.json", 0600);
   $all = glob("$dir/*.json") ?: [];
@@ -538,8 +548,17 @@ function und_restore($id) {
   $j = und_read_json($f, null);
   if (!is_array($j) || empty($j['undash_backup'])) return ['error' => 'That backup cannot be read.'];
   und_backup('before restoring ' . $id);
-  if (is_array($j['config'])) und_save_config($j['config'], false);
-  if (is_array($j['secrets'])) und_save_secrets($j['secrets']);
+  if ((int)$j['undash_backup'] >= 2) {
+    // both files exactly as they were
+    if (is_string($j['yaml'] ?? null) && $j['yaml'] !== '') und_store_write('config.yaml', $j['yaml']);
+    if (is_string($j['env'] ?? null)) und_store_write('.env', $j['env'], true);
+    und_store_reset();
+    return ['ok' => true];
+  }
+  // a backup from before config.yaml: convert it like the old files
+  $conv = und_store_convert(und_normalize(und_migrate(is_array($j['config'] ?? null) ? $j['config'] : und_default_config())), (array)($j['secrets']['vars'] ?? []), (array)($j['secrets']['svc'] ?? []));
+  und_save_config($conv['config'], false);
+  $env = und_env(); foreach ($conv['env'] as $k => $v) $env[$k] = $v; und_env_write($env);
   und_save_css((string)($j['css'] ?? ''), false);
   return ['ok' => true];
 }
@@ -547,8 +566,9 @@ function und_restore($id) {
 /* ---------- load / save ---------- */
 
 function und_load_config() {
-  $c = und_read_json(und_file('config.json'), null);
-  if (!is_array($c) || !isset($c['groups'])) return und_normalize(und_default_config());
+  $c = und_doc();
+  if (!isset($c['groups'])) return und_normalize(und_default_config());
+  $c['schema'] = (int)($c['version'] ?? UND_SCHEMA);
   return und_normalize(und_migrate($c));
 }
 
@@ -720,7 +740,9 @@ function und_normalize(array $c) {
         'type' => $s['type'], 'icon' => und_clip((string)($s['icon'] ?? ''), 300), 'href' => und_clip((string)($s['href'] ?? ''), 500), 'url' => und_clip((string)($s['url'] ?? ''), 500),
         'description' => und_clip(trim((string)($s['description'] ?? '')), 200), 'hidden' => !empty($s['hidden']), 'favorite' => !empty($s['favorite']), 'span' => (int)($s['span'] ?? 1) === 2 ? 2 : 1,
         'fields' => array_values(array_filter(array_map('strval', (array)($s['fields'] ?? [])), function ($f) { return preg_match('/^[A-Za-z0-9_]{1,40}$/', $f); })),
-        'options' => $opt ? $opt : new stdClass()];
+        'options' => $opt ? $opt : new stdClass()]
+        // credentials only ever as a reference to .env; a value typed into the file by hand is not kept here
+        + array_map(function ($f) use ($s) { $r = und_ref_name($s[$f] ?? ''); return $r ? '{{' . $r . '}}' : ''; }, array_combine(array_keys(UND_CRED_FIELDS), array_keys(UND_CRED_FIELDS)));
     }
     $groups[] = $out;
   }
@@ -730,6 +752,9 @@ function und_normalize(array $c) {
 
 /** Serialises read-change-write of config.json (two quick dashboard clicks must not lose one). Released when the request ends. */
 function und_config_lock() {
+  // reentrant within one request: taking it twice would wait for ourselves
+  static $fp = null;
+  if (is_resource($fp)) return $fp;
   @mkdir(und_tmp('locks'), 0755, true);
   $fp = @fopen(und_tmp('locks/config.lock'), 'c');
   if ($fp) flock($fp, LOCK_EX);
@@ -738,7 +763,8 @@ function und_config_lock() {
 
 function und_save_config(array $c, $backup = true) {
   if ($backup) und_backup('settings saved');
-  return und_store_write('config.json', json_encode(und_normalize($c), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR));
+  $n = und_normalize($c); unset($n['schema']);
+  return und_doc_write(['version' => UND_SCHEMA] + json_decode(json_encode($n), true));
 }
 
 /** Every widget id in a config (used to drop credentials of widgets that were removed). */
@@ -763,25 +789,50 @@ function und_sanitize_css($css) {
   return $css;
 }
 
-function und_load_css() { return und_sanitize_css((string)@file_get_contents(und_file('custom.css'))); }
+function und_load_css() { return und_sanitize_css((string)(und_doc()['custom_css'] ?? '')); }
 
 function und_save_css($css, $backup = true) {
   if ($backup) und_backup('custom CSS saved');
-  return und_store_write('custom.css', und_sanitize_css($css));
+  $css = und_sanitize_css($css);
+  return und_doc_write(['custom_css' => trim($css) === '' ? null : $css]);
 }
 
 /* ---------- secrets ---------- */
 
+/**
+ * The secrets as the rest of UnDash sees them: vars = every .env value (except UnDash's own entries), unraid = the API
+ * address (config.yaml) and key (.env). Credentials of apps are vars too, referenced from config.yaml.
+ */
 function und_secrets() {
-  $s = isset($GLOBALS['UND_TEST_SECRETS']) ? $GLOBALS['UND_TEST_SECRETS'] : und_read_json(und_file('secrets.json'), []);
-  return ['vars' => isset($s['vars']) && is_array($s['vars']) ? $s['vars'] : [], 'svc' => isset($s['svc']) && is_array($s['svc']) ? $s['svc'] : [],
-          'unraid' => isset($s['unraid']) && is_array($s['unraid']) ? $s['unraid'] : []];
+  if (isset($GLOBALS['UND_TEST_SECRETS'])) { $s = $GLOBALS['UND_TEST_SECRETS']; return ['vars' => (array)($s['vars'] ?? []), 'svc' => (array)($s['svc'] ?? []), 'unraid' => (array)($s['unraid'] ?? [])]; }
+  $env = und_env();
+  $vars = array_diff_key($env, array_flip(UND_ENV_RESERVED));
+  return ['vars' => $vars, 'svc' => [], 'unraid' => ['url' => (string)(und_doc()['unraid']['url'] ?? ''), 'key' => (string)($env['UNRAID_API_KEY'] ?? '')]];
 }
+/** vars replace the .env values (UnDash's own entries are kept); unraid sets the address and key; svc (old per-widget credentials) become references. */
 function und_save_secrets(array $s) {
-  // the Unraid API connection is kept unless the caller sets it explicitly
-  $unraid = isset($s['unraid']) && is_array($s['unraid']) ? $s['unraid'] : und_read_json(und_file('secrets.json'), [])['unraid'] ?? [];
-  $s = ['vars' => isset($s['vars']) && is_array($s['vars']) ? $s['vars'] : [], 'svc' => isset($s['svc']) && is_array($s['svc']) ? $s['svc'] : [], 'unraid' => is_array($unraid) ? $unraid : []];
-  return und_store_write('secrets.json', json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), true);
+  $env = und_env();
+  $keep = array_intersect_key($env, array_flip(UND_ENV_RESERVED));
+  $new = isset($s['vars']) && is_array($s['vars']) ? array_change_key_case($s['vars'], CASE_UPPER) : array_diff_key($env, $keep);
+  $new = array_diff_key($new, array_flip(UND_ENV_RESERVED)) + $keep;
+  if (isset($s['unraid']) && is_array($s['unraid'])) {
+    if (array_key_exists('key', $s['unraid'])) { if ((string)$s['unraid']['key'] === '') unset($new['UNRAID_API_KEY']); else $new['UNRAID_API_KEY'] = (string)$s['unraid']['key']; }
+    if (array_key_exists('url', $s['unraid'])) und_doc_write(['unraid' => (string)$s['unraid']['url'] === '' ? null : ['url' => (string)$s['unraid']['url']]]);
+  }
+  if (!empty($s['svc']) && is_array($s['svc'])) {
+    // credentials from an old export or backup: into .env under readable names, referenced from the config
+    $cfg = und_load_config();
+    foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$sv) foreach (array_keys(UND_CRED_FIELDS) as $f) {
+      $v = (string)($s['svc'][$sv['id']][$f] ?? '');
+      if ($v === '') continue;
+      if ($r = und_ref_name($v)) { $sv[$f] = '{{' . $r . '}}'; continue; }
+      $name = und_ref_name($sv[$f] ?? '') ?: und_cred_name($sv['name'], $f, $new + und_cfg_refs($cfg));
+      $new[$name] = $v; $sv[$f] = '{{' . $name . '}}';
+    }
+    unset($g, $sv);
+    und_save_config($cfg, false);
+  }
+  return und_env_write($new);
 }
 
 function und_var_is_secret($name) { return preg_match('/KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i', $name) === 1; }
@@ -840,7 +891,8 @@ function und_service_full(array $cfg, $id) {
   foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) {
     if ($s['id'] !== $id) continue;
     $c = $sec['svc'][$id] ?? [];
-    foreach (['key', 'password', 'username'] as $f) $s[$f] = und_resolve((string)($c[$f] ?? ''), $sec['vars']);
+    // credentials: a reference in config.yaml ({{RADARR_API_KEY}}) to a value in .env
+    foreach (['key', 'password', 'username'] as $f) { $v = (string)($s[$f] ?? '') !== '' ? (string)$s[$f] : (string)($c[$f] ?? ''); $s[$f] = und_resolve($v, $sec['vars']); if (und_ref_name($s[$f])) $s[$f] = ''; }
     foreach (['url', 'href'] as $f) $s[$f] = und_resolve($s[$f], $sec['vars']);
     $s['options'] = json_decode(und_resolve(json_encode($s['options']), array_map(function ($v) { return trim(json_encode((string)$v), '"'); }, $sec['vars'])), true) ?: [];
     $s['_group'] = $g['name'];
@@ -877,9 +929,11 @@ function und_layout_view(array $cfg) {
   $vars = und_secrets()['vars'];
   foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) {
     $s['zone'] = und_zone($s);
-    $h = und_resolve($s['href'], $vars);
+    // no link of its own: the app's address, when it is a plain one (no login or token in it)
+    $src = trim($s['href']) !== '' ? $s['href'] : (preg_match('#^https?://[^/@?\s]+(/[^?@\s]*)?$#i', trim($s['url'])) ? trim($s['url']) : '');
+    $h = und_resolve($src, $vars);
     // a link that would carry a secret variable is not resolved for the browser
-    if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s['href'], $m)) foreach ($m[1] as $n) if (und_var_is_secret($n)) $h = '';
+    if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $src, $m)) foreach ($m[1] as $n) if (und_var_is_secret($n)) $h = '';
     $s['href_resolved'] = preg_match('#^(https?://|/)#i', $h) ? $h : '';
   }
   return $cfg;
@@ -892,7 +946,9 @@ function und_validate(array $cfg) {
   $issues = []; $vars = und_secrets()['vars']; $types = und_types(); $ids = array_flip(und_service_ids($cfg));
   foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) {
     $where = '"' . $s['name'] . '" in "' . $g['name'] . '"';
-    if (!empty($types[$s['type']][2]) && trim($s['url']) === '') $issues[] = ['level' => 'warn', 'msg' => "$where has no API URL."];
+    if (!empty($types[$s['type']][2]) && trim($s['url']) === '') $issues[] = ['level' => 'warn', 'msg' => "$where has no address."];
+    $kr = und_ref_name($s['key'] ?? '');
+    if (in_array('key', $types[$s['type']][1] ?? [], true) && $s['type'] !== 'peanut' && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Apps)."];
     foreach (['url', 'href'] as $f) if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s[$f], $m)) foreach ($m[1] as $n) {
       $n = strtoupper($n);
       if (!isset($vars[$n]) && $n !== 'UNRAID_IP') $issues[] = ['level' => 'bad', 'msg' => "$where uses {{" . $n . '}}, which is not defined.'];
@@ -904,7 +960,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>226cf6ef96f217a5b9d78200401312757114a7c4b1eb0d0b68f6754342b46a69</SHA256>
+<SHA256>e9fb9e4105b6e447a643b3926ecf0bedc32c9f5e50a9a24fd54120930b424955</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -1548,7 +1604,7 @@ function und_vm_summary() {
  *   ['calendar' => [['ts','title','sub','done'], ...]]
  *   ['streams' => [['title','user','state','pos','dur'], ...]]   (can be combined with blocks)
  *   ['error' => 'message']
- * The endpoints and the numbers they produce follow gethomepage/homepage's widgets, so the cards show what Homepage showed.
+ * Each app's numbers come from its own documented API.
  */
 
 /* ---------- HTTP ---------- */
@@ -1739,6 +1795,14 @@ function und_w_qbittorrent($s) {
   return ['blocks' => [und_b('leech', 'Leech', $leech), und_b('download', 'Download', $dl, 'rate'), und_b('seed', 'Seed', $seed), und_b('upload', 'Upload', $ul, 'rate')]];
 }
 
+function und_w_qui($s) {
+  $q = und_qui_status($s, 0);
+  $c = $q['counts'];
+  return ['blocks' => [und_b('downloading', 'Downloading', $c['downloading']), und_b('seeding', 'Seeding', $c['seeding']), und_b('idle', 'Idle', $c['idle']),
+    und_b('crossseed', 'Cross-seed', $c['crossseed']), und_b('download', 'Download', $q['down'], 'rate'), und_b('upload', 'Upload', $q['up'], 'rate'),
+    und_b('instances', 'Instances', count($q['instances']))]];
+}
+
 function und_w_sabnzbd($s) {
   $j = und_get(und_u($s['url'], '/api?output=json&mode=queue&apikey=' . rawurlencode($s['key'])));
   if (isset($j['error'])) throw new Exception('SABnzbd: ' . $j['error']);
@@ -1777,7 +1841,7 @@ function und_w_plex($s) {
   foreach ((array)($secs['MediaContainer']['Directory'] ?? []) as $d) {
     $type = (string)($d['type'] ?? '');
     if (!isset($count[$type])) continue;
-    $q = $type === 'artist' ? '?type=9&' : '?';     // albums for music libraries, like Homepage
+    $q = $type === 'artist' ? '?type=9&' : '?';     // albums for music libraries
     $r = und_get(und_u($s['url'], '/library/sections/' . rawurlencode((string)$d['key']) . '/all' . $q . 'X-Plex-Container-Start=0&X-Plex-Container-Size=0'), $h);
     $count[$type] += (int)($r['MediaContainer']['totalSize'] ?? $r['MediaContainer']['size'] ?? 0);
   }
@@ -1951,7 +2015,7 @@ function und_w_customapi($s) {
   return ['blocks' => $b];
 }
 ]]></INLINE>
-<SHA256>fbf98446bc27e667d4609f2d156804ebb0e72654b15c7e1abdc42cb9654752a1</SHA256>
+<SHA256>17eec05a3ce3ca89dbd22e9a0ee90bcbbead252d345718f6f733c90e0e8a235f</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/import.php" Mode="0644">
@@ -2031,17 +2095,48 @@ function und_yaml_scalar($v) {
   if ($v === '' || $v === '~' || $v === 'null') return null;
   if ($v[0] === '"') { $e = strrpos($v, '"'); return stripcslashes((string)substr($v, 1, ($e ?: strlen($v)) - 1)); }
   if ($v[0] === "'") return str_replace("''", "'", (string)substr($v, 1, (strrpos($v, "'") ?: strlen($v)) - 1));
-  if ($v[0] === '[') {
-    $in = trim(substr($v, 1, (strrpos($v, ']') ?: strlen($v)) - 1));
-    if ($in === '') return [];
-    preg_match_all('/"(?:[^"\\\\]|\\\\.)*"|\'[^\']*\'|[^,]+/', $in, $m);
-    return array_map('und_yaml_scalar', array_map('trim', $m[0]));
-  }
+  // flow collections: [a, b] and { key: value }, nested; "{{NAME}}" written without quotes stays a string
+  if (($v[0] === '[' || $v[0] === '{') && !preg_match('/^\{\{[^{}]*\}\}/', $v)) { $i = 0; $r = und_yaml_flow($v, $i); if ($r !== null) return $r; }
   if (in_array(strtolower($v), ['true', 'yes', 'on'], true)) return true;
   if (in_array(strtolower($v), ['false', 'no', 'off'], true)) return false;
   if (preg_match('/^-?\d+$/', $v)) return (int)$v;
   if (preg_match('/^-?\d+\.\d+$/', $v)) return (float)$v;
   return $v;
+}
+
+/** One flow collection starting at $v[$i]; null when it is not well formed (the caller keeps the text). */
+function und_yaml_flow($v, &$i) {
+  $open = $v[$i]; $close = $open === '[' ? ']' : '}'; $out = []; $i++;
+  $n = strlen($v);
+  while (true) {
+    while ($i < $n && ($v[$i] === ' ' || $v[$i] === ',')) $i++;
+    if ($i >= $n) return null;
+    if ($v[$i] === $close) { $i++; return $out; }
+    $key = null;
+    if ($open === '{') {
+      $k = und_yaml_flow_item($v, $i, ':');
+      if ($k === null || $k === '' || $i >= $n || $v[$i] !== ':') return null;
+      $i++; $key = (string)und_yaml_scalar($k);
+      while ($i < $n && $v[$i] === ' ') $i++;
+    }
+    if ($i < $n && ($v[$i] === '[' || $v[$i] === '{')) { $val = und_yaml_flow($v, $i); if ($val === null) return null; }
+    else { $at = $i; $t = und_yaml_flow_item($v, $i, ''); if ($t === null || $i === $at) return null; $val = und_yaml_scalar($t); }   // no progress = a stray bracket
+    if ($key === null) $out[] = $val; else $out[$key] = $val;
+  }
+}
+/** The text of one flow scalar (quoted or plain) up to a comma, the closing bracket or, for keys, the colon. */
+function und_yaml_flow_item($v, &$i, $stop) {
+  $n = strlen($v); $s = $i;
+  if ($i >= $n) return null;
+  if ($v[$i] === '"' || $v[$i] === "'") {
+    $q = $v[$i]; $i++;
+    while ($i < $n && $v[$i] !== $q) { if ($q === '"' && $v[$i] === '\\') $i++; $i++; }
+    if ($i >= $n) return null;
+    $i++;
+    return substr($v, $s, $i - $s);
+  }
+  while ($i < $n && $v[$i] !== ',' && $v[$i] !== ']' && $v[$i] !== '}' && !($stop === ':' && $v[$i] === ':' && ($i + 1 >= $n || $v[$i + 1] === ' '))) $i++;
+  return trim(substr($v, $s, $i - $s));
 }
 
 /* ---------- Homepage -> UnDash ---------- */
@@ -2156,22 +2251,20 @@ function und_hp_convert($servicesYaml, $settingsYaml = '', $envText = '') {
   return ['config' => $cfg, 'secrets' => $secrets, 'vars' => $vars, 'warnings' => $warn, 'groups' => count($groups), 'services' => $count];
 }
 
-/** Save an import: replaces the layout; keeps stored variable values unless the .env gave a new one. */
+/** Save a converted import: the layout becomes config.yaml, addresses are written into the apps, keys go to .env. */
 function und_hp_apply(array $conv) {
-  $old = und_secrets();
-  $vars = $old['vars'];
-  foreach ($conv['vars'] as $n => $v) if ($v !== null || !isset($vars[$n])) $vars[$n] = $v === null ? (string)($vars[$n] ?? '') : (string)$v;
-  und_save_config($conv['config']);
-  $saved = und_load_config();
-  $ids = [];
-  foreach ($saved['groups'] as $g) foreach ($g['services'] as $s) $ids[] = $s['id'];
-  $svc = [];
-  foreach ($conv['secrets'] as $id => $c) if (in_array($id, $ids, true)) $svc[$id] = $c;
-  und_save_secrets(['vars' => $vars, 'svc' => $svc]);
+  und_config_lock();
+  $vars = und_secrets()['vars'];
+  foreach ($conv['vars'] as $n => $v) if ($v !== null) $vars[strtoupper($n)] = (string)$v;
+  $res = und_store_convert(und_normalize($conv['config']), $vars, $conv['secrets']);
+  und_save_config($res['config']);
+  $env = und_env();
+  foreach ($res['env'] as $k => $v) if ($v !== '' || !isset($env[$k])) $env[$k] = $v;
+  und_env_write($env);
   return ['ok' => true];
 }
 ]]></INLINE>
-<SHA256>8d28fc16533a48c31c552dba9a22fa3e6d88160a9999f7aeb8e3166f43d7822d</SHA256>
+<SHA256>4c549e06da6db709781575adcfd8dcf239172f1355d2fb75ff6833a20781dd3d</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/transfer.php" Mode="0644">
@@ -2179,31 +2272,26 @@ function und_hp_apply(array $conv) {
 /*
  * UnDash - settings export and import.
  *
- * Export file: {"undash_export": 1, "schema": 2, "kind": "full"|"redacted", "created": unix time, "config": {...}, "css": "...", "vars": {...}, "secrets": {...}}
- *   full      layout, preferences, appearance, custom CSS, every variable and every widget credential (a complete backup; keep it private)
- *   redacted  the same without anything secret: credentials are dropped, secret-looking and login/e-mail variables are emptied, and passwords or
- *             tokens written straight into URLs (user:pass@host, ?apikey=...) are replaced by {{REDACTED}}
- * Neither contains anything but UnDash's own settings.
+ * Export
+ *   config  config.yaml as it is: layout, apps, theme, ignored alerts, custom CSS. It never holds a secret (credentials
+ *           are references such as {{RADARR_API_KEY}}), so it is safe to share. Passwords or tokens someone typed straight
+ *           into an address (user:pass@host, ?apikey=...) are replaced by {{REDACTED}}.
+ *   env     .env: the values of those references (keys, user names, passwords). Keep it private.
+ * Import accepts config.yaml, .env and export files of older UnDash versions (JSON), which are converted on the way in.
  */
 
 function und_export($kind) {
-  $cfg = und_load_config(); $sec = und_secrets();
-  $out = ['undash_export' => 1, 'schema' => UND_SCHEMA, 'kind' => $kind === 'full' ? 'full' : 'redacted', 'created' => time(), 'version' => UND_VERSION,
-          'config' => $cfg, 'css' => und_load_css()];
-  if ($out['kind'] === 'full') { $out['vars'] = (object)$sec['vars']; $out['secrets'] = (object)$sec['svc']; $out['unraid'] = (object)$sec['unraid']; return $out; }
-  if (!empty($sec['unraid']['url'])) $out['unraid'] = ['url' => und_redact_url((string)$sec['unraid']['url'])];
-  $vars = [];
-  foreach ($sec['vars'] as $k => $v) $vars[$k] = und_var_is_private($k, $v) ? '' : und_redact_url((string)$v);
-  $out['vars'] = (object)$vars;
-  foreach ($out['config']['groups'] as &$g) foreach ($g['services'] as &$s) {
-    $s['url'] = und_redact_url($s['url']); $s['href'] = und_redact_url($s['href']);
+  if ($kind === 'env') return ['name' => 'undash.env', 'type' => 'text/plain', 'text' => und_env_text(und_secrets()['vars'] + array_intersect_key(und_env(), ['UNRAID_API_KEY' => 1]))];
+  $doc = und_doc();
+  if (isset($doc['groups'])) foreach ($doc['groups'] as &$g) foreach ((array)($g['services'] ?? []) as $i => $sv) {
+    $g['services'][$i]['url'] = und_redact_url((string)($sv['url'] ?? '')); $g['services'][$i]['href'] = und_redact_url((string)($sv['href'] ?? ''));
     // custom API headers may hold a key written in clear text
-    if (is_array($s['options']) && isset($s['options']['headers']) && is_array($s['options']['headers'])) foreach ($s['options']['headers'] as $hk => $hv) {
-      if (!preg_match('/^\{\{\s*[A-Za-z0-9_]+\s*\}\}$/', (string)$hv)) $s['options']['headers'][$hk] = '{{REDACTED}}';
-    }
+    if (isset($sv['options']['headers']) && is_array($sv['options']['headers'])) foreach ($sv['options']['headers'] as $hk => $hv)
+      if (!und_ref_name($hv)) $g['services'][$i]['options']['headers'][$hk] = '{{REDACTED}}';
   }
-  unset($g, $s);
-  return $out;
+  unset($g);
+  if (!isset($doc['groups'])) { $full = json_decode(json_encode(und_load_config()), true); unset($full['schema']); $doc = ['version' => UND_SCHEMA] + $full + array_intersect_key($doc, ['unraid' => 1, 'ignored_alerts' => 1, 'custom_css' => 1]); }
+  return ['name' => 'undash-config.yaml', 'type' => 'application/yaml', 'text' => "# UnDash settings, exported " . gmdate('Y-m-d') . " (version " . UND_VERSION . "). No secrets: they are in .env.\n" . und_yaml_emit($doc)];
 }
 
 /** Secrets written into a URL: user:password@host and token-like query parameters. Variables ({{NAME}}) are kept. */
@@ -2216,68 +2304,86 @@ function und_redact_url($u) {
 }
 
 /**
- * Check an uploaded export before anything is changed. Returns a summary for the preview, or an error.
- * Only UnDash export files (and older UnDash layout files, which are plain config objects) are accepted.
+ * Check an uploaded file before anything is changed. Returns what it is and a summary for the preview, or an error.
+ * Accepted: config.yaml, .env, and export files of older UnDash versions (JSON).
  */
 function und_import_parse($raw) {
-  if (!is_string($raw) || $raw === '') return ['error' => 'The file is empty.'];
-  if (strlen($raw) > 2097152) return ['error' => 'The file is larger than 2 MB; that is not an UnDash export.'];
+  if (!is_string($raw) || trim($raw) === '') return ['error' => 'The file is empty.'];
+  if (strlen($raw) > 2097152) return ['error' => 'The file is larger than 2 MB; that is not an UnDash settings file.'];
+  $t = ltrim($raw);
+  if ($t[0] === '{') return und_import_parse_json($raw);
+  // .env: only NAME=value lines (and comments)
+  $lines = array_filter(preg_split('/\r\n|\r|\n/', $raw), function ($l) { return trim($l) !== '' && trim($l)[0] !== '#'; });
+  if ($lines && count(array_filter($lines, function ($l) { return preg_match('/^\s*(export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/', $l); })) === count($lines)) {
+    $env = und_env_read($raw);
+    return ['kind' => 'env', 'env' => $env, 'summary' => ['kind' => 'env', 'values' => count($env), 'names' => array_slice(array_keys($env), 0, 60)]];
+  }
+  $doc = und_yaml_read($raw);
+  if (!is_array($doc) || !isset($doc['groups']) || !is_array($doc['groups'])) return ['error' => 'This is not an UnDash settings file (config.yaml, .env, or an export of an older version).'];
+  if ((int)($doc['version'] ?? UND_SCHEMA) > UND_SCHEMA) return ['error' => 'This file comes from a newer UnDash (settings version ' . (int)$doc['version'] . '). Update UnDash first.'];
+  $cfg = $doc; $cfg['schema'] = (int)($doc['version'] ?? UND_SCHEMA);
+  $cfg = und_normalize(und_migrate($cfg));
+  return und_import_summary(['kind' => 'config', 'config' => $cfg, 'css' => is_string($doc['custom_css'] ?? null) ? $doc['custom_css'] : null,
+    'ignored' => is_array($doc['ignored_alerts'] ?? null) ? $doc['ignored_alerts'] : null, 'unraid_url' => (string)($doc['unraid']['url'] ?? ''), 'env' => []], $doc['groups']);
+}
+
+/** An export of an older UnDash (JSON with config, vars and per-widget credentials): converted like the old files. */
+function und_import_parse_json($raw) {
   $j = json_decode($raw, true, 64);
   if (!is_array($j)) return ['error' => 'The file is not valid JSON.'];
   if (isset($j['undash_export'])) {
-    if ((int)$j['undash_export'] !== 1) return ['error' => 'This export comes from a newer UnDash; update the plugin first.'];
-    if ((int)($j['schema'] ?? 0) > UND_SCHEMA) return ['error' => 'This export uses settings schema ' . (int)$j['schema'] . '; this UnDash understands up to ' . UND_SCHEMA . '. Update the plugin first.'];
-    if (!isset($j['config']) || !is_array($j['config']) || !isset($j['config']['groups']) || !is_array($j['config']['groups'])) return ['error' => 'The export has no layout in it.'];
-    $file = ['kind' => ($j['kind'] ?? '') === 'full' ? 'full' : 'redacted', 'config' => $j['config'], 'css' => is_string($j['css'] ?? null) ? $j['css'] : null,
-             'vars' => isset($j['vars']) && is_array($j['vars']) ? $j['vars'] : [], 'secrets' => isset($j['secrets']) && is_array($j['secrets']) ? $j['secrets'] : [], 'created' => (int)($j['created'] ?? 0)];
-  } elseif (isset($j['groups']) && is_array($j['groups'])) {
-    $file = ['kind' => 'layout', 'config' => $j, 'css' => null, 'vars' => [], 'secrets' => [], 'created' => 0];
-  } else return ['error' => 'This is not an UnDash settings file.'];
-  foreach ($file['vars'] as $k => $v) if (!is_string($k) || !preg_match('/^[A-Za-z][A-Za-z0-9_]{0,63}$/', $k) || !is_scalar($v)) return ['error' => 'The variables in the file are malformed.'];
-  foreach ($file['secrets'] as $id => $c) if (!preg_match('/^[a-f0-9]{8}$/', (string)$id) || !is_array($c)) return ['error' => 'The credentials in the file are malformed.'];
-  $rawGroups = $file['config']['groups'];
-  $cfg = und_normalize(und_migrate($file['config']));
-  $file['config'] = $cfg;
+    if ((int)($j['schema'] ?? 0) > UND_SCHEMA) return ['error' => 'This export uses settings schema ' . (int)$j['schema'] . '; this UnDash understands up to ' . UND_SCHEMA . '. Update UnDash first.'];
+    if (!isset($j['config']['groups']) || !is_array($j['config']['groups'])) return ['error' => 'The export has no layout in it.'];
+    $cfg = $j['config']; $vars = is_array($j['vars'] ?? null) ? $j['vars'] : []; $sec = is_array($j['secrets'] ?? null) ? $j['secrets'] : [];
+  } elseif (isset($j['groups']) && is_array($j['groups'])) { $cfg = $j; $vars = []; $sec = []; }
+  else return ['error' => 'This is not an UnDash settings file.'];
+  foreach ($vars as $k => $v) if (!is_string($k) || !preg_match('/^[A-Za-z][A-Za-z0-9_]{0,63}$/', $k) || !is_scalar($v)) return ['error' => 'The variables in the file are malformed.'];
+  foreach ($sec as $id => $c) if (!preg_match('/^[a-f0-9]{8}$/', (string)$id) || !is_array($c)) return ['error' => 'The credentials in the file are malformed.'];
+  $conv = und_store_convert(und_normalize(und_migrate($cfg)), $vars, $sec);
+  return und_import_summary(['kind' => 'config', 'legacy' => true, 'config' => $conv['config'], 'css' => is_string($j['css'] ?? null) ? $j['css'] : null, 'ignored' => null,
+    'unraid_url' => (string)($j['unraid']['url'] ?? ''), 'env' => array_filter($conv['env'], function ($v) { return $v !== ''; })], $cfg['groups']);
+}
+
+function und_import_summary(array $file, $rawGroups) {
+  $cfg = $file['config'];
   $n = 0; foreach ($cfg['groups'] as $g) $n += count($g['services']);
-  $dropped = 0; foreach ($rawGroups as $g) $dropped += is_array($g) ? count((array)($g['services'] ?? [])) : 0;
-  $file['summary'] = ['kind' => $file['kind'], 'created' => $file['created'], 'groups' => count($cfg['groups']), 'widgets' => $n, 'skipped' => max(0, $dropped - $n),
-    'theme' => $cfg['appearance']['theme'], 'accent' => $cfg['appearance']['accent'], 'refresh' => $cfg['general']['refresh'], 'css' => $file['css'] !== null ? strlen($file['css']) : null,
-    'vars' => count($file['vars']), 'credentials' => count($file['secrets'])];
+  $dropped = 0; foreach ((array)$rawGroups as $g) $dropped += is_array($g) ? count((array)($g['services'] ?? [])) : 0;
+  $file['summary'] = ['kind' => $file['kind'], 'legacy' => !empty($file['legacy']), 'groups' => count($cfg['groups']), 'widgets' => $n, 'skipped' => max(0, $dropped - $n),
+    'theme' => $cfg['appearance']['theme'], 'refresh' => $cfg['general']['refresh'], 'css' => $file['css'] !== null ? strlen($file['css']) : null, 'values' => count($file['env'])];
   return $file;
 }
 
 /**
- * Apply a checked import. A backup of the current settings is taken first, so it can be undone from the backup list.
- * Credentials: a full export replaces them; a redacted or layout-only file keeps the stored ones for widgets with the same id
- * and keeps stored values of variables the file leaves empty.
+ * Apply a checked import; a backup is taken first, so it can be undone from the backup list.
+ *   config  replaces config.yaml (layout, apps, theme ...). Your .env stays; the Unraid API address is only filled in when none is set.
+ *   env     adds the values to .env (a value in the file replaces the one stored under the same name).
  */
 function und_import_apply($raw) {
   $f = und_import_parse($raw);
   if (isset($f['error'])) return $f;
-  $j_unraid = json_decode($raw, true)['unraid'] ?? null;
+  und_config_lock();
   $bk = und_backup('before import');
-  $old = und_secrets();
-  $ids = und_service_ids($f['config']);
-  $vars = $old['vars'];
-  foreach ($f['vars'] as $k => $v) { $k = strtoupper($k); if ((string)$v !== '' || !isset($vars[$k])) $vars[$k] = und_clip((string)$v, 2000); }
-  $svc = [];
-  foreach ($ids as $id) {
-    $c = $f['kind'] === 'full' && isset($f['secrets'][$id]) ? $f['secrets'][$id] : ($old['svc'][$id] ?? []);
-    foreach (['key', 'password', 'username'] as $k) if (isset($c[$k]) && is_scalar($c[$k]) && (string)$c[$k] !== '') $svc[$id][$k] = und_clip((string)$c[$k], 2000);
+  if ($f['kind'] === 'env') {
+    $env = und_env();
+    foreach ($f['env'] as $k => $v) $env[$k] = $v;
+    und_env_write($env);
+    return ['ok' => true, 'backup' => $bk];
   }
   if (!und_save_config($f['config'], false)) return ['error' => 'Could not write the configuration directory.'];
-  $unraid = $old['unraid'];
-  if (isset($j_unraid) && is_array($j_unraid)) {
-    // a full export is a restore and replaces the address; a redacted one (a shared layout) only fills it in when none is set
-    if (!empty($j_unraid['url']) && is_string($j_unraid['url']) && preg_match('#^https?://#i', $j_unraid['url']) && ($f['kind'] === 'full' || (string)($unraid['url'] ?? '') === '')) $unraid['url'] = und_clip($j_unraid['url'], 300);
-    if ($f['kind'] === 'full' && !empty($j_unraid['key']) && is_string($j_unraid['key'])) $unraid['key'] = und_clip($j_unraid['key'], 300);
-  }
-  und_save_secrets(['vars' => $vars, 'svc' => $svc, 'unraid' => $unraid]);
-  if ($f['css'] !== null) und_save_css($f['css'], false);
+  $parts = [];
+  if ($f['css'] !== null) $parts['custom_css'] = trim(und_sanitize_css($f['css'])) === '' ? null : und_sanitize_css($f['css']);
+  if ($f['ignored'] !== null) $parts['ignored_alerts'] = $f['ignored'] ? und_ignore_clean($f['ignored']) : null;
+  if ($f['unraid_url'] !== '' && preg_match('#^https?://#i', $f['unraid_url']) && (string)(und_doc()['unraid']['url'] ?? '') === '') $parts['unraid'] = ['url' => und_clip($f['unraid_url'], 300)];
+  if ($parts) und_doc_write($parts);
+  // values from the file fill empty ones; a {{NAME}} the config uses but .env lacks gets an empty entry, so Settings lists it to fill in
+  $env = und_env(); $before = $env;
+  foreach ($f['env'] as $k => $v) if (!isset($env[$k]) || $env[$k] === '') $env[$k] = $v;
+  foreach (array_keys(und_cfg_refs($f['config'])) as $n) if (!isset($env[$n]) && $n !== 'UNRAID_IP') $env[$n] = '';
+  if ($env !== $before) und_env_write($env);
   return ['ok' => true, 'backup' => $bk];
 }
 ]]></INLINE>
-<SHA256>97379af8a61abcc3fde337b8ed29742726a0ed1b9404c4623572a3bc5d8fbcbd</SHA256>
+<SHA256>bb2f450b5cf2b4bee29add9fcb569b05d5515800fae76edd803b8b99f864fa79</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/ops.php" Mode="0644">
@@ -2484,21 +2590,28 @@ function und_handoff_use($t) {
 
 /* ---------- password sign-in (Docker version: there is no Unraid session to reuse) ---------- */
 
-function und_auth_file() { return UND_DIR . '/auth.json'; }
 function und_setup_file() { return UND_DIR . '/setup-code.txt'; }
+
+/** The password hash (or the choice to go without one) is kept in .env as UNDASH_PASSWORD_HASH / UNDASH_AUTH=open. */
+function und_auth_set(array $set) {
+  und_config_lock();
+  $env = und_env();
+  unset($env['UNDASH_PASSWORD_HASH'], $env['UNDASH_AUTH']);
+  return und_env_write($env + $set);
+}
 
 /** none = not set up yet (first start), env = UNDASH_PASSWORD, file = password set in the dashboard,
  *  open = the owner chose to go without a password for now (anyone who reaches the port is signed in). */
 function und_auth_kind() {
   if ((string)getenv('UNDASH_PASSWORD') !== '') return 'env';
-  $a = und_read_json(und_auth_file(), []);
-  return !empty($a['hash']) ? 'file' : (!empty($a['open']) ? 'open' : 'none');
+  $e = und_env();
+  return !empty($e['UNDASH_PASSWORD_HASH']) ? 'file' : (($e['UNDASH_AUTH'] ?? '') === 'open' ? 'open' : 'none');
 }
 
 /** Skip the password (setup page) or remove it later (Settings). A password can be added again at any time. */
 function und_auth_open() {
   if (und_auth_kind() === 'env') return ['error' => 'The password comes from UNDASH_PASSWORD in the container settings; remove it there.'];
-  if (!und_write_json(und_auth_file(), ['open' => true, 'set' => time()], true)) return ['error' => 'Could not write ' . und_auth_file() . '. Check the /config volume.'];
+  if (!und_auth_set(['UNDASH_AUTH' => 'open'])) return ['error' => 'Could not write the .env file. Check the /config volume.'];
   @unlink(und_setup_file());
   return ['ok' => true];
 }
@@ -2506,13 +2619,13 @@ function und_auth_open() {
 function und_password_ok($pw) {
   $pw = (string)$pw;
   if (und_auth_kind() === 'env') return hash_equals((string)getenv('UNDASH_PASSWORD'), $pw);
-  $a = und_read_json(und_auth_file(), []);
-  return !empty($a['hash']) && password_verify($pw, (string)$a['hash']);
+  $h = (string)(und_env()['UNDASH_PASSWORD_HASH'] ?? '');
+  return $h !== '' && password_verify($pw, $h);
 }
 
 function und_password_set($pw) {
   if (strlen((string)$pw) < 10) return ['error' => 'Use at least 10 characters.'];
-  if (!und_write_json(und_auth_file(), ['hash' => password_hash((string)$pw, PASSWORD_DEFAULT), 'set' => time()], true)) return ['error' => 'Could not write ' . und_auth_file() . '. Check the /config volume.'];
+  if (!und_auth_set(['UNDASH_PASSWORD_HASH' => password_hash((string)$pw, PASSWORD_DEFAULT)])) return ['error' => 'Could not write the .env file. Check the /config volume.'];
   @unlink(und_setup_file());
   return ['ok' => true];
 }
@@ -2541,7 +2654,7 @@ function und_login_failed($ip) {
   $a[] = time(); und_write_json($f, $a, true);
 }
 ]]></INLINE>
-<SHA256>146ab02dec95a1e6ce599da4460ab32109b8673aad402aff87a2c08f9079b4c9</SHA256>
+<SHA256>7c7e99adf390939a0bab85114a93e908e8761374ff25cb2eccfccbe5b6089e01</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/unraid_api.php" Mode="0644">
@@ -3027,11 +3140,57 @@ function und_arr_status(array $cfg, $id) {
 <FILE Name="&emhttp;/include/downloads.php" Mode="0644">
 <INLINE><![CDATA[<?php
 /*
- * UnDash - download clients (qBittorrent, SABnzbd): connection, speeds, counts by state, the active items with progress
- * and ETA, and pause / resume of the whole client through the client's own API. Cached for 3 seconds.
+ * UnDash - download clients (qBittorrent, SABnzbd, qui): connection, speeds, counts by state, the active items with
+ * progress and ETA, and pause / resume of the whole client through the client's own API. Cached for 3 seconds.
+ * qui (github.com/autobrr/qui) manages several qBittorrent instances; UnDash reads its API with an API key (X-API-Key)
+ * and shows the totals plus one line per instance. qui is read only here.
  */
 
-function und_dl_types() { return ['qbittorrent', 'sabnzbd']; }
+function und_dl_types() { return ['qbittorrent', 'sabnzbd', 'qui']; }
+
+/** A qui API call (GET, JSON). */
+function und_qui_get(array $s, $path) {
+  return und_get(und_u($s['url'], $path), ['headers' => ['X-API-Key' => $s['key'], 'Accept' => 'application/json'], 'timeout' => 15]);
+}
+
+/** Counts, speeds and the active torrents of every qBittorrent instance in qui. */
+function und_qui_status(array $s, $items = 8) {
+  $inst = und_qui_get($s, '/api/instances');
+  if (!is_array($inst)) throw new Exception('qui did not answer with a list of instances.');
+  $keys = ['downloading', 'seeding', 'idle', 'crossseed', 'stalled', 'paused', 'checking', 'error', 'tracker', 'completed'];
+  $tot = array_fill_keys($keys, 0); $down = 0.0; $up = 0.0; $list = []; $active = [];
+  foreach ($inst as $i) {
+    if (!is_array($i) || !isset($i['id'])) continue;
+    $row = ['name' => und_clip((string)($i['name'] ?? ('Instance ' . $i['id'])), 80), 'online' => !empty($i['connected']), 'down' => 0, 'up' => 0, 'counts' => array_fill_keys($keys, 0), 'total' => 0];
+    if ($row['online']) {
+      try {
+        $j = und_qui_get($s, '/api/instances/' . rawurlencode((string)$i['id']) . '/torrents?page=0&limit=' . max(1, (int)$items) . '&sort=dlspeed&order=desc');
+        $st = (array)($j['stats'] ?? []); $cs = (array)($j['counts']['status'] ?? []); $tags = (array)($j['counts']['tags'] ?? []);
+        $n = function ($k) use ($cs) { return (int)($cs[$k] ?? 0); };
+        $row['counts'] = ['downloading' => (int)($st['downloading'] ?? $n('downloading')), 'seeding' => (int)($st['seeding'] ?? $n('seeding')), 'idle' => $n('inactive'),
+          'crossseed' => (int)($tags['cross-seed'] ?? 0), 'stalled' => $n('stalled'), 'paused' => (int)($st['paused'] ?? ($n('paused') ?: $n('stopped'))),
+          'checking' => (int)($st['checking'] ?? $n('checking')), 'error' => (int)($st['error'] ?? $n('errored')),
+          'tracker' => $n('unregistered') + $n('tracker_down') + $n('tracker_error'), 'completed' => $n('completed')];
+        $row['total'] = (int)($st['total'] ?? 0);
+        $row['down'] = (float)($st['totalDownloadSpeed'] ?? 0); $row['up'] = (float)($st['totalUploadSpeed'] ?? 0);
+        foreach ((array)($j['torrents'] ?? []) as $t) {
+          $ts = (string)($t['state'] ?? '');
+          if (!in_array($ts, ['downloading', 'forcedDL', 'metaDL', 'forcedMetaDL', 'stalledDL', 'checkingDL', 'allocating'], true)) continue;
+          $eta = (int)($t['eta'] ?? 0);
+          $active[] = ['name' => und_clip((string)($t['name'] ?? ''), 140), 'progress' => round(100 * (float)($t['progress'] ?? 0), 1), 'speed' => (float)($t['dlspeed'] ?? 0),
+                       'eta' => $eta > 0 && $eta < 8640000 ? $eta : null, 'state' => $ts === 'stalledDL' ? 'stalled' : 'downloading', 'size' => (float)($t['size'] ?? 0)];
+        }
+      } catch (Throwable $e) {
+        $row['online'] = false; $row['error'] = und_redact($e->getMessage(), [$s['key']]);
+      }
+    } else $row['error'] = und_clip((string)($i['connectionStatus'] ?? 'not connected'), 120);
+    foreach ($keys as $k) $tot[$k] += $row['counts'][$k];
+    $down += $row['down']; $up += $row['up'];
+    $list[] = $row;
+  }
+  usort($active, function ($a, $b) { return $b['speed'] <=> $a['speed'] ?: $b['progress'] <=> $a['progress']; });
+  return ['counts' => $tot, 'down' => $down, 'up' => $up, 'instances' => $list, 'items' => array_slice($active, 0, $items)];
+}
 
 function und_dl_service(array $cfg, $id) {
   foreach ($cfg['groups'] as $g) foreach ($g['services'] as $x) if ($x['id'] === $id && in_array($x['type'], und_dl_types(), true)) return und_service_full($cfg, $id);
@@ -3093,6 +3252,15 @@ function und_dl_status(array $cfg, $id) {
         $out = array_merge($out, ['online' => true, 'down' => (float)($tr['dl_info_speed'] ?? 0), 'up' => (float)($tr['up_info_speed'] ?? 0), 'counts' => $c,
           'state' => $conn === 'disconnected' ? 'disconnected' : ($c['downloading'] ? 'downloading' : ($c['stalled'] ? 'stalled' : ($c['paused'] && !$c['seeding'] && !$c['queued'] ? 'paused' : 'idle'))),
           'note' => $conn === 'firewalled' ? 'Firewalled: incoming connections are blocked.' : '', 'can_pause' => true]);
+      } elseif ($s['type'] === 'qui') {
+        $q = und_qui_status($s);
+        $on = array_filter($q['instances'], function ($i) { return $i['online']; });
+        if (!$q['instances']) throw new Exception('qui has no qBittorrent instances yet.');
+        $c = $q['counts'];
+        $out = array_merge($out, ['online' => true, 'down' => $q['down'], 'up' => $q['up'], 'counts' => $c, 'items' => $q['items'],
+          'instances' => count($q['instances']) > 1 || !$on ? $q['instances'] : [],
+          'state' => !$on ? 'disconnected' : ($c['downloading'] ? 'downloading' : ($c['stalled'] ? 'stalled' : 'idle')),
+          'note' => count($on) < count($q['instances']) ? (count($q['instances']) - count($on)) . ' of ' . count($q['instances']) . ' instances are not connected.' : '', 'can_pause' => false]);
       } else {
         $q = und_get(und_u($s['url'], '/api?output=json&mode=queue&limit=8&apikey=' . rawurlencode($s['key'])));
         if (isset($q['error'])) throw new Exception('SABnzbd: ' . $q['error']);
@@ -3124,6 +3292,7 @@ function und_dl_action(array $cfg, $id, $op) {
   if (!in_array($op, ['pause', 'resume'], true)) return ['error' => 'Unknown action.'];
   $s = und_dl_service($cfg, $id);
   if (!$s) return ['error' => 'Unknown download client.'];
+  if ($s['type'] === 'qui') return ['error' => 'Pause and resume torrents in qui itself.'];
   $lock = und_lock('dl:' . $id);
   if (!$lock) return ['error' => 'Another action on ' . $s['name'] . ' is still running.'];
   try {
@@ -3148,7 +3317,7 @@ function und_dl_action(array $cfg, $id, $op) {
   }
 }
 ]]></INLINE>
-<SHA256>cda7a5f8385d5bc9fa00f5b8c177fd6d0763cf1a38ff191ffbe5719312e7284d</SHA256>
+<SHA256>42cb3007562d68c634a445f2864e5fd4fa87e95408afb351004e59feab52f08f</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/ignores.php" Mode="0644">
@@ -3156,8 +3325,8 @@ function und_dl_action(array $cfg, $id, $op) {
 /*
  * UnDash - ignored alerts. Alerts are still worked out on every refresh; an ignore rule only hides a matching alert
  * from the dashboard, so monitoring never stops and an ignored alert comes back as soon as its rule is removed or runs
- * out while the condition is still there. Rules live in ignores.json in the configuration directory (mirrored to the
- * flash drive like config.json), so they survive plugin updates and container re-creation.
+ * out while the condition is still there. Rules live in config.yaml (ignored_alerts), so they survive plugin updates and
+ * container re-creation.
  *
  * A rule hides either one alert (kind "instance", key "<category>:<resource>", e.g. "disk.hot:disk3") or every alert
  * of a category (kind "type", key "<category>"). until is a Unix time, or null for "permanently".
@@ -3176,7 +3345,6 @@ const UND_IGNORE_MAX = 500;
 const UND_IGNORE_MIN_S = 300;            // 5 minutes
 const UND_IGNORE_MAX_S = 366 * 86400;    // a year; longer than that is "permanently"
 
-function und_ignore_file() { return und_file('ignores.json'); }
 
 /** Valid rules only: anything malformed in the file is dropped instead of breaking the dashboard. */
 function und_ignore_clean($list) {
@@ -3201,7 +3369,7 @@ function und_ignore_clean($list) {
 /** Container names, disk names, versions, array states: letters, digits and a few separators. */
 function und_ignore_res_ok($res) { return is_string($res) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_.+@ -]{0,127}$/', $res) === 1; }
 
-function und_ignores() { return und_ignore_clean(und_read_json(und_ignore_file(), [])); }
+function und_ignores() { return und_ignore_clean(und_doc()['ignored_alerts'] ?? []); }
 
 /** The rules still in force at $now (what the live refresh sends with every answer). */
 function und_ignores_active($now = null) {
@@ -3211,19 +3379,16 @@ function und_ignores_active($now = null) {
 
 /** Read, change and write the rules under one lock, so two browser tabs cannot lose each other's changes. */
 function und_ignore_edit(callable $fn) {
-  @mkdir(und_tmp('locks'), 0755, true);
-  $fp = @fopen(und_tmp('locks/ignores.lock'), 'c');
-  if (!$fp || !flock($fp, LOCK_EX)) { if ($fp) fclose($fp); return ['error' => 'The ignore list is busy. Try again.']; }
-  try {
-    $list = und_ignores();
-    $res = $fn($list);
-    if (isset($res['error'])) return $res;
-    // keep expired rules a month so Settings can show them, then let them go
-    $old = time() - 30 * 86400;
-    $list = array_values(array_filter($list, function ($r) use ($old) { return $r['until'] === null || $r['until'] > $old; }));
-    if (!und_store_write('ignores.json', json_encode(und_ignore_clean($list), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))) return ['error' => 'The ignore list could not be saved.'];
-    return $res + ['ok' => true];
-  } finally { flock($fp, LOCK_UN); fclose($fp); }
+  und_config_lock();
+  $list = und_ignores();
+  $res = $fn($list);
+  if (isset($res['error'])) return $res;
+  // keep expired rules a month so Settings can show them, then let them go
+  $old = time() - 30 * 86400;
+  $list = array_values(array_filter($list, function ($r) use ($old) { return $r['until'] === null || $r['until'] > $old; }));
+  $clean = und_ignore_clean($list);
+  if (!und_doc_write(['ignored_alerts' => $clean ? $clean : null])) return ['error' => 'The ignore list could not be saved.'];
+  return $res + ['ok' => true];
 }
 
 /** duration: seconds, or "permanent". Ignoring the same alert again replaces the old rule. */
@@ -3269,7 +3434,347 @@ function und_ignore_purge_expired() {
   });
 }
 ]]></INLINE>
-<SHA256>fbcbd6b5641d1b4156896c59f162e1807c3717f7de135f9c7612207f61f09768</SHA256>
+<SHA256>4b1da94442a2a5aa4dca1b9a8a71ab2aa4c7bceee9ba84bbf430f90b6693c46f</SHA256>
+</FILE>
+
+<FILE Name="&emhttp;/include/store.php" Mode="0644">
+<INLINE><![CDATA[<?php
+/*
+ * UnDash - where settings live. Two files in the configuration folder (mirrored to the flash drive):
+ *
+ *   config.yaml  everything you set up: layout, apps, theme, ignored alerts, custom CSS, the Unraid API address.
+ *                It never holds a secret: an app's key, user name or password is a reference such as {{RADARR_API_KEY}}.
+ *   .env         the values behind those references, plus the Unraid API key and the Docker version's password hash.
+ *
+ * Alert history and backups are data, not settings: they go in data/ (not mirrored).
+ * Older versions kept config.json, secrets.json, custom.css and ignores.json; they are converted on first use (see
+ * und_store_migrate) and moved to data/legacy/.
+ */
+
+const UND_ENV_RESERVED = ['UNRAID_API_KEY', 'UNDASH_PASSWORD_HASH', 'UNDASH_AUTH'];
+const UND_CRED_FIELDS = ['key' => 'API_KEY', 'username' => 'USERNAME', 'password' => 'PASSWORD'];
+
+function und_data_dir() { $d = und_store_dir() . '/data'; @mkdir($d, 0700, true); return $d; }
+
+/* ---------- YAML: a small writer and a reader for what it writes (plus ordinary hand edits) ---------- */
+
+function und_yaml_emit($v, $indent = 0) {
+  $pad = str_repeat('  ', $indent);
+  if (!is_array($v) && !is_object($v)) return und_yaml_scalar_out($v);
+  $a = (array)$v;
+  $list = $a === [] ? is_array($v) && !is_object($v) : array_keys($a) === range(0, count($a) - 1);
+  if ($a === []) return $list ? '[]' : '{}';
+  $out = '';
+  foreach ($a as $k => $x) {
+    $key = $list ? '-' : und_yaml_key_out((string)$k) . ':';
+    if ((is_array($x) || is_object($x)) && (array)$x !== []) {
+      $inner = und_yaml_emit($x, $indent + 1);
+      if ($list && !und_yaml_is_list($x)) {
+        // "- key: value" with the following keys aligned under the first
+        $lines = explode("\n", rtrim($inner, "\n"));
+        $out .= $pad . '- ' . ltrim($lines[0]) . "\n";
+        foreach (array_slice($lines, 1) as $l) $out .= $l . "\n";
+      } else $out .= $pad . $key . "\n" . $inner;
+    } elseif (is_string($x) && strpos($x, "\n") !== false) {
+      $out .= $pad . $key . " |-\n";
+      foreach (explode("\n", $x) as $l) $out .= ($l === '' ? '' : $pad . '  ' . $l) . "\n";
+    } else $out .= $pad . $key . ' ' . und_yaml_emit($x) . "\n";
+  }
+  return $out;
+}
+function und_yaml_is_list($x) { $a = (array)$x; return !is_object($x) && ($a === [] || array_keys($a) === range(0, count($a) - 1)); }
+function und_yaml_key_out($k) { return preg_match('/^[A-Za-z0-9_][A-Za-z0-9_. -]*$/', $k) && substr($k, -1) !== ' ' ? $k : und_yaml_quote($k); }
+function und_yaml_quote($s) { return '"' . strtr($s, ['\\' => '\\\\', '"' => '\\"', "\t" => '\\t', "\r" => '\\r', "\n" => '\\n']) . '"'; }
+function und_yaml_scalar_out($v) {
+  if ($v === null) return 'null';
+  if ($v === true) return 'true';
+  if ($v === false) return 'false';
+  if (is_int($v)) return (string)$v;
+  if (is_float($v)) return rtrim(rtrim(sprintf('%.6F', $v), '0'), '.') ?: '0';
+  $s = (string)$v;
+  // plain only when it reads back as the same string
+  $plain = $s !== '' && preg_match('/^[A-Za-z_\/.][A-Za-z0-9 _\/.:@()+,-]*$/', $s) && substr($s, -1) !== ' ' && strpos($s, ': ') === false && strpos($s, ' #') === false
+    && !in_array(strtolower($s), ['true', 'false', 'yes', 'no', 'on', 'off', 'null', '~'], true);
+  return $plain ? $s : und_yaml_quote($s);
+}
+
+/** Reads YAML: block maps and lists, quoted and plain scalars, [] and {} (also short flow lists), | and |- blocks, comments. */
+function und_yaml_read($text) {
+  $raw = preg_split('/\r\n|\r|\n/', (string)$text);
+  $lines = [];
+  for ($n = 0; $n < count($raw); $n++) {
+    $r = str_replace("\t", '    ', $raw[$n]);
+    $l = und_yaml_strip_comment($r);
+    if (trim($l) === '' || trim($l) === '---') continue;
+    $ind = strlen($l) - strlen(ltrim($l, ' ')); $body = rtrim(ltrim($l, ' '));
+    // a block scalar: "key: |" or "key: |-" takes the following more-indented lines verbatim
+    if (preg_match('/^(.*?:)\s*\|([-+]?)$/', $body, $m) || preg_match('/^(-)\s*\|([-+]?)$/', $body, $m)) {
+      $blk = []; $min = null;
+      while ($n + 1 < count($raw)) {
+        $nx = str_replace("\t", '    ', $raw[$n + 1]);
+        $ni = strlen($nx) - strlen(ltrim($nx, ' '));
+        if (trim($nx) !== '' && $ni <= $ind) break;
+        $n++; $blk[] = $nx;
+        if (trim($nx) !== '') $min = $min === null ? $ni : min($min, $ni);
+      }
+      $txt = implode("\n", array_map(function ($b) use ($min) { return (string)substr($b, (int)$min); }, $blk));
+      $txt = $m[2] === '-' ? rtrim($txt, "\n") : rtrim($txt, "\n") . "\n";
+      $lines[] = [$ind, $m[1] . ' ' . und_yaml_quote($txt)];
+      continue;
+    }
+    $lines[] = [$ind, $body];
+  }
+  $i = 0;
+  $out = $lines ? und_yaml_block($lines, $i, $lines[0][0]) : [];
+  return und_yaml_fix($out);
+}
+/** {} written for an empty map comes back from the shared parser as the string "{}". */
+function und_yaml_fix($v) {
+  if ($v === '{}') return [];
+  if (is_array($v)) foreach ($v as $k => $x) $v[$k] = und_yaml_fix($x);
+  return $v;
+}
+
+/* ---------- .env ---------- */
+
+function und_env_text(array $env) {
+  $out = "# UnDash secrets: API keys, user names and passwords. Keep this file private.\n# config.yaml refers to these by name, e.g. {{RADARR_API_KEY}}.\n";
+  ksort($env);
+  foreach ($env as $k => $v) {
+    $v = (string)$v;
+    $out .= $k . '=' . ($v === '' || preg_match('/^[A-Za-z0-9_.\/:@+,-]*$/', $v) ? $v : '"' . strtr($v, ['\\' => '\\\\', '"' => '\\"', "\n" => '\\n']) . '"') . "\n";
+  }
+  return $out;
+}
+function und_env_read($text) {
+  $out = [];
+  foreach (preg_split('/\r\n|\r|\n/', (string)$text) as $l) {
+    if (!preg_match('/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $l, $m)) continue;
+    $v = trim($m[2]);
+    if ($v !== '' && $v[0] === '"' && substr($v, -1) === '"' && strlen($v) > 1) $v = strtr(substr($v, 1, -1), ['\\n' => "\n", '\\"' => '"', '\\\\' => '\\']);
+    elseif ($v !== '' && $v[0] === "'" && substr($v, -1) === "'" && strlen($v) > 1) $v = substr($v, 1, -1);
+    elseif (($p = strpos($v, ' #')) !== false) $v = rtrim(substr($v, 0, $p));
+    $out[strtoupper($m[1])] = $v;
+  }
+  return $out;
+}
+
+/* ---------- the document (config.yaml) and the secrets (.env), cached per request ---------- */
+
+function &und_store_cache() { static $c = null; return $c; }
+function und_store_reset() { $c = &und_store_cache(); $c = null; }
+
+/** Parsed config.yaml and .env; read again whenever either file changed (another request, a hand edit, a restore). */
+function und_store_load() {
+  und_store_migrate();
+  $y = und_file('config.yaml'); $e = und_file('.env');
+  clearstatcache();
+  $sig = $y . '|' . @filemtime($y) . '|' . @filesize($y) . '|' . $e . '|' . @filemtime($e) . '|' . @filesize($e) . '|' . md5((string)@file_get_contents($y) . (string)@file_get_contents($e));
+  $c = &und_store_cache();
+  if ($c !== null && $c['sig'] === $sig) return $c;
+  $doc = is_file($y) ? und_yaml_read((string)@file_get_contents($y)) : [];
+  $c = ['doc' => is_array($doc) ? $doc : [], 'env' => und_env_read((string)@file_get_contents($e)), 'sig' => $sig];
+  return $c;
+}
+function und_doc() { return und_store_load()['doc']; }
+function und_env() { return isset($GLOBALS['UND_TEST_ENV']) ? $GLOBALS['UND_TEST_ENV'] : und_store_load()['env']; }
+
+/** Change part of config.yaml (top-level keys); null removes a key. */
+function und_doc_write(array $parts) {
+  $doc = und_doc();
+  foreach ($parts as $k => $v) { if ($v === null) unset($doc[$k]); else $doc[$k] = $v; }
+  unset($doc['schema']);       // version is the one that is written
+  $order = ['version', 'general', 'appearance', 'dashboard', 'media', 'downloads', 'apps', 'docker', 'vms', 'groups', 'unraid', 'ignored_alerts', 'custom_css'];
+  $sorted = [];
+  foreach ($order as $k) if (array_key_exists($k, $doc)) $sorted[$k] = $doc[$k];
+  foreach ($doc as $k => $v) if (!array_key_exists($k, $sorted)) $sorted[$k] = $v;
+  $txt = "# UnDash settings. No secrets in here: keys, user names and passwords are in .env next to this file.\n"
+       . "# Edit in Settings, or by hand (then reload the dashboard).\n" . und_yaml_emit($sorted);
+  $ok = und_store_write('config.yaml', $txt);
+  und_store_reset();
+  return $ok;
+}
+function und_env_write(array $env) {
+  $clean = [];
+  foreach ($env as $k => $v) { $k = strtoupper((string)$k); if (preg_match('/^[A-Z_][A-Z0-9_]{0,63}$/', $k)) $clean[$k] = und_clip((string)$v, 4000); }
+  $ok = und_store_write('.env', und_env_text($clean), true);
+  und_store_reset();
+  return $ok;
+}
+
+/* ---------- app credentials: references in config.yaml, values in .env ---------- */
+
+function und_ref_name($v) { return preg_match('/^\{\{\s*([A-Za-z0-9_]+)\s*\}\}$/', (string)$v, $m) ? strtoupper($m[1]) : null; }
+
+/** A readable, unused .env name for an app's credential: "qBittorrent Private" + key -> QBITTORRENT_PRIVATE_API_KEY. */
+function und_cred_name($appName, $field, array $taken) {
+  $base = strtoupper(trim(preg_replace('/[^A-Za-z0-9]+/', '_', (string)$appName), '_')) ?: 'APP';
+  if (preg_match('/^[0-9]/', $base)) $base = 'APP_' . $base;
+  $name = $base . '_' . UND_CRED_FIELDS[$field];
+  for ($n = 2; isset($taken[$name]); $n++) $name = $base . '_' . $n . '_' . UND_CRED_FIELDS[$field];
+  return $name;
+}
+
+/** Every name config.yaml refers to, anywhere ({{NAME}} in addresses, options and credential fields). */
+function und_cfg_refs(array $cfg) {
+  preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', json_encode($cfg['groups'] ?? []), $m);
+  return array_flip(array_map('strtoupper', $m[1]));
+}
+
+/**
+ * Apply credentials sent from Settings: for each app id and field, a new value (stored in .env under a readable name and
+ * referenced from config.yaml), UND_KEEP (unchanged) or '' (removed). Values the config no longer refers to are dropped.
+ */
+function und_creds_apply(array $cfg, array $old, array $creds, array &$env) {
+  $oldRefs = [];
+  foreach ($old['groups'] ?? [] as $g) foreach ($g['services'] as $s) foreach (array_keys(UND_CRED_FIELDS) as $f) if ($r = und_ref_name($s[$f] ?? '')) $oldRefs[$s['id']][$f] = $r;
+  foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) foreach (array_keys(UND_CRED_FIELDS) as $f) {
+    $in = $creds[$s['id']][$f] ?? UND_KEEP;
+    $ref = und_ref_name($s[$f] ?? '') ?: ($oldRefs[$s['id']][$f] ?? null);
+    if ($in === UND_KEEP) { $s[$f] = $ref ? '{{' . $ref . '}}' : ''; continue; }
+    if ((string)$in === '') { $s[$f] = ''; continue; }
+    if ($r = und_ref_name($in)) { $s[$f] = '{{' . $r . '}}'; continue; }          // the user typed a reference to a shared value
+    if (!$ref || in_array($ref, UND_ENV_RESERVED, true)) $ref = und_cred_name($s['name'], $f, $env + und_cfg_refs($cfg));
+    $env[$ref] = und_clip((string)$in, 4000);
+    $s[$f] = '{{' . $ref . '}}';
+  }
+  unset($g, $s);
+  // a credential value nothing refers to any more goes (only credential-style names, never a shared value someone added)
+  $used = und_cfg_refs($cfg);
+  foreach ($oldRefs as $fields) foreach ($fields as $r) if (!isset($used[$r])) unset($env[$r]);
+  return $cfg;
+}
+
+/* ---------- conversion from the old files ---------- */
+
+/** Older versions: config.json + secrets.json (+ custom.css, ignores.json). Converted once; the old files go to data/legacy/. */
+function und_store_migrate() {
+  static $done = [];
+  $dir = und_store_dir();
+  if (isset($done[$dir]) && !is_file($dir . '/config.json') && !is_file(UND_DIR . '/config.json')) return;
+  $done[$dir] = 1;
+  $y = und_file('config.yaml'); $j = und_file('config.json');
+  if (is_file($y) || !is_file($j)) return;
+  $lock = und_config_lock();
+  clearstatcache();
+  if (is_file(und_file('config.yaml'))) return;
+  $cfg = und_read_json($j, null);
+  if (!is_array($cfg)) return;
+  $sec = und_read_json(und_file('secrets.json'), []);
+  $conv = und_store_convert(und_normalize(und_migrate($cfg)), (array)($sec['vars'] ?? []), (array)($sec['svc'] ?? []));
+  $ign = und_read_json(und_file('ignores.json'), []);
+  $doc = ['version' => UND_SCHEMA] + $conv['config']; unset($doc['schema']);
+  if (!empty($sec['unraid']['url'])) $doc['unraid'] = ['url' => (string)$sec['unraid']['url']];
+  if (is_array($ign) && $ign) $doc['ignored_alerts'] = array_values($ign);
+  $css = (string)@file_get_contents(und_file('custom.css'));
+  if (trim($css) !== '') $doc['custom_css'] = $css;
+  $env = $conv['env'];
+  if (!empty($sec['unraid']['key'])) $env['UNRAID_API_KEY'] = (string)$sec['unraid']['key'];
+  $auth = und_read_json(UND_DIR . '/auth.json', []);
+  if (!empty($auth['hash'])) $env['UNDASH_PASSWORD_HASH'] = (string)$auth['hash']; elseif (!empty($auth['open'])) $env['UNDASH_AUTH'] = 'open';
+  und_store_write('.env', und_env_text($env), true);
+  und_store_reset();
+  $txt = "# UnDash settings. No secrets in here: keys, user names and passwords are in .env next to this file.\n# Edit in Settings, or by hand (then reload the dashboard).\n" . und_yaml_emit($doc);
+  if (!und_store_write('config.yaml', $txt)) return;
+  // keep the old files, out of the way (never deleted)
+  foreach (array_unique([$dir, UND_DIR]) as $d) {
+    $legacy = $d . '/data/legacy';
+    foreach (['config.json', 'secrets.json', 'custom.css', 'ignores.json', 'auth.json'] as $f) if (is_file("$d/$f")) {
+      @mkdir($legacy, 0700, true); @rename("$d/$f", "$legacy/$f");
+    }
+    if (is_dir("$d/backups")) { @mkdir("$d/data", 0700, true); if (!is_dir("$d/data/backups")) @rename("$d/backups", "$d/data/backups"); }
+  }
+  if (is_file($dir . '/alert-history.json')) @rename($dir . '/alert-history.json', und_data_dir() . '/alert-history.json');
+  und_store_reset();
+}
+
+/**
+ * Old variables and per-widget credentials -> clean references. Addresses and ports that were variables are written into
+ * the apps directly; credentials move to per-app names (RADARR_API_KEY); whatever is still referenced keeps its value
+ * under its name without a HOMEPAGE_VAR_ prefix. Unused variables are dropped.
+ */
+function und_store_convert(array $cfg, array $vars, array $svc) {
+  $vars = array_change_key_case(array_map('strval', $vars), CASE_UPPER);
+  $env = [];
+  $inline = function ($s) use ($vars) {
+    return preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', function ($m) use ($vars) {
+      $n = strtoupper($m[1]);
+      return isset($vars[$n]) && !und_var_is_secret($n) && !preg_match('/USER|LOGIN|MAIL/i', $n) ? $vars[$n] : $m[0];
+    }, (string)$s);
+  };
+  foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) {
+    $s['url'] = $inline($s['url']); $s['href'] = $inline($s['href']);
+    foreach (array_keys(UND_CRED_FIELDS) as $f) {
+      $val = (string)($svc[$s['id']][$f] ?? '');
+      if ($r = und_ref_name($val)) $val = $vars[$r] ?? '';
+      $s[$f] = '';
+      if ($val === '') continue;
+      $name = und_cred_name($s['name'], $f, $env);
+      $env[$name] = $val; $s[$f] = '{{' . $name . '}}';
+    }
+  }
+  unset($g, $s);
+  // what is still referenced (a key inside an address, an option) keeps its value, without the old prefix
+  foreach (array_keys(und_cfg_refs($cfg)) as $n) {
+    if (isset($env[$n]) || !isset($vars[$n])) continue;
+    $new = preg_replace('/^HOMEPAGE_VAR_/', '', $n);
+    // the short name may already hold a credential: the same value shares it, a different one gets its own name
+    for ($k = 2; $new !== $n && isset($env[$new]) && $env[$new] !== (string)$vars[$n]; $k++) $new = preg_replace('/^HOMEPAGE_VAR_/', '', $n) . '_' . $k;
+    $env[$new] = $vars[$n];
+    if ($new !== $n) $cfg = json_decode(str_replace(['{{' . $n . '}}', '{{ ' . $n . ' }}'], '{{' . $new . '}}', json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)), true);
+  }
+  return ['config' => und_normalize($cfg), 'env' => $env];
+}
+
+/* ---------- what Settings sees ---------- */
+
+/** Per app: whether a key / password is stored (never the value) and the user name (not a secret). */
+function und_creds_view(array $cfg) {
+  $env = und_env(); $out = [];
+  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) {
+    $r = [];
+    foreach (array_keys(UND_CRED_FIELDS) as $f) {
+      $n = und_ref_name($s[$f] ?? '');
+      $set = $n !== null && (string)($env[$n] ?? '') !== '';
+      $r[$f] = $f === 'username' ? ($set ? (string)$env[$n] : '') : ($set ? UND_KEEP : '');
+      $r[$f . '_ref'] = $n ?: '';
+    }
+    $out[$s['id']] = $r;
+  }
+  return (object)$out;
+}
+
+/** Shared values: .env entries that are not an app's own credential and not UnDash's own (addresses you reuse, a common key …). */
+function und_shared_names(array $env, array $cfg) {
+  $own = [];
+  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) foreach (array_keys(UND_CRED_FIELDS) as $f) if ($n = und_ref_name($s[$f] ?? '')) $own[$n] = 1;
+  return array_values(array_filter(array_keys($env), function ($k) use ($own) { return !isset($own[$k]) && !in_array($k, UND_ENV_RESERVED, true); }));
+}
+function und_shared_view(array $cfg) {
+  $env = und_env(); $used = und_cfg_refs($cfg); $out = [];
+  foreach (und_shared_names($env, $cfg) as $k) {
+    $secret = und_var_is_secret($k);
+    $out[] = ['name' => $k, 'value' => $secret && $env[$k] !== '' ? UND_KEEP : $env[$k], 'secret' => $secret, 'used' => isset($used[$k])];
+  }
+  return $out;
+}
+/** The shared values the form sent replace the old set (UND_KEEP = unchanged); credentials and UnDash's own entries are untouched. */
+function und_shared_apply(array $env, array $old, array $new, array $list) {
+  // credentials of the new config (an app added in the same save) are not shared values, even though the old config did not know them
+  $creds = array_flip(array_diff(array_keys($env), und_shared_names($env, $new)));
+  $before = und_shared_names($env, $old);
+  $keep = $env;
+  foreach ($before as $k) if (!isset($creds[$k])) unset($env[$k]);
+  foreach ($list as $v) {
+    $n = strtoupper(trim((string)($v['name'] ?? '')));
+    if (!preg_match('/^[A-Z][A-Z0-9_]{0,63}$/', $n) || in_array($n, UND_ENV_RESERVED, true)) continue;
+    $val = (string)($v['value'] ?? '');
+    $env[$n] = $val === UND_KEEP ? (string)($keep[$n] ?? '') : und_clip($val, 4000);
+  }
+  return $env;
+}
+]]></INLINE>
+<SHA256>32aff55159e49ebc632ccf657eeb82a2a4a04a5aeee1d7cbea74ab2b4d4824f7</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/alerts.php" Mode="0644">
@@ -3321,7 +3826,7 @@ function und_alerts(array $cfg, $sys, $dk) {
 
 const UND_ALERT_LOG_MAX = 300;
 
-function und_alert_file() { return und_store_dir() . '/alert-history.json'; }
+function und_alert_file() { return und_data_dir() . '/alert-history.json'; }
 
 /**
  * Records starts and ends. $scopes says which categories this snapshot actually checked ('system', 'docker'): an
@@ -3382,7 +3887,7 @@ function und_alerts_check() {
   return count($alerts);
 }
 ]]></INLINE>
-<SHA256>cc6bf742dd366c2b65f1e662e7c7f8f0568f811db00871c512b01dbd5ffdbc0d</SHA256>
+<SHA256>355bc5e53113f8be5812023f2cef4478cdfca8d5c71c0ad78db360d9c3ac092f</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/health.php" Mode="0644">
@@ -3902,16 +4407,27 @@ switch ($action) {
   /* ---- settings ---- */
   case 'settings': {
     $cfg = und_load_config(); $loc = und_loc();
-    out(['config' => $cfg, 'secrets' => und_secrets_view(und_secrets()), 'types' => und_types(), 'keep' => UND_KEEP, 'css' => und_load_css(),
-         'loc' => $loc, 'store' => und_store_dir(), 'flash' => UND_DIR, 'metrics' => und_metric_ids(), 'sections' => und_section_ids()]);
+    out(['config' => $cfg, 'creds' => und_creds_view($cfg), 'shared' => und_shared_view($cfg), 'types' => und_types(), 'keep' => UND_KEEP, 'css' => und_load_css(),
+         'loc' => $loc, 'store' => und_store_dir(), 'flash' => UND_DIR, 'metrics' => und_metric_ids(), 'sections' => und_section_ids(),
+         'zones' => array_map(function ($t) { return und_zone(['type' => $t]); }, array_combine(array_keys(und_types()), array_keys(und_types())))]);
+  }
+  /* the dashboard as it would look with unsaved settings: nothing is written, credentials are not involved */
+  case 'preview': {
+    $cfg = $J('config');
+    if (!$cfg || !isset($cfg['groups'])) fail('Nothing to preview.');
+    $norm = und_normalize($cfg);
+    $norm['schema'] = UND_SCHEMA;
+    out(['layout' => und_layout_view($norm)]);
   }
   case 'save': {
     $lk = und_config_lock();
     $cfg = $J('config');
     if (!$cfg || !isset($cfg['groups'])) fail('Nothing to save.');
-    $norm = und_normalize($cfg);
+    $old = und_load_config(); $env = und_env();
+    $norm = und_creds_apply(und_normalize($cfg), $old, $J('creds') ?: [], $env);
+    if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
     if (!und_save_config($norm)) fail('Could not write the configuration directory. Check that ' . und_store_dir() . ' is writable.', 500);
-    if (isset($_POST['vars']) || isset($_POST['svc'])) und_save_secrets(und_secrets_merge(und_secrets(), $J('vars') ?: [], $J('svc') ?: [], und_service_ids($norm)));
+    if (!und_env_write($env)) fail('Could not write the .env file in ' . und_store_dir() . '.', 500);
     if (isset($_POST['css'])) und_save_css($P('css'), false);
     out(['ok' => true]);
   }
@@ -3939,11 +4455,13 @@ switch ($action) {
     out(['ok' => true, 'layout' => und_layout_view(und_load_config())]);
   }
   case 'test': {
-    // try one widget with the settings shown in the form, before they are saved
+    // try one app with what the form shows, before it is saved (nothing is written)
     $cfg = $J('config'); $id = $P('id');
     if (!$cfg || !preg_match('/^[a-f0-9]{8}$/', $id)) fail('Nothing to test.');
-    $norm = und_normalize($cfg);
-    $GLOBALS['UND_TEST_SECRETS'] = und_secrets_merge(und_secrets(), $J('vars') ?: [], $J('svc') ?: [], und_service_ids($norm));
+    $env = und_env(); $old = und_load_config();
+    $norm = und_creds_apply(und_normalize($cfg), $old, $J('creds') ?: [], $env);
+    if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
+    $GLOBALS['UND_TEST_SECRETS'] = ['vars' => array_diff_key($env, array_flip(UND_ENV_RESERVED)), 'svc' => [], 'unraid' => []];
     out(und_fetch_service($norm, $id));
   }
   case 'validate': out(['issues' => und_validate(und_load_config())]);
@@ -3992,7 +4510,7 @@ switch ($action) {
   }
 
   /* ---- import / export / backups ---- */
-  case 'export':        out(und_export($P('kind') === 'full' ? 'full' : 'redacted'));
+  case 'export':        out(und_export($P('kind') === 'env' ? 'env' : 'config'));
   case 'import_check':  { $r = und_import_parse($P('file')); if (isset($r['error'])) fail($r['error']); out(['summary' => $r['summary']]); }
   case 'import_file':   { $r = und_import_apply($P('file')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'backups':       out(['backups' => und_backups()]);
@@ -4008,7 +4526,7 @@ switch ($action) {
   case 'import_apply': {
     $c = und_hp_convert($P('services'), $P('settings'), $P('env'));
     if (isset($c['error'])) fail($c['error']);
-    und_backup('before Homepage import');
+    und_backup('before importing services.yaml');
     out(und_hp_apply($c));
   }
   case 'reset': {
@@ -4024,7 +4542,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>6df56974c7445671539aa543529282b94d8bbd65e978c957c6e9f14171968652</SHA256>
+<SHA256>be11ab4e0c4f3cb4ac43b7bd1ef086969ccfe02d1cea42d5b91e27f370438102</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -4925,7 +5443,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);padding:6px 10px;background:var(--panel-2)}
 .und .switch.pk{margin:3px 0;font-size:13px;min-width:0}
 
-/* ---------- Fluent Dark: frosted glass with blue accents (from Homepage custom.css) ---------- */
+/* ---------- Fluent Dark: frosted glass with blue accents ---------- */
 .und[data-theme=fluent]{background:radial-gradient(1100px 600px at 0% -10%,rgba(59,130,246,.14),transparent 60%),radial-gradient(900px 520px at 100% 0%,rgba(99,102,241,.10),transparent 60%),var(--bg)}
 .und[data-theme=fluent].has-bg{background:transparent}
 .und[data-theme=fluent] .card,.und[data-theme=fluent] button.stat,.und[data-theme=fluent] .ci,.und[data-theme=fluent] .alert,.und[data-theme=fluent] .panel,.und[data-theme=fluent] .olist{
@@ -4951,8 +5469,36 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und[data-theme=fluent][data-mode=light] .meter i,.und[data-theme=fluent][data-mode=light] .progress i,.und[data-theme=fluent][data-mode=light] .stat .bar i{background:linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa);box-shadow:0 0 6px rgba(37,99,235,.3)}
 .und[data-theme=fluent][data-mode=light] .modal,.und[data-theme=fluent][data-mode=light] .menu,.und[data-theme=fluent][data-mode=light] .toast{background:rgba(255,255,255,.97);border-color:rgba(15,23,42,.12)}
 .und[data-theme=fluent][data-mode=light] *{scrollbar-color:rgba(15,23,42,.2) transparent}
+
+/* Settings > Apps editor, type picker, preview bar, export rows */
+.und .ae-bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}.und .ae-bar input[type=search]{flex:1 1 200px;max-width:320px}
+.und .ae-sec{margin-bottom:14px}.und .ae-sec:last-child{margin-bottom:0}
+.und .ae-h{display:flex;align-items:center;gap:8px;margin:0 0 6px;flex-wrap:wrap;min-height:30px}.und .ae-h>b{font-size:13px;color:var(--title)}
+.und .ae-h input[type=text]{flex:0 1 220px;min-width:100px;padding:3px 8px}
+.und .olist .oi.ae-row{gap:6px;flex-wrap:nowrap}.und .ae-row .badge{flex:none}
+.und .ae-row .ae-name{flex:1;min-width:0;text-align:left;background:none!important;border:0!important;padding:0!important;color:inherit!important;font:inherit!important;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:0!important}
+.und .ae-row .ae-name:hover b{color:var(--accent)}.und .ae-row.off .ae-name,.und .ae-row.off img{opacity:.55}
+.und .ae-sub{font-size:11.5px;font-weight:600;color:var(--faint);margin:6px 0 8px;text-transform:uppercase;letter-spacing:.05em;border-top:1px solid var(--line);padding-top:12px}
+.und .ae-ico{display:inline-flex;align-items:center;justify-content:center;width:30px;flex:none}.und .ae-ico img{width:22px;height:22px;object-fit:contain}
+.und .ae-adv{margin:4px 0 8px}.und .ae-adv>summary{cursor:pointer;color:var(--muted);font-size:13px;margin-bottom:8px}
+.und .tp-h{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);margin:10px 0 6px}.und .tp-h:first-child{margin-top:0}
+.und .tpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
+.und .tpick button{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;text-align:left;font:inherit;font-size:13px;min-width:0}
+.und .tpick button:hover,.und .tpick button:focus-visible{border-color:var(--accent);background:var(--accent-soft)}.und .tpick img,.und .tpick .ph{width:22px;height:22px;object-fit:contain;flex:none}
+.und details.set>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}.und details.set>summary::-webkit-details-marker{display:none}
+.und details.set>summary::before{content:'';width:6px;height:6px;border:solid var(--faint);border-width:0 1.6px 1.6px 0;transform:rotate(-45deg);margin:0 4px 0 2px;transition:transform .15s}
+.und details.set[open]>summary::before{transform:rotate(45deg)}.und details.set[open]>summary{margin-bottom:10px}
+.und .pv-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9400;display:flex;align-items:center;gap:8px;padding:8px 10px 8px 14px;border:1px solid var(--accent);border-radius:12px;background:var(--panel);color:var(--text);box-shadow:0 12px 34px rgba(0,0,0,.35);width:min(700px,calc(100vw - 32px));flex-wrap:wrap}
+.und .pv-bar>svg{width:18px;height:18px;color:var(--accent);flex:none}
+.und .exp-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}.und .exp-row:first-child{padding-top:0}.und .exp-row:last-child{border-bottom:0;padding-bottom:0}.und .exp-row .t{flex:1;min-width:0}
+.und .dl-inst{display:flex;flex-direction:column;gap:2px;margin:2px 0 6px}.und .dl-inst>div{display:flex;gap:8px;align-items:center;font-size:12.5px}.und .dl-inst .ell{flex:1;min-width:0}
+@media (max-width:600px){
+  .und .olist .oi.ae-row{flex-wrap:wrap;row-gap:2px;justify-content:flex-end;gap:2px}.und .olist .oi.ae-row .ae-name{flex:1 1 calc(100% - 40px)}
+  .und .ae-row .badge{margin-right:auto}
+  .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
+}
 ]]></INLINE>
-<SHA256>58fe1df5fdc2372f877cb6f51ea45244ded4454949d514a6d7305a42f8a91822</SHA256>
+<SHA256>43e75966123945743926bec83c54d5b0bec66559b01fea6c00d63c59d888ee90</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -5084,6 +5630,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 
   /* ---------- API ---------- */
   function api(action, data, timeoutMs) {
+    if (S.drawer && S.drawer.previewing) {
+      if (action === 'prefs') return Promise.resolve({ error: 'This is a preview. Go back to Settings or save first.' });
+      // an app added in the preview has nothing on the server yet
+      var known = function (id) { return S.drawer.saved.groups.some(function (g) { return g.services.some(function (x) { return x.id === id; }); }); };
+      if (/^(dl|arr|service)$/.test(action) && data && data.id && !known(data.id)) return Promise.resolve({ error: 'Loads once you save.', preview: true, unconfigured: true, online: false });
+    }
     var fd = new URLSearchParams(); fd.append('action', action);   // urlencoded: multipart POSTs hang on Unraid's web server
     fd.append('csrf_token', window.UND_CSRF || '');
     for (var k in (data || {})) fd.append(k, typeof data[k] === 'object' ? JSON.stringify(data[k]) : data[k]);
@@ -5164,7 +5716,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   function lum(c) { var a = c.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2]; }
   /* Colour themes. Each has a dark and (most) a light palette; the mode setting picks one (system = follow the OS).
      Palettes come from the themes' public, MIT-licensed definitions (Kanagawa, Catppuccin, Nord, Tokyo Night) and the
-     shadcn neutral / zinc scales; Fluent Dark is the frosted-glass look from Homepage's custom.css.
+     shadcn neutral / zinc scales; Fluent Dark is a frosted-glass look.
      keys: bg panel p2 (inner panel) bar (strip / hover) field line l2 (strong line) text muted faint title accent
            [ok warn bad info] (status colours; when missing, the standard ones for dark or light are used) */
   var THEMES = {
@@ -6612,12 +7164,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var state = !j.online ? (j.unconfigured ? 'na' : 'bad') : issues ? (bad ? 'bad' : 'warn') : 'ok';
     x.dot.className = 'sdot ' + state; x.dot.setAttribute('aria-label', !j.online ? (j.unconfigured ? 'not configured' : 'offline') : issues ? issues + ' issues' : 'online');
     clear(x.info); clear(x.extra);
-    if (!j.online) x.info.appendChild(h('span', { class: j.unconfigured ? 'muted' : 't-bad' }, j.unconfigured ? 'Not configured' : 'Offline'));
+    if (!j.online) x.info.appendChild(h('span', { class: j.unconfigured ? 'muted' : 't-bad' }, j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline'));
     else (j.blocks || []).slice(0, 4).forEach(function (b) { x.info.appendChild(h('span', { class: 'st' }, h('b', null, fmt(b.value, b.fmt)), ' ' + b.label.toLowerCase())); });
     if (issues) x.extra.appendChild(h('span', { class: 'badge ' + (bad ? 'bad' : 'warn') }, issues + (issues === 1 ? ' issue' : ' issues')));
     else if (j.version) x.extra.appendChild(h('span', { class: 'muted xs' }, 'v' + j.version));
     clear(x.det);
-    if (j.error) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
+    if (j.error && !j.preview) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
     if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(blk)));
     (j.health || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, (z.source ? z.source + ': ' : '') + z.msg))); });
     (j.issues || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, h('b', null, z.title), ' · ' + z.msg))); });
@@ -6628,7 +7180,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   BUILD.downloads = function (r) {
     var apps = zoneApps('downloads');
     r.list = h('div', { class: 'dls' }); r.c = {};
-    if (!apps.length) r.list.appendChild(h('div', { class: 'card empty' }, 'No download clients yet. Add qBittorrent or SABnzbd in Settings > Apps.'));
+    if (!apps.length) r.list.appendChild(h('div', { class: 'card empty' }, 'No download clients yet. Add qBittorrent, qui or SABnzbd in Settings > Apps.'));
     apps.forEach(function (s) {
       var x = { s: s, head: h('div', { class: 'dlh' }), body: h('div', { class: 'dlb' }, h('div', { class: 'muted sm' }, 'Loading…')) };
       x.el = h('div', { class: 'card dl', 'data-name': s.name }, x.head, x.body);
@@ -6651,22 +7203,29 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var x = R.downloads && R.downloads.c[id]; if (!x) return;
     var busy = S.busy['dl:' + id] || '';
     var sig = JSON.stringify([j, busy, S.L.downloads.items]); if (x.sig === sig) return; x.sig = sig;
-    var s = x.s, st = j.error ? ['Unreachable', 'bad'] : (DLSTATE[j.state] || [j.state, 'off']);
+    var s = x.s, st = j.preview ? ['Not saved yet', 'off'] : j.error ? ['Unreachable', 'bad'] : (DLSTATE[j.state] || [j.state, 'off']);
     clear(x.head); clear(x.body);
     var paused = j.state === 'paused' || j.paused;
     x.head.appendChild(img(iconUrl(s.icon), 'aico', 'download'));
     x.head.appendChild(h('span', { class: 'an' }, s.name));
-    x.head.appendChild(h('span', { class: 'badge ' + st[1] }, busy || (j.unconfigured ? 'Not configured' : st[0])));
+    x.head.appendChild(h('span', { class: 'badge ' + st[1] }, busy || (j.unconfigured && !j.preview ? 'Not configured' : st[0])));
     x.head.appendChild(h('span', { class: 'grow' }));
     if (j.online && j.can_pause) x.head.appendChild(btn('', function () { dlAct(s, id, paused ? 'resume' : 'pause'); }, 'sm' + (paused ? ' okc' : ''), paused ? 'play' : 'pause', (paused ? 'Resume all in ' : 'Pause all in ') + s.name));
     if (s.href_resolved) x.head.appendChild(h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('web')));
     if (busy) x.head.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
-    if (j.error) { x.body.appendChild(h('div', { class: 'sm t-bad' }, j.error)); return; }
+    if (j.error) { x.body.appendChild(h('div', { class: j.preview ? 'sm muted' : 'sm t-bad' }, j.error)); return; }
     var c = j.counts || {};
     x.body.appendChild(h('div', { class: 'dlspeed' }, h('span', null, h('b', null, rate(j.down)), ' ↓'), j.up !== null && j.up !== undefined ? h('span', null, h('b', null, rate(j.up)), ' ↑') : null, j.eta && j.eta !== '0:00:00' ? h('span', { class: 'muted' }, j.eta + ' left') : null));
-    var chips = [['downloading', 'active', ''], ['stalled', 'stalled', 'warn'], ['queued', 'queued', ''], ['paused', 'paused', 'off'], ['seeding', 'seeding', ''], ['completed', 'done', ''], ['error', 'errors', 'bad']];
+    var chips = [['downloading', 'active', ''], ['stalled', 'stalled', 'warn'], ['queued', 'queued', ''], ['paused', 'paused', 'off'], ['seeding', 'seeding', ''], ['idle', 'idle', 'off'], ['crossseed', 'cross-seed', ''],
+      ['checking', 'checking', ''], ['completed', 'done', ''], ['tracker', 'tracker issues', 'warn'], ['error', 'errors', 'bad']];
+    if (j.type === 'qui') chips = chips.filter(function (z) { return z[0] !== 'completed'; });   // in qui nearly everything is complete: seeding says more
     x.body.appendChild(h('div', { class: 'chips' }, chips.filter(function (z) { return c[z[0]]; }).map(function (z) { return h('span', { class: 'badge plain ' + z[2] }, c[z[0]].toLocaleString() + ' ' + z[1]); })));
     if (j.note) x.body.appendChild(h('div', { class: 'xs t-warn' }, j.note));
+    // qui: one line per qBittorrent instance
+    if ((j.instances || []).length) x.body.appendChild(h('div', { class: 'dl-inst' }, j.instances.map(function (i) {
+      return h('div', null, h('span', { class: 'sdot ' + (i.online ? 'ok' : 'bad'), role: 'img', 'aria-label': i.online ? 'connected' : 'not connected' }), h('span', { class: 'ell' }, i.name),
+        i.online ? h('span', { class: 'muted num' }, rate(i.down) + ' ↓ · ' + rate(i.up) + ' ↑ · ' + (i.counts.seeding || 0).toLocaleString() + ' seeding') : h('span', { class: 't-bad xs ell' }, i.error || 'not connected'));
+    })));
     (j.items || []).slice(0, S.L.downloads.items).forEach(function (it) {
       x.body.appendChild(h('div', { class: 'dli', title: it.name },
         h('div', { class: 'dln' }, h('span', { class: 'ell' }, it.name), h('span', { class: 'muted xs num' }, it.progress.toFixed(it.progress < 10 ? 1 : 0) + '%' + (it.eta ? ' · ' + dur(it.eta) : '') + (it.speed ? ' · ' + rate(it.speed) : '') + (it.state !== 'downloading' ? ' · ' + it.state : ''))),
@@ -6753,7 +7312,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     if (dot) { dot.className = 'sdot ' + (r.error ? (r.unconfigured ? 'na' : 'bad') : 'ok'); dot.setAttribute('aria-label', r.error ? (r.unconfigured ? 'not configured' : 'error') : 'online'); }
     var cb = clear(c.querySelector('.cb'));
     if (r.error) {
-      var e = h('button', { type: 'button', class: 'err' + (r.unconfigured ? ' cfg' : ''), 'aria-expanded': 'false', onclick: function () { e.classList.toggle('open'); e.setAttribute('aria-expanded', e.classList.contains('open') ? 'true' : 'false'); } }, r.unconfigured ? 'Not configured' : r.offline ? 'Unreachable' : 'API error', h('div', { class: 'x' }, r.error));
+      var e = h('button', { type: 'button', class: 'err' + (r.unconfigured ? ' cfg' : ''), 'aria-expanded': 'false', onclick: function () { e.classList.toggle('open'); e.setAttribute('aria-expanded', e.classList.contains('open') ? 'true' : 'false'); } }, r.preview ? 'Loads once you save' : r.unconfigured ? 'Not configured' : r.offline ? 'Unreachable' : 'API error', h('div', { class: 'x' }, r.error));
       cb.appendChild(e); return;
     }
     if (r.blocks && r.blocks.length) cb.appendChild(blocks(r.blocks));
@@ -6888,7 +7447,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   var FIELDS = {
     radarr: 'wanted, missing, queued, movies', sonarr: 'wanted, queued, series', lidarr: 'wanted, queued, artists', readarr: 'wanted, queued, books',
     bazarr: 'missingEpisodes, missingMovies', prowlarr: 'numberOfGrabs, numberOfQueries, numberOfFailGrabs, numberOfFailQueries', overseerr: 'pending, approved, processing, completed, available',
-    autobrr: 'approvedPushes, rejectedPushes, filters, indexers', wizarr: 'users, invites, pending, expired', qbittorrent: 'leech, download, seed, upload', sabnzbd: 'rate, queue, timeleft',
+    autobrr: 'approvedPushes, rejectedPushes, filters, indexers', wizarr: 'users, invites, pending, expired', qbittorrent: 'leech, download, seed, upload', qui: 'downloading, seeding, idle, crossseed, download, upload, instances', sabnzbd: 'rate, queue, timeleft',
     emby: 'movies, series, episodes, songs', jellyfin: 'movies, series, episodes, songs', plex: 'streams, albums, movies, tv', adguard: 'queries, blocked, filtered, latency',
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
@@ -6902,13 +7461,14 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   var MEDIA_DESC = { upcoming_movies: 'Radarr calendar', upcoming_episodes: 'Sonarr calendar', recent_movies: 'Radarr imports', recent_episodes: 'Sonarr imports' };
 
   function openSettings(tab) {
-    if (S.drawer) return;
+    if (S.drawer) { if (S.drawer.previewing) S.drawer.back(); return; }
     closeMenu(true);
     var D = { tab: SET_ALIAS[tab] || (SET_PAGES[tab] ? tab : 'layout'), dirty: false };
     S.drawer = D;
     var last = document.activeElement;
     var bodyEl = h('div', { class: 'db', role: 'tabpanel' });
     var saveB = btn('Save', save, 'pri'); saveB.disabled = true;
+    var prevB = btn('Preview', preview, '', 'eye', 'See the dashboard with these settings, without saving'); prevB.disabled = true;
     var status = h('span', { class: 'muted sm grow', role: 'status' }, 'Loading…');
     var tabs = h('nav', { class: 'dt', role: 'tablist', 'aria-label': 'Settings', 'aria-orientation': 'vertical' });
     SET_NAV.forEach(function (g) {
@@ -6921,11 +7481,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
       h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), h('span', { class: 'grow' }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')),
       h('div', { class: 'dmain' }, tabs, bodyEl),
-      h('div', { class: 'df' }, saveB, btn('Discard', function () { if (!D.dirty) close(true); else confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }), status));
+      h('div', { class: 'df' }, saveB, prevB, btn('Discard', function () { if (!D.dirty) close(true); else confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }), status));
     var bg = h('div', { class: 'drawer-bg', onclick: function () { close(); } });
     root.appendChild(bg); root.appendChild(drawer);
     function key(e) {
       if (root.querySelector('.modal-bg')) return;
+      if (D.previewing) { if (e.key === 'Escape') back(); return; }
       if (e.key === 'Escape') close();
       if (e.key === 'Tab') {
         var f = drawer.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select,textarea');
@@ -6937,21 +7498,48 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     document.addEventListener('keydown', key);
     function paintTabs() { [].forEach.call(tabs.querySelectorAll('button'), function (b) { var on = b.getAttribute('data-t') === D.tab; b.className = on ? 'on' : ''; b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
     function dirty() { D.dirty = true; saveB.disabled = false; status.textContent = 'Unsaved changes'; }
+    /* Preview: the dashboard drawn from the unsaved settings, with a bar to go back, save or discard */
+    var pbar = null;
+    function preview() {
+      prevB.disabled = true;
+      api('preview', { config: D.cfg }).then(function (j) {
+        prevB.disabled = false;
+        if (j.error) { toast(j.error, true); return; }
+        if (!D.saved) D.saved = S.L;
+        D.previewing = true; S.L = j.layout;
+        shell();                     // this takes the drawer off the page; back() puts it back as it was
+        applyCss(D.cfg.appearance.css_enabled ? D.css : '');
+        pbar = h('div', { class: 'pv-bar', role: 'region', 'aria-label': 'Preview of unsaved settings' }, ic('eye'),
+          h('span', { class: 'grow' }, h('b', null, 'Preview'), h('span', { class: 'muted sm' }, ' · not saved yet. New apps load their data once saved.')),
+          btn('Back to settings', back, 'sm'), btn('Discard', function () { confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }, 'sm ghost'), btn('Save', save, 'pri sm'));
+        root.appendChild(pbar);
+        refreshNow();
+        setTimeout(function () { var f = pbar && pbar.querySelector('.btn'); if (f) f.focus(); }, 0);
+      });
+    }
+    function back() {
+      if (!D.previewing) return;
+      D.previewing = false; if (pbar) pbar.remove(); pbar = null;
+      root.appendChild(bg); root.appendChild(drawer);
+      setTimeout(function () { prevB.focus(); }, 0);
+    }
+    D.back = back;
     function close(force) {
       if (force !== true && D.dirty) { confirmBox('Close without saving?', 'Your changes in Settings are not saved yet.', 'Close without saving', true).then(function (y) { if (y) close(true); }); return; }
       document.removeEventListener('keydown', key);
-      bg.remove(); drawer.remove(); S.drawer = null;
+      bg.remove(); drawer.remove(); if (pbar) pbar.remove(); S.drawer = null;
+      if (D.saved) { S.L = D.saved; D.saved = null; D.previewing = false; shell(); refreshNow(); }
       if (D.dirty) { applyLook(); applyCss(S.boot.css); }
       if (last && last.focus && document.body.contains(last)) try { last.focus(); } catch (e) { /* gone */ }
     }
     D.close = close;
     function save() {
       saveB.disabled = true; status.textContent = 'Saving…';
-      var data = { config: D.cfg, vars: D.vars.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }), svc: D.svc };
+      var data = { config: D.cfg, creds: D.creds, shared: sharedOut(D) };
       if (D.cssChanged) data.css = D.css;
       api('save', data).then(function (j) {
         if (j.error) { saveB.disabled = false; status.textContent = j.error; toast(j.error, true); return; }
-        D.dirty = false; toast('Settings saved');
+        D.dirty = false; D.saved = null; toast('Settings saved');
         close(true); reload();
       });
     }
@@ -6966,7 +7554,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     paintTabs(); render();
     api('settings').then(function (j) {
       if (j.error) { status.textContent = j.error; return; }
-      D.cfg = j.config; D.vars = j.secrets.vars; D.svc = Array.isArray(j.secrets.svc) ? {} : j.secrets.svc; D.types = j.types; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
+      D.cfg = j.config; D.creds = Array.isArray(j.creds) ? {} : j.creds; D.shared = j.shared || []; D.zones = j.zones || {}; D.types = j.types; prevB.disabled = false; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
       ['docker', 'vms'].forEach(function (k) { if (Array.isArray(D.cfg[k].items)) D.cfg[k].items = {}; });
       status.textContent = 'Changes apply after saving.';
       render();
@@ -6993,7 +7581,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     layout: ['Layout', 'grid', pick(tabDashboard, ['Sections', 'System overview'])],
     media: ['Media & downloads', 'play', pick(tabDashboard, ['Media', 'Downloads'])],
     containers: ['Containers & VMs', 'box', pick(tabDashboard, ['Containers', 'Virtual machines', 'Favorites, names and visibility'])],
-    services: ['Apps', 'web', function (b, D, dirty) { pick(tabDashboard, ['Apps'])(b, D, dirty); tabServices(b, D, dirty); }],
+    services: ['Apps', 'web', function (b, D, dirty) { tabServices(b, D, dirty); pick(tabDashboard, ['How apps are shown'])(b, D, dirty); }],
     appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Spacing', 'Wallpaper'])],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['Refresh & display', 'clock', tabSystem],
@@ -7073,7 +7661,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
           btn('Clear', function () { D2.selected = []; txt(selCount, '0 selected'); drawPick(); dirty(); }, 'sm ghost')),
         pick, h('div', { class: 'hint' }, 'Also from the dashboard: gear > Show in "Selected".'))));
     var A2 = c.apps;
-    b.appendChild(set('Apps', 'Plex, Emby, Immich, AdGuard and your other apps, below Arr Stack and Downloads.', h('div', { class: 'grid2' },
+    b.appendChild(set('How apps are shown', 'The Apps section: Plex, Immich, AdGuard and the other apps that are not in Arr Stack or Downloads.', h('div', { class: 'grid2' },
       F('Columns', sIn(A2, 'columns', dirty, [[0, 'Automatic'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']]))),
       cIn(A2, 'headers', dirty, 'Show group titles (Streaming, Other …)'), cIn(A2, 'links', dirty, 'Show shortcut links (the old Services links) as small buttons')));
     b.appendChild(set('Virtual machines', 'VMs are found automatically through libvirt.', h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])))));
@@ -7235,144 +7823,230 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     check();
   }
 
+  /* ---- Apps: every app is added, changed, hidden and removed here. Addresses go to config.yaml, keys and passwords to .env (server side) ---- */
+  var APP_CATS = [['Arr Stack', ['radarr', 'sonarr', 'lidarr', 'readarr', 'prowlarr', 'bazarr', 'autobrr', 'overseerr', 'wizarr']],
+    ['Downloads', ['qbittorrent', 'qui', 'sabnzbd']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar']],
+    ['Network and tools', ['adguard', 'pihole', 'npm', 'immich', 'peanut']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Other', ['customapi', 'link']]];
+  var APP_PORT = { radarr: 7878, sonarr: 8989, lidarr: 8686, readarr: 8787, prowlarr: 9696, bazarr: 6767, autobrr: 7474, overseerr: 5055, wizarr: 5690, qbittorrent: 8080, qui: 7476, sabnzbd: 8080,
+    plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80 };
+  var APP_ICON = { adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
+  var KEY_WHERE = { radarr: 'Radarr: Settings > General', sonarr: 'Sonarr: Settings > General', lidarr: 'Lidarr: Settings > General', readarr: 'Readarr: Settings > General', prowlarr: 'Prowlarr: Settings > General',
+    bazarr: 'Bazarr: Settings > General', overseerr: 'Overseerr / Jellyseerr: Settings > General', sabnzbd: 'SABnzbd: Config > General', qui: 'qui: Settings > API Keys', autobrr: 'autobrr: Settings > API Keys',
+    tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys' };
+  var ZONE_NAME = { arr: 'Arr Stack', downloads: 'Downloads', media: 'Media', overview: 'System overview', apps: 'Apps' };
+  function appIcon(t) { var n = APP_ICON[t] !== undefined ? APP_ICON[t] : t; return n ? 'sh-' + n : ''; }
+  function appZone(D, s) { return s.type === 'customapi' && /get_recently_added/.test(s.url || '') ? 'media' : (D.zones || {})[s.type] || 'apps'; }
+  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : 'API key', username: 'Username', password: 'Password' }[k]; }
+
   function tabServices(b, D, dirty) {
-    var vt = h('div', { class: 'olist' });
-    var drawVars = function () {
-      clear(vt);
-      D.vars.forEach(function (v, i) {
-        if (v.value === D.keep) v.stored = true;
-        vt.appendChild(h('div', { class: 'oi' },
-          h('input', { type: 'text', value: v.name, placeholder: 'NAME', 'aria-label': 'Variable name', style: { flex: '1 1 160px' }, oninput: function (e) { v.name = e.target.value.toUpperCase(); v.secret = /KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i.test(v.name); dirty(); } }),
-          h('input', { type: v.secret ? 'password' : 'text', value: v.value === D.keep ? '' : v.value, placeholder: v.stored ? 'stored (leave empty to keep)' : 'value', autocomplete: 'off', 'aria-label': 'Value of ' + (v.name || 'variable'), style: { flex: '2 1 200px' },
-            oninput: function (e) { v.value = e.target.value === '' && v.stored ? D.keep : e.target.value; dirty(); } }),
-          btn('', function () { D.vars.splice(i, 1); dirty(); drawVars(); }, 'sm ghost danger', 'trash', 'Remove variable ' + v.name)));
+    var q = '', box = h('div');
+    var filter = h('input', { type: 'search', placeholder: 'Find an app…', 'aria-label': 'Find an app', oninput: function () { q = filter.value.toLowerCase(); draw(); } });
+    var redraw = function () { draw(); };
+    b.appendChild(set('Your apps', 'Each app goes to its section on its own: Radarr and Sonarr to Arr Stack, download clients to Downloads, everything else to Apps. API keys and passwords are kept in .env on the server, never in the settings file or the browser.',
+      h('div', { class: 'ae-bar' }, filter, h('span', { class: 'grow' }),
+        btn('Add group', function () { D.cfg.groups.push({ id: rid(), name: 'New group', columns: 4, header: true, services: [] }); dirty(); draw(); }, 'sm', 'plus'),
+        btn('Add app', function () { addApp(D, null, null, redraw, dirty); }, 'pri sm', 'plus')), box));
+    function entries() { var out = []; D.cfg.groups.forEach(function (g) { g.services.forEach(function (s) { out.push({ s: s, g: g }); }); }); return out; }
+    function swap(a, c) { var ia = a.g.services.indexOf(a.s), ic2 = c.g.services.indexOf(c.s); a.g.services[ia] = c.s; c.g.services[ic2] = a.s; dirty(); draw(); }
+    function row(x, list) {
+      var s = x.s, T = D.types[s.type] || [s.type, [], false], c = D.creds[s.id] || {}, i = list.indexOf(x);
+      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && s.type !== 'peanut' && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
+      var edit = function () { editService(D, s, x.g, false, redraw, dirty); };
+      return h('div', { class: 'oi ae-row' + (s.hidden ? ' off' : '') },
+        img(iconUrl(s.icon), '', 'web'),
+        h('button', { type: 'button', class: 't ae-name', onclick: edit, title: 'Edit ' + s.name }, h('b', null, s.name || T[0]), h('span', { class: 'muted sm' }, ' · ' + T[0] + (s.hidden ? ' · hidden' : ''))),
+        warn ? h('span', { class: 'badge warn' }, warn) : null,
+        btn('', function () { if (i > 0) swap(x, list[i - 1]); }, 'sm ghost', 'upar', 'Move ' + s.name + ' up'),
+        btn('', function () { if (i < list.length - 1) swap(x, list[i + 1]); }, 'sm ghost', 'dnar', 'Move ' + s.name + ' down'),
+        btn('', function () { s.hidden = !s.hidden; dirty(); draw(); }, 'sm ghost', s.hidden ? 'eyeoff' : 'eye', (s.hidden ? 'Show ' : 'Hide ') + s.name),
+        btn('', edit, 'sm', 'edit', 'Edit ' + s.name),
+        btn('', function () {
+          confirmBox('Remove ' + s.name + '?', 'It leaves the dashboard when you save. Its stored key and password are deleted with it.', 'Remove', true).then(function (y) {
+            if (!y) return;
+            x.g.services.splice(x.g.services.indexOf(s), 1); delete D.creds[s.id]; dirty(); draw();
+          });
+        }, 'sm ghost danger', 'trash', 'Remove ' + s.name));
+    }
+    function draw() {
+      clear(box);
+      var all = entries(), hit = function (x) { return !q || [x.s.name, (D.types[x.s.type] || [''])[0], x.g.name].join(' ').toLowerCase().indexOf(q) >= 0; }, any = false;
+      ['arr', 'downloads', 'media', 'overview'].forEach(function (z) {
+        var list = all.filter(function (x) { return appZone(D, x.s) === z; }), shown = list.filter(hit);
+        if (!shown.length) return;
+        any = true;
+        box.appendChild(h('div', { class: 'ae-sec' }, h('div', { class: 'ae-h' }, h('b', null, ZONE_NAME[z]), h('span', { class: 'muted sm' }, String(list.length)), h('span', { class: 'grow' }),
+          btn('Add', function () { addApp(D, z, null, redraw, dirty); }, 'sm ghost', 'plus', 'Add an app to ' + ZONE_NAME[z])),
+          h('div', { class: 'olist' }, shown.map(function (x) { return row(x, list); }))));
       });
-      if (!D.vars.length) vt.appendChild(h('div', { class: 'empty' }, 'No variables.'));
-    };
-    drawVars();
-    b.appendChild(set('Variables', 'Use {{NAME}} in any URL, link, key or password, like Homepage\'s HOMEPAGE_VAR_… variables. Names containing KEY, TOKEN, PASS or SECRET are secrets: never shown again and left out of redacted exports. {{UNRAID_IP}} is built in.',
-      vt, h('div', { style: { 'margin-top': '8px' } }, btn('Add variable', function () { D.vars.push({ name: '', value: '', secret: false }); dirty(); drawVars(); }, 'sm', 'plus'))));
-    var lay = h('div');
-    var drawLayout = function () {
-      clear(lay);
-      D.cfg.groups.forEach(function (gr, gi) {
-        var box = h('div', { class: 'lg' });
-        box.appendChild(h('div', { class: 'lh' }, h('input', { type: 'text', value: gr.name, 'aria-label': 'Group name', oninput: function (e) { gr.name = e.target.value; dirty(); } }),
-          h('label', { class: 'inl sm muted' }, 'Columns', h('input', { type: 'number', min: 1, max: 8, value: gr.columns, oninput: function (e) { gr.columns = +e.target.value; dirty(); } })),
-          h('label', { class: 'switch sm' }, h('input', { type: 'checkbox', checked: gr.header, onchange: function (e) { gr.header = e.target.checked; dirty(); } }), 'Title'),
-          btn('', function () { if (move(D.cfg.groups, gi, -1)) { dirty(); drawLayout(); } }, 'sm ghost', 'upar', 'Move group ' + gr.name + ' up'),
-          btn('', function () { if (move(D.cfg.groups, gi, 1)) { dirty(); drawLayout(); } }, 'sm ghost', 'dnar', 'Move group ' + gr.name + ' down'),
-          btn('Add widget', function () { editService(D, { id: rid(), name: '', type: 'radarr', icon: '', href: '', url: '', description: '', hidden: false, favorite: false, span: 1, fields: [], options: {} }, gr, true, drawLayout, dirty); }, 'sm', 'plus'),
-          btn('', function () { confirmBox('Delete group "' + gr.name + '"?', 'The group and its ' + gr.services.length + ' widgets are removed when you save.', 'Delete', true).then(function (y) { if (y) { D.cfg.groups.splice(gi, 1); dirty(); drawLayout(); } }); }, 'sm ghost danger', 'trash', 'Delete group ' + gr.name)));
-        gr.services.forEach(function (s, si) {
-          box.appendChild(h('div', { class: 'ls' }, img(iconUrl(s.icon), ''), h('span', { class: 't' }, h('b', null, s.name), h('span', { class: 'muted sm' }, ' · ' + ((D.types[s.type] || [s.type])[0]) + (s.hidden ? ' · hidden' : '') + (s.favorite ? ' · favorite' : ''))),
-            btn('', function () { if (move(gr.services, si, -1)) { dirty(); drawLayout(); } }, 'sm ghost', 'upar', 'Move ' + s.name + ' up'),
-            btn('', function () { if (move(gr.services, si, 1)) { dirty(); drawLayout(); } }, 'sm ghost', 'dnar', 'Move ' + s.name + ' down'),
-            D.cfg.groups.length > 1 ? btn('', function () { var to = D.cfg.groups[gi - 1] || D.cfg.groups[gi + 1]; gr.services.splice(si, 1); to.services.push(s); dirty(); drawLayout(); }, 'sm ghost', 'swap', 'Move ' + s.name + ' to the ' + (gi ? 'previous' : 'next') + ' group') : null,
-            btn('', function () { s.hidden = !s.hidden; dirty(); drawLayout(); }, 'sm ghost', s.hidden ? 'eye' : 'eyeoff', (s.hidden ? 'Show ' : 'Hide ') + s.name),
-            btn('', function () { editService(D, s, gr, false, drawLayout, dirty); }, 'sm', 'edit', 'Edit ' + s.name),
-            btn('', function () { gr.services.splice(si, 1); delete D.svc[s.id]; dirty(); drawLayout(); }, 'sm ghost danger', 'trash', 'Remove ' + s.name)));
-        });
-        if (!gr.services.length) box.appendChild(h('div', { class: 'ls muted sm' }, 'No widgets in this group.'));
-        lay.appendChild(box);
-      });
-    };
-    drawLayout();
-    b.appendChild(set('Widgets', 'App widgets shown in the Services section. Credentials are stored on the server and never shown again.', lay,
-      btn('Add group', function () { D.cfg.groups.push({ id: rid(), name: 'New group', columns: 4, header: true, services: [] }); dirty(); drawLayout(); }, 'sm', 'plus')));
-    var ta = function (ph, lab) { return h('textarea', { rows: 6, placeholder: ph, spellcheck: 'false', 'aria-label': lab }); };
-    var ySvc = ta('Paste services.yaml here', 'services.yaml'), ySet = ta('Optional: settings.yaml (columns and group titles)', 'settings.yaml'), yEnv = ta('Optional: HOMEPAGE_VAR_… values from your .env (KEY=value per line)', '.env values');
-    var prev = h('div', { style: { 'margin-top': '10px' } });
-    b.appendChild(set('Import from Homepage', 'Brings over groups, widgets, icons, links and {{HOMEPAGE_VAR_…}} variables from a gethomepage/homepage config. Only the widgets are replaced; a backup is taken first.',
-      h('div', { class: 'grid2' }, ySvc, h('div', null, ySet, h('div', { style: { height: '8px' } }), yEnv)),
-      h('div', { style: { 'margin-top': '8px' } }, btn('Preview', function () {
-        if (D.dirty) { toast('Save or discard your other changes first.', true); return; }
-        api('import_preview', { services: ySvc.value, settings: ySet.value, env: yEnv.value }).then(function (j) {
-          clear(prev);
-          if (j.error) { prev.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
-          var missing = j.vars.filter(function (v) { return !v.set && !v.stored; });
-          prev.appendChild(h('div', { class: 'banner ok' }, j.groups + ' groups and ' + j.services + ' widgets found.'));
-          j.warnings.forEach(function (w) { prev.appendChild(h('div', { class: 'banner' }, w)); });
-          if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' variables have no value yet (fill them in under Variables afterwards): ' + missing.map(function (v) { return v.name; }).join(', ')));
-          prev.appendChild(h('div', { class: 'kv2 sm' }, j.layout.map(function (g) { return [h('span', null, g.name), h('span', null, g.services.join(', '))]; })));
-          prev.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Import and replace the widgets', function () {
-            confirmBox('Replace the widgets?', 'Your current groups and widgets are replaced. Appearance, container and VM preferences and stored variable values are kept. A backup is taken first.', 'Import', true).then(function (y) {
-              if (y) act('import_apply', { services: ySvc.value, settings: ySet.value, env: yEnv.value }, 'Imported').then(function (k) { if (!k.error) { D.close(true); reload().then(function () { openSettings('services'); }); } });
+      D.cfg.groups.forEach(function (g, gi) {
+        var list = all.filter(function (x) { return x.g === g && appZone(D, x.s) === 'apps'; }), shown = list.filter(hit);
+        if (q && !shown.length) return;
+        any = true;
+        var others = g.services.filter(function (s) { return appZone(D, s) !== 'apps'; });
+        box.appendChild(h('div', { class: 'ae-sec' }, h('div', { class: 'ae-h' }, h('b', null, 'Apps'), h('span', { class: 'muted' }, '·'),
+          h('input', { type: 'text', value: g.name, 'aria-label': 'Group name', oninput: function (e) { g.name = e.target.value; dirty(); } }),
+          h('label', { class: 'switch sm', title: 'Show the group title on the dashboard' }, h('input', { type: 'checkbox', checked: g.header, onchange: function (e) { g.header = e.target.checked; dirty(); } }), 'Title'),
+          h('span', { class: 'grow' }),
+          btn('', function () { if (move(D.cfg.groups, gi, -1)) { dirty(); draw(); } }, 'sm ghost', 'upar', 'Move group ' + g.name + ' up'),
+          btn('', function () { if (move(D.cfg.groups, gi, 1)) { dirty(); draw(); } }, 'sm ghost', 'dnar', 'Move group ' + g.name + ' down'),
+          btn('Add', function () { addApp(D, 'apps', g, redraw, dirty); }, 'sm ghost', 'plus', 'Add an app to ' + g.name),
+          D.cfg.groups.length > 1 ? btn('', function () {
+            var n = g.services.length - others.length;
+            confirmBox('Delete the group "' + g.name + '"?', n ? 'Its ' + n + ' app' + (n > 1 ? 's are' : ' is') + ' removed too when you save.' : 'It has no apps.', 'Delete', true).then(function (y) {
+              if (!y) return;
+              var to = D.cfg.groups[gi ? 0 : 1];
+              others.forEach(function (s) { to.services.push(s); });          // Arr and download apps kept in this group stay
+              g.services.forEach(function (s) { if (others.indexOf(s) < 0) delete D.creds[s.id]; });
+              D.cfg.groups.splice(gi, 1); dirty(); draw();
             });
-          }, 'pri')));
-        });
-      }, '', 'check')), prev));
+          }, 'sm ghost danger', 'trash', 'Delete group ' + g.name) : null),
+          h('div', { class: 'olist' }, shown.length ? shown.map(function (x) { return row(x, list); }) : h('div', { class: 'empty' }, others.length
+            ? 'Nothing for the Apps section; its ' + others.length + ' other app' + (others.length > 1 ? 's are' : ' is') + ' listed above (' + others.map(function (o) { return o.name; }).join(', ') + ').' : 'No apps in this group yet.'))));
+      });
+      if (!any) box.appendChild(h('div', { class: 'empty' }, q ? 'No app matches "' + q + '".' : 'No apps yet. Use Add app to add Radarr, qBittorrent, Plex and the others.'));
+    }
+    draw();
+    sharedValues(b, D, dirty);
+  }
+
+  /* pick a type, then fill in the details */
+  function addApp(D, zone, group, after, dirty) {
+    var qq = '', grid = h('div');
+    var find = h('input', { type: 'search', placeholder: 'Search apps…', 'aria-label': 'Search app types', oninput: function () { qq = find.value.toLowerCase(); paint(); } });
+    var order = APP_CATS.slice().sort(function (a, c) { var za = appZone(D, { type: a[1][0] }) === zone, zc = appZone(D, { type: c[1][0] }) === zone; return za === zc ? 0 : za ? -1 : 1; });
+    var m;
+    function paint() {
+      clear(grid);
+      order.forEach(function (cat) {
+        var ts = cat[1].filter(function (t) { return D.types[t] && (!qq || (D.types[t][0] + ' ' + t).toLowerCase().indexOf(qq) >= 0); });
+        if (!ts.length) return;
+        grid.appendChild(h('div', { class: 'tp-h' }, cat[0]));
+        grid.appendChild(h('div', { class: 'tpick' }, ts.map(function (t) {
+          return h('button', { type: 'button', title: D.types[t][0], onclick: function () { m.close(); pickType(t); } }, img(iconUrl(appIcon(t)), '', 'web'), h('span', { class: 'ell' }, D.types[t][0].replace(/ \(.*\)$/, '')));
+        })));
+      });
+      if (!grid.childNodes.length) grid.appendChild(h('div', { class: 'empty' }, 'No app type matches. Custom API (JSON) can read most apps, Link only just opens a page.'));
+    }
+    function pickType(t) {
+      var g = group || D.cfg.groups[0];
+      if (!g) { g = { id: rid(), name: 'Apps', columns: 4, header: true, services: [] }; D.cfg.groups.push(g); }
+      editService(D, { id: rid(), name: D.types[t][0].replace(/ \(.*\)$/, ''), type: t, icon: appIcon(t), href: '', url: '', description: '', hidden: false, favorite: false, span: 1, fields: [], options: {} }, g, true, after, dirty);
+    }
+    paint();
+    m = modal('Add an app', h('div', null, h('div', { style: { 'margin-bottom': '10px' } }, find), grid), [btn('Cancel', function () { m.close(); })], true);
   }
 
   function editService(D, orig, group, isNew, after, dirtyOuter) {
-    var s = JSON.parse(JSON.stringify(orig)), sec = JSON.parse(JSON.stringify(D.svc[s.id] || {}));
+    var s = JSON.parse(JSON.stringify(orig)), c0 = D.creds[s.id] || {};
+    var cr = { key: c0.key || '', username: c0.username || '', password: c0.password || '' }, stored = { key: c0.key === D.keep, password: c0.password === D.keep, username: false };
     if (!s.options || Array.isArray(s.options)) s.options = {};
-    var form = h('div'), noop = function () {};
+    var gid = group.id, form = h('div', { class: 'ae-form' }), noop = function () {};
     var draw = function () {
       clear(form);
-      var T = D.types[s.type] || ['', [], false];
-      var typeSel = h('select', { onchange: function (e) { s.type = e.target.value; s.fields = []; s.options = {}; draw(); } }, Object.keys(D.types).map(function (k) { return h('option', { value: k, selected: k === s.type }, D.types[k][0]); }));
-      form.appendChild(h('div', { class: 'grid2' }, F('Name', tIn(s, 'name', noop, T[0])), F('Type', typeSel),
-        F('Icon', tIn(s, 'icon', noop, 'sh-radarr, radarr.png or https://…'), 'sh-NAME = selfh.st icons, NAME.png = dashboard-icons, or any URL.'),
-        F('Link (opens on click)', tIn(s, 'href', noop, 'http://{{SERVER_IP}}:7878')),
-        F('Description', tIn(s, 'description', noop, 'Optional')), F('Width', sIn(s, 'span', noop, [[1, 'Normal'], [2, 'Double']]))));
+      var T = D.types[s.type] || ['', [], false], z = appZone(D, s), port = APP_PORT[s.type] || 80;
+      var typeSel = h('select', { onchange: function (e) { var was = s.type; s.type = e.target.value; s.fields = []; s.options = {}; if (!s.icon || s.icon === appIcon(was)) s.icon = appIcon(s.type); draw(); } },
+        Object.keys(D.types).map(function (k) { return h('option', { value: k, selected: k === s.type }, D.types[k][0]); }));
+      var icoPrev = h('span', { class: 'ae-ico' }, img(iconUrl(s.icon), '', 'web'));
+      form.appendChild(h('div', { class: 'grid2' }, F('Name', tIn(s, 'name', noop, T[0])), F('Type', typeSel, 'Shows in ' + (z === 'apps' ? 'Apps' : ZONE_NAME[z]) + '.')));
+      if (T[2]) form.appendChild(F('Address', tIn(s, 'url', noop, 'http://192.168.1.10:' + port), 'Where UnDash reaches ' + T[0].replace(/ \(.*\)$/, '') + ', from the server: the IP or host name and the port, e.g. http://192.168.1.10:' + port + '.'));
+      if ((T[1] || []).length) {
+        var creds = h('div', { class: 'grid2' });
+        T[1].forEach(function (k) {
+          var inp = h('input', { type: k === 'username' ? 'text' : 'password', autocomplete: k === 'username' ? 'off' : 'new-password', value: stored[k] ? '' : cr[k], spellcheck: 'false',
+            placeholder: stored[k] ? 'Saved. Type to replace it' : (k === 'key' ? 'Paste the ' + credLabel(s.type, k).replace(/^[A-Z][a-z]/, function (x) { return x.toLowerCase(); }) : ''),
+            oninput: function (e) { cr[k] = e.target.value === '' && stored[k] ? D.keep : e.target.value; } });
+          var ref = c0[k + '_ref'];
+          creds.appendChild(F(credLabel(s.type, k), h('div', { class: 'sec-in' }, inp, stored[k] ? btn('Remove', function () { cr[k] = ''; stored[k] = false; draw(); }, 'sm', null, 'Remove the saved ' + credLabel(s.type, k).toLowerCase()) : null),
+            ref ? 'Kept in .env as ' + ref + '.' : (k === 'key' ? (KEY_WHERE[s.type] ? 'In ' + KEY_WHERE[s.type] + '. ' : '') + 'Kept in .env on the server.' : null)));
+        });
+        form.appendChild(h('div', { class: 'ae-sub' }, 'Login'));
+        form.appendChild(creds);
+      }
+      form.appendChild(h('div', { class: 'ae-sub' }, 'On the dashboard'));
+      form.appendChild(h('div', { class: 'grid2' },
+        F('Link (opens on click)', tIn(s, 'href', noop, T[2] ? 'Same as the address' : 'https://…'), T[2] ? 'Leave empty to open the address. Use it for a public or HTTPS address.' : null),
+        F('Icon', h('div', { class: 'sec-in' }, icoPrev, tIn(s, 'icon', function () { clear(icoPrev).appendChild(img(iconUrl(s.icon), '', 'web')); }, 'sh-radarr')), 'sh-NAME (selfh.st icons), NAME.png (dashboard-icons) or an image URL.'),
+        z === 'apps' && D.cfg.groups.length > 1 ? F('Group', h('select', { onchange: function (e) { gid = e.target.value; } }, D.cfg.groups.map(function (g) { return h('option', { value: g.id, selected: g.id === gid }, g.name); }))) : null,
+        z === 'apps' ? F('Description', tIn(s, 'description', noop, 'Optional')) : null,
+        z === 'apps' ? F('Card width', sIn(s, 'span', noop, [[1, 'Normal'], [2, 'Double']])) : null));
       form.appendChild(h('div', { class: 'inl' }, cIn(s, 'favorite', noop, 'Favorite'), cIn(s, 'hidden', noop, 'Hidden')));
-      if (T[2] || s.type === 'customapi') form.appendChild(F('API URL', tIn(s, 'url', noop, 'http://{{SERVER_IP}}:7878'), 'The address UnDash calls from the server. {{VARIABLES}} work here.'));
-      var creds = h('div', { class: 'grid2' });
-      (T[1] || []).forEach(function (k) {
-        var stored = sec[k] === D.keep;
-        var inp = h('input', { type: k === 'username' ? 'text' : 'password', autocomplete: 'off', value: stored ? '' : (sec[k] || ''), placeholder: stored ? 'stored (leave empty to keep)' : (k === 'key' ? 'API key or {{VARIABLE}}' : ''),
-          oninput: function (e) { sec[k] = e.target.value === '' && stored ? D.keep : e.target.value; } });
-        creds.appendChild(F({ key: s.type === 'plex' ? 'Plex token' : s.type === 'peanut' ? 'Device key' : s.type === 'pihole' ? 'Password / app password' : 'API key', username: 'Username', password: 'Password' }[k],
-          h('div', { class: 'sec-in' }, inp, stored ? btn('Clear', function () { sec[k] = ''; stored = false; inp.placeholder = ''; }, 'sm') : null)));
-      });
-      if (creds.childNodes.length) form.appendChild(creds);
-      if (FIELDS[s.type]) form.appendChild(F('Fields to show', h('input', { type: 'text', value: (s.fields || []).join(', '), placeholder: 'all', oninput: function (e) { s.fields = e.target.value.split(/[\s,]+/).filter(Boolean); } }), 'Available: ' + FIELDS[s.type] + '. Empty shows all.'));
+      var adv = h('div');
+      if (FIELDS[s.type]) adv.appendChild(F('Numbers to show', h('input', { type: 'text', value: (s.fields || []).join(', '), placeholder: 'all', oninput: function (e) { s.fields = e.target.value.split(/[\s,]+/).filter(Boolean); } }), 'Available: ' + FIELDS[s.type] + '. Empty shows all.'));
       if (s.type === 'calendar') {
         s.options.integrations = s.options.integrations || [];
-        var box = h('div');
+        var cbox = h('div');
         D.cfg.groups.forEach(function (g) { g.services.forEach(function (x) {
           if (x.type !== 'radarr' && x.type !== 'sonarr') return;
           var on = s.options.integrations.filter(function (i) { return i.service === x.id; })[0];
-          box.appendChild(h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!on, onchange: function (e) {
+          cbox.appendChild(h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!on, onchange: function (e) {
             s.options.integrations = s.options.integrations.filter(function (i) { return i.service !== x.id; });
             if (e.target.checked) s.options.integrations.push({ service: x.id, unmonitored: true });
-          } }), x.name + ' (' + g.name + ')'));
+          } }), x.name));
         }); });
-        if (!box.childNodes.length) box.appendChild(h('div', { class: 'muted sm' }, 'Add a Radarr or Sonarr widget first.'));
-        form.appendChild(F('Sources', box));
+        if (!cbox.childNodes.length) cbox.appendChild(h('div', { class: 'muted sm' }, 'Add Radarr or Sonarr first.'));
+        form.appendChild(F('Sources', cbox));
         form.appendChild(h('div', { class: 'grid2' }, F('Max events', tIn(s.options, 'max_events', noop, '8')), F('Days ahead', tIn(s.options, 'days_ahead', noop, '30')), F('Days back', tIn(s.options, 'previous_days', noop, '0'))));
       }
-      if (s.type === 'tautulli_recent') form.appendChild(h('div', { class: 'grid2' }, F('Media type', tIn(s.options, 'media_type', noop, 'movie, episode, track…')), F('Library section id', tIn(s.options, 'section_id', noop, 'optional')), F('Count', tIn(s.options, 'count', noop, '6'))));
+      if (s.type === 'tautulli_recent') adv.appendChild(h('div', { class: 'grid2' }, F('Media type', tIn(s.options, 'media_type', noop, 'movie, episode, track…')), F('Library section id', tIn(s.options, 'section_id', noop, 'optional')), F('Count', tIn(s.options, 'count', noop, '6'))));
       if (s.type === 'ups') form.appendChild(F('UPS name', tIn(s.options, 'ups', noop, D.cfg.general.ups_name)));
-      if (s.type === 'emby' || s.type === 'jellyfin') form.appendChild(cIn(s.options, 'hide_blocks', noop, 'Only show the streams (hide the library counts)'));
+      if (s.type === 'emby' || s.type === 'jellyfin') adv.appendChild(cIn(s.options, 'hide_blocks', noop, 'Only show the streams (hide the library counts)'));
       if (s.type === 'customapi') {
         var js = function (k, def, lab) { var t = h('textarea', { rows: 6, spellcheck: 'false', 'aria-label': lab, oninput: function (e) { try { s.options[k] = JSON.parse(e.target.value || def); e.target.style.borderColor = ''; } catch (x) { e.target.style.borderColor = 'var(--bad)'; } } }); t.value = JSON.stringify(s.options[k] || JSON.parse(def), null, 2); return t; };
         form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Blocks'], ['list', 'List']])), F('Method', tIn(s.options, 'method', noop, 'GET'))));
         form.appendChild(F('Headers (JSON)', js('headers', '{}', 'Headers'), '{{KEY}} is replaced by the API key above, e.g. {"X-Api-Key": "{{KEY}}"}.'));
         form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}]. Formats: number, text, bytes, rate, percent; lists can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
       }
+      if (adv.childNodes.length) form.appendChild(h('details', { class: 'ae-adv' }, h('summary', null, 'More options'), adv));
       var res = h('div', { role: 'status' });
-      if (T[2] || s.type === 'calendar' || s.type === 'customapi' || s.type === 'ups') form.appendChild(h('div', { class: 'inl' }, btn('Test', function () {
+      if (T[2] || s.type === 'calendar' || s.type === 'customapi' || s.type === 'ups') form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
         clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
-        var cfg = JSON.parse(JSON.stringify(D.cfg)), svc = JSON.parse(JSON.stringify(D.svc));
-        var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0];
-        if (gg) { var k = gg.services.map(function (x) { return x.id; }).indexOf(s.id); if (k < 0) gg.services.push(s); else gg.services[k] = s; }
-        svc[s.id] = sec;
-        api('test', { config: cfg, vars: D.vars.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }), svc: svc, id: s.id }).then(function (r) {
+        var cfg = JSON.parse(JSON.stringify(D.cfg)), creds = JSON.parse(JSON.stringify(D.creds));
+        var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0] || cfg.groups[0];
+        var k = gg.services.map(function (x) { return x.id; }).indexOf(s.id); if (k < 0) gg.services.push(s); else gg.services[k] = s;
+        creds[s.id] = cr;
+        api('test', { config: cfg, creds: creds, shared: sharedOut(D), id: s.id }).then(function (r) {
           clear(res);
           if (r.error) res.appendChild(h('div', { class: 'banner bad' }, r.error));
           else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' items' : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
         });
-      }, '', 'check'), res));
+      }, '', 'check'), h('span', { class: 'muted sm' }, 'Tries it with what is filled in here; nothing is saved.')));
+      form.appendChild(res);
     };
     draw();
-    var m = modal(isNew ? 'Add widget to ' + group.name : 'Edit ' + orig.name, form, [btn('Cancel', function () { m.close(); }), btn(isNew ? 'Add' : 'Apply', function () {
-      if (!s.name) s.name = (D.types[s.type] || [''])[0];
+    var m = modal(isNew ? 'Add ' + (D.types[s.type] || [''])[0].replace(/ \(.*\)$/, '') : 'Edit ' + orig.name, form, [btn('Cancel', function () { m.close(); }), btn(isNew ? 'Add app' : 'Apply', function () {
+      if (!String(s.name).trim()) s.name = (D.types[s.type] || [''])[0].replace(/ \(.*\)$/, '');
       s.span = +s.span === 2 ? 2 : 1;
-      if (isNew) group.services.push(s); else for (var k in s) orig[k] = s[k];
-      D.svc[s.id] = sec; m.close(); dirtyOuter(); after();
+      var to = D.cfg.groups.filter(function (g) { return g.id === gid; })[0] || group;
+      if (isNew) to.services.push(s);
+      else {
+        for (var k in s) orig[k] = s[k];
+        if (to !== group) { group.services.splice(group.services.indexOf(orig), 1); to.services.push(orig); }
+      }
+      D.creds[s.id] = Object.assign({}, c0, cr); m.close(); dirtyOuter(); after();
     }, 'pri')], true);
+  }
+
+  /* values several apps share ({{NAME}}): advanced, most setups have none */
+  function sharedOut(D) { return D.shared.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }); }
+  function sharedValues(b, D, dirty) {
+    var list = h('div', { class: 'olist' });
+    var draw = function () {
+      clear(list);
+      D.shared.forEach(function (v, i) {
+        var keep = v.value === D.keep;
+        list.appendChild(h('div', { class: 'oi' },
+          h('input', { type: 'text', value: v.name, placeholder: 'NAME', 'aria-label': 'Name', spellcheck: 'false', style: { flex: '1 1 150px' }, oninput: function (e) { v.name = e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'); v.secret = /KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/.test(v.name); dirty(); } }),
+          h('input', { type: v.secret ? 'password' : 'text', value: keep ? '' : v.value, placeholder: keep ? 'Saved. Type to replace it' : 'value', autocomplete: 'new-password', 'aria-label': 'Value of ' + (v.name || 'the shared value'), style: { flex: '2 1 200px' },
+            oninput: function (e) { v.value = e.target.value === '' && keep ? D.keep : e.target.value; dirty(); } }),
+          h('span', { class: 'badge ' + (v.used ? 'plain' : 'off') }, v.used ? 'in use' : 'unused'),
+          btn('', function () { D.shared.splice(i, 1); dirty(); draw(); }, 'sm ghost danger', 'trash', 'Remove ' + (v.name || 'this value'))));
+      });
+      if (!D.shared.length) list.appendChild(h('div', { class: 'empty' }, 'None. You only need these to reuse one value in several apps.'));
+    };
+    draw();
+    b.appendChild(h('details', { class: 'set adv' }, h('summary', null, h('b', null, 'Shared values'), h('span', { class: 'muted sm' }, ' · advanced' + (D.shared.length ? ', ' + D.shared.length : ''))),
+      h('p', { class: 'hint' }, 'A value used by several apps, such as one server address. Type {{NAME}} in an address, link or key field to use it. Kept in .env with the keys; names with KEY, TOKEN, PASS or SECRET are hidden once saved. {{UNRAID_IP}} is built in.'),
+      list, h('div', { style: { 'margin-top': '8px' } }, btn('Add shared value', function () { D.shared.push({ name: '', value: '', secret: false, used: false }); dirty(); draw(); }, 'sm', 'plus'))));
   }
 
   /* Docker version: where the Unraid API is and its key (the key is never shown again once saved) */
@@ -7452,55 +8126,58 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var dl = function (kind) {
       api('export', { kind: kind }).then(function (j) {
         if (j.error) { toast(j.error, true); return; }
-        var a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(j, null, 2)], { type: 'application/json' })), download: 'undash-' + kind + '-' + new Date().toISOString().slice(0, 10) + '.json' });
+        var a = h('a', { href: URL.createObjectURL(new Blob([j.text], { type: 'text/plain' })), download: j.name });
         root.appendChild(a); a.click(); root.removeChild(a);
       });
     };
-    b.appendChild(set('Export', null,
-      h('div', { class: 'kv2 sm', style: { 'margin-bottom': '10px' } },
-        h('span', null, 'Redacted'), h('span', null, 'Layout, sections, metrics, container and VM preferences, theme, accent, refresh settings, custom CSS and non-secret variables. API keys, passwords, tokens and secret variables are removed, and so are passwords or tokens written into URLs. Safe to share.'),
-        h('span', null, 'Full'), h('span', null, 'Everything above plus every variable, API key and password: a complete backup. Keep it private.')),
-      h('div', { class: 'inl' }, btn('Export redacted', function () { dl('redacted'); }, '', 'download'), btn('Export full', function () {
-        confirmBox('Export with secrets?', 'The file contains your API keys and passwords in plain text. Store it somewhere private.', 'Export full').then(function (y) { if (y) dl('full'); });
-      }, '', 'download'))));
+    b.appendChild(set('Export', 'UnDash keeps two files in its configuration folder: config.yaml with everything you set here, and .env with the keys and passwords.',
+      h('div', { class: 'exp' },
+        h('div', { class: 'exp-row' }, h('div', { class: 't' }, h('b', null, 'config.yaml'), h('div', { class: 'muted sm' }, 'Apps, layout, theme and preferences. No keys, passwords or logins in it, so it is safe to share.')),
+          btn('Download', function () { dl('config'); }, '', 'download', 'Download config.yaml')),
+        h('div', { class: 'exp-row' }, h('div', { class: 't' }, h('b', null, '.env'), h('div', { class: 'muted sm' }, 'API keys, user names and passwords, and the Unraid API key. Keep it private.')),
+          btn('Download', function () {
+            confirmBox('Download your keys and passwords?', 'The file has every API key and password in plain text. Keep it somewhere private.', 'Download').then(function (y) { if (y) dl('env'); });
+          }, '', 'download', 'Download .env')))));
     var info = h('div', { style: { 'margin-top': '10px' } });
-    var file = h('input', { type: 'file', accept: '.json,application/json', 'aria-label': 'Settings file to import', onchange: function () {
+    var file = h('input', { type: 'file', 'aria-label': 'Settings file to import', onchange: function () {
       var f = file.files[0]; clear(info); if (!f) return;
-      if (f.size > 2097152) { info.appendChild(h('div', { class: 'banner bad' }, 'That file is larger than 2 MB, so it is not an UnDash export.')); return; }
+      if (f.size > 2097152) { info.appendChild(h('div', { class: 'banner bad' }, 'That file is larger than 2 MB, so it is not an UnDash settings file.')); return; }
       var rd = new FileReader();
       rd.onload = function () {
         var raw = String(rd.result);
         api('import_check', { file: raw }).then(function (j) {
           clear(info);
           if (j.error) { info.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
-          var s = j.summary;
-          info.appendChild(h('div', { class: 'kv2 sm' },
-            h('span', null, 'Kind'), h('span', null, s.kind === 'full' ? 'Full export (includes secrets)' : s.kind === 'redacted' ? 'Redacted export (your stored secrets are kept)' : 'Layout file (your stored secrets are kept)'),
-            h('span', null, 'Created'), h('span', null, s.created ? new Date(s.created * 1000).toLocaleString() : 'unknown'),
-            h('span', null, 'Widgets'), h('span', null, s.groups + ' groups, ' + s.widgets + ' widgets' + (s.skipped ? ' (' + s.skipped + ' of an unknown type skipped)' : '')),
-            h('span', null, 'Appearance'), h('span', null, s.theme + ' theme, accent ' + (s.accent || 'from the theme') + ', refresh ' + s.refresh + ' s'),
-            h('span', null, 'Custom CSS'), h('span', null, s.css === null ? 'not included (current CSS kept)' : s.css + ' characters'),
-            h('span', null, 'Variables'), h('span', null, s.vars + (s.credentials ? ', credentials for ' + s.credentials + ' widgets' : ''))));
-          info.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Apply this file', function () {
-            confirmBox('Replace your settings?', 'The settings above replace the current ones. A backup is taken first; you can restore it below.', 'Apply', true).then(function (y) {
-              if (y) act('import_file', { file: raw }, 'Settings imported').then(function (k) { if (!k.error) location.reload(); });
+          var s = j.summary, env = s.kind === 'env';
+          info.appendChild(env ? h('div', { class: 'kv2 sm' }, h('span', null, 'File'), h('span', null, '.env (keys and passwords)'), h('span', null, 'Values'), h('span', null, s.values + (s.names.length ? ': ' + s.names.join(', ') : '')))
+            : h('div', { class: 'kv2 sm' },
+              h('span', null, 'File'), h('span', null, s.legacy ? 'Settings export of an older UnDash (converted)' : 'config.yaml'),
+              h('span', null, 'Apps'), h('span', null, s.widgets + ' in ' + s.groups + ' group' + (s.groups === 1 ? '' : 's') + (s.skipped ? ' (' + s.skipped + ' of an unknown type skipped)' : '')),
+              h('span', null, 'Look'), h('span', null, s.theme + ' theme, refresh every ' + s.refresh + ' s'),
+              h('span', null, 'Custom CSS'), h('span', null, s.css === null ? 'not in the file (yours is kept)' : s.css + ' characters'),
+              h('span', null, 'Keys and passwords'), h('span', null, s.values ? s.values + ' in the file, added to .env' : 'none in the file; the ones you saved are kept')));
+          info.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn(env ? 'Add these values' : 'Replace my settings', function () {
+            confirmBox(env ? 'Add these keys and passwords?' : 'Replace your settings?', env ? 'They are added to .env; a value with the same name replaces the saved one. A backup is taken first.'
+              : 'Apps, layout and look are replaced by the file. Your saved keys and passwords stay. A backup is taken first, so you can go back below.', env ? 'Add' : 'Replace', !env).then(function (y) {
+              if (y) act('import_file', { file: raw }, 'Imported').then(function (k) { if (!k.error) location.reload(); });
             });
           }, 'pri')));
         });
       };
       rd.readAsText(f);
     } });
-    b.appendChild(set('Import', 'Load an UnDash export. You see what it contains before anything changes.', file, info));
+    b.appendChild(set('Import', 'Choose a config.yaml or .env exported from UnDash (exports of older versions work too). You see what is in it before anything changes.', file, info));
+    hpImport(b, D);
     var vbox = h('div', { role: 'status' });
     var bbox = h('div', { class: 'olist' }, h('div', { class: 'empty' }, 'Loading…'));
-    b.appendChild(set('Check configuration', 'Looks for widgets without a URL, undefined variables and calendar sources that were removed.',
-      btn('Validate', function () {
+    b.appendChild(set('Check configuration', 'Looks for apps without an address, unknown {{NAMES}} and calendar sources that were removed.',
+      btn('Check', function () {
         clear(vbox).appendChild(h('div', { class: 'progress' }, h('i')));
         api('validate').then(function (j) { clear(vbox); if (j.error) { vbox.appendChild(h('div', { class: 'banner bad' }, j.error)); return; } if (!j.issues.length) vbox.appendChild(h('div', { class: 'banner ok', style: { 'margin-top': '10px' } }, 'No problems found.')); j.issues.forEach(function (x) { vbox.appendChild(h('div', { class: 'banner ' + (x.level === 'bad' ? 'bad' : ''), style: { 'margin-top': '8px' } }, x.msg)); }); });
       }, '', 'check'), vbox));
-    b.appendChild(set('Backups', 'Taken automatically before every save, import, restore and reset (the newest 15 are kept in backups/ of the configuration directory).', bbox,
+    b.appendChild(set('Backups', 'Both files are backed up before every save, import, restore and reset. The newest 15 are kept in data/backups of the configuration folder.', bbox,
       h('div', { style: { 'margin-top': '10px' } }, btn('Reset to defaults…', function () {
-        confirmBox('Reset the dashboard?', 'Widgets, sections and preferences go back to the defaults. Variables and credentials are kept, and a backup is taken first.', 'Reset', true).then(function (y) { if (y) act('reset', {}, 'Reset').then(function (j) { if (!j.error) location.reload(); }); });
+        confirmBox('Reset the dashboard?', 'Apps, sections and preferences go back to the defaults. Your keys and passwords stay in .env, and a backup is taken first.', 'Reset', true).then(function (y) { if (y) act('reset', {}, 'Reset').then(function (j) { if (!j.error) location.reload(); }); });
       }, 'danger', 'trash'))));
     api('backups').then(function (j) {
       clear(bbox);
@@ -7508,9 +8185,36 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       j.backups.forEach(function (x) {
         var when = new Date(x.created * 1000).toLocaleString();
         bbox.appendChild(h('div', { class: 'oi' }, h('span', { class: 't' }, h('b', null, when), h('span', { class: 'muted sm' }, ' · ' + (x.reason || ''))),
-          btn('Restore', function () { confirmBox('Restore this backup?', 'Settings, secrets and custom CSS go back to ' + when + '. The current state is backed up first.', 'Restore', true).then(function (y) { if (y) act('restore', { id: x.id }, 'Restored').then(function (k) { if (!k.error) location.reload(); }); }); }, 'sm', null, 'Restore the backup from ' + when)));
+          btn('Restore', function () { confirmBox('Restore this backup?', 'config.yaml and .env go back to how they were on ' + when + '. The current state is backed up first.', 'Restore', true).then(function (y) { if (y) act('restore', { id: x.id }, 'Restored').then(function (k) { if (!k.error) location.reload(); }); }); }, 'sm', null, 'Restore the backup from ' + when)));
       });
     });
+  }
+  /* the one place that talks about Homepage: its config files are converted into UnDash's own */
+  function hpImport(b, D) {
+    var ta = function (ph, lab) { return h('textarea', { rows: 6, placeholder: ph, spellcheck: 'false', 'aria-label': lab }); };
+    var ySvc = ta('Paste services.yaml here', 'services.yaml'), ySet = ta('Optional: settings.yaml (columns and group titles)', 'settings.yaml'), yEnv = ta('Optional: the .env with your HOMEPAGE_VAR_… values', '.env values');
+    var prev = h('div', { style: { 'margin-top': '10px' } });
+    var data = function () { return { services: ySvc.value, settings: ySet.value, env: yEnv.value }; };
+    b.appendChild(h('details', { class: 'set adv' }, h('summary', null, h('b', null, 'Coming from Homepage?')),
+      h('p', { class: 'hint' }, 'You can import your Homepage dashboard configs too. Paste services.yaml (and optionally settings.yaml and .env): UnDash turns the groups, apps, icons and links into its own settings, and moves the keys into .env. Only your apps are replaced; a backup is taken first.'),
+      h('div', { class: 'grid2' }, ySvc, h('div', null, ySet, h('div', { style: { height: '8px' } }), yEnv)),
+      h('div', { style: { 'margin-top': '8px' } }, btn('Preview', function () {
+        if (D.dirty) { toast('Save or discard your other changes first.', true); return; }
+        api('import_preview', data()).then(function (j) {
+          clear(prev);
+          if (j.error) { prev.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
+          var missing = j.vars.filter(function (v) { return !v.set && !v.stored; });
+          prev.appendChild(h('div', { class: 'banner ok' }, j.groups + ' groups and ' + j.services + ' apps found.'));
+          j.warnings.forEach(function (w) { prev.appendChild(h('div', { class: 'banner' }, w)); });
+          if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' value' + (missing.length > 1 ? 's are' : ' is') + ' not in the pasted .env: ' + missing.map(function (v) { return v.name; }).join(', ') + '. Paste the .env too, or fill in those addresses and keys in Settings > Apps afterwards.'));
+          prev.appendChild(h('div', { class: 'kv2 sm' }, j.layout.map(function (g) { return [h('span', null, g.name), h('span', null, g.services.join(', '))]; })));
+          prev.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Import and replace my apps', function () {
+            confirmBox('Replace your apps?', 'Your current apps and groups are replaced. Theme, sections, container and VM preferences and saved keys stay. A backup is taken first.', 'Import', true).then(function (y) {
+              if (y) act('import_apply', data(), 'Imported').then(function (k) { if (!k.error) { D.close(true); reload().then(function () { openSettings('services'); }); } });
+            });
+          }, 'pri')));
+        });
+      }, '', 'check')), prev));
   }
 
   function reload() {
@@ -7571,7 +8275,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>ee0de512dd4b2d65aba69f8e5e5c19078e0ca7ba89bd0a1528abf62a50bb48fd</SHA256>
+<SHA256>f2ff84699dbe087af1896cb36d39476676768b91a027853e2143eb09c5296032</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">

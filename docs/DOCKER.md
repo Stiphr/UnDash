@@ -78,7 +78,7 @@ Environment variables:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `UNRAID_API_URL`, `UNRAID_API_KEY` | | the Unraid API; can instead be set in Settings > Connection (stored in `/config/secrets.json`) |
+| `UNRAID_API_URL`, `UNRAID_API_KEY` | | the Unraid API; can instead be set in Settings > Connection (stored in `/config/.env`) |
 | `UNDASH_PASSWORD` | | dashboard password; when set, it replaces the one chosen in the browser |
 | `UNDASH_PORT` | 9099 | the port inside the container (normally leave it and change the host port) |
 | `PHP_CLI_SERVER_WORKERS` | 4 | parallel requests |
@@ -107,8 +107,8 @@ the container in its own `/config`. Two things to watch:
 * **Port**: both default to 9099. Turn the plugin's port off (plugin Settings > Connection) or give the
   container another host port.
 * **Settings**: map the plugin's folder to `/import` (read-only) once to start the container with the same
-  layout, apps and secrets. Nothing in `/config` is ever overwritten; remove the mapping afterwards.
-  Or use plugin Settings > Backup & import > Export full, then Import in the container.
+  layout, apps and keys. Nothing in `/config` is ever overwritten; remove the mapping afterwards.
+  Or download `config.yaml` and `.env` in the plugin's Settings > Backup & import and import both in the container.
 
 Nothing is removed from the plugin. Keep it if you need server power, OS updates, hibernate or container CPU/memory.
 
@@ -131,8 +131,8 @@ run it by hand or push a version tag.
 
 * Runs as uid 99 / gid 100 (Unraid's nobody:users), unprivileged, read-only code, `tini` as init (clean stop).
 * No Docker socket: containers are managed through the Unraid API with the key's own permissions.
-* The API key and app credentials stay on the server (`/config/secrets.json`, mode 600); the browser only sees
-  "stored". Redacted exports leave them out.
+* The API key and app credentials stay on the server (`/config/.env`, mode 600); the browser only sees
+  "saved". `config.yaml` never holds them.
 * The dashboard password is stored as a hash; 5 wrong attempts lock an address out for 15 minutes; sessions are
   HttpOnly, SameSite=Strict cookies with a CSRF token; a strict Content-Security-Policy is sent.
 * The health check (`/health`) answers "ok" and nothing else.
