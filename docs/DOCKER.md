@@ -81,7 +81,7 @@ Environment variables:
 | `UNRAID_API_URL`, `UNRAID_API_KEY` | | the Unraid API; can instead be set in Settings > Connection (stored in `/config/.env`) |
 | `UNDASH_PASSWORD` | | dashboard password; when set, it replaces the one chosen in the browser |
 | `UNDASH_PORT` | 9099 | the port inside the container (normally leave it and change the host port) |
-| `PHP_CLI_SERVER_WORKERS` | 4 | parallel requests |
+| `PHP_CLI_SERVER_WORKERS` | 12 | parallel requests |
 
 ## 3. First start
 

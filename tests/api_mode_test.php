@@ -79,7 +79,7 @@ t('starting a running VM refused', isset(und_vm_action('Win', 'start')['error'])
 t('server power refused in Docker mode', isset(und_power_prepare('reboot')['error']) && isset(und_power('reboot', 'x', 'y')['error']));
 t('OS update refused in Docker mode', isset(und_os_update()['error']));
 // secrets
-$view = json_encode(und_secrets_view(und_secrets()));
+$view = json_encode([und_creds_view(und_load_config()), und_shared_view(und_load_config())]);
 t('the API key is not in the settings view', strpos($view, 'SECRETKEY123') === false);
 $red = und_export('config')['text'];
 t('the API key is not in the config.yaml export', strpos($red, 'SECRETKEY123') === false && strpos($red, 'tower.local') !== false);
@@ -103,6 +103,41 @@ t('API-mode array names the hot, bad and erroring disks', $ar['hot_disks'] === [
 t('ignore rules are stored in /config in Docker mode', !empty(und_ignore_add('type', 'os.available', '', 'permanent')['ok']) && strpos((string)@file_get_contents(UND_DIR . '/config.yaml'), 'os.available') !== false);
 $id = und_server_identity();
 t('in Docker mode the title shows the server (here: the API host, as the system read is not answered), never the container', $id['name'] === 'tower.local' && $id['ip'] === 'tower.local' && $id['name'] !== gethostname(), json_encode($id));
+// the slow reads (network, primary interface) stay out of page loads and refreshes
+$GLOBALS['ANSWER'] = function ($req) {
+  $q = $req['query']; $d = [];
+  if (strpos($q, 'network {') !== false) $d['metrics'] = ['network' => [['name' => 'br0', 'rxSec' => 1000, 'txSec' => 200]]];
+  if (strpos($q, 'primaryNetwork') !== false) $d['info'] = ['cpu' => ['brand' => 'Test CPU', 'threads' => 8], 'primaryNetwork' => ['name' => 'br0', 'ipAddress' => '10.0.0.9'], 'os' => ['hostname' => 'tower'], 'versions' => ['core' => ['unraid' => '7.3.4']]];
+  if (strpos($q, 'percentTotal') !== false) $d += ['info' => ['os' => ['hostname' => 'tower', 'uptime' => '100', 'kernel' => 'k'], 'versions' => ['core' => ['unraid' => '7.3.4']]],
+    'metrics' => ['cpu' => ['percentTotal' => 5, 'cpus' => []], 'memory' => ['total' => 100, 'available' => 50]], 'array' => ['state' => 'STARTED'], 'vars' => ['name' => 'Tower']];
+  return ['json' => ['data' => $d]];
+};
+$slowSent = function () { return count(array_filter($GLOBALS['SENT'], function ($x) { return preg_match('/network \{|primaryNetwork/', (string)($x['body']['query'] ?? '')); })); };
+clear_cache(); @unlink(UND_TMP . '/apipoll.beat');
+$GLOBALS['SENT'] = [];
+$sys = und_system(und_load_config());
+t('without the background poller the network and CPU model are read inline', $sys['net']['rx'] === 1000.0 && $sys['cpu']['model'] === 'Test CPU' && $sys['ip'] === '10.0.0.9' && $slowSent() === 2, json_encode([$sys['net'], $slowSent()]));
+clear_cache(); touch(UND_TMP . '/apipoll.beat'); @unlink(UND_TMP . '/viewer');
+$GLOBALS['SENT'] = [];
+$sys = und_system(und_load_config());
+t('with the poller running a refresh never waits for the slow reads', $slowSent() === 0 && $sys['cpu']['pct'] === 5.0 && $sys['net']['rx'] === null && is_file(UND_TMP . '/viewer'), json_encode([$sys['net'], $slowSent()]));
+und_api_poll_due();
+t('the poller stores both slow reads', $slowSent() === 2 && is_file(UND_TMP . '/api-net.json') && is_file(UND_TMP . '/api-ident.json'));
+und_api_poll_due();
+t('the poller asks again only when a copy is due', $slowSent() === 2);
+@unlink(UND_TMP . '/api-system.json');
+$sys = und_system(und_load_config());
+t('a refresh then shows the poller\'s copies', $sys['net']['rx'] === 1000.0 && $sys['cpu']['model'] === 'Test CPU' && $slowSent() === 2);
+$GLOBALS['SENT'] = [];
+$id = und_server_identity();
+t('the page title comes from the stored identity, without a system read', $id === ['name' => 'tower', 'ip' => '10.0.0.9', 'os' => '7.3.4'] && !$GLOBALS['SENT'], json_encode($id));
+$w = json_decode(file_get_contents(UND_TMP . '/api-net.json'), true); $w['t'] -= 100; file_put_contents(UND_TMP . '/api-net.json', json_encode($w));
+@unlink(UND_TMP . '/api-system.json');
+t('network rates older than 20 s are not shown as current', und_system(und_load_config())['net']['rx'] === null);
+$GLOBALS['ANSWER'] = ['code' => 0, 'err' => 'timed out', 'json' => null];
+und_api_poll_due();
+t('a failed poll keeps the last good copy', json_decode(file_get_contents(UND_TMP . '/api-net.json'), true)['t'] === $w['t']);
+@unlink(UND_TMP . '/apipoll.beat');
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);
