@@ -421,13 +421,13 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .dli .meter{height:4px}.und .meter i.off{background:var(--off)}
 
 /* compact container rows */
-.und .rowh.c,.und .rowi.c{grid-template-columns:minmax(160px,2.4fr) minmax(90px,.9fr) 70px 80px minmax(90px,.8fr) 150px;padding:4px 10px;min-height:0}
-.und .rowi.c{min-height:38px}
-.und .rowi.c .who{gap:8px}
-.und .rowi.c .who img,.und .rowi.c .who .ph{width:22px;height:22px;border-radius:5px}
-.und .rowi.c .nm{font-weight:500;font-size:13px}
+.und .rowh.c,.und .rowi.c{grid-template-columns:minmax(160px,2.4fr) minmax(90px,.9fr) 70px 80px minmax(90px,.8fr) 48px;padding:8px 14px;min-height:0}
+.und .rowi.c{min-height:52px}
+.und .rowi.c .who{gap:10px}
+.und .rowi.c .who img,.und .rowi.c .who .ph{width:28px;height:28px;border-radius:6px}
+.und .rowi.c .nm{font-weight:600;font-size:13.5px}
 .und .rowi.c .c-cpu,.und .rowi.c .c-mem{font-size:12.5px}
-.und .rowi.c .acts .btn.sm{min-height:26px!important}.und .rowi.c .acts .btn.ic.sm{width:26px;min-width:26px!important}
+.und .rowi.c .acts .btn.sm{min-height:30px!important}.und .rowi.c .acts .btn.ic.sm{width:30px;min-width:30px!important}
 .und .panel.compact .rowh{padding-top:5px;padding-bottom:5px}
 
 /* apps */
@@ -444,7 +444,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .login input{width:100%}
 
 @media (max-width:1100px){
-  .und .rowh.c,.und .rowi.c{grid-template-columns:minmax(150px,2fr) minmax(90px,1fr) 64px 76px 150px}
+  .und .rowh.c,.und .rowi.c{grid-template-columns:minmax(150px,2fr) minmax(90px,1fr) 64px 76px 48px}
   .und .rowh.c>:nth-child(5),.und .rowi.c>.c-upd{display:none}
 }
 @media (max-width:900px){
@@ -462,22 +462,25 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 
 /* ================= 2026.10.31: compact containers and apps ================= */
 /* containers: a multi-column grid of one-line cells */
-.und .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:6px}
+.und .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
 .und .cgrid.fixed{grid-template-columns:repeat(var(--cc),minmax(0,1fr))}
-.und .ci{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:5px 6px 5px 8px;min-width:0;min-height:42px}
+.und .ci{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 8px 10px 12px;min-width:0;min-height:60px}
 .und .ci:hover{border-color:var(--line-2)}
 .und .ci.busy{opacity:.7}
-.und .ci .cico,.und .ci span.cico{width:24px;height:24px;border-radius:5px;object-fit:contain;flex:none;background:var(--panel-2)}
+.und .ci .cico,.und .ci span.cico{width:32px;height:32px;border-radius:7px;object-fit:contain;flex:none;background:var(--panel-2)}
 .und .ci span.cico{display:flex;align-items:center;justify-content:center;color:var(--faint)}.und .ci span.cico svg{width:14px;height:14px}
-.und .ci .cn{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
-.und .ci .cname{display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;color:var(--title)}
+.und .ci .cn{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;line-height:1.25}
+.und .ci .cname{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13.5px;color:var(--title)}
 .und .ci .cname svg{width:12px;height:12px;color:var(--warn);flex:none}
-.und .ci .cs{display:flex;gap:8px;font-size:11.5px;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}
+.und .ci .cs{display:flex;gap:10px;font-size:12px;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}
 .und .ci .badge{flex:none}
 .und .ci .acts{gap:2px;flex:none}
-.und .ci .acts .btn.ic.sm{width:26px;min-width:26px!important;min-height:26px!important}
+.und .ci .acts .btn.ic.sm{width:30px;min-width:30px!important;min-height:30px!important}
 .und .ci .acts .btn{background:transparent!important;border-color:transparent!important}
 .und .ci .acts .btn:hover:not(:disabled){background:var(--bar)!important;border-color:var(--line-2)!important}
+.und a.wl,.und span.wl{color:inherit;text-decoration:none!important;display:inline-flex;align-items:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.und a.wl:hover{color:var(--accent-text)}.und a.wl:hover img{filter:brightness(1.15)}.und a.wl:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.und .btn.gear{background:transparent!important;border-color:transparent!important;color:var(--muted)!important}.und .btn.gear:hover{background:var(--bar)!important;border-color:var(--line-2)!important;color:var(--title)!important}
 .und .ci.st-exited .cname,.und .ci.st-created .cname,.und .ci.st-dead .cname{color:var(--muted);font-weight:500}
 
 /* apps: compact cards in one grid */
