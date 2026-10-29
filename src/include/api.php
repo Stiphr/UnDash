@@ -5,7 +5,7 @@
  * On the standalone port, standalone/router.php checks the Unraid login (or UnDash's own session) and its CSRF token first.
  */
 require_once __DIR__ . '/lib.php';
-require_once __DIR__ . '/auth.php';      // the Docker version's password (Settings > Configuration)
+require_once __DIR__ . '/auth.php';      // the Docker version's password (Settings > Connection)
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -34,7 +34,7 @@ switch ($action) {
   case 'boot': {
     $cfg = und_load_config(); $loc = und_loc();
     out(['version' => UND_VERSION, 'layout' => und_layout_view($cfg), 'types' => und_types(), 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
-         'server' => ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip()],
+         'server' => und_server_identity(),
          'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes' && !und_api_mode(), 'caps' => und_caps(),
          'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null,
          'auth' => und_api_mode() ? und_auth_kind() : 'unraid']);
@@ -125,6 +125,7 @@ switch ($action) {
   case 'power_prepare': { $r = und_power_prepare($P('op')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'power':         { $r = und_power($P('op'), $P('nonce'), $P('confirm')); if (isset($r['error'])) fail($r['error'], 409); out($r); }
   case 'history':       out(['history' => und_history()]);
+  case 'self_update':   out(und_self_update());
   case 'alert_history': out(und_alert_history());
 
   /* ignored alerts: hiding only, monitoring goes on */

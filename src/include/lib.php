@@ -162,6 +162,17 @@ function und_os_version() {
   return is_array($v) && !empty($v['version']) ? (string)$v['version'] : '';
 }
 
+/** Name, address and Unraid version of the server for the title bar. In a container the local host name and address are the
+ *  container's own, so they come from the Unraid API there (its system read is cached, so this costs nothing extra). */
+function und_server_identity() {
+  if (und_api_mode()) {
+    $s = und_api_system(und_load_config());
+    $host = (string)parse_url(und_api_conf()['url'], PHP_URL_HOST);
+    return ['name' => (string)($s['name'] ?? '') ?: $host, 'ip' => (string)($s['ip'] ?? '') ?: $host, 'os' => (string)($s['os'] ?? '')];
+  }
+  return ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip(), 'os' => function_exists('und_os_version') ? und_os_version() : ''];
+}
+
 function und_server_ip() {
   $n = @parse_ini_string(und_read('/var/local/emhttp/network.ini'), true);
   if (is_array($n)) foreach ($n as $sec) if (is_array($sec) && !empty($sec['IPADDR:0'])) return (string)$sec['IPADDR:0'];

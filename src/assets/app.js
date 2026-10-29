@@ -246,6 +246,7 @@
     var t = THEMES[a.theme] || THEMES.default, mode = lookMode(a), p = t[mode] || t.dark, st = STATUS[mode], light = mode === 'light';
     root.setAttribute('data-theme', THEMES[a.theme] ? a.theme : 'default');
     root.setAttribute('data-mode', mode);
+    root.style.colorScheme = mode;          // native controls, dropdown lists and scrollbars follow the theme
     root.setAttribute('data-density', a.density);
     var set = function (k, v) { root.style.setProperty(k, v); };
     [['--bg', 'bg'], ['--panel', 'panel'], ['--panel-2', 'p2'], ['--bar', 'bar'], ['--field', 'field'], ['--line', 'line'], ['--line-2', 'l2'], ['--text', 'text'], ['--muted', 'muted'], ['--faint', 'faint'], ['--title', 'title']]
@@ -265,6 +266,8 @@
     if (window.UND_STANDALONE) document.body.style.background = p.bg;
     root.classList.toggle('has-bg', !!a.background);
     // wallpaper blur: the whole picture, or only what shows through the (then see-through) cards
+    // the margin around the dashboard: automatic, or what Settings > Theme says
+    ['x', 'y'].forEach(function (k) { var v = a['safe_' + k]; if (v === undefined || v < 0) root.style.removeProperty('--safe-' + k); else root.style.setProperty('--safe-' + k, v + 'px'); });
     var glass = !!a.background && a.blur_target === 'cards';
     root.classList.toggle('glass', glass);
     set('--glass-blur', (glass ? a.blur : 0) + 'px');
@@ -322,14 +325,34 @@
     R.srvBtn.setAttribute('aria-haspopup', 'menu');
     root.appendChild(h('header', { class: 'top' },
       h('div', { class: 'brand' }, logo(), h('div', { class: 'ell' }, h('h1', { class: 'und-name' }, g.title || 'UnDash'),
-        R.sub = h('div', { class: 'und-sub' }, S.boot.server.name + ' · ' + S.boot.server.ip + ' · UnDash ' + S.boot.version))),
+        R.sub = h('div', { class: 'und-sub' }))),
       h('div', { class: 'search' }, ic('search'), R.search, R.sbox = h('div', { class: 'sbox', id: 'und-sbox', hidden: true, role: 'region', 'aria-label': 'Results to request' })), acts));
-    R.sections = h('main', { class: 'sections' });
+    R.sections = h('main', { class: 'sections' }); R.noMatch = null;
     root.appendChild(R.sections);
     S.L.dashboard.sections.forEach(function (sec) { if (sec.visible) buildSection(sec); });
-    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Dashboard.'));
+    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Layout.'));
     packHalves();
-    paintAll(); paintLive();
+    paintAll(); paintLive(); paintIdent();
+    if (!S.selfT) { S.selfT = 1; checkSelf(); }
+  }
+
+  /* ---- title bar: server, Unraid version and UnDash version, each with a badge when a newer one exists ---- */
+  function checkSelf() { api('self_update').then(function (j) { if (!j.error || j.latest) { S.self = j; paintIdent(); } setTimeout(checkSelf, 6 * 3600 * 1000); }); }
+  function paintIdent() {
+    if (!R.sub) return;
+    var y = S.live || {}, s = y.system && !y.system.error ? y.system : null, b = S.boot.server || {};
+    var name = (s && s.name) || b.name || '', ip = (s && s.ip) || b.ip || '', os = (s && s.os) || b.os || '', ou = (s && s.os_update) || {};
+    var me = S.self || {};
+    var sig = JSON.stringify([name, ip, os, ou.available, ou.latest, ou.staged, me.newer, me.latest]);
+    if (R.sub._sig === sig) return; R.sub._sig = sig;
+    clear(R.sub);
+    R.sub.appendChild(h('span', { class: 'ell', title: ip }, name + (ip && ip !== name ? ' · ' + ip : '')));
+    if (os) {
+      var osUp = ou.staged ? ['restart for ' + ou.staged, 'Unraid ' + ou.staged + ' is installed; it becomes active after a restart'] : ou.available ? [ou.latest + ' available', 'Unraid ' + ou.latest + ' is available'] : null;
+      R.sub.appendChild(h('span', { class: 'vchip' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { if (S.boot.caps.os_update) osDialog(); else window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
+    }
+    R.sub.appendChild(h('span', { class: 'vchip' }, 'UnDash ' + S.boot.version, me.newer ? h('a', { class: 'upd', href: me.url, target: '_blank', rel: 'noopener',
+      title: 'UnDash ' + me.latest + ' is available. ' + (S.boot.caps.mode === 'api' ? 'Update the UnDash container in Unraid\'s Docker tab.' : 'Update it under Plugins in Unraid.') }, ic('up'), me.latest + ' available') : null));
   }
 
   /* Half-width sections next to each other go into two columns, each section into the shorter one (in order), so a short
@@ -367,10 +390,11 @@
     var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
     p.w.classList.toggle('one', !!one);
     unlevel(p);                                           // measure the natural heights, not the stretched ones
-    p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
     var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
+    // sections hidden by the filter take no room and stay where they are
+    p.items.forEach(function (el, i) { var h0 = el.offsetHeight; if (!h0) { want.push(now[i]); return; } var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += h0 + gap; });
     var move = want.join() !== now.join();
-    if (move && !one) {
+    if (move && !one && !S.q.trim()) {
       // only move when it clearly helps, so sections do not jump back and forth
       var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
       if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
@@ -507,7 +531,7 @@
         S.connErr = r.error;
         if (R.alerts) paintAlerts(S.live || {});
       } else {
-        S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r;
+        S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r; paintIdent();
         if (r.power && !S.power) powerOverlay(r.power);
         paintAll();
       }
@@ -553,6 +577,7 @@
     if (R.docker && open('docker')) paintDocker(y);
     if (R.vms && open('vms')) paintVms(y);
     paintCounts(y);
+    if (S.q) matchVisibility();
     // ResizeObserver does not run in a background tab; the live refresh catches up instead
     if (R.packs && R.packs.length) balanceHalves();
   }
@@ -577,6 +602,28 @@
     root.querySelectorAll('.aitem[data-name],.card.dl[data-name]').forEach(function (el) { el.style.display = matches(el.getAttribute('data-name')) ? '' : 'none'; });
     if (R.media) Object.keys(R.media.w).forEach(function (k) { var x = R.media.w[k]; if (x.last) paintMedia(k, x.last); });
     Object.keys(POLL).forEach(function (k) { if (POLL[k].last && R[k]) POLL[k].paint(POLL[k].last); });
+    matchVisibility();
+  }
+
+  /* While the filter box is in use, sections (and media columns) with nothing that matches step aside instead of showing
+     empty boxes; the overview and alerts stay. If nothing at all matches, one line says so. */
+  var MATCH_ITEMS = '.mi,.aitem,.card.dl,.pl,.rq,.agrid>.w,.alinks>.alink,.ci,.rowi,.tile,.hrow:not(.hh),.fav';
+  function matchVisibility() {
+    if (!R.sections) return;
+    var q = S.q.trim(), any = false;
+    [].forEach.call(R.sections.querySelectorAll('section.sec[data-sec]'), function (el) {
+      var id = el.getAttribute('data-sec');
+      if (!q || id === 'overview' || id === 'alerts') { el.classList.remove('nomatch'); [].forEach.call(el.querySelectorAll('.nomatch-col'), function (c) { c.classList.remove('nomatch-col'); }); return; }
+      var shown = function (x) { return x.style.display !== 'none' && !x.closest('[hidden]'); };
+      [].forEach.call(el.querySelectorAll('.mw'), function (c) { c.classList.toggle('nomatch-col', ![].some.call(c.querySelectorAll('.mi'), shown)); });
+      var n = [].filter.call(el.querySelectorAll(MATCH_ITEMS), function (x) { return shown(x) && !x.closest('.nomatch-col'); }).length;
+      el.classList.toggle('nomatch', n === 0);
+      if (n) any = true;
+    });
+    if (!R.noMatch) { R.noMatch = h('div', { class: 'nomatch-note', role: 'status' }); R.sections.parentNode.insertBefore(R.noMatch, R.sections); }
+    R.noMatch.hidden = !q || any;
+    if (R.packs && R.packs.length) balanceHalves();
+    if (q && !any) txt(R.noMatch, 'Nothing on the dashboard matches "' + q + '".' + (hasSeerr() ? ' Movies and series to request are in the list under the search box.' : ''));
   }
 
   /* ================= sections ================= */
@@ -600,7 +647,7 @@
     r.detail = h('div', { class: 'detail', hidden: true });
     r.stale = h('div', { class: 'stale', hidden: true, role: 'status' });
     r.body.appendChild(r.stale); r.body.appendChild(r.bar); r.body.appendChild(r.detail);
-    if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Dashboard).'));
+    if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Layout).'));
     r.open = LS.get('detail', '');
   };
   function toggleDetail(id) {
@@ -1015,7 +1062,7 @@
     var D = S.L.docker, i = D.selected.indexOf(name), first = !D.selected.length;
     if (i >= 0) D.selected.splice(i, 1); else D.selected.push(name);
     api('prefs', { kind: 'docker_view', value: { selected: D.selected } }).then(function (j) { if (j.error) toast(j.error, true); });
-    toast(i >= 0 ? name + ' removed from "Selected"' : name + ' added to "Selected"' + (first ? '. Pick "Selected" as the default view in Settings > Dashboard.' : ''));
+    toast(i >= 0 ? name + ' removed from "Selected"' : name + ' added to "Selected"' + (first ? '. Pick "Selected" as the default view in Settings > Containers & VMs.' : ''));
     shell();
   }
   function setLayout(kind, l) { S.L[kind].layout = l; api('prefs', { kind: kind + '_view', value: { layout: l } }); shell(); }
@@ -1395,7 +1442,7 @@
       x.el = h('div', { class: 'mw card' }, h('div', { class: 'mh' }, h('h3', null, MEDIA[id][0]), x.count, h('span', { class: 'grow' }), x.link), x.row);
       r.w[id] = x; r.grid.appendChild(x.el);
     });
-    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Dashboard).'));
+    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Media & downloads).'));
     r.body.classList.add('mbody');
     r.body.appendChild(r.grid);
     clearTimeout(S.mediaTimer); loadMedia(true);
@@ -1451,7 +1498,7 @@
     p.stale = false;
     api(p.action, Object.assign({}, p.data || {}, extra || {}), 30000).then(function (j) {
       if (POLL[key] !== p) return;                              // the section was rebuilt meanwhile
-      p.last = j; p.paint(j);
+      p.last = j; p.paint(j); if (S.q) matchVisibility();
       p.t = setTimeout(function () { pollRun(key); }, p.every);
     });
   }
@@ -1899,19 +1946,24 @@
   function openSettings(tab) {
     if (S.drawer) return;
     closeMenu(true);
-    var D = { tab: typeof tab === 'string' ? tab : 'dashboard', dirty: false };
+    var D = { tab: SET_ALIAS[tab] || (SET_PAGES[tab] ? tab : 'layout'), dirty: false };
     S.drawer = D;
     var last = document.activeElement;
     var bodyEl = h('div', { class: 'db', role: 'tabpanel' });
     var saveB = btn('Save', save, 'pri'); saveB.disabled = true;
     var status = h('span', { class: 'muted sm grow', role: 'status' }, 'Loading…');
-    var tabs = h('div', { class: 'dt', role: 'tablist', 'aria-label': 'Settings sections' });
-    [['dashboard', 'Dashboard'], ['system', 'System'], ['appearance', 'Appearance'], ['services', 'Apps'], ['ignored', 'Ignored alerts'], ['config', 'Configuration']].forEach(function (t) {
-      tabs.appendChild(h('button', { type: 'button', role: 'tab', 'data-t': t[0], onclick: function () { D.tab = t[0]; paintTabs(); render(); } }, t[1]));
+    var tabs = h('nav', { class: 'dt', role: 'tablist', 'aria-label': 'Settings', 'aria-orientation': 'vertical' });
+    SET_NAV.forEach(function (g) {
+      tabs.appendChild(h('div', { class: 'dg' }, g[0]));
+      g[1].forEach(function (id) {
+        var pg = SET_PAGES[id];
+        tabs.appendChild(h('button', { type: 'button', role: 'tab', 'data-t': id, onclick: function () { D.tab = id; paintTabs(); render(); } }, ic(pg[1]), pg[0]));
+      });
     });
     var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
-      h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), h('span', { class: 'grow' }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')), tabs, bodyEl,
-      h('div', { class: 'df' }, saveB, btn('Discard', function () { if (!D.dirty || window.confirm('Discard your changes?')) close(true); }), status));
+      h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), h('span', { class: 'grow' }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')),
+      h('div', { class: 'dmain' }, tabs, bodyEl),
+      h('div', { class: 'df' }, saveB, btn('Discard', function () { if (!D.dirty) close(true); else confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }), status));
     var bg = h('div', { class: 'drawer-bg', onclick: function () { close(); } });
     root.appendChild(bg); root.appendChild(drawer);
     function key(e) {
@@ -1925,10 +1977,10 @@
       }
     }
     document.addEventListener('keydown', key);
-    function paintTabs() { [].forEach.call(tabs.childNodes, function (b) { var on = b.getAttribute('data-t') === D.tab; b.className = on ? 'on' : ''; b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
+    function paintTabs() { [].forEach.call(tabs.querySelectorAll('button'), function (b) { var on = b.getAttribute('data-t') === D.tab; b.className = on ? 'on' : ''; b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
     function dirty() { D.dirty = true; saveB.disabled = false; status.textContent = 'Unsaved changes'; }
     function close(force) {
-      if (force !== true && D.dirty && !window.confirm('Close settings without saving your changes?')) return;
+      if (force !== true && D.dirty) { confirmBox('Close without saving?', 'Your changes in Settings are not saved yet.', 'Close without saving', true).then(function (y) { if (y) close(true); }); return; }
       document.removeEventListener('keydown', key);
       bg.remove(); drawer.remove(); S.drawer = null;
       if (D.dirty) { applyLook(); applyCss(S.boot.css); }
@@ -1948,7 +2000,8 @@
     function render() {
       clear(bodyEl);
       if (!D.cfg) { bodyEl.appendChild(h('div', { class: 'progress' }, h('i'))); return; }
-      ({ dashboard: tabDashboard, system: tabSystem, appearance: tabAppearance, services: tabServices, ignored: tabIgnored, config: tabConfig })[D.tab](bodyEl, D, dirty);
+      bodyEl.appendChild(h('h2', { class: 'dtitle' }, SET_PAGES[D.tab][0]));
+      SET_PAGES[D.tab][2](bodyEl, D, dirty);
       bodyEl.scrollTop = 0;
     }
     D.render = render;
@@ -1969,6 +2022,29 @@
   function sIn(o, k, dirty, opts, onch) { return h('select', { onchange: function (e) { o[k] = e.target.value; dirty(); if (onch) onch(); } }, opts.map(function (x) { return h('option', { value: x[0], selected: String(o[k]) === String(x[0]) }, x[1]); })); }
   function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return false; var x = arr[i]; arr[i] = arr[j]; arr[j] = x; return true; }
   function rid() { var a = new Uint8Array(4); window.crypto.getRandomValues(a); return [].map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  /* Settings pages: [title, icon, builder]. Builders that share an older all-in-one tab take their blocks by title. */
+  function pick(build, titles) {
+    return function (b, D, dirty) {
+      var tmp = h('div'); build(tmp, D, dirty);
+      [].slice.call(tmp.children).forEach(function (el) {
+        var t = el.querySelector('h3'); if (t && titles.indexOf(t.textContent) >= 0) b.appendChild(el);
+      });
+    };
+  }
+  var SET_PAGES = {
+    layout: ['Layout', 'grid', pick(tabDashboard, ['Sections', 'System overview'])],
+    media: ['Media & downloads', 'play', pick(tabDashboard, ['Media', 'Downloads'])],
+    containers: ['Containers & VMs', 'box', pick(tabDashboard, ['Containers', 'Virtual machines', 'Favorites, names and visibility'])],
+    services: ['Apps', 'web', function (b, D, dirty) { pick(tabDashboard, ['Apps'])(b, D, dirty); tabServices(b, D, dirty); }],
+    appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Spacing', 'Wallpaper'])],
+    css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
+    system: ['Refresh & display', 'clock', tabSystem],
+    ignored: ['Ignored alerts', 'mute', tabIgnored],
+    config: ['Connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }],
+    backup: ['Backup & import', 'download', configCommon]
+  };
+  var SET_NAV = [['Dashboard', ['layout', 'media', 'containers', 'services']], ['Look', ['appearance', 'css']], ['Behaviour', ['system', 'ignored']], ['Server', ['config', 'backup']]];
+  var SET_ALIAS = { dashboard: 'layout' };
   function set(title, hint) { var b = h('section', { class: 'set' }, h('h3', null, title), hint ? h('p', { class: 'hint' }, hint) : null); for (var i = 2; i < arguments.length; i++) add(b, arguments[i]); return b; }
   /* reorderable list: drag the handle (mouse) or use the arrow buttons (keyboard, touch) */
   function orderList(arr, row, dirty, redraw) {
@@ -2150,11 +2226,21 @@
     var col, hex, cur = a.accent || themeAccent(a);
     hex = h('input', { type: 'text', value: cur, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
     col = h('input', { type: 'color', value: cur, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
-    b.appendChild(set('Theme', 'Pick a colour theme and whether it is light, dark or follows your system; every theme has both. Status colours (green, amber, red) stay readable in every theme.',
+    b.appendChild(set('Colours', 'Pick a colour theme and whether it is light, dark or follows your system; every theme has both. Status colours (green, amber, red) stay readable in every theme.',
       h('div', { class: 'inl', style: { 'margin-bottom': '12px' } }, h('span', { class: 'muted sm' }, 'Mode'), modeSeg), tw,
       h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex,
         btn(a.accent ? 'Use the theme accent' : 'Theme accent in use', function () { a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); }, 'sm ghost')),
-      h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)))));
+      null));
+    var margin = function (k, lab) {
+      var auto = a[k] < 0, out = h('span', { class: 'num muted sm', style: { 'min-width': '48px', 'text-align': 'right' } }, auto ? 'auto' : a[k] + ' px');
+      var r = h('input', { type: 'range', min: 0, max: 120, value: auto ? (k === 'safe_x' ? 32 : 16) : a[k], disabled: auto, 'aria-label': lab, style: { flex: '1' },
+        oninput: function (e) { a[k] = +e.target.value; txt(out, a[k] + ' px'); dirty(); preview(); } });
+      return F(lab, h('div', { class: 'inl' }, h('label', { class: 'switch', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: auto, onchange: function (e) {
+        a[k] = e.target.checked ? -1 : +r.value; r.disabled = e.target.checked; txt(out, e.target.checked ? 'auto' : a[k] + ' px'); dirty(); preview(); } }), 'Auto'), r, out));
+    };
+    b.appendChild(set('Spacing', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
+      F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)), h('span'),
+      margin('safe_x', 'Side margin'), margin('safe_y', 'Top and bottom margin'))));
     var pd = function () { dirty(); preview(); };
     var rng = function (k, lo, hi, unit, lab) {
       var out = h('span', { class: 'num muted sm', style: { 'min-width': '44px', 'text-align': 'right' } }, a[k] + unit);
@@ -2331,10 +2417,6 @@
     }, 'pri')], true);
   }
 
-  function tabConfig(b, D) {
-    if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D);
-    configCommon(b, D);
-  }
   /* Docker version: where the Unraid API is and its key (the key is never shown again once saved) */
   /* Docker version: the dashboard's own password (it can be skipped at setup and added here later) */
   function dashPass(b) {
@@ -2481,7 +2563,7 @@
   // g then a letter jumps to a section (it opens a collapsed one); ? lists everything
   var GOTO = { o: 'overview', a: 'alerts', f: 'favorites', m: 'media', s: 'arr', d: 'downloads', n: 'playing', q: 'requests', p: 'apps', c: 'docker', v: 'vms', h: 'health' };
   function jumpTo(id) {
-    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Dashboard).', true); return; }
+    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Layout).', true); return; }
     if (r.sec.collapsed) r.el.querySelector('.sec-h h2 button').click();
     r.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     var b = r.el.querySelector('.sec-h h2 button'); if (b) try { b.focus({ preventScroll: true }); } catch (x) { b.focus(); }
