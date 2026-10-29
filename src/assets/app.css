@@ -1,5 +1,6 @@
 /* UnDash - one stylesheet, scoped to .und so nothing leaks into Unraid's page.
-   Three themes: default (the Unraid Swiss Manager look: dark grey panels, orange accent), light and amoled.
+   Colour themes are palettes in app.js (THEMES), applied as the custom properties below; these values are the Default
+   dark palette (the Unraid Swiss Manager look: dark grey panels, orange accent) and only show before the script runs.
    The accent (--accent) only colours interactive and selected things; status colours (--ok, --warn, --bad) never follow it. */
 .und{
   --bg:#1d1b1b;--panel:#232121;--panel-2:#1b1919;--bar:#2a2828;--field:#181616;--line:#343131;--line-2:#454141;
@@ -7,13 +8,10 @@
   --accent:#f15a2c;--accent-btn:#d4431a;--accent-ink:#fff;--accent-soft:rgba(241,90,44,.14);--accent-text:#ff7a50;
   --ok:#4ec38b;--warn:#e8b33c;--bad:#ff6b5e;--info:#79a0ee;--off:#8a8484;
   --ok-soft:rgba(78,195,139,.13);--warn-soft:rgba(232,179,60,.14);--bad-soft:rgba(255,107,94,.13);
-  --shadow:0 1px 2px rgba(0,0,0,.25);--radius:8px;--gap:12px;--pad:14px;
-  --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --shadow:0 1px 2px rgba(0,0,0,.25);--radius:10px;--gap:12px;--pad:14px;
+  --font:Inter,"Inter Variable",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   color:var(--text);font:14px/1.45 var(--font);margin:0;padding:4px 0 28px;text-align:left;position:relative;isolation:isolate;-webkit-text-size-adjust:100%}
-.und[data-theme=light]{--bg:#f3f4f6;--panel:#fff;--panel-2:#f6f7f9;--bar:#f0f1f4;--field:#fff;--line:#e2e3e8;--line-2:#cdd0d6;--text:#1d1f24;--muted:#5b606b;--faint:#80858f;--title:#111318;
-  --ok:#14804a;--warn:#8a5a00;--bad:#c4332a;--info:#2457c5;--off:#6f7480;--ok-soft:#e8f5ee;--warn-soft:#fbf3dd;--bad-soft:#fdeceb;--shadow:0 1px 2px rgba(16,24,40,.06)}
-.und[data-theme=amoled]{--bg:#000;--panel:#0b0b0b;--panel-2:#070707;--bar:#141414;--field:#050505;--line:#202020;--line-2:#2e2e2e;--text:#f2f2f2;--muted:#a8a8a8;--faint:#767676;--title:#fff;--shadow:none}
-.und[data-theme=light],.und[data-theme=amoled],.und.has-bg{background:var(--bg);padding:14px;border-radius:var(--radius)}
+.und[data-mode=light],.und[data-theme]:not([data-theme=default]),.und.has-bg{background:var(--bg);padding:14px;border-radius:var(--radius)}
 .und[data-density=compact]{--gap:8px;--pad:10px;font-size:13.5px}
 .und[data-density=expanded]{--gap:16px;--pad:18px;font-size:14.5px}
 .und *,.und *::before,.und *::after{box-sizing:border-box}
@@ -92,7 +90,8 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .sec{grid-column:1/-1;min-width:0}.und .sec.half{grid-column:auto}
 .und .hcols{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--gap);align-items:start;min-width:0}
 .und .hcol{display:flex;flex-direction:column;gap:16px;min-width:0}
-.und .hcols.one{grid-template-columns:minmax(0,1fr)}.und .hcols.one>.hcol:empty{display:none}
+.und .hcols.one{grid-template-columns:minmax(0,1fr)}
+.und .sec.fill{display:flex;flex-direction:column}.und .sec.fill>.sec-b{flex:1;display:flex;flex-direction:column}.und .sec.fill>.sec-b>:last-child{flex:1}.und .hcols.one>.hcol:empty{display:none}
 .und .sec-h{display:flex;align-items:center;gap:8px;margin:0 0 8px;min-height:30px;flex-wrap:wrap}
 .und .sec-h h2{display:flex;align-items:center;gap:8px;font:600 15px/1.3 var(--font);color:var(--title);margin:0;padding:0;border:0;background:none;text-transform:none;letter-spacing:0}
 .und .sec-h h2 button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border-radius:4px}
@@ -254,11 +253,12 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .olist .oi:last-child{border-bottom:0}.und .olist .oi .t{flex:1;min-width:120px}
 .und .olist .oi img{width:22px;height:22px;object-fit:contain;flex:none}
 .und .olist .oi input[type=text]{flex:1 1 140px;min-width:0}
-.und .themes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.und .themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .und button.theme{border:2px solid var(--line)!important;border-radius:8px!important;padding:8px!important;cursor:pointer;background:transparent!important;color:var(--text)!important;font:inherit!important;text-align:left;margin:0!important;display:flex;flex-direction:column;gap:6px}
 .und button.theme.on{border-color:var(--accent)!important}
 .und .theme .pv{height:54px;border-radius:5px;display:flex;gap:4px;padding:6px;border:1px solid rgba(127,127,127,.3)}
 .und .theme .pv i{flex:1;border-radius:3px}
+.und .theme .tn{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}.und .theme .tn b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .sec-in{display:flex;gap:6px}.und .sec-in input{flex:1;min-width:0}
 .und .lg{border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--panel)}
 .und .lg .lh{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}
@@ -312,7 +312,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   .und button.btn,.und .btn{min-height:38px!important}.und .btn.ic{width:38px;min-width:38px!important}.und .btn.sm{min-height:36px!important}.und .btn.ic.sm{width:36px;min-width:36px!important}
   .und .seg button{min-height:36px!important}
   .und input[type=text],.und input[type=number],.und input[type=url],.und input[type=password],.und input[type=search],.und select,.und textarea{font-size:16px!important;min-height:40px}
-  .und .themes{grid-template-columns:1fr}
+  .und .themes{grid-template-columns:repeat(2,minmax(0,1fr))}
   .und .modal-bg{align-items:flex-end;padding:0}.und .modal{border-radius:14px 14px 0 0;max-height:92vh;padding:16px}
   .und .modal .foot .btn{flex:1}
   .und .drawer{width:100vw;border-left:0}
@@ -481,7 +481,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .ci.st-exited .cname,.und .ci.st-created .cname,.und .ci.st-dead .cname{color:var(--muted);font-weight:500}
 
 /* apps: compact cards in one grid */
-.und .agrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;align-items:start}
+.und .agrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;align-items:stretch}
 .und .agrid.fixed{grid-template-columns:repeat(var(--ac),minmax(0,1fr))}
 .und .card.ac{padding:10px 12px;min-height:0}
 .und .ac .cb{flex:0 0 auto}.und .ac .blocks{margin-top:0}
@@ -509,3 +509,20 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 }
 .und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--panel-2)}
 .und .switch.pk{margin:3px 0;font-size:13px;min-width:0}
+
+/* ---------- Fluent Dark: frosted glass with blue accents (from Homepage custom.css) ---------- */
+.und[data-theme=fluent]{background:radial-gradient(1100px 600px at 0% -10%,rgba(59,130,246,.14),transparent 60%),radial-gradient(900px 520px at 100% 0%,rgba(99,102,241,.10),transparent 60%),var(--bg)}
+.und[data-theme=fluent].has-bg{background:transparent}
+.und[data-theme=fluent] .card,.und[data-theme=fluent] button.stat,.und[data-theme=fluent] .ci,.und[data-theme=fluent] .alert,.und[data-theme=fluent] .panel,.und[data-theme=fluent] .olist{
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:10px;box-shadow:0 4px 6px -1px rgba(0,0,0,.2);transition:background-color .3s,border-color .3s,box-shadow .3s}
+.und[data-theme=fluent] .card:hover,.und[data-theme=fluent] button.stat:hover,.und[data-theme=fluent] .ci:hover,.und[data-theme=fluent] a.mi:hover{background-color:rgba(39,43,48,.5);border-color:rgba(59,130,246,.8);box-shadow:0 0 15px rgba(59,130,246,.3)}
+.und[data-theme=fluent] .sec-h h2,.und[data-theme=fluent] .nm,.und[data-theme=fluent] .cname{font-weight:500}
+.und[data-theme=fluent] .aico,.und[data-theme=fluent] .ci img,.und[data-theme=fluent] .w .ch .ico{background:rgba(255,255,255,.05);border-radius:6px;opacity:.9;transition:transform .3s cubic-bezier(.4,0,.2,1),filter .3s,background-color .3s}
+.und[data-theme=fluent] .card:hover .aico,.und[data-theme=fluent] .ci:hover img,.und[data-theme=fluent] a:hover .aico{opacity:1;background:rgba(59,130,246,.15);transform:scale(1.08);filter:drop-shadow(0 0 6px rgba(59,130,246,.8))}
+.und[data-theme=fluent] .meter,.und[data-theme=fluent] .progress{background:rgba(0,0,0,.3);border-radius:10px;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+.und[data-theme=fluent] .meter i,.und[data-theme=fluent] .progress i,.und[data-theme=fluent] .stat .bar i{background:linear-gradient(90deg,#1e3a8a,#3b82f6,#60a5fa);border-radius:10px;box-shadow:0 0 8px rgba(59,130,246,.4)}
+.und[data-theme=fluent] .meter i.warn,.und[data-theme=fluent] .stat.warn .bar i{background:linear-gradient(90deg,#92400e,var(--warn))}
+.und[data-theme=fluent] .meter i.bad,.und[data-theme=fluent] .stat.bad .bar i{background:linear-gradient(90deg,#7f1d1d,var(--bad))}
+/* overlays stay solid so text over moving content is readable */
+.und[data-theme=fluent] .modal,.und[data-theme=fluent] .menu,.und[data-theme=fluent] .toast{background:rgba(17,19,24,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-color:rgba(255,255,255,.12)}
+.und[data-theme=fluent] *{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.12) transparent}

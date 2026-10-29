@@ -49,6 +49,7 @@
     play: 'M7 4l13 8-13 8z', pause: 'M7 4h4v16H7zM14 4h4v16h-4z', stop: 'M6 6h12v12H6z',
     restart: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', logs: 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5', info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01',
     up: 'M12 19V5M5 12l7-7 7 7', web: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
+    sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
     moon: 'M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z', check: 'M5 12l4 4 10-10', power: 'M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0',
     full: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', screen: 'M3 4h18v12H3zM8 20h8M12 16v4', edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
     trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13', upar: 'M12 6l-6 6h12z', dnar: 'M12 18l6-6H6z', plus: 'M12 5v14M5 12h14', x: 'M6 6l12 12M18 6L6 18',
@@ -203,17 +204,62 @@
   function hexRgb(hx) { var m = /^#([0-9a-f]{6})$/i.exec(hx || ''); if (!m) return [241, 90, 44]; var n = parseInt(m[1], 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
   function mix(c, t, f) { return 'rgb(' + c.map(function (v, i) { return Math.round(v + (t[i] - v) * f); }).join(',') + ')'; }
   function lum(c) { var a = c.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2]; }
+  /* Colour themes. Each has a dark and (most) a light palette; the mode setting picks one (system = follow the OS).
+     Palettes come from the themes' public, MIT-licensed definitions (Kanagawa, Catppuccin, Nord, Tokyo Night) and the
+     shadcn neutral / zinc scales; Fluent Dark is the frosted-glass look from Homepage's custom.css.
+     keys: bg panel p2 (inner panel) bar (strip / hover) field line l2 (strong line) text muted faint title accent
+           [ok warn bad info] (status colours; when missing, the standard ones for dark or light are used) */
+  var THEMES = {
+    default: { name: 'Default', dark: { bg: '#1d1b1b', panel: '#232121', p2: '#1b1919', bar: '#2a2828', field: '#181616', line: '#343131', l2: '#454141', text: '#ece9e9', muted: '#a19c9c', faint: '#7f7977', title: '#ffffff', accent: '#f15a2c' },
+      light: { bg: '#f3f4f6', panel: '#ffffff', p2: '#f6f7f9', bar: '#f0f1f4', field: '#ffffff', line: '#e2e3e8', l2: '#cdd0d6', text: '#1d1f24', muted: '#5b606b', faint: '#80858f', title: '#111318', accent: '#e0491b' } },
+    amoled: { name: 'AMOLED', dark: { bg: '#000000', panel: '#0b0b0b', p2: '#070707', bar: '#141414', field: '#050505', line: '#202020', l2: '#2e2e2e', text: '#f2f2f2', muted: '#a8a8a8', faint: '#767676', title: '#ffffff', accent: '#f15a2c' } },
+    minimal: { name: 'Minimal', dark: { bg: '#0a0a0a', panel: '#171717', p2: '#121212', bar: '#262626', field: '#0f0f0f', line: '#262626', l2: '#3a3a3a', text: '#fafafa', muted: '#a3a3a3', faint: '#737373', title: '#ffffff', accent: '#e5e5e5' },
+      light: { bg: '#fafafa', panel: '#ffffff', p2: '#f5f5f5', bar: '#f5f5f5', field: '#ffffff', line: '#e5e5e5', l2: '#d4d4d4', text: '#0a0a0a', muted: '#737373', faint: '#a3a3a3', title: '#0a0a0a', accent: '#171717' } },
+    zinc: { name: 'Zinc Blue', dark: { bg: '#09090b', panel: '#18181b', p2: '#131316', bar: '#27272a', field: '#0f0f12', line: '#27272a', l2: '#3f3f46', text: '#fafafa', muted: '#a1a1aa', faint: '#71717a', title: '#ffffff', accent: '#3b82f6' },
+      light: { bg: '#f4f4f5', panel: '#ffffff', p2: '#fafafa', bar: '#f4f4f5', field: '#ffffff', line: '#e4e4e7', l2: '#d4d4d8', text: '#09090b', muted: '#52525b', faint: '#a1a1aa', title: '#09090b', accent: '#2563eb' } },
+    wave: { name: 'Kanagawa Wave', dark: { bg: '#1f1f28', panel: '#2a2a37', p2: '#232330', bar: '#363646', field: '#1a1a22', line: '#363646', l2: '#54546d', text: '#dcd7ba', muted: '#a8a48f', faint: '#727169', title: '#ece7cb', accent: '#7e9cd8', ok: '#98bb6c', warn: '#e6c384', bad: '#e46876', info: '#7fb4ca' },
+      light: { bg: '#e5ddb0', panel: '#f2ecbc', p2: '#ece5b6', bar: '#e7dba0', field: '#f7f1c8', line: '#d5cea3', l2: '#c7bf93', text: '#545464', muted: '#6f6e66', faint: '#8a8980', title: '#43436c', accent: '#4d699b', ok: '#6f894e', warn: '#836f4a', bad: '#c84053', info: '#4e8ca2' } },
+    dragon: { name: 'Kanagawa Dragon', dark: { bg: '#181616', panel: '#1d1c19', p2: '#12120f', bar: '#282727', field: '#0d0c0c', line: '#282727', l2: '#393836', text: '#c5c9c5', muted: '#a6a69c', faint: '#737c73', title: '#e0e2df', accent: '#8ba4b0', ok: '#87a987', warn: '#c4b28a', bad: '#c4746e', info: '#8ea4a2' },
+      light: { bg: '#e5ddb0', panel: '#f2ecbc', p2: '#ece5b6', bar: '#e7dba0', field: '#f7f1c8', line: '#d5cea3', l2: '#c7bf93', text: '#545464', muted: '#6f6e66', faint: '#8a8980', title: '#43436c', accent: '#4d699b', ok: '#6f894e', warn: '#836f4a', bad: '#c84053', info: '#4e8ca2' } },
+    catppuccin: { name: 'Catppuccin', dark: { bg: '#11111b', panel: '#1e1e2e', p2: '#181825', bar: '#313244', field: '#181825', line: '#313244', l2: '#45475a', text: '#cdd6f4', muted: '#a6adc8', faint: '#7f849c', title: '#e6ebff', accent: '#cba6f7', ok: '#a6e3a1', warn: '#f9e2af', bad: '#f38ba8', info: '#89b4fa' },
+      light: { bg: '#dce0e8', panel: '#eff1f5', p2: '#e6e9ef', bar: '#ccd0da', field: '#e6e9ef', line: '#ccd0da', l2: '#bcc0cc', text: '#4c4f69', muted: '#6c6f85', faint: '#8c8fa1', title: '#4c4f69', accent: '#8839ef', ok: '#40a02b', warn: '#b76d0b', bad: '#d20f39', info: '#1e66f5' } },
+    nord: { name: 'Nord', dark: { bg: '#2e3440', panel: '#3b4252', p2: '#353b49', bar: '#434c5e', field: '#2b303b', line: '#434c5e', l2: '#4c566a', text: '#e5e9f0', muted: '#aeb6c4', faint: '#7b88a1', title: '#eceff4', accent: '#88c0d0', ok: '#a3be8c', warn: '#ebcb8b', bad: '#bf616a', info: '#81a1c1' },
+      light: { bg: '#e5e9f0', panel: '#eceff4', p2: '#e8ecf2', bar: '#d8dee9', field: '#f2f4f8', line: '#d8dee9', l2: '#c2cad8', text: '#2e3440', muted: '#4c566a', faint: '#7b88a1', title: '#2e3440', accent: '#5e81ac', ok: '#5c7d43', warn: '#9a7417', bad: '#bf616a', info: '#5e81ac' } },
+    tokyo: { name: 'Tokyo Night', dark: { bg: '#16161e', panel: '#1a1b26', p2: '#1f2030', bar: '#292e42', field: '#13131a', line: '#292e42', l2: '#3b4261', text: '#c0caf5', muted: '#a9b1d6', faint: '#565f89', title: '#dfe5ff', accent: '#7aa2f7', ok: '#9ece6a', warn: '#e0af68', bad: '#f7768e', info: '#7dcfff' },
+      light: { bg: '#d0d5e3', panel: '#e1e2e7', p2: '#d6d8df', bar: '#c4c8da', field: '#e9e9ec', line: '#c4c8da', l2: '#a8aecb', text: '#3760bf', muted: '#6172b0', faint: '#8990b3', title: '#2d4f9e', accent: '#2e7de9', ok: '#587539', warn: '#8c6c3e', bad: '#f52a65', info: '#007197' } },
+    fluent: { name: 'Fluent Dark', dark: { bg: '#0b0d12', panel: 'rgba(24,24,27,.45)', p2: 'rgba(255,255,255,.03)', bar: 'rgba(255,255,255,.06)', field: 'rgba(0,0,0,.3)', line: 'rgba(255,255,255,.08)', l2: 'rgba(255,255,255,.14)', text: '#e2e8f0', muted: '#94a3b8', faint: '#64748b', title: '#f8fafc', accent: '#3b82f6' } }
+  };
+  var STATUS = { dark: { ok: '#4ec38b', warn: '#e8b33c', bad: '#ff6b5e', info: '#79a0ee', off: '#8a8484' }, light: { ok: '#14804a', warn: '#8a5a00', bad: '#c4332a', info: '#2457c5', off: '#6f7480' } };
+  var DARK_OS = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+  function lookMode(a) {
+    var t = THEMES[a.theme] || THEMES.default;
+    if (!t.light) return 'dark';
+    if (a.mode === 'system') return DARK_OS && DARK_OS.matches ? 'light' : 'dark';
+    return a.mode === 'light' ? 'light' : 'dark';
+  }
+  function themeAccent(a) { var t = THEMES[a.theme] || THEMES.default; return (t[lookMode(a)] || t.dark).accent; }
   function applyLook(a) {
     a = a || S.L.appearance;
-    root.setAttribute('data-theme', a.theme);
+    var t = THEMES[a.theme] || THEMES.default, mode = lookMode(a), p = t[mode] || t.dark, st = STATUS[mode], light = mode === 'light';
+    root.setAttribute('data-theme', THEMES[a.theme] ? a.theme : 'default');
+    root.setAttribute('data-mode', mode);
     root.setAttribute('data-density', a.density);
-    var c = hexRgb(a.accent), light = a.theme === 'light', L1 = lum(c);
-    root.style.setProperty('--accent', a.accent);
-    root.style.setProperty('--accent-btn', mix(c, [0, 0, 0], light ? 0.06 : 0.12));
-    root.style.setProperty('--accent-ink', L1 > 0.45 ? '#111' : '#fff');
-    root.style.setProperty('--accent-soft', 'rgba(' + c.join(',') + ',' + (light ? 0.12 : 0.16) + ')');
+    var set = function (k, v) { root.style.setProperty(k, v); };
+    [['--bg', 'bg'], ['--panel', 'panel'], ['--panel-2', 'p2'], ['--bar', 'bar'], ['--field', 'field'], ['--line', 'line'], ['--line-2', 'l2'], ['--text', 'text'], ['--muted', 'muted'], ['--faint', 'faint'], ['--title', 'title']]
+      .forEach(function (x) { set(x[0], p[x[1]]); });
+    ['ok', 'warn', 'bad', 'info', 'off'].forEach(function (k) {
+      var v = p[k] || st[k]; set('--' + k, v);
+      if (k !== 'info' && k !== 'off') set('--' + k + '-soft', 'rgba(' + hexRgb(v).join(',') + ',' + (light ? 0.12 : 0.14) + ')');
+    });
+    set('--shadow', light ? '0 1px 2px rgba(16,24,40,.06)' : a.theme === 'amoled' ? 'none' : '0 1px 2px rgba(0,0,0,.25)');
+    var acc = a.accent || p.accent, c = hexRgb(acc), L1 = lum(c);
+    set('--accent', acc);
+    set('--accent-btn', mix(c, [0, 0, 0], light ? 0.06 : 0.12));
+    set('--accent-ink', L1 > 0.45 ? '#111' : '#fff');
+    set('--accent-soft', 'rgba(' + c.join(',') + ',' + (light ? 0.12 : 0.16) + ')');
     // link text must stay readable on the panel colour: darken on light, lighten on dark
-    root.style.setProperty('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : a.accent) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
+    set('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : acc) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
+    if (window.UND_STANDALONE) document.body.style.background = p.bg;
     root.classList.toggle('has-bg', !!a.background);
     root.classList.toggle('full', S.full && !window.UND_STANDALONE);
     var bg = null;
@@ -225,6 +271,8 @@
       bg.style.inset = '-' + (a.blur * 2) + 'px';
     } else if (bg) bg.parentNode.removeChild(bg);
   }
+  // "system" follows the OS switching between light and dark while the page is open
+  if (DARK_OS) { var osChange = function () { if (S.L && S.L.appearance && S.L.appearance.mode === 'system' && !S.drawer) applyLook(); }; if (DARK_OS.addEventListener) DARK_OS.addEventListener('change', osChange); else DARK_OS.addListener(osChange); }
   /* custom CSS is nested under .und (CSS nesting), so it styles UnDash only; it is text, never markup */
   function applyCss(css) {
     var st = document.getElementById('und-custom-css');
@@ -301,16 +349,48 @@
     (R.packs || []).forEach(function (p) {
       var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
       p.w.classList.toggle('one', !!one);
+      unlevel(p);                                           // measure the natural heights, not the stretched ones
       p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
       var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
-      if (want.join() === now.join()) return;
-      if (!one) {
+      var move = want.join() !== now.join();
+      if (move && !one) {
         // only move when it clearly helps, so sections do not jump back and forth
         var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
-        if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) return;
+        if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
       }
-      p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
+      if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
+      if (!one) level(p);
     });
+  }
+  /* Smart height: the shorter column ends level with the taller one. Media in the shorter column shows more items
+     (its lists grow); otherwise the column's last box stretches. */
+  function unlevel(p) {
+    p.items.forEach(function (el) {
+      el.classList.remove('fill'); el.style.minHeight = '';
+      [].forEach.call(el.querySelectorAll('.mlist'), function (l) { l.style.height = ''; l.style.maxHeight = ''; });
+    });
+  }
+  function level(p) {
+    var h0 = p.cols[0].offsetHeight, h1 = p.cols[1].offsetHeight, diff = Math.abs(h0 - h1);
+    var short = p.cols[h0 < h1 ? 0 : 1], kids = [].slice.call(short.children);
+    if (diff < 4 || !kids.length) return;
+    var media = kids.filter(function (el) { return el.getAttribute('data-sec') === 'media' && !el.classList.contains('closed'); })[0];
+    if (media) {
+      // every row of media columns gets its share of the difference; lists in a row share one height
+      var rows = {}, lists = [].slice.call(media.querySelectorAll('.mlist'));
+      lists.forEach(function (l) { var t = Math.round(l.getBoundingClientRect().top); (rows[t] = rows[t] || []).push(l); });
+      var keys = Object.keys(rows);
+      if (keys.length) {
+        var add = diff / keys.length;
+        keys.forEach(function (k) {
+          var tall = Math.max.apply(null, rows[k].map(function (l) { return l.offsetHeight; }));
+          rows[k].forEach(function (l) { l.style.maxHeight = 'none'; l.style.height = Math.round(tall + add) + 'px'; });
+        });
+        return;
+      }
+    }
+    var last = kids.filter(function (el) { return !el.classList.contains('closed'); }).pop();
+    if (last) { last.classList.add('fill'); last.style.minHeight = last.offsetHeight + diff + 'px'; }
   }
   if (NARROW) (NARROW.addEventListener ? NARROW.addEventListener('change', function () { balanceHalves(); }) : NARROW.addListener(balanceHalves));
 
@@ -1840,17 +1920,27 @@
   function tabAppearance(b, D, dirty) {
     var a = D.cfg.appearance;
     var preview = function () { applyLook(a); };
-    var THEMES = [['default', 'Default', ['#1d1b1b', '#232121']], ['light', 'Light', ['#f3f4f6', '#ffffff']], ['amoled', 'AMOLED', ['#000000', '#0b0b0b']]];
-    var tw = h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Theme' });
-    THEMES.forEach(function (t) {
-      tw.appendChild(h('button', { type: 'button', class: 'theme' + (a.theme === t[0] ? ' on' : ''), role: 'radio', 'aria-checked': a.theme === t[0] ? 'true' : 'false', onclick: function () { a.theme = t[0]; dirty(); preview(); D.render(); } },
-        h('span', { class: 'pv', style: { background: t[2][0] } }, h('i', { style: { background: t[2][1] } }), h('i', { style: { background: t[2][1] } }), h('i', { style: { background: a.accent, flex: '0 0 18%' } })), h('b', null, t[1])));
+    var modeSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Mode' });
+    [['light', 'Light', 'sun'], ['dark', 'Dark', 'moon'], ['system', 'System', 'screen']].forEach(function (m) {
+      modeSeg.appendChild(h('button', { type: 'button', role: 'radio', class: a.mode === m[0] ? 'on' : '', 'aria-checked': a.mode === m[0] ? 'true' : 'false', onclick: function () { a.mode = m[0]; dirty(); preview(); D.render(); } }, ic(m[2]), m[1]));
     });
-    var col, hex;
-    hex = h('input', { type: 'text', value: a.accent, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
-    col = h('input', { type: 'color', value: a.accent, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
-    b.appendChild(set('Theme', 'Three built-in themes. The accent colours buttons, links and selections only; status colours (green, amber, red) never change.', tw,
-      h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex, btn('Default orange', function () { a.accent = '#f15a2c'; hex.value = col.value = a.accent; dirty(); preview(); }, 'sm ghost')),
+    var tw = h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Theme' });
+    Object.keys(THEMES).forEach(function (id) {
+      var t = THEMES[id], p = t[lookMode({ theme: id, mode: a.mode })] || t.dark;
+      tw.appendChild(h('button', { type: 'button', class: 'theme' + (a.theme === id ? ' on' : ''), role: 'radio', 'aria-checked': a.theme === id ? 'true' : 'false',
+        title: t.light ? 'Light and dark' : 'Dark only',
+        onclick: function () { a.theme = id; a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); } },
+        h('span', { class: 'pv', style: { background: id === 'fluent' ? 'radial-gradient(120% 90% at 0% 0%, rgba(59,130,246,.35), transparent 60%), ' + p.bg : p.bg } },
+          h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.accent, flex: '0 0 18%' } })),
+        h('span', { class: 'tn' }, h('b', null, t.name), t.light ? null : h('span', { class: 'muted xs' }, 'dark only'))));
+    });
+    var col, hex, cur = a.accent || themeAccent(a);
+    hex = h('input', { type: 'text', value: cur, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
+    col = h('input', { type: 'color', value: cur, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
+    b.appendChild(set('Theme', 'Pick a colour theme and whether it is light, dark or follows your system. Themes marked dark only ignore the mode. Status colours (green, amber, red) stay readable in every theme.',
+      h('div', { class: 'inl', style: { 'margin-bottom': '12px' } }, h('span', { class: 'muted sm' }, 'Mode'), modeSeg), tw,
+      h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex,
+        btn(a.accent ? 'Use the theme accent' : 'Theme accent in use', function () { a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); }, 'sm ghost')),
       h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)))));
     var pd = function () { dirty(); preview(); };
     b.appendChild(set('Wallpaper', 'Optional image behind the dashboard (https:// or a path served by Unraid).', h('div', { class: 'grid2' },
@@ -2099,7 +2189,7 @@
             h('span', null, 'Kind'), h('span', null, s.kind === 'full' ? 'Full export (includes secrets)' : s.kind === 'redacted' ? 'Redacted export (your stored secrets are kept)' : 'Layout file (your stored secrets are kept)'),
             h('span', null, 'Created'), h('span', null, s.created ? new Date(s.created * 1000).toLocaleString() : 'unknown'),
             h('span', null, 'Widgets'), h('span', null, s.groups + ' groups, ' + s.widgets + ' widgets' + (s.skipped ? ' (' + s.skipped + ' of an unknown type skipped)' : '')),
-            h('span', null, 'Appearance'), h('span', null, s.theme + ' theme, accent ' + s.accent + ', refresh ' + s.refresh + ' s'),
+            h('span', null, 'Appearance'), h('span', null, s.theme + ' theme, accent ' + (s.accent || 'from the theme') + ', refresh ' + s.refresh + ' s'),
             h('span', null, 'Custom CSS'), h('span', null, s.css === null ? 'not included (current CSS kept)' : s.css + ' characters'),
             h('span', null, 'Variables'), h('span', null, s.vars + (s.credentials ? ', credentials for ' + s.credentials + ' widgets' : ''))));
           info.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Apply this file', function () {
