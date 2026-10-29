@@ -491,43 +491,6 @@ function und_save_secrets(array $s) {
 
 function und_var_is_secret($name) { return preg_match('/KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i', $name) === 1; }
 
-/** Stricter, for redacted exports that may be shared: login names and e-mail addresses go too (half a credential, and personal). */
-function und_var_is_private($name, $value) {
-  return und_var_is_secret($name) || preg_match('/USER|LOGIN|EMAIL|MAIL|ACCOUNT/i', $name) === 1 || preg_match('/[^\s@]+@[^\s@]+\.[a-z]{2,}/i', (string)$value) === 1;
-}
-
-/** What the browser may see: secret variables and stored credentials are replaced by UND_KEEP. */
-function und_secrets_view(array $s) {
-  $vars = [];
-  foreach ($s['vars'] as $k => $v) $vars[] = ['name' => $k, 'value' => und_var_is_secret($k) && $v !== '' ? UND_KEEP : $v, 'secret' => und_var_is_secret($k)];
-  $svc = [];
-  foreach ($s['svc'] as $id => $c) foreach (['key', 'password', 'username'] as $f) {
-    if (!isset($c[$f]) || $c[$f] === '') continue;
-    $svc[$id][$f] = ($f === 'username' || preg_match('/^\{\{\s*[A-Za-z0-9_]+\s*\}\}$/', $c[$f])) ? $c[$f] : UND_KEEP;
-  }
-  return ['vars' => $vars, 'svc' => (object)$svc];
-}
-
-/** Merge what the browser sent back with what is stored (UND_KEEP = unchanged). */
-function und_secrets_merge(array $old, array $vars, array $svc, array $ids) {
-  $new = ['vars' => [], 'svc' => []];
-  foreach ($vars as $v) {
-    $n = strtoupper(trim((string)($v['name'] ?? '')));
-    if (!preg_match('/^[A-Z][A-Z0-9_]{0,63}$/', $n)) continue;
-    $val = (string)($v['value'] ?? '');
-    $new['vars'][$n] = $val === UND_KEEP ? (string)($old['vars'][$n] ?? '') : und_clip($val, 2000);
-  }
-  foreach ($ids as $id) {
-    $in = isset($svc[$id]) && is_array($svc[$id]) ? $svc[$id] : [];
-    foreach (['key', 'password', 'username'] as $f) {
-      $val = (string)($in[$f] ?? '');
-      if ($val === UND_KEEP) $val = (string)($old['svc'][$id][$f] ?? '');
-      if ($val !== '') $new['svc'][$id][$f] = und_clip($val, 2000);
-    }
-  }
-  return $new;
-}
-
 /** Replace {{NAME}} with variable values. UNRAID_IP is built in. Unknown names are left as they are. */
 function und_resolve($s, array $vars) {
   if (!und_has($s, '{{')) return $s;
@@ -551,13 +514,6 @@ function und_service_full(array $cfg, $id) {
     $s['options'] = json_decode(und_resolve(json_encode($s['options']), array_map(function ($v) { return trim(json_encode((string)$v), '"'); }, $sec['vars'])), true) ?: [];
     $s['_group'] = $g['name'];
     return $s;
-  }
-  return null;
-}
-
-function und_find_service(array $cfg, $group, $name, $type = null) {
-  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) {
-    if (strcasecmp($s['name'], (string)$name) === 0 && ($group === null || $group === '' || strcasecmp($g['name'], (string)$group) === 0) && ($type === null || $s['type'] === $type)) return $s['id'];
   }
   return null;
 }
