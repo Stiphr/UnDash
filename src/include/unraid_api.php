@@ -140,13 +140,13 @@ function und_api_array(array $a) {
   foreach ((array)($a['parities'] ?? []) as $x) if (($x['status'] ?? '') !== 'DISK_NP' && ($x['status'] ?? '') !== 'DISK_NP_DSBL') $parity[] = und_api_disk_row($x, 'Parity');
   foreach ((array)($a['disks'] ?? []) as $x) if (($x['status'] ?? '') !== 'DISK_NP') $data[] = und_api_disk_row($x, 'Array');
   foreach ((array)($a['caches'] ?? []) as $x) if (und_api_bigint($x['fsSize'] ?? 0) > 0) $pools[] = und_api_disk_row($x, 'Pool');
-  $size = 0; $free = 0; $bad = 0; $hot = 0; $err = 0;
+  $size = 0; $free = 0;
   foreach ($data as $x) { $size += $x['size']; $free += $x['free']; }
-  foreach (array_merge($parity, $data, $pools) as $x) { if ($x['health'] === 'bad') $bad++; if ($x['temp'] !== null && $x['temp'] >= 50) $hot++; $err += $x['errors']; }
+  $fl = und_disk_flags(array_merge($parity, $data, $pools));
   $pc = $a['parityCheckStatus'] ?? [];
   return ['state' => (string)($a['state'] ?? ''), 'resync' => !empty($pc['running']) ? 1 : 0, 'resync_pct' => !empty($pc['running']) && isset($pc['progress']) ? (float)$pc['progress'] : null,
           'resync_action' => !empty($pc['running']) ? 'Parity check' : '', 'size' => $size, 'free' => $free, 'disks' => count($data), 'parity' => count($parity),
-          'pools' => $pools, 'bad' => $bad, 'hot' => $hot, 'errors' => $err, 'mover' => false, '_rows' => ['parity' => $parity, 'array' => $data, 'pools' => $pools]];
+          'pools' => $pools, 'mover' => false, '_rows' => ['parity' => $parity, 'array' => $data, 'pools' => $pools]] + $fl;
 }
 
 function und_api_storage() {

@@ -1,3 +1,9 @@
+###2026.10.31b
+- Media: four equal columns (upcoming movies, upcoming episodes, recently added movies, recently added episodes) as compact lists that scroll on their own; 4, 2 or 1 columns depending on the space. Each column has its own item count (Settings > Dashboard > Media).
+- Alerts: Ignore on each alert, for 1 hour, 24 hours, 7 days, a custom time or permanently, or for every alert of that type (with a confirmation). Undo right after ignoring. Disk alerts are now per disk.
+- Settings > Ignored alerts: temporarily ignored, permanently ignored and ignored alert types, with filter, Restore, Restore all and Delete expired.
+- Ignoring only hides an alert; monitoring continues, and an alert comes back when its rule is restored or runs out while the problem is still there. Rules are kept in ignores.json in the configuration folder.
+
 ###2026.10.31a
 - Apps (Plex, Emby, Tautulli, AdGuard, Immich …) now sit right below Arr Stack and Downloads as one grid of compact cards; group titles and the old Services shortcut links are off by default (Settings > Dashboard > Apps).
 - Containers: a compact multi-column grid instead of a full-width table, showing the running containers by default. Pick your own set with "Selected" (⋯ menu or Settings), choose the columns and which details each container shows. Table and card layouts are still there.

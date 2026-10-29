@@ -286,6 +286,72 @@ t('path-like session id refused', und_unraid_logged_in() === false);
 $_SERVER['HTTP_HOST'] = 'evil.com/x';
 t('odd host header refused', und_req_host() === '');
 
+/* ---------------- ignored alerts ---------------- */
+group('ignores');
+reset_store();
+t('no rules to start with', und_ignores() === [] && und_ignores_active() === []);
+$a = und_ignore_add('instance', 'disk.hot', 'disk3', 3600, 'disk3 is at 52°C.', 'warn');
+t('instance rule added', !empty($a['ok']) && $a['rule']['key'] === 'disk.hot:disk3' && $a['rule']['until'] > time() + 3500);
+t('rule written to the config dir and the flash mirror', is_file(UND_DIR . '/ignores.json') && is_file(und_store_dir() . '/ignores.json'));
+$p = und_ignore_add('type', 'docker.exited', 'ignored-anyway', 'permanent', 'Container stopped', 'warn');
+t('type rule is permanent and has no resource', $p['rule']['until'] === null && $p['rule']['resource'] === '' && $p['rule']['key'] === 'docker.exited');
+t('both rules active', count(und_ignores_active()) === 2);
+$a2 = und_ignore_add('instance', 'disk.hot', 'disk3', 86400);
+t('ignoring the same alert again replaces the rule', count(und_ignores()) === 2 && $a2['rule']['until'] > time() + 86000);
+t('unknown category refused', isset(und_ignore_add('instance', 'shell.exec', 'x', 3600)['error']));
+t('connection alerts cannot be ignored', isset(und_ignore_add('type', 'conn.down', '', 3600)['error']));
+t('unknown scope refused', isset(und_ignore_add('all', 'disk.hot', 'disk3', 3600)['error']));
+t('odd resource refused', isset(und_ignore_add('instance', 'disk.hot', '../../etc', 3600)['error']) && isset(und_ignore_add('instance', 'disk.hot', '', 3600)['error']));
+t('too short a duration refused', isset(und_ignore_add('instance', 'disk.hot', 'disk1', 10)['error']));
+t('too long a duration refused', isset(und_ignore_add('instance', 'disk.hot', 'disk1', 400 * 86400)['error']));
+t('non-numeric duration refused', isset(und_ignore_add('instance', 'disk.hot', 'disk1', 'forever')['error']));
+t('refusals change nothing', count(und_ignores()) === 2);
+// expiry is decided at read time, by the server clock
+$raw = json_decode(file_get_contents(und_ignore_file()), true);
+$raw[] = ['id' => 'aaaaaaaaaaaa', 'kind' => 'instance', 'key' => 'os.available:7.2.0', 'category' => 'os.available', 'resource' => '7.2.0', 'until' => time() - 60, 'created' => time() - 3660, 'title' => 'x', 'severity' => 'info'];
+$raw[] = ['id' => 'bbbbbbbbbbbb', 'kind' => 'instance', 'category' => 'nope', 'resource' => 'x'];
+$raw[] = 'garbage';
+$raw[] = ['id' => 'NOT-AN-ID', 'kind' => 'type', 'category' => 'disk.bad'];
+$raw[] = ['id' => 'cccccccccccc', 'kind' => 'instance', 'category' => 'disk.bad', 'resource' => 'evil;rm', 'until' => null];
+und_store_write('ignores.json', json_encode($raw));
+t('malformed records are dropped, valid ones kept', count(und_ignores()) === 3);
+t('an expired rule is listed but not active', count(und_ignores_active()) === 2 && !in_array('aaaaaaaaaaaa', array_column(und_ignores_active(), 'id'), true));
+file_put_contents(und_ignore_file(), '{not json');
+t('an unreadable file means no rules, not an error', und_ignores() === []);
+und_store_write('ignores.json', json_encode($raw));
+$pe = und_ignore_purge_expired();
+t('delete expired removes only the expired rule', $pe['removed'] === 1 && count(und_ignores()) === 2);
+t('purging also wrote out a clean file', count(json_decode(file_get_contents(und_ignore_file()), true)) === 2);
+$rm = und_ignore_remove(['zzzzzzzzzzzz', 'not valid']);
+t('restoring unknown ids removes nothing', isset($rm['error']) && count(und_ignores()) === 2);
+$rm = und_ignore_remove([$p['rule']['id']]);
+t('restore removes just that rule', $rm['removed'] === 1 && und_ignores()[0]['key'] === 'disk.hot:disk3');
+und_ignore_add('instance', 'docker.unhealthy', 'plex', 3600);
+$ra = und_ignore_restore_all();
+t('restore all empties the list', $ra['removed'] === 2 && und_ignores() === []);
+// a rule from a month ago that ran out is cleaned up on the next write
+und_store_write('ignores.json', json_encode([['id' => 'dddddddddddd', 'kind' => 'type', 'category' => 'disk.hot', 'until' => time() - 40 * 86400, 'created' => time() - 50 * 86400]]));
+und_ignore_add('instance', 'disk.hot', 'disk1', 3600);
+t('long-expired rules are pruned on write', count(und_ignores()) === 1 && und_ignores()[0]['resource'] === 'disk1');
+// rules survive a lost store directory: the flash mirror still has them (and the reverse on first use)
+reset_store();
+@mkdir(UND_DIR, 0777, true);
+file_put_contents(UND_DIR . '/ignores.json', json_encode([['id' => 'eeeeeeeeeeee', 'kind' => 'type', 'category' => 'os.available', 'until' => null, 'created' => time()]]));
+t('rules on the flash drive are picked up', count(und_ignores()) === 1);
+t('ignores.json is copied into a new config dir', is_file(und_store_dir() . '/ignores.json') || und_store_dir() === UND_DIR);
+reset_store();
+$fl = und_disk_flags([['name' => 'parity', 'health' => 'ok', 'temp' => 41, 'errors' => 0], ['name' => 'disk3', 'health' => 'bad', 'temp' => 52, 'errors' => 4], ['name' => 'cache', 'health' => 'ok', 'temp' => null, 'errors' => 0]]);
+t('disk flags name the disks', $fl['bad_disks'] === ['disk3'] && $fl['hot_disks'] === [['name' => 'disk3', 'temp' => 52]] && $fl['error_disks'] === [['name' => 'disk3', 'errors' => 4]] && $fl['bad'] === 1 && $fl['hot'] === 1 && $fl['errors'] === 4);
+
+/* ---------------- media columns ---------------- */
+group('media');
+$m = und_normalize(['groups' => [], 'media' => ['count' => 12, 'widgets' => [['id' => 'recent_episodes', 'visible' => false, 'count' => 7], ['id' => 'upcoming_movies', 'count' => 999]]]])['media'];
+t('columns always in the fixed order', array_column($m['widgets'], 'id') === ['upcoming_movies', 'upcoming_episodes', 'recent_movies', 'recent_episodes']);
+t('per-column count kept and clamped', $m['widgets'][3]['count'] === 7 && $m['widgets'][0]['count'] === 50);
+t('older configs fall back to the shared count', $m['widgets'][1]['count'] === 12);
+t('visibility kept', $m['widgets'][3]['visible'] === false && $m['widgets'][0]['visible'] === true);
+t('default count is 15', und_load_config()['media']['widgets'][2]['count'] === 15);
+
 /* ---------------- Homepage import still works ---------------- */
 group('homepage');
 $yaml = "- Arr:\n    - Radarr:\n        icon: radarr.png\n        href: http://{{HOMEPAGE_VAR_IP}}:7878\n        widget:\n          type: radarr\n          url: http://{{HOMEPAGE_VAR_IP}}:7878\n          key: {{HOMEPAGE_VAR_RADARR_KEY}}\n          fields: [\"wanted\", \"queued\"]\n- System:\n    - CPU:\n        widget:\n          type: glances\n          metric: cpu\n";
