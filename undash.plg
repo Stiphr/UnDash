@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "2026.11.01">
+<!ENTITY version "2026.11.01a">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###2026.11.01a
+- Themes: Light / Dark / System mode and ten colour themes: Default, AMOLED, Minimal, Zinc Blue, Kanagawa Wave, Kanagawa Dragon, Catppuccin, Nord, Tokyo Night and Fluent Dark (frosted glass with blue accents). Most have light and dark versions. The accent follows the theme unless you pick your own.
+- Smart heights: app cards in a row are the same height, and in the two-column area the shorter column ends level with the taller one (Media shows more items, otherwise the last box stretches).
+- Inter-first font stack and 10 px corners, closer to qui's look. Your current theme and accent are unchanged; the old Light theme is now Default in light mode.
+
 ###2026.11.01
 - Less wasted space: the System tiles and the Apps cards now fill the whole row, app cards are only as tall as their content, and sections sit closer together.
 - Half-width sections that follow each other (e.g. Media, Arr Stack, Downloads) are stacked in two balanced columns, so a short section no longer leaves a gap beside a tall one.
@@ -108,7 +113,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '2026.11.01');
+define('UND_VERSION', '2026.11.01a');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -277,7 +282,7 @@ foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>8056bc59d6924b6f095afd25b81ea8c7e5941f976eac60a941176615adc7c32f</SHA256>
+<SHA256>d6ce1623e9bb34ba471a7b9f0a729a17e5ac8a46fa35ef7df5928183d927b1e0</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -336,7 +341,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo',
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
-    'appearance' => ['theme' => 'default', 'accent' => '#f15a2c', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'brightness' => 75, 'css_enabled' => true],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'brightness' => 75, 'css_enabled' => true],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
@@ -552,6 +557,9 @@ function und_migrate(array $c) {
   return $c;
 }
 
+/** Colour themes (palettes in assets/app.js). AMOLED and Fluent Dark are dark only. */
+function und_theme_ids() { return ['default', 'amoled', 'minimal', 'zinc', 'wave', 'dragon', 'catppuccin', 'nord', 'tokyo', 'fluent']; }
+
 function und_hex($c, $d) { return preg_match('/^#[0-9a-fA-F]{6}$/', (string)$c) ? strtolower($c) : $d; }
 
 /** Clamp and fill a config that came from disk, the browser or an import. Unknown keys are dropped. */
@@ -569,8 +577,11 @@ function und_normalize(array $c) {
 
   $a = (isset($c['appearance']) && is_array($c['appearance']) ? $c['appearance'] : []) + $d['appearance'];
   $a = array_intersect_key($a, $d['appearance']);
-  $a['theme'] = in_array($a['theme'], ['default', 'light', 'amoled'], true) ? $a['theme'] : 'default';
-  $a['accent'] = und_hex($a['accent'], '#f15a2c');
+  // the old "light" theme is the default palette in light mode
+  if ($a['theme'] === 'light') { $a['theme'] = 'default'; if (!isset($c['appearance']['mode'])) $a['mode'] = 'light'; }
+  $a['theme'] = in_array($a['theme'], und_theme_ids(), true) ? $a['theme'] : 'default';
+  $a['mode'] = in_array($a['mode'], ['dark', 'light', 'system'], true) ? $a['mode'] : 'dark';
+  $a['accent'] = $a['accent'] === '' ? '' : und_hex($a['accent'], '');   // empty = the theme's own accent
   $a['density'] = in_array($a['density'], ['compact', 'comfortable', 'expanded'], true) ? $a['density'] : 'comfortable';
   $a['background'] = preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(10, min(100, (int)$a['brightness']));
@@ -816,7 +827,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>f040982bf140fc1b340d7334ad1707e9afeda78a810a8d87b54eea8a4752cf89</SHA256>
+<SHA256>dc698bc6d3efb2b00d3c94beca42003abdc4068fa8b49e4ad96d62497f77e705</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -3614,7 +3625,8 @@ esac
 
 <FILE Name="&emhttp;/assets/app.css" Mode="0644">
 <INLINE><![CDATA[/* UnDash - one stylesheet, scoped to .und so nothing leaks into Unraid's page.
-   Three themes: default (the Unraid Swiss Manager look: dark grey panels, orange accent), light and amoled.
+   Colour themes are palettes in app.js (THEMES), applied as the custom properties below; these values are the Default
+   dark palette (the Unraid Swiss Manager look: dark grey panels, orange accent) and only show before the script runs.
    The accent (--accent) only colours interactive and selected things; status colours (--ok, --warn, --bad) never follow it. */
 .und{
   --bg:#1d1b1b;--panel:#232121;--panel-2:#1b1919;--bar:#2a2828;--field:#181616;--line:#343131;--line-2:#454141;
@@ -3622,13 +3634,10 @@ esac
   --accent:#f15a2c;--accent-btn:#d4431a;--accent-ink:#fff;--accent-soft:rgba(241,90,44,.14);--accent-text:#ff7a50;
   --ok:#4ec38b;--warn:#e8b33c;--bad:#ff6b5e;--info:#79a0ee;--off:#8a8484;
   --ok-soft:rgba(78,195,139,.13);--warn-soft:rgba(232,179,60,.14);--bad-soft:rgba(255,107,94,.13);
-  --shadow:0 1px 2px rgba(0,0,0,.25);--radius:8px;--gap:12px;--pad:14px;
-  --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --shadow:0 1px 2px rgba(0,0,0,.25);--radius:10px;--gap:12px;--pad:14px;
+  --font:Inter,"Inter Variable",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   color:var(--text);font:14px/1.45 var(--font);margin:0;padding:4px 0 28px;text-align:left;position:relative;isolation:isolate;-webkit-text-size-adjust:100%}
-.und[data-theme=light]{--bg:#f3f4f6;--panel:#fff;--panel-2:#f6f7f9;--bar:#f0f1f4;--field:#fff;--line:#e2e3e8;--line-2:#cdd0d6;--text:#1d1f24;--muted:#5b606b;--faint:#80858f;--title:#111318;
-  --ok:#14804a;--warn:#8a5a00;--bad:#c4332a;--info:#2457c5;--off:#6f7480;--ok-soft:#e8f5ee;--warn-soft:#fbf3dd;--bad-soft:#fdeceb;--shadow:0 1px 2px rgba(16,24,40,.06)}
-.und[data-theme=amoled]{--bg:#000;--panel:#0b0b0b;--panel-2:#070707;--bar:#141414;--field:#050505;--line:#202020;--line-2:#2e2e2e;--text:#f2f2f2;--muted:#a8a8a8;--faint:#767676;--title:#fff;--shadow:none}
-.und[data-theme=light],.und[data-theme=amoled],.und.has-bg{background:var(--bg);padding:14px;border-radius:var(--radius)}
+.und[data-mode=light],.und[data-theme]:not([data-theme=default]),.und.has-bg{background:var(--bg);padding:14px;border-radius:var(--radius)}
 .und[data-density=compact]{--gap:8px;--pad:10px;font-size:13.5px}
 .und[data-density=expanded]{--gap:16px;--pad:18px;font-size:14.5px}
 .und *,.und *::before,.und *::after{box-sizing:border-box}
@@ -3707,7 +3716,8 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .sec{grid-column:1/-1;min-width:0}.und .sec.half{grid-column:auto}
 .und .hcols{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--gap);align-items:start;min-width:0}
 .und .hcol{display:flex;flex-direction:column;gap:16px;min-width:0}
-.und .hcols.one{grid-template-columns:minmax(0,1fr)}.und .hcols.one>.hcol:empty{display:none}
+.und .hcols.one{grid-template-columns:minmax(0,1fr)}
+.und .sec.fill{display:flex;flex-direction:column}.und .sec.fill>.sec-b{flex:1;display:flex;flex-direction:column}.und .sec.fill>.sec-b>:last-child{flex:1}.und .hcols.one>.hcol:empty{display:none}
 .und .sec-h{display:flex;align-items:center;gap:8px;margin:0 0 8px;min-height:30px;flex-wrap:wrap}
 .und .sec-h h2{display:flex;align-items:center;gap:8px;font:600 15px/1.3 var(--font);color:var(--title);margin:0;padding:0;border:0;background:none;text-transform:none;letter-spacing:0}
 .und .sec-h h2 button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border-radius:4px}
@@ -3869,11 +3879,12 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .olist .oi:last-child{border-bottom:0}.und .olist .oi .t{flex:1;min-width:120px}
 .und .olist .oi img{width:22px;height:22px;object-fit:contain;flex:none}
 .und .olist .oi input[type=text]{flex:1 1 140px;min-width:0}
-.und .themes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.und .themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .und button.theme{border:2px solid var(--line)!important;border-radius:8px!important;padding:8px!important;cursor:pointer;background:transparent!important;color:var(--text)!important;font:inherit!important;text-align:left;margin:0!important;display:flex;flex-direction:column;gap:6px}
 .und button.theme.on{border-color:var(--accent)!important}
 .und .theme .pv{height:54px;border-radius:5px;display:flex;gap:4px;padding:6px;border:1px solid rgba(127,127,127,.3)}
 .und .theme .pv i{flex:1;border-radius:3px}
+.und .theme .tn{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}.und .theme .tn b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .sec-in{display:flex;gap:6px}.und .sec-in input{flex:1;min-width:0}
 .und .lg{border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--panel)}
 .und .lg .lh{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}
@@ -3927,7 +3938,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   .und button.btn,.und .btn{min-height:38px!important}.und .btn.ic{width:38px;min-width:38px!important}.und .btn.sm{min-height:36px!important}.und .btn.ic.sm{width:36px;min-width:36px!important}
   .und .seg button{min-height:36px!important}
   .und input[type=text],.und input[type=number],.und input[type=url],.und input[type=password],.und input[type=search],.und select,.und textarea{font-size:16px!important;min-height:40px}
-  .und .themes{grid-template-columns:1fr}
+  .und .themes{grid-template-columns:repeat(2,minmax(0,1fr))}
   .und .modal-bg{align-items:flex-end;padding:0}.und .modal{border-radius:14px 14px 0 0;max-height:92vh;padding:16px}
   .und .modal .foot .btn{flex:1}
   .und .drawer{width:100vw;border-left:0}
@@ -4096,7 +4107,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .ci.st-exited .cname,.und .ci.st-created .cname,.und .ci.st-dead .cname{color:var(--muted);font-weight:500}
 
 /* apps: compact cards in one grid */
-.und .agrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;align-items:start}
+.und .agrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;align-items:stretch}
 .und .agrid.fixed{grid-template-columns:repeat(var(--ac),minmax(0,1fr))}
 .und .card.ac{padding:10px 12px;min-height:0}
 .und .ac .cb{flex:0 0 auto}.und .ac .blocks{margin-top:0}
@@ -4124,8 +4135,25 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 }
 .und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--panel-2)}
 .und .switch.pk{margin:3px 0;font-size:13px;min-width:0}
+
+/* ---------- Fluent Dark: frosted glass with blue accents (from Homepage custom.css) ---------- */
+.und[data-theme=fluent]{background:radial-gradient(1100px 600px at 0% -10%,rgba(59,130,246,.14),transparent 60%),radial-gradient(900px 520px at 100% 0%,rgba(99,102,241,.10),transparent 60%),var(--bg)}
+.und[data-theme=fluent].has-bg{background:transparent}
+.und[data-theme=fluent] .card,.und[data-theme=fluent] button.stat,.und[data-theme=fluent] .ci,.und[data-theme=fluent] .alert,.und[data-theme=fluent] .panel,.und[data-theme=fluent] .olist{
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:10px;box-shadow:0 4px 6px -1px rgba(0,0,0,.2);transition:background-color .3s,border-color .3s,box-shadow .3s}
+.und[data-theme=fluent] .card:hover,.und[data-theme=fluent] button.stat:hover,.und[data-theme=fluent] .ci:hover,.und[data-theme=fluent] a.mi:hover{background-color:rgba(39,43,48,.5);border-color:rgba(59,130,246,.8);box-shadow:0 0 15px rgba(59,130,246,.3)}
+.und[data-theme=fluent] .sec-h h2,.und[data-theme=fluent] .nm,.und[data-theme=fluent] .cname{font-weight:500}
+.und[data-theme=fluent] .aico,.und[data-theme=fluent] .ci img,.und[data-theme=fluent] .w .ch .ico{background:rgba(255,255,255,.05);border-radius:6px;opacity:.9;transition:transform .3s cubic-bezier(.4,0,.2,1),filter .3s,background-color .3s}
+.und[data-theme=fluent] .card:hover .aico,.und[data-theme=fluent] .ci:hover img,.und[data-theme=fluent] a:hover .aico{opacity:1;background:rgba(59,130,246,.15);transform:scale(1.08);filter:drop-shadow(0 0 6px rgba(59,130,246,.8))}
+.und[data-theme=fluent] .meter,.und[data-theme=fluent] .progress{background:rgba(0,0,0,.3);border-radius:10px;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+.und[data-theme=fluent] .meter i,.und[data-theme=fluent] .progress i,.und[data-theme=fluent] .stat .bar i{background:linear-gradient(90deg,#1e3a8a,#3b82f6,#60a5fa);border-radius:10px;box-shadow:0 0 8px rgba(59,130,246,.4)}
+.und[data-theme=fluent] .meter i.warn,.und[data-theme=fluent] .stat.warn .bar i{background:linear-gradient(90deg,#92400e,var(--warn))}
+.und[data-theme=fluent] .meter i.bad,.und[data-theme=fluent] .stat.bad .bar i{background:linear-gradient(90deg,#7f1d1d,var(--bad))}
+/* overlays stay solid so text over moving content is readable */
+.und[data-theme=fluent] .modal,.und[data-theme=fluent] .menu,.und[data-theme=fluent] .toast{background:rgba(17,19,24,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-color:rgba(255,255,255,.12)}
+.und[data-theme=fluent] *{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.12) transparent}
 ]]></INLINE>
-<SHA256>7e558d5e31b768aa350e15b99b394932419eadae61d976a072f137170b86c60e</SHA256>
+<SHA256>66c56f5f218e929d0eeab4237d85c9759cc28f19e99234cbed9c8caec0ecde02</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -4180,6 +4208,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     play: 'M7 4l13 8-13 8z', pause: 'M7 4h4v16H7zM14 4h4v16h-4z', stop: 'M6 6h12v12H6z',
     restart: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', logs: 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5', info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01',
     up: 'M12 19V5M5 12l7-7 7 7', web: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
+    sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
     moon: 'M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z', check: 'M5 12l4 4 10-10', power: 'M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0',
     full: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', screen: 'M3 4h18v12H3zM8 20h8M12 16v4', edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
     trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13', upar: 'M12 6l-6 6h12z', dnar: 'M12 18l6-6H6z', plus: 'M12 5v14M5 12h14', x: 'M6 6l12 12M18 6L6 18',
@@ -4334,17 +4363,62 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   function hexRgb(hx) { var m = /^#([0-9a-f]{6})$/i.exec(hx || ''); if (!m) return [241, 90, 44]; var n = parseInt(m[1], 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
   function mix(c, t, f) { return 'rgb(' + c.map(function (v, i) { return Math.round(v + (t[i] - v) * f); }).join(',') + ')'; }
   function lum(c) { var a = c.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2]; }
+  /* Colour themes. Each has a dark and (most) a light palette; the mode setting picks one (system = follow the OS).
+     Palettes come from the themes' public, MIT-licensed definitions (Kanagawa, Catppuccin, Nord, Tokyo Night) and the
+     shadcn neutral / zinc scales; Fluent Dark is the frosted-glass look from Homepage's custom.css.
+     keys: bg panel p2 (inner panel) bar (strip / hover) field line l2 (strong line) text muted faint title accent
+           [ok warn bad info] (status colours; when missing, the standard ones for dark or light are used) */
+  var THEMES = {
+    default: { name: 'Default', dark: { bg: '#1d1b1b', panel: '#232121', p2: '#1b1919', bar: '#2a2828', field: '#181616', line: '#343131', l2: '#454141', text: '#ece9e9', muted: '#a19c9c', faint: '#7f7977', title: '#ffffff', accent: '#f15a2c' },
+      light: { bg: '#f3f4f6', panel: '#ffffff', p2: '#f6f7f9', bar: '#f0f1f4', field: '#ffffff', line: '#e2e3e8', l2: '#cdd0d6', text: '#1d1f24', muted: '#5b606b', faint: '#80858f', title: '#111318', accent: '#e0491b' } },
+    amoled: { name: 'AMOLED', dark: { bg: '#000000', panel: '#0b0b0b', p2: '#070707', bar: '#141414', field: '#050505', line: '#202020', l2: '#2e2e2e', text: '#f2f2f2', muted: '#a8a8a8', faint: '#767676', title: '#ffffff', accent: '#f15a2c' } },
+    minimal: { name: 'Minimal', dark: { bg: '#0a0a0a', panel: '#171717', p2: '#121212', bar: '#262626', field: '#0f0f0f', line: '#262626', l2: '#3a3a3a', text: '#fafafa', muted: '#a3a3a3', faint: '#737373', title: '#ffffff', accent: '#e5e5e5' },
+      light: { bg: '#fafafa', panel: '#ffffff', p2: '#f5f5f5', bar: '#f5f5f5', field: '#ffffff', line: '#e5e5e5', l2: '#d4d4d4', text: '#0a0a0a', muted: '#737373', faint: '#a3a3a3', title: '#0a0a0a', accent: '#171717' } },
+    zinc: { name: 'Zinc Blue', dark: { bg: '#09090b', panel: '#18181b', p2: '#131316', bar: '#27272a', field: '#0f0f12', line: '#27272a', l2: '#3f3f46', text: '#fafafa', muted: '#a1a1aa', faint: '#71717a', title: '#ffffff', accent: '#3b82f6' },
+      light: { bg: '#f4f4f5', panel: '#ffffff', p2: '#fafafa', bar: '#f4f4f5', field: '#ffffff', line: '#e4e4e7', l2: '#d4d4d8', text: '#09090b', muted: '#52525b', faint: '#a1a1aa', title: '#09090b', accent: '#2563eb' } },
+    wave: { name: 'Kanagawa Wave', dark: { bg: '#1f1f28', panel: '#2a2a37', p2: '#232330', bar: '#363646', field: '#1a1a22', line: '#363646', l2: '#54546d', text: '#dcd7ba', muted: '#a8a48f', faint: '#727169', title: '#ece7cb', accent: '#7e9cd8', ok: '#98bb6c', warn: '#e6c384', bad: '#e46876', info: '#7fb4ca' },
+      light: { bg: '#e5ddb0', panel: '#f2ecbc', p2: '#ece5b6', bar: '#e7dba0', field: '#f7f1c8', line: '#d5cea3', l2: '#c7bf93', text: '#545464', muted: '#6f6e66', faint: '#8a8980', title: '#43436c', accent: '#4d699b', ok: '#6f894e', warn: '#836f4a', bad: '#c84053', info: '#4e8ca2' } },
+    dragon: { name: 'Kanagawa Dragon', dark: { bg: '#181616', panel: '#1d1c19', p2: '#12120f', bar: '#282727', field: '#0d0c0c', line: '#282727', l2: '#393836', text: '#c5c9c5', muted: '#a6a69c', faint: '#737c73', title: '#e0e2df', accent: '#8ba4b0', ok: '#87a987', warn: '#c4b28a', bad: '#c4746e', info: '#8ea4a2' },
+      light: { bg: '#e5ddb0', panel: '#f2ecbc', p2: '#ece5b6', bar: '#e7dba0', field: '#f7f1c8', line: '#d5cea3', l2: '#c7bf93', text: '#545464', muted: '#6f6e66', faint: '#8a8980', title: '#43436c', accent: '#4d699b', ok: '#6f894e', warn: '#836f4a', bad: '#c84053', info: '#4e8ca2' } },
+    catppuccin: { name: 'Catppuccin', dark: { bg: '#11111b', panel: '#1e1e2e', p2: '#181825', bar: '#313244', field: '#181825', line: '#313244', l2: '#45475a', text: '#cdd6f4', muted: '#a6adc8', faint: '#7f849c', title: '#e6ebff', accent: '#cba6f7', ok: '#a6e3a1', warn: '#f9e2af', bad: '#f38ba8', info: '#89b4fa' },
+      light: { bg: '#dce0e8', panel: '#eff1f5', p2: '#e6e9ef', bar: '#ccd0da', field: '#e6e9ef', line: '#ccd0da', l2: '#bcc0cc', text: '#4c4f69', muted: '#6c6f85', faint: '#8c8fa1', title: '#4c4f69', accent: '#8839ef', ok: '#40a02b', warn: '#b76d0b', bad: '#d20f39', info: '#1e66f5' } },
+    nord: { name: 'Nord', dark: { bg: '#2e3440', panel: '#3b4252', p2: '#353b49', bar: '#434c5e', field: '#2b303b', line: '#434c5e', l2: '#4c566a', text: '#e5e9f0', muted: '#aeb6c4', faint: '#7b88a1', title: '#eceff4', accent: '#88c0d0', ok: '#a3be8c', warn: '#ebcb8b', bad: '#bf616a', info: '#81a1c1' },
+      light: { bg: '#e5e9f0', panel: '#eceff4', p2: '#e8ecf2', bar: '#d8dee9', field: '#f2f4f8', line: '#d8dee9', l2: '#c2cad8', text: '#2e3440', muted: '#4c566a', faint: '#7b88a1', title: '#2e3440', accent: '#5e81ac', ok: '#5c7d43', warn: '#9a7417', bad: '#bf616a', info: '#5e81ac' } },
+    tokyo: { name: 'Tokyo Night', dark: { bg: '#16161e', panel: '#1a1b26', p2: '#1f2030', bar: '#292e42', field: '#13131a', line: '#292e42', l2: '#3b4261', text: '#c0caf5', muted: '#a9b1d6', faint: '#565f89', title: '#dfe5ff', accent: '#7aa2f7', ok: '#9ece6a', warn: '#e0af68', bad: '#f7768e', info: '#7dcfff' },
+      light: { bg: '#d0d5e3', panel: '#e1e2e7', p2: '#d6d8df', bar: '#c4c8da', field: '#e9e9ec', line: '#c4c8da', l2: '#a8aecb', text: '#3760bf', muted: '#6172b0', faint: '#8990b3', title: '#2d4f9e', accent: '#2e7de9', ok: '#587539', warn: '#8c6c3e', bad: '#f52a65', info: '#007197' } },
+    fluent: { name: 'Fluent Dark', dark: { bg: '#0b0d12', panel: 'rgba(24,24,27,.45)', p2: 'rgba(255,255,255,.03)', bar: 'rgba(255,255,255,.06)', field: 'rgba(0,0,0,.3)', line: 'rgba(255,255,255,.08)', l2: 'rgba(255,255,255,.14)', text: '#e2e8f0', muted: '#94a3b8', faint: '#64748b', title: '#f8fafc', accent: '#3b82f6' } }
+  };
+  var STATUS = { dark: { ok: '#4ec38b', warn: '#e8b33c', bad: '#ff6b5e', info: '#79a0ee', off: '#8a8484' }, light: { ok: '#14804a', warn: '#8a5a00', bad: '#c4332a', info: '#2457c5', off: '#6f7480' } };
+  var DARK_OS = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+  function lookMode(a) {
+    var t = THEMES[a.theme] || THEMES.default;
+    if (!t.light) return 'dark';
+    if (a.mode === 'system') return DARK_OS && DARK_OS.matches ? 'light' : 'dark';
+    return a.mode === 'light' ? 'light' : 'dark';
+  }
+  function themeAccent(a) { var t = THEMES[a.theme] || THEMES.default; return (t[lookMode(a)] || t.dark).accent; }
   function applyLook(a) {
     a = a || S.L.appearance;
-    root.setAttribute('data-theme', a.theme);
+    var t = THEMES[a.theme] || THEMES.default, mode = lookMode(a), p = t[mode] || t.dark, st = STATUS[mode], light = mode === 'light';
+    root.setAttribute('data-theme', THEMES[a.theme] ? a.theme : 'default');
+    root.setAttribute('data-mode', mode);
     root.setAttribute('data-density', a.density);
-    var c = hexRgb(a.accent), light = a.theme === 'light', L1 = lum(c);
-    root.style.setProperty('--accent', a.accent);
-    root.style.setProperty('--accent-btn', mix(c, [0, 0, 0], light ? 0.06 : 0.12));
-    root.style.setProperty('--accent-ink', L1 > 0.45 ? '#111' : '#fff');
-    root.style.setProperty('--accent-soft', 'rgba(' + c.join(',') + ',' + (light ? 0.12 : 0.16) + ')');
+    var set = function (k, v) { root.style.setProperty(k, v); };
+    [['--bg', 'bg'], ['--panel', 'panel'], ['--panel-2', 'p2'], ['--bar', 'bar'], ['--field', 'field'], ['--line', 'line'], ['--line-2', 'l2'], ['--text', 'text'], ['--muted', 'muted'], ['--faint', 'faint'], ['--title', 'title']]
+      .forEach(function (x) { set(x[0], p[x[1]]); });
+    ['ok', 'warn', 'bad', 'info', 'off'].forEach(function (k) {
+      var v = p[k] || st[k]; set('--' + k, v);
+      if (k !== 'info' && k !== 'off') set('--' + k + '-soft', 'rgba(' + hexRgb(v).join(',') + ',' + (light ? 0.12 : 0.14) + ')');
+    });
+    set('--shadow', light ? '0 1px 2px rgba(16,24,40,.06)' : a.theme === 'amoled' ? 'none' : '0 1px 2px rgba(0,0,0,.25)');
+    var acc = a.accent || p.accent, c = hexRgb(acc), L1 = lum(c);
+    set('--accent', acc);
+    set('--accent-btn', mix(c, [0, 0, 0], light ? 0.06 : 0.12));
+    set('--accent-ink', L1 > 0.45 ? '#111' : '#fff');
+    set('--accent-soft', 'rgba(' + c.join(',') + ',' + (light ? 0.12 : 0.16) + ')');
     // link text must stay readable on the panel colour: darken on light, lighten on dark
-    root.style.setProperty('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : a.accent) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
+    set('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : acc) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
+    if (window.UND_STANDALONE) document.body.style.background = p.bg;
     root.classList.toggle('has-bg', !!a.background);
     root.classList.toggle('full', S.full && !window.UND_STANDALONE);
     var bg = null;
@@ -4356,6 +4430,8 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
       bg.style.inset = '-' + (a.blur * 2) + 'px';
     } else if (bg) bg.parentNode.removeChild(bg);
   }
+  // "system" follows the OS switching between light and dark while the page is open
+  if (DARK_OS) { var osChange = function () { if (S.L && S.L.appearance && S.L.appearance.mode === 'system' && !S.drawer) applyLook(); }; if (DARK_OS.addEventListener) DARK_OS.addEventListener('change', osChange); else DARK_OS.addListener(osChange); }
   /* custom CSS is nested under .und (CSS nesting), so it styles UnDash only; it is text, never markup */
   function applyCss(css) {
     var st = document.getElementById('und-custom-css');
@@ -4432,16 +4508,48 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     (R.packs || []).forEach(function (p) {
       var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
       p.w.classList.toggle('one', !!one);
+      unlevel(p);                                           // measure the natural heights, not the stretched ones
       p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
       var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
-      if (want.join() === now.join()) return;
-      if (!one) {
+      var move = want.join() !== now.join();
+      if (move && !one) {
         // only move when it clearly helps, so sections do not jump back and forth
         var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
-        if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) return;
+        if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
       }
-      p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
+      if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
+      if (!one) level(p);
     });
+  }
+  /* Smart height: the shorter column ends level with the taller one. Media in the shorter column shows more items
+     (its lists grow); otherwise the column's last box stretches. */
+  function unlevel(p) {
+    p.items.forEach(function (el) {
+      el.classList.remove('fill'); el.style.minHeight = '';
+      [].forEach.call(el.querySelectorAll('.mlist'), function (l) { l.style.height = ''; l.style.maxHeight = ''; });
+    });
+  }
+  function level(p) {
+    var h0 = p.cols[0].offsetHeight, h1 = p.cols[1].offsetHeight, diff = Math.abs(h0 - h1);
+    var short = p.cols[h0 < h1 ? 0 : 1], kids = [].slice.call(short.children);
+    if (diff < 4 || !kids.length) return;
+    var media = kids.filter(function (el) { return el.getAttribute('data-sec') === 'media' && !el.classList.contains('closed'); })[0];
+    if (media) {
+      // every row of media columns gets its share of the difference; lists in a row share one height
+      var rows = {}, lists = [].slice.call(media.querySelectorAll('.mlist'));
+      lists.forEach(function (l) { var t = Math.round(l.getBoundingClientRect().top); (rows[t] = rows[t] || []).push(l); });
+      var keys = Object.keys(rows);
+      if (keys.length) {
+        var add = diff / keys.length;
+        keys.forEach(function (k) {
+          var tall = Math.max.apply(null, rows[k].map(function (l) { return l.offsetHeight; }));
+          rows[k].forEach(function (l) { l.style.maxHeight = 'none'; l.style.height = Math.round(tall + add) + 'px'; });
+        });
+        return;
+      }
+    }
+    var last = kids.filter(function (el) { return !el.classList.contains('closed'); }).pop();
+    if (last) { last.classList.add('fill'); last.style.minHeight = last.offsetHeight + diff + 'px'; }
   }
   if (NARROW) (NARROW.addEventListener ? NARROW.addEventListener('change', function () { balanceHalves(); }) : NARROW.addListener(balanceHalves));
 
@@ -5971,17 +6079,27 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   function tabAppearance(b, D, dirty) {
     var a = D.cfg.appearance;
     var preview = function () { applyLook(a); };
-    var THEMES = [['default', 'Default', ['#1d1b1b', '#232121']], ['light', 'Light', ['#f3f4f6', '#ffffff']], ['amoled', 'AMOLED', ['#000000', '#0b0b0b']]];
-    var tw = h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Theme' });
-    THEMES.forEach(function (t) {
-      tw.appendChild(h('button', { type: 'button', class: 'theme' + (a.theme === t[0] ? ' on' : ''), role: 'radio', 'aria-checked': a.theme === t[0] ? 'true' : 'false', onclick: function () { a.theme = t[0]; dirty(); preview(); D.render(); } },
-        h('span', { class: 'pv', style: { background: t[2][0] } }, h('i', { style: { background: t[2][1] } }), h('i', { style: { background: t[2][1] } }), h('i', { style: { background: a.accent, flex: '0 0 18%' } })), h('b', null, t[1])));
+    var modeSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Mode' });
+    [['light', 'Light', 'sun'], ['dark', 'Dark', 'moon'], ['system', 'System', 'screen']].forEach(function (m) {
+      modeSeg.appendChild(h('button', { type: 'button', role: 'radio', class: a.mode === m[0] ? 'on' : '', 'aria-checked': a.mode === m[0] ? 'true' : 'false', onclick: function () { a.mode = m[0]; dirty(); preview(); D.render(); } }, ic(m[2]), m[1]));
     });
-    var col, hex;
-    hex = h('input', { type: 'text', value: a.accent, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
-    col = h('input', { type: 'color', value: a.accent, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
-    b.appendChild(set('Theme', 'Three built-in themes. The accent colours buttons, links and selections only; status colours (green, amber, red) never change.', tw,
-      h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex, btn('Default orange', function () { a.accent = '#f15a2c'; hex.value = col.value = a.accent; dirty(); preview(); }, 'sm ghost')),
+    var tw = h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Theme' });
+    Object.keys(THEMES).forEach(function (id) {
+      var t = THEMES[id], p = t[lookMode({ theme: id, mode: a.mode })] || t.dark;
+      tw.appendChild(h('button', { type: 'button', class: 'theme' + (a.theme === id ? ' on' : ''), role: 'radio', 'aria-checked': a.theme === id ? 'true' : 'false',
+        title: t.light ? 'Light and dark' : 'Dark only',
+        onclick: function () { a.theme = id; a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); } },
+        h('span', { class: 'pv', style: { background: id === 'fluent' ? 'radial-gradient(120% 90% at 0% 0%, rgba(59,130,246,.35), transparent 60%), ' + p.bg : p.bg } },
+          h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.accent, flex: '0 0 18%' } })),
+        h('span', { class: 'tn' }, h('b', null, t.name), t.light ? null : h('span', { class: 'muted xs' }, 'dark only'))));
+    });
+    var col, hex, cur = a.accent || themeAccent(a);
+    hex = h('input', { type: 'text', value: cur, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
+    col = h('input', { type: 'color', value: cur, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
+    b.appendChild(set('Theme', 'Pick a colour theme and whether it is light, dark or follows your system. Themes marked dark only ignore the mode. Status colours (green, amber, red) stay readable in every theme.',
+      h('div', { class: 'inl', style: { 'margin-bottom': '12px' } }, h('span', { class: 'muted sm' }, 'Mode'), modeSeg), tw,
+      h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex,
+        btn(a.accent ? 'Use the theme accent' : 'Theme accent in use', function () { a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); }, 'sm ghost')),
       h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)))));
     var pd = function () { dirty(); preview(); };
     b.appendChild(set('Wallpaper', 'Optional image behind the dashboard (https:// or a path served by Unraid).', h('div', { class: 'grid2' },
@@ -6230,7 +6348,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
             h('span', null, 'Kind'), h('span', null, s.kind === 'full' ? 'Full export (includes secrets)' : s.kind === 'redacted' ? 'Redacted export (your stored secrets are kept)' : 'Layout file (your stored secrets are kept)'),
             h('span', null, 'Created'), h('span', null, s.created ? new Date(s.created * 1000).toLocaleString() : 'unknown'),
             h('span', null, 'Widgets'), h('span', null, s.groups + ' groups, ' + s.widgets + ' widgets' + (s.skipped ? ' (' + s.skipped + ' of an unknown type skipped)' : '')),
-            h('span', null, 'Appearance'), h('span', null, s.theme + ' theme, accent ' + s.accent + ', refresh ' + s.refresh + ' s'),
+            h('span', null, 'Appearance'), h('span', null, s.theme + ' theme, accent ' + (s.accent || 'from the theme') + ', refresh ' + s.refresh + ' s'),
             h('span', null, 'Custom CSS'), h('span', null, s.css === null ? 'not included (current CSS kept)' : s.css + ' characters'),
             h('span', null, 'Variables'), h('span', null, s.vars + (s.credentials ? ', credentials for ' + s.credentials + ' widgets' : ''))));
           info.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Apply this file', function () {
@@ -6288,7 +6406,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   });
 })();
 ]]></INLINE>
-<SHA256>6f34525c7fb699136ec3f4f5cb43cdfef4c1dcab353ab717fdcaac7df8d5fc06</SHA256>
+<SHA256>846cceb42651df708283ff56fa944b1b62d1ba20242c74e17736dea178674bda</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
