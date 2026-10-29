@@ -75,3 +75,29 @@ function und_log_syslog($msg) {
   if (isset($GLOBALS['UND_EXEC_MOCK'])) return;
   und_run([und_bin('logger'), '-t', 'undash', '--', $msg], 5);
 }
+
+/* ---------- is there a newer UnDash? ---------- */
+
+/**
+ * The newest release tag (vX.Y.Z) of the UnDash repository, checked at most every 6 hours (a failed check is retried
+ * after an hour). Nothing is sent but the request itself.
+ */
+function und_self_update() {
+  $f = und_tmp('self-update.json');
+  $c = und_read_json($f, null);
+  $fresh = is_array($c) && time() - (int)($c['at'] ?? 0) < (!empty($c['error']) ? 3600 : 21600);
+  if (!$fresh) {
+    $c = ['at' => time(), 'latest' => '', 'error' => ''];
+    $r = und_http('GET', 'https://api.github.com/repos/Stiphr/UnDash/tags?per_page=30', ['timeout' => 6, 'headers' => ['Accept' => 'application/vnd.github+json']]);
+    if ($r['code'] !== 200 || !is_array($r['json'])) $c['error'] = $r['err'] ?: 'GitHub answered HTTP ' . $r['code'];
+    else foreach ($r['json'] as $t) {
+      $v = preg_match('/^v?(\d+\.\d+\.\d+)$/', (string)($t['name'] ?? ''), $m) ? $m[1] : '';
+      if ($v !== '' && ($c['latest'] === '' || version_compare($v, $c['latest'], '>'))) $c['latest'] = $v;
+    }
+    und_write_json($f, $c);
+  }
+  $cur = UND_VERSION;
+  $semver = preg_match('/^\d+\.\d+\.\d+$/', $cur) === 1;
+  return ['current' => $cur, 'latest' => $c['latest'], 'newer' => $semver && $c['latest'] !== '' && version_compare($c['latest'], $cur, '>'),
+          'checked' => (int)$c['at'], 'error' => $c['error'], 'url' => 'https://github.com/Stiphr/UnDash/releases'];
+}

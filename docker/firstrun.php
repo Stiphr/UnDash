@@ -14,7 +14,7 @@ if (!is_file('/config/config.json') && is_dir('/import')) {
   echo $n ? "Imported $n settings file(s) from /import (the plugin's settings). Unmount /import now if you like; it is only read once.\n" : "/import is mounted but holds no UnDash settings.\n";
 }
 $c = und_api_conf();
-if ($c['url'] === '' || $c['key'] === '') echo "The Unraid API is not configured yet: set UNRAID_API_URL and UNRAID_API_KEY, or enter them in Settings > Configuration.\n";
+if ($c['url'] === '' || $c['key'] === '') echo "The Unraid API is not configured yet: set UNRAID_API_URL and UNRAID_API_KEY, or enter them in Settings > Connection.\n";
 $code = und_setup_code_ensure();
 if ($code !== null) {
   echo "------------------------------------------------------------\n";

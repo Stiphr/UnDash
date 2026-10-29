@@ -1,3 +1,11 @@
+###0.5.1
+- Version numbers are now x.y.z (this is 0.5.1); releases are the vX.Y.Z tags. Plugin users coming from a 2026.x.x date version: reinstall the plugin once, as Unraid compares the old and new numbers as text.
+- Title bar: the UnDash logo and name, your server, its Unraid version and the UnDash version, each with an "available" badge when a newer one exists (UnDash checks its GitHub releases at most every 6 hours). The Docker version now shows the server's name and address instead of the container's.
+- The same safe margin in every theme (other themes used to get less room than Default on the full-window page); set your own side and top/bottom margins in Settings > Theme > Spacing.
+- Search: while filtering, sections and media columns with nothing that matches are hidden instead of showing empty boxes; one line says when nothing matches at all.
+- Settings reorganized into grouped pages with a side menu: Layout, Media & downloads, Containers & VMs, Apps, Theme, Custom CSS, Refresh & display, Ignored alerts, Connection, Backup & import. Checkboxes, sliders, dropdown lists and confirmation dialogs now follow the theme.
+- Fixes: Fluent's background gradient was lost on the full-window page; the settings group headings lost their style when switching pages.
+
 ###2026.11.02d
 - Themes: every theme now has a light and a dark version (AMOLED is pure white in light mode, Fluent Dark becomes Fluent Light), so Light / Dark / System always applies.
 - Wallpaper: brightness 0-100%, and the blur can cover the whole wallpaper or only what is behind the cards (frosted glass, the picture stays sharp). Text on the wallpaper gets a frosted backing so it stays readable.

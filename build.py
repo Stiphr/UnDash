@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Builds undash.plg from src/ (every file is inlined, as Unraid plugins require, so installing needs no extra downloads).
-Usage: python3 build.py [VERSION]      default version = today's date, e.g. 2026.10.29 (add a letter for a second release that day: 2026.10.29a)
+Usage: python3 build.py VERSION      x.y.z, e.g. 0.5.1 (the release tag is vX.Y.Z)
 """
 import sys, pathlib, datetime, hashlib, base64, textwrap
 
@@ -16,7 +16,8 @@ files = [
     ('include/downloads.php', '0644'), ('include/ignores.php', '0644'), ('include/alerts.php', '0644'), ('include/health.php', '0644'), ('include/playing.php', '0644'), ('include/requests.php', '0644'), ('include/api.php', '0644'), ('handoff.php', '0644'), ('standalone/router.php', '0644'),
     ('scripts/oscheck.php', '0755'), ('scripts/alertcheck.php', '0755'), ('scripts/rc.undash', '0755'), ('assets/app.css', '0644'), ('assets/app.js', '0644'),
 ]
-changes = (root / 'CHANGES.txt').read_text().strip()
+# the changelog goes into the XML as text, so &, < and > must be escaped (an unescaped & breaks plugin installs)
+changes = (root / 'CHANGES.txt').read_text().strip().replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 out = ["""<?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
