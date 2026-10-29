@@ -83,8 +83,10 @@ Environment variables:
 ## 3. First start
 
 The container log (Docker tab > UnDash > Logs) shows a one-time setup code. Open `http://SERVER:9099`,
-enter the code and choose a password (10+ characters). Then Settings > Configuration > **Test connection**
-shows which parts of the API the key can read.
+enter the code and choose a password (10+ characters). Or press **Continue without a password** (no code needed):
+not recommended, because anyone who can reach the port can then see and control your containers and VMs, but you can
+add a password any time in Settings > Configuration > **Dashboard password** (where it can also be changed or removed).
+Then Settings > Configuration > **Test connection** shows which parts of the API the key can read.
 
 ## Networking
 
