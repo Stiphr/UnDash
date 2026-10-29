@@ -53,7 +53,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo',
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
-    'appearance' => ['theme' => 'default', 'accent' => '#f15a2c', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'brightness' => 75, 'css_enabled' => true],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'brightness' => 75, 'css_enabled' => true],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
@@ -269,6 +269,9 @@ function und_migrate(array $c) {
   return $c;
 }
 
+/** Colour themes (palettes in assets/app.js). AMOLED and Fluent Dark are dark only. */
+function und_theme_ids() { return ['default', 'amoled', 'minimal', 'zinc', 'wave', 'dragon', 'catppuccin', 'nord', 'tokyo', 'fluent']; }
+
 function und_hex($c, $d) { return preg_match('/^#[0-9a-fA-F]{6}$/', (string)$c) ? strtolower($c) : $d; }
 
 /** Clamp and fill a config that came from disk, the browser or an import. Unknown keys are dropped. */
@@ -286,8 +289,11 @@ function und_normalize(array $c) {
 
   $a = (isset($c['appearance']) && is_array($c['appearance']) ? $c['appearance'] : []) + $d['appearance'];
   $a = array_intersect_key($a, $d['appearance']);
-  $a['theme'] = in_array($a['theme'], ['default', 'light', 'amoled'], true) ? $a['theme'] : 'default';
-  $a['accent'] = und_hex($a['accent'], '#f15a2c');
+  // the old "light" theme is the default palette in light mode
+  if ($a['theme'] === 'light') { $a['theme'] = 'default'; if (!isset($c['appearance']['mode'])) $a['mode'] = 'light'; }
+  $a['theme'] = in_array($a['theme'], und_theme_ids(), true) ? $a['theme'] : 'default';
+  $a['mode'] = in_array($a['mode'], ['dark', 'light', 'system'], true) ? $a['mode'] : 'dark';
+  $a['accent'] = $a['accent'] === '' ? '' : und_hex($a['accent'], '');   // empty = the theme's own accent
   $a['density'] = in_array($a['density'], ['compact', 'comfortable', 'expanded'], true) ? $a['density'] : 'comfortable';
   $a['background'] = preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(10, min(100, (int)$a['brightness']));
