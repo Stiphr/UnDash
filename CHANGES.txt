@@ -1,3 +1,15 @@
+###2026.10.29e
+- One page for everything: server overview with health and quick actions, alerts, favorites, system metrics, containers, VMs, storage and app widgets. The separate Docker, VMs and System tabs are gone; settings open in a side panel.
+- Live refresh every 2 seconds by default (configurable, pause/resume, last update time, reconnects on its own, slows down in background tabs). One light request per refresh; per-container CPU and memory come from cgroups.
+- Containers: discovered automatically; start, stop, restart, pause, update, bulk update with progress, logs, details; favorites, custom names, icons and hiding kept by name. "Not checked" is shown separately from "up to date".
+- VMs: only the actions that fit the VM's state are offered; graceful shutdown and force stop are separate and confirmed.
+- Restart and shut down the server from the dashboard (type the server name to confirm; Unraid's own commands).
+- More metrics: per-core CPU, swap, array capacity and disk health, load, host and address, container and VM totals, UPS.
+- Three themes (Default, Light, AMOLED), custom accent colour, density, custom CSS editor with live preview.
+- Settings live in /mnt/user/appdata/undash (configurable, mirrored to the flash drive), with automatic backups and restore.
+- Export (full or redacted without secrets), import with a preview, configuration check.
+- UnDash on its own port (default 9099) for browsers signed in to Unraid.
+
 ###2026.10.29
 - First release: a Homepage-style dashboard that runs as a native Unraid plugin (no Docker container).
 - System cards and top bar from the kernel and Unraid's own state: CPU, memory, disk, network, temperature, uptime, UPS (NUT or apcupsd).

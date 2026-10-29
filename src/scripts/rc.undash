@@ -22,8 +22,10 @@ start() {
     return 1
   fi
   mkdir -p /tmp/undash
-  # 4 workers so slow app APIs or a log download never block the dashboard; access logs are not kept, errors go to syslog
-  PHP_CLI_SERVER_WORKERS=4 setsid nohup /usr/bin/php -d error_log=syslog -d display_errors=0 -d expose_php=0 \
+  # 4 workers so slow app APIs or a log download never block the dashboard; access logs are not kept, errors go to syslog.
+  # Unraid's php.ini prepends webGui/include/local_prepend.php (its own CSRF check for nginx requests); this port does its own
+  # sign-in and CSRF checks in router.php, so the prepend is switched off here.
+  PHP_CLI_SERVER_WORKERS=4 setsid nohup /usr/bin/php -d auto_prepend_file= -d error_log=syslog -d display_errors=0 -d expose_php=0 \
     -S "$BIND:$PORT" -t "$EM/standalone" "$EM/standalone/router.php" > /dev/null 2>&1 &
   echo $! > $PIDF
   sleep 0.5

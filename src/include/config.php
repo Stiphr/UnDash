@@ -105,8 +105,8 @@ function und_save_loc(array $v) {
  */
 function und_store_dir() {
   static $cache = [];
-  $dir = rtrim(und_loc()['CONFIG_DIR'], '/');
-  if (isset($cache[$dir])) return $cache[$dir];
+  $dir = und_path(rtrim(und_loc()['CONFIG_DIR'], '/'));
+  if (isset($cache[$dir]) && is_dir($cache[$dir])) return $cache[$dir];
   $ok = false;
   if ($dir === UND_DIR) $ok = true;
   elseif (is_dir($dir)) $ok = is_writable($dir);
@@ -215,11 +215,11 @@ function und_migrate(array $c) {
     if (isset($g['show_resources']) && !$g['show_resources']) $c['dashboard']['sections'] = [['id' => 'metrics', 'visible' => false]];
     unset($g['theme'], $g['background'], $g['blur'], $g['brightness'], $g['refresh_system'], $g['show_resources']);
     $c['general'] = $g;
-    // the old "System" group of Glances-style cards is now the built-in overview
+    // Glances-style system cards are now the built-in System section: drop them, and a group they leave empty
     foreach ((array)($c['groups'] ?? []) as $i => $gr) {
-      $native = 0;
-      foreach ((array)($gr['services'] ?? []) as $s) if (in_array($s['type'] ?? '', ['system_info', 'cpu', 'memory'], true)) $native++;
-      if ($native && $native === count($gr['services'])) unset($c['groups'][$i]);
+      if (!is_array($gr)) continue;
+      $keep = array_values(array_filter((array)($gr['services'] ?? []), function ($s) { return !in_array($s['type'] ?? '', ['system_info', 'cpu', 'memory'], true); }));
+      if (!$keep && count((array)($gr['services'] ?? []))) unset($c['groups'][$i]); else $c['groups'][$i]['services'] = $keep;
     }
     $c['groups'] = array_values((array)($c['groups'] ?? []));
     $c['schema'] = 2;
@@ -446,8 +446,8 @@ function und_validate(array $cfg) {
       if (!isset($vars[$n]) && $n !== 'UNRAID_IP') $issues[] = ['level' => 'bad', 'msg' => "$where uses {{" . $n . '}}, which is not defined.'];
       elseif (isset($vars[$n]) && $vars[$n] === '') $issues[] = ['level' => 'warn', 'msg' => "$where uses {{" . $n . '}}, which is empty.'];
     }
-    if ($s['type'] === 'calendar') foreach ((array)($s['options']['integrations'] ?? []) as $in) if (!isset($ids[$in['service'] ?? ''])) $issues[] = ['level' => 'warn', 'msg' => "$where refers to a Radarr/Sonarr widget that was removed."];
+    if ($s['type'] === 'calendar') foreach ((array)(((array)$s['options'])['integrations'] ?? []) as $in) if (!isset($ids[$in['service'] ?? ''])) $issues[] = ['level' => 'warn', 'msg' => "$where refers to a Radarr/Sonarr widget that was removed."];
   }
-  if (und_store_dir() !== rtrim(und_loc()['CONFIG_DIR'], '/')) $issues[] = ['level' => 'warn', 'msg' => 'The configuration directory ' . und_loc()['CONFIG_DIR'] . ' is not available (is the array started?). Settings are read from and saved to the flash drive until it is.'];
+  if (und_store_dir() !== und_path(rtrim(und_loc()['CONFIG_DIR'], '/'))) $issues[] = ['level' => 'warn', 'msg' => 'The configuration directory ' . und_loc()['CONFIG_DIR'] . ' is not available (is the array started?). Settings are read from and saved to the flash drive until it is.'];
   return $issues;
 }

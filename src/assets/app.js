@@ -1,10 +1,17 @@
-/* UnDash UI. Plain JS, no libraries; every string from the server or an app is inserted as text, never as HTML. */
+/* UnDash UI: one page (overview, alerts, favourites, metrics, containers, VMs, storage, services) plus a settings drawer.
+   Plain JS, no libraries. Every string from the server or an app is inserted as text, never as HTML.
+   One live request per refresh (never two at once); widgets of other apps refresh on their own, slower loop. */
 (function () {
   'use strict';
   var API = window.UND_API || '/plugins/undash/include/api.php';
+  var UNRAID = window.UND_UNRAID || '';           // set on the standalone port: where Unraid's own web UI is
   var root = document.getElementById('und');
-  var S = { tab: 'dash', boot: null, sys: null, svc: {}, docker: null, stats: {}, vms: null, os: null, storage: null, set: null, dirty: false,
-            timers: {}, q: '', filter: 'all', busy: {}, full: false };
+  if (!root) return;
+  var S = {
+    boot: null, L: null, live: null, lastOk: 0, conn: 'wait', fails: 0, paused: false, inflight: false, timer: null, waitVisible: false,
+    svc: {}, svcTimer: null, svcRun: false, storageAt: 0, busy: {}, q: '', fd: 'all', showHidden: false,
+    full: false, drawer: null, menu: null, power: null
+  };
   var LS = { get: function (k, d) { try { var v = localStorage.getItem('undash.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
              set: function (k, v) { try { localStorage.setItem('undash.' + k, JSON.stringify(v)); } catch (e) { /* private window */ } } };
 
@@ -12,12 +19,14 @@
   function h(tag, p) {
     var e = document.createElement(tag); p = p || {};
     for (var k in p) {
-      if (k === 'class') e.className = p[k];
-      else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), p[k]);
-      else if (k === 'value') e.value = p[k];
-      else if (k === 'checked' || k === 'disabled' || k === 'selected') e[k] = !!p[k];
-      else if (k === 'style' && typeof p[k] === 'object') { for (var s in p[k]) e.style.setProperty(s, p[k][s]); }
-      else if (p[k] !== null && p[k] !== undefined && p[k] !== false) e.setAttribute(k, p[k]);
+      var v = p[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === 'class') e.className = v;
+      else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v);
+      else if (k === 'value') e.value = v;
+      else if (k === 'checked' || k === 'disabled' || k === 'selected') e[k] = !!v;
+      else if (k === 'style' && typeof v === 'object') { for (var s in v) e.style.setProperty(s, v[s]); }
+      else e.setAttribute(k, v === true ? '' : v);
     }
     for (var i = 2; i < arguments.length; i++) add(e, arguments[i]);
     return e;
@@ -27,30 +36,39 @@
     if (Array.isArray(c)) { c.forEach(function (x) { add(e, x); }); return; }
     e.appendChild(c.nodeType ? c : document.createTextNode(String(c)));
   }
-  function clear(e) { while (e.firstChild) e.removeChild(e.firstChild); return e; }
+  function clear(e) { while (e && e.firstChild) e.removeChild(e.firstChild); return e; }
+  function txt(e, t) { if (e && e.textContent !== t) e.textContent = t; }
   var SVGNS = 'http://www.w3.org/2000/svg';
-  /* small line icons (24x24, stroke) */
   var IC = {
     cpu: 'M9 3v2M15 3v2M9 19v2M15 19v2M3 9h2M3 15h2M19 9h2M19 15h2M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM9 9h6v6H9z',
-    mem: 'M3 7h18v10H3zM7 7v10M11 7v10M15 7v10M5 17v3M19 17v3',
-    disk: 'M4 15l2-9h12l2 9M4 15h16v4H4zM17 17h.01',
-    net: 'M12 3v5M5 13v-2h14v2M5 13v3M19 13v3M12 8v8M3 16h4v5H3zM10 16h4v5h-4zM17 16h4v5h-4z',
-    temp: 'M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0zM12 9v8',
-    clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
+    mem: 'M3 7h18v10H3zM7 7v10M11 7v10M15 7v10M5 17v3M19 17v3', disk: 'M4 15l2-9h12l2 9M4 15h16v4H4zM17 17h.01',
+    net: 'M7 17V5M3 9l4-4 4 4M17 7v12M13 15l4 4 4-4', temp: 'M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0zM12 9v8',
+    clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2', load: 'M3 17l5-6 4 3 5-7 4 5', server: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01',
+    box: 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8', vm: 'M3 4h18v12H3zM8 20h8M12 16v4', bolt: 'M13 2L4 14h7l-1 8 9-12h-7z',
+    array: 'M4 6h16M4 12h16M4 18h16', swap: 'M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4', tag: 'M3 12V3h9l9 9-9 9zM7.5 7.5h.01',
     play: 'M7 4l13 8-13 8z', pause: 'M7 4h4v16H7zM14 4h4v16h-4z', stop: 'M6 6h12v12H6z',
-    restart: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', logs: 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5',
-    up: 'M12 19V5M5 12l7-7 7 7', web: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18',
+    restart: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', logs: 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5', info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01',
+    up: 'M12 19V5M5 12l7-7 7 7', web: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
     moon: 'M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z', check: 'M5 12l4 4 10-10', power: 'M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0',
     full: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', screen: 'M3 4h18v12H3zM8 20h8M12 16v4', edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
-    trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13', upar: 'M12 5l-6 6h12z', dnar: 'M12 19l6-6H6z', plus: 'M12 5v14M5 12h14', x: 'M6 6l12 12M18 6L6 18'
+    trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13', upar: 'M12 6l-6 6h12z', dnar: 'M12 18l6-6H6z', plus: 'M12 5v14M5 12h14', x: 'M6 6l12 12M18 6L6 18',
+    gear: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+    dots: 'M5 12h.01M12 12h.01M19 12h.01', star: 'M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z',
+    eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', eyeoff: 'M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.1 3.9M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2',
+    search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+    grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', chev: 'M6 9l6 6 6-6', history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
+    download: 'M12 4v12M6 10l6 6 6-6M4 20h16'
   };
-  function ic(n) {
+  function ic(n, fill) {
     var s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor');
-    s.setAttribute('stroke-width', '1.8'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('aria-hidden', 'true');
-    var p = document.createElementNS(SVGNS, 'path'); p.setAttribute('d', IC[n] || ''); if (n === 'play' || n === 'pause' || n === 'stop') p.setAttribute('fill', 'currentColor');
+    s.setAttribute('stroke-width', '1.8'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false');
+    var p = document.createElementNS(SVGNS, 'path'); p.setAttribute('d', IC[n] || '');
+    if (fill || n === 'play' || n === 'pause' || n === 'stop') p.setAttribute('fill', 'currentColor');
     s.appendChild(p); return s;
   }
-  function btn(label, onclick, cls, icon, title) { return h('button', { type: 'button', class: 'btn ' + (cls || ''), onclick: onclick, title: title || null }, icon ? ic(icon) : null, label); }
+  function btn(label, onclick, cls, icon, title) {
+    return h('button', { type: 'button', class: 'btn ' + (cls || '') + (label ? '' : ' ic'), onclick: onclick, title: title || null, 'aria-label': !label && title ? title : null }, icon ? ic(icon) : null, label || null);
+  }
 
   /* ---------- formatting ---------- */
   function num(v) { return v === null || v === undefined || v === '' ? '-' : (typeof v === 'number' ? v.toLocaleString() : (isFinite(+v) && String(v).trim() !== '' ? (+v).toLocaleString() : String(v))); }
@@ -62,10 +80,11 @@
   }
   function rate(b) { if (b === null || b === undefined) return '-'; return b < 1 ? '0 B/s' : bytes(b, 1).replace('KiB', 'kiB') + '/s'; }
   function dur(s) { s = Math.max(0, Math.round(s || 0)); var hh = Math.floor(s / 3600), mm = Math.floor(s % 3600 / 60), ss = s % 60; return (hh ? hh + ':' + (mm < 10 ? '0' : '') : '') + mm + ':' + (ss < 10 ? '0' : '') + ss; }
-  function upt(s) { var d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), mm = Math.floor(s % 3600 / 60); return d ? d + 'd' + hh + 'h' : hh ? hh + 'h' + mm + 'm' : mm + 'm'; }
+  function upt(s) { var d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), mm = Math.floor(s % 3600 / 60); return d ? d + 'd ' + hh + 'h' : hh ? hh + 'h ' + mm + 'm' : mm + 'm'; }
+  function pct(v) { return v === null || v === undefined ? '-' : (Math.round(v * 10) / 10) + '%'; }
   function fmt(v, f) {
     if (f === 'bytes') return bytes(v); if (f === 'rate') return rate(v); if (f === 'ms') return num(v) + ' ms';
-    if (f === 'pct') return (v === null || v === undefined ? '-' : (Math.round(v * 10) / 10) + '%'); if (f === 'dur') return dur(v);
+    if (f === 'pct') return pct(v); if (f === 'dur') return dur(v);
     if (f === 'text') return v === null || v === undefined || v === '' ? '-' : (typeof v === 'number' ? v.toLocaleString() : String(v));
     return num(v);
   }
@@ -77,381 +96,777 @@
     return RTF ? RTF.format(n, u[0]).replace(/\./g, '') : Math.abs(n) + ' ' + u[0] + (Math.abs(n) === 1 ? '' : 's') + (n < 0 ? ' ago' : '');
   }
   function day(ts) { return new Date(ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' }); }
+  function clock(ts) { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
   function iconUrl(i) {
     if (!i) return '';
-    if (/^(https?:)?\/\//.test(i) || i[0] === '/') return i;
+    if (/^https?:\/\//.test(i)) return i;
+    if (i[0] === '/') return (UNRAID && !/^\/(state|plugins\/dynamix\.vm\.manager)\//.test(i) ? UNRAID : '') + i;
     var m;
     if ((m = /^sh-(.+?)(\.(svg|png|webp))?$/.exec(i))) return 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/' + (m[3] || 'svg') + '/' + m[1] + '.' + (m[3] || 'svg');
     if (/^(mdi|si)-/.test(i)) return '';
     if ((m = /^(.+)\.(png|svg|webp)$/.exec(i))) return 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/' + m[2] + '/' + i;
     return 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/' + i + '.png';
   }
-  function img(src, cls) { return src ? h('img', { class: cls || 'ico', src: src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.style.visibility = 'hidden'; } }) : null; }
-  function toast(msg, bad) { var t = h('div', { class: 'toast' + (bad ? ' bad' : ''), role: 'status' }, msg); root.appendChild(t); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, bad ? 7000 : 3500); }
+  function img(src, cls, fallback) {
+    if (!src) return fallback ? h('span', { class: 'ph' }, ic(fallback)) : null;
+    return h('img', { class: cls || 'ico', src: src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.style.visibility = 'hidden'; } });
+  }
+  function meterCls(p) { return p > 90 ? 'bad' : p > 75 ? 'warn' : ''; }
+
+  var toastBox = null;
+  function toast(msg, bad) {
+    if (!toastBox || !toastBox.parentNode) { toastBox = h('div', { class: 'toasts', 'aria-live': 'polite' }); root.appendChild(toastBox); }
+    var t = h('div', { class: 'toast' + (bad ? ' bad' : ''), role: bad ? 'alert' : 'status' }, msg); toastBox.appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, bad ? 8000 : 3500);
+  }
 
   /* ---------- API ---------- */
-  function api(action, data) {
+  function api(action, data, timeoutMs) {
     var fd = new URLSearchParams(); fd.append('action', action);   // urlencoded: multipart POSTs hang on Unraid's web server
     fd.append('csrf_token', window.UND_CSRF || '');
     for (var k in (data || {})) fd.append(k, typeof data[k] === 'object' ? JSON.stringify(data[k]) : data[k]);
-    return fetch(API, { method: 'POST', body: fd, credentials: 'same-origin' }).then(function (r) {
-      return r.json().catch(function () { return { error: 'Unexpected response (' + r.status + ')' }; }).then(function (j) { if (!r.ok && !j.error) j.error = 'Request failed (' + r.status + ')'; return j; });
-    }).catch(function () { return { error: 'Could not reach the server.' }; });
+    var ctl = window.AbortController ? new AbortController() : null;
+    var to = setTimeout(function () { if (ctl) ctl.abort(); }, timeoutMs || 30000);
+    return fetch(API, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-Token': window.UND_CSRF || '' }, signal: ctl ? ctl.signal : undefined }).then(function (r) {
+      clearTimeout(to);
+      if (r.status === 401) return { error: 'Signed out. Reload the page to sign in again.', auth: true };
+      return r.json().catch(function () { return { error: 'Unexpected answer from the server (HTTP ' + r.status + ').' }; }).then(function (j) { if (!r.ok && !j.error) j.error = 'Request failed (HTTP ' + r.status + ').'; return j; });
+    }).catch(function (e) { clearTimeout(to); return { error: e && e.name === 'AbortError' ? 'The server took too long to answer.' : 'Could not reach the server.', offline: true }; });
   }
-  function act(action, data, okMsg) { return api(action, data).then(function (j) { if (j.error) toast(j.error, true); else if (okMsg) toast(okMsg); return j; }); }
+  function act(action, data, okMsg) { return api(action, data, 130000).then(function (j) { if (j.error) toast(j.error, true); else if (okMsg) toast(okMsg); return j; }); }
 
+  /* ---------- dialogs and menus ---------- */
   function modal(title, body, foot, wide) {
-    var bg = h('div', { class: 'modal-bg', onclick: function (e) { if (e.target === bg) close(); } });
-    var m = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true' }, h('h3', null, title), body, foot ? h('div', { class: 'foot' }, foot) : null);
-    function close() { if (bg.parentNode) bg.parentNode.removeChild(bg); document.removeEventListener('keydown', esc); if (m.onclose) m.onclose(); }
-    function esc(e) { if (e.key === 'Escape') close(); }
-    document.addEventListener('keydown', esc);
-    bg.appendChild(m); root.appendChild(bg); m.close = close; return m;
+    var last = document.activeElement;
+    var bg = h('div', { class: 'modal-bg', onmousedown: function (e) { if (e.target === bg) close(); } });
+    var hid = 'und-m' + Math.random().toString(36).slice(2, 8);
+    var m = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': hid, tabindex: '-1' }, h('h3', { id: hid }, title), body, foot ? h('div', { class: 'foot' }, foot) : null);
+    function close() { if (!bg.parentNode) return; bg.parentNode.removeChild(bg); document.removeEventListener('keydown', key, true); if (m.onclose) m.onclose(); if (last && last.focus) try { last.focus(); } catch (e) { /* gone */ } }
+    function key(e) {
+      var all = root.querySelectorAll('.modal-bg');
+      if (all[all.length - 1] !== bg) return;          // only the top-most dialog reacts
+      if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
+      if (e.key !== 'Tab') return;
+      var f = m.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select,textarea,[tabindex="0"]');
+      if (!f.length) return;
+      if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+    }
+    document.addEventListener('keydown', key, true);
+    bg.appendChild(m); root.appendChild(bg); m.close = close;
+    setTimeout(function () { var f = m.querySelector('input,select,textarea,.foot .btn.pri,.foot .btn'); (f || m).focus(); }, 0);
+    return m;
   }
   function confirmBox(title, text, okLabel, danger) {
     return new Promise(function (res) {
       var done = false, m;
-      var ok = btn(okLabel || 'OK', function () { done = true; m.close(); res(true); }, danger ? 'danger' : 'pri');
-      m = modal(title, h('p', null, text), [btn('Cancel', function () { m.close(); }), ok]);
+      var ok = btn(okLabel || 'OK', function () { done = true; m.close(); res(true); }, danger ? 'danger solid' : 'pri');
+      m = modal(title, typeof text === 'string' ? h('p', null, text) : text, [btn('Cancel', function () { m.close(); }), ok]);
       m.onclose = function () { if (!done) res(false); };
-      ok.focus();
     });
   }
+  function closeMenu(keepFocus) { if (S.menu) { var m = S.menu; S.menu = null; if (m.parentNode) m.parentNode.removeChild(m); document.removeEventListener('mousedown', menuOut, true); document.removeEventListener('keydown', menuKey, true); if (!keepFocus && m._from && document.body.contains(m._from)) try { m._from.focus(); } catch (e) { /* gone */ } } }
+  function menuOut(e) { if (S.menu && !S.menu.contains(e.target) && !S.menu._from.contains(e.target)) closeMenu(true); }
+  function menuKey(e) {
+    if (!S.menu) return;
+    var items = [].slice.call(S.menu.querySelectorAll('button:not([disabled])')), i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); closeMenu(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); (items[i + 1] || items[0]).focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[i - 1] || items[items.length - 1]).focus(); }
+    else if (e.key === 'Tab') closeMenu(true);
+  }
+  /* items: [label, icon, fn, cls, disabled] or 'hr' */
+  function menu(from, items) {
+    if (S.menu && S.menu._from === from) { closeMenu(); return; }
+    closeMenu(true);
+    var m = h('div', { class: 'menu', role: 'menu' });
+    items.forEach(function (x) {
+      if (!x) return;
+      if (x === 'hr') { if (m.lastChild && m.lastChild.tagName !== 'HR') m.appendChild(h('hr')); return; }
+      m.appendChild(h('button', { type: 'button', role: 'menuitem', class: x[3] || '', disabled: !!x[4], onclick: function () { closeMenu(true); x[2](); } }, ic(x[1]), x[0]));
+    });
+    if (m.lastChild && m.lastChild.tagName === 'HR') m.removeChild(m.lastChild);
+    m._from = from; S.menu = m; root.appendChild(m);
+    var r = from.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+    var left = Math.min(window.innerWidth - mw - 8, Math.max(8, r.right - mw)), top = r.bottom + 4;
+    if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 4);
+    m.style.left = left + 'px'; m.style.top = top + 'px';
+    document.addEventListener('mousedown', menuOut, true); document.addEventListener('keydown', menuKey, true);
+    var f = m.querySelector('button:not([disabled])'); if (f) f.focus();
+  }
+  window.addEventListener('scroll', function () { closeMenu(true); }, true);
 
-  /* ---------- shell ---------- */
-  var TABS = [['dash', 'Dashboard'], ['docker', 'Docker'], ['vms', 'VMs'], ['system', 'System'], ['settings', 'Settings']];
-
-  function applyLook() {
-    var g = S.boot.layout.general;
-    root.setAttribute('data-theme', g.theme || 'dark');
-    root.classList.toggle('has-bg', !!g.background);
-    root.classList.toggle('full', S.full);
+  /* ---------- appearance ---------- */
+  function hexRgb(hx) { var m = /^#([0-9a-f]{6})$/i.exec(hx || ''); if (!m) return [241, 90, 44]; var n = parseInt(m[1], 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  function mix(c, t, f) { return 'rgb(' + c.map(function (v, i) { return Math.round(v + (t[i] - v) * f); }).join(',') + ')'; }
+  function lum(c) { var a = c.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2]; }
+  function applyLook(a) {
+    a = a || S.L.appearance;
+    root.setAttribute('data-theme', a.theme);
+    root.setAttribute('data-density', a.density);
+    var c = hexRgb(a.accent), light = a.theme === 'light', L1 = lum(c);
+    root.style.setProperty('--accent', a.accent);
+    root.style.setProperty('--accent-btn', mix(c, [0, 0, 0], light ? 0.06 : 0.12));
+    root.style.setProperty('--accent-ink', L1 > 0.45 ? '#111' : '#fff');
+    root.style.setProperty('--accent-soft', 'rgba(' + c.join(',') + ',' + (light ? 0.12 : 0.16) + ')');
+    // link text must stay readable on the panel colour: darken on light, lighten on dark
+    root.style.setProperty('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : a.accent) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
+    root.classList.toggle('has-bg', !!a.background);
+    root.classList.toggle('full', S.full && !window.UND_STANDALONE);
+    var bg = null;
+    for (var i = 0; i < root.children.length; i++) if (root.children[i].classList.contains('und-bg')) bg = root.children[i];
+    if (a.background) {
+      if (!bg) { bg = h('div', { class: 'und-bg' }); root.insertBefore(bg, root.firstChild); }
+      bg.style.backgroundImage = 'url("' + a.background.replace(/["\\()]/g, '') + '")';
+      bg.style.filter = 'blur(' + a.blur + 'px) brightness(' + a.brightness + '%)';
+      bg.style.inset = '-' + (a.blur * 2) + 'px';
+    } else if (bg) bg.parentNode.removeChild(bg);
+  }
+  /* custom CSS is nested under .und (CSS nesting), so it styles UnDash only; it is text, never markup */
+  function applyCss(css) {
+    var st = document.getElementById('und-custom-css');
+    if (!css) { if (st) st.parentNode.removeChild(st); return; }
+    if (!st) { st = document.createElement('style'); st.id = 'und-custom-css'; document.head.appendChild(st); }
+    st.textContent = '.und{\n' + String(css).replace(/<\/?style/gi, '') + '\n}';
   }
 
-  function shell() {
-    clear(root); applyLook();
-    var g = S.boot.layout.general;
-    if (g.background) root.appendChild(h('div', { class: 'und-bg', style: { 'background-image': 'url("' + g.background.replace(/["\\]/g, '') + '")', filter: 'blur(' + g.blur + 'px) brightness(' + g.brightness + '%)', inset: '-' + (g.blur * 2) + 'px' } }));
-    var os = h('div', { class: 'actions', id: 'und-hd-r' });
-    root.appendChild(h('div', { class: 'head' },
-      h('div', { class: 'brand' }, logo(), h('div', null, h('div', { class: 'und-name' }, g.title || 'UnDash'), h('div', { class: 'ver' }, (S.boot.server.name || 'Unraid') + ' · UnDash ' + S.boot.version))),
-      os));
-    var tabs = h('div', { class: 'tabs', role: 'tablist' });
-    TABS.forEach(function (t) { tabs.appendChild(h('button', { type: 'button', role: 'tab', class: 'tab' + (S.tab === t[0] ? ' on' : ''), 'aria-selected': S.tab === t[0] ? 'true' : 'false', onclick: function () { go(t[0]); } }, t[1])); });
-    root.appendChild(tabs);
-    root.appendChild(h('div', { id: 'und-body' }));
-    headRight();
-  }
+  /* ================= shell ================= */
   function logo() {
     var s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 64 64'); s.setAttribute('class', 'logo'); s.setAttribute('aria-hidden', 'true');
-    s.innerHTML = '<rect width="64" height="64" rx="14" fill="#f15a2c"/><rect x="12" y="12" width="18" height="24" rx="4" fill="#fff"/><rect x="34" y="12" width="18" height="12" rx="4" fill="#fff" opacity=".85"/><rect x="34" y="28" width="18" height="24" rx="4" fill="#fff"/><rect x="12" y="40" width="18" height="12" rx="4" fill="#fff" opacity=".85"/>';
+    [['0', '0', '64', '64', '14', 'var(--accent)', '1'], ['12', '12', '18', '24', '4', '#fff', '1'], ['34', '12', '18', '12', '4', '#fff', '.85'], ['34', '28', '18', '24', '4', '#fff', '1'], ['12', '40', '18', '12', '4', '#fff', '.85']].forEach(function (r) {
+      var e = document.createElementNS(SVGNS, 'rect'); e.setAttribute('x', r[0]); e.setAttribute('y', r[1]); e.setAttribute('width', r[2]); e.setAttribute('height', r[3]); e.setAttribute('rx', r[4]); e.setAttribute('fill', r[5]); e.setAttribute('opacity', r[6]); s.appendChild(e);
+    });
     return s;
   }
-  function headRight() {
-    var el = document.getElementById('und-hd-r'); if (!el) return; clear(el);
-    var o = S.sys && S.sys.os_update;
-    if (o && o.staged) el.appendChild(h('span', { class: 'pill up', onclick: function () { go('system'); }, title: 'Reboot to finish the update' }, 'Unraid ' + o.staged + ' installed · reboot to finish'));
-    else if (o && o.available) el.appendChild(h('span', { class: 'pill up', onclick: function () { go('system'); } }, ic('up'), 'Unraid ' + o.latest + ' available'));
-    else if (o && o.installed) el.appendChild(h('span', { class: 'pill ok', title: o.checked ? 'Checked ' + rel(o.checked) : '' }, 'Unraid ' + o.installed));
-    el.appendChild(btn(S.full ? 'Exit focus' : 'Focus', function () { S.full = !S.full; LS.set('full', S.full); applyLook(); headRight(); }, 'sm', 'full', 'Full-window dashboard'));
+
+  var R = {};      // references to live parts of the page
+  function shell() {
+    closeMenu(true);
+    clear(root); R = {}; toastBox = null;
+    applyLook();
+    applyCss(S.boot.css);
+    var g = S.L.general;
+    R.live = h('div', { class: 'live', role: 'status' }, h('span', { class: 'dot' }), R.liveTxt = h('span', null, 'Connecting…'),
+      R.pause = btn('', togglePause, 'ghost sm', 'pause', 'Pause live refresh'));
+    R.search = h('input', { type: 'search', placeholder: 'Filter containers, VMs, services…  ( / )', 'aria-label': 'Filter the dashboard', value: S.q,
+      oninput: function () { S.q = R.search.value; refreshFilters(); },
+      onkeydown: function (e) {
+        if (e.key === 'Escape') { R.search.value = ''; S.q = ''; refreshFilters(); }
+        if (e.key === 'Enter' && g.search !== 'none' && S.q.trim() && !root.querySelector('[data-match="1"]')) webSearch(S.q.trim());
+      } });
+    var acts = h('div', { class: 'acts' }, R.live,
+      R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
+      window.UND_STANDALONE ? null : btn('', toggleFull, 'focus' + (S.full ? ' on' : ''), 'full', S.full ? 'Exit focus mode' : 'Focus mode (hide Unraid\'s menu)'),
+      btn('', openSettings, '', 'gear', 'Settings'));
+    R.srvBtn.setAttribute('aria-haspopup', 'menu');
+    root.appendChild(h('header', { class: 'top' },
+      h('div', { class: 'brand' }, logo(), h('div', { class: 'ell' }, h('h1', { class: 'und-name' }, g.title || 'UnDash'),
+        R.sub = h('div', { class: 'und-sub' }, S.boot.server.name + ' · ' + S.boot.server.ip + ' · UnDash ' + S.boot.version))),
+      h('div', { class: 'search' }, ic('search'), R.search), acts));
+    R.sections = h('main', { class: 'sections' });
+    root.appendChild(R.sections);
+    S.L.dashboard.sections.forEach(function (sec) { if (sec.visible) buildSection(sec); });
+    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Dashboard.'));
+    paintAll(); paintLive();
   }
 
-  function go(tab) {
-    if (S.tab === 'settings' && tab !== 'settings' && S.dirty && !window.confirm('Leave Settings without saving your changes?')) return;
-    if (tab !== 'settings') { S.dirty = false; S.set = null; }
-    S.tab = tab; try { history.replaceState(null, '', '#' + tab); } catch (e) { /* ignore */ }
-    stopTimers(); shell(); render();
+  function webSearch(q) {
+    var E = { duckduckgo: 'https://duckduckgo.com/?q=', google: 'https://www.google.com/search?q=', bing: 'https://www.bing.com/search?q=', startpage: 'https://www.startpage.com/do/search?q=', brave: 'https://search.brave.com/search?q=' };
+    var u = E[S.L.general.search]; if (u) window.open(u + encodeURIComponent(q), '_blank', 'noopener');
   }
-  function stopTimers() { for (var k in S.timers) { clearInterval(S.timers[k]); clearTimeout(S.timers[k]); } S.timers = {}; }
-  function every(name, sec, fn) { S.timers[name] = setInterval(function () { if (!document.hidden) fn(); }, Math.max(2, sec) * 1000); }
-  function body() { return document.getElementById('und-body'); }
+  function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
-  function render() {
-    var b = body(); if (!b) return; clear(b);
-    if (S.tab === 'dash') return renderDash(b);
-    if (S.tab === 'docker') return renderDocker(b);
-    if (S.tab === 'vms') return renderVms(b);
-    if (S.tab === 'system') return renderSystem(b);
-    if (S.tab === 'settings') return renderSettings(b);
+  var TITLES = { overview: 'Server', alerts: 'Alerts', favorites: 'Favorites', metrics: 'System', docker: 'Containers', vms: 'Virtual machines', storage: 'Storage', services: 'Services' };
+  function buildSection(sec) {
+    var tools = h('div', { class: 'tools' });
+    var count = h('span', { class: 'count' });
+    var body = h('div', { class: 'sec-b', id: 'und-sec-' + sec.id });
+    var el = h('section', { class: 'sec' + (sec.width === 'half' ? ' half' : '') + (sec.collapsed ? ' closed' : ''), 'data-sec': sec.id, 'aria-label': TITLES[sec.id] },
+      h('div', { class: 'sec-h' }, h('h2', null, h('button', { type: 'button', 'aria-expanded': sec.collapsed ? 'false' : 'true', 'aria-controls': 'und-sec-' + sec.id, onclick: function (e) {
+        sec.collapsed = !sec.collapsed; el.classList.toggle('closed', sec.collapsed); e.currentTarget.setAttribute('aria-expanded', sec.collapsed ? 'false' : 'true');
+        api('prefs', { kind: 'section', key: sec.id, value: { collapsed: sec.collapsed } });
+        if (!sec.collapsed) paintAll();
+      } }, ic('chev'), TITLES[sec.id]), count), tools), body);
+    R[sec.id] = { el: el, body: body, tools: tools, count: count, sec: sec };
+    R.sections.appendChild(el);
+    var b = BUILD[sec.id]; if (b) b(R[sec.id]);
   }
+  function open(id) { return R[id] && !R[id].sec.collapsed; }
 
-  /* ================= Dashboard ================= */
-  var NATIVE = { system_info: 1, cpu: 1, memory: 1, link: 1 };
+  /* which parts the live request needs, so hidden sections cost nothing */
+  function parts() {
+    var p = ['system'];
+    if (R.docker || R.favorites || R.alerts || R.overview || metricOn('docker')) p.push('docker');
+    if (R.vms || R.favorites || R.overview || metricOn('vms')) p.push('vms');
+    if (metricOn('ups')) p.push('ups');
+    return p.join(',');
+  }
+  function metricOn(id) { return !!R.metrics && S.L.dashboard.metrics.some(function (m) { return m.visible && m.id === id; }); }
 
-  function renderDash(b) {
-    var L = S.boot.layout, g = L.general;
-    var rb = h('div', { class: 'rbar', id: 'und-rbar' }); if (g.show_resources || g.show_date || g.show_search) b.appendChild(rb);
-    var closed = LS.get('closed', {});
-    L.groups.forEach(function (gr) {
-      var links = gr.services.length && gr.services.every(function (s) { return s.type === 'link'; });
-      var grid = h('div', { class: 'grid' + (links ? ' links' : ''), style: { '--cols': String(gr.columns) } });
-      var wrap = h('div', { class: 'grp' + (closed[gr.id] ? ' closed' : '') });
-      if (gr.header) wrap.appendChild(h('h2', { onclick: function () { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); } }, gr.name, h('span', { class: 'chev' }, '▾')));
-      gr.services.forEach(function (s) { grid.appendChild(card(s)); });
-      wrap.appendChild(grid); b.appendChild(wrap);
+  /* ================= live refresh ================= */
+  function schedule(ms) { clearTimeout(S.timer); S.timer = setTimeout(tick, ms); }
+  function interval() {
+    var base = Math.max(1, S.L.general.refresh) * 1000;
+    if (S.fails) return Math.min(30000, base * Math.pow(2, Math.min(S.fails, 5)));
+    if (document.hidden && S.L.general.background_poll === 'slow') return Math.max(30000, base);
+    return base;
+  }
+  function tick() {
+    if (S.paused || S.inflight || S.power) return;
+    if (document.hidden && S.L.general.background_poll === 'pause') { S.waitVisible = true; return; }
+    S.inflight = true;
+    api('live', { parts: parts() }, 20000).then(function (r) {
+      S.inflight = false;
+      if (r.error) {
+        S.fails++;
+        S.conn = r.auth ? 'auth' : S.fails >= 3 ? 'down' : 'retry';
+        S.connErr = r.error;
+        if (R.alerts) paintAlerts(S.live || {});
+      } else {
+        S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r;
+        if (r.power && !S.power) powerOverlay(r.power);
+        paintAll();
+      }
+      paintLive();
+      if (!S.paused && S.conn !== 'auth') schedule(interval());
     });
-    if (!L.groups.length) b.appendChild(h('div', { class: 'banner' }, 'Nothing on the dashboard yet. Add widgets or import your Homepage config in ', h('a', { href: '#settings', onclick: function (e) { e.preventDefault(); go('settings'); } }, 'Settings'), '.'));
-    drawRbar(); paintNative();
-    pollSys(); every('sys', g.refresh_system, pollSys);
-    pollServices(); every('svc', g.refresh_services, pollServices);
+  }
+  function refreshNow() { if (!S.inflight && !S.paused) { clearTimeout(S.timer); tick(); } }
+  function togglePause() {
+    S.paused = !S.paused; LS.set('paused', S.paused);
+    if (!S.paused) refreshNow(); else clearTimeout(S.timer);
+    paintLive();
+  }
+  function paintLive() {
+    if (!R.live) return;
+    R.live.className = 'live ' + (S.paused ? 'paused' : S.conn === 'ok' ? '' : S.conn === 'wait' || S.conn === 'retry' ? 'retry' : 'down');
+    var t = S.paused ? 'Paused' + (S.lastOk ? ' · ' + clock(S.lastOk) : '')
+      : S.conn === 'ok' ? 'Live · ' + clock(S.lastOk)
+      : S.conn === 'wait' ? 'Connecting…'
+      : S.conn === 'auth' ? 'Signed out'
+      : S.conn === 'retry' ? 'Reconnecting…' : 'Offline · retrying';
+    txt(R.liveTxt, t);
+    R.live.title = (S.conn !== 'ok' && S.connErr ? S.connErr + ' ' : '') + 'Refreshes every ' + S.L.general.refresh + ' s' + (S.lastOk ? '; last update ' + clock(S.lastOk) : '');
+    clear(R.pause).appendChild(ic(S.paused ? 'play' : 'pause'));
+    R.pause.title = S.paused ? 'Resume live refresh' : 'Pause live refresh';
+    R.pause.setAttribute('aria-label', R.pause.title);
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (!S.L) return;
+    if (!document.hidden && (S.waitVisible || S.L.general.background_poll !== 'normal')) { S.waitVisible = false; refreshNow(); }
+    if (!document.hidden && !S.svcRun) pollServices();
+  });
+
+  function paintAll() {
+    var y = S.live || {};
+    if (R.overview && open('overview')) paintOverview(y);
+    if (R.alerts) paintAlerts(y);
+    if (R.favorites && open('favorites')) paintFavs(y);
+    if (R.metrics && open('metrics')) paintMetrics(y);
+    if (R.docker && open('docker')) paintDocker(y);
+    if (R.vms && open('vms')) paintVms(y);
+    if (R.storage && open('storage') && Date.now() - S.storageAt > 30000) loadStorage();
+    paintCounts(y);
+  }
+  function paintCounts(y) {
+    if (R.docker && y.docker && y.docker.containers) {
+      var c = y.docker.containers;
+      txt(R.docker.count, c.filter(function (x) { return x.state === 'running'; }).length + ' of ' + c.length + ' running');
+    }
+    if (R.vms && y.vms && y.vms.vms) txt(R.vms.count, y.vms.vms.filter(function (v) { return v.state === 'running'; }).length + ' of ' + y.vms.vms.length + ' running');
   }
 
-  function card(s) {
-    var u = iconUrl(s.icon), href = s.href_resolved || '';
-    if (s.type === 'link') {
-      return h('div', { class: 'card link', onclick: function () { if (href) window.open(href, '_blank', 'noopener'); }, title: href },
-        h('div', { class: 'ch' }, img(u), h('span', { class: 'nm' }, s.name)));
-    }
-    var nm = href ? h('a', { class: 'nm', href: href, target: '_blank', rel: 'noopener' }, s.name) : h('span', { class: 'nm' }, s.name);
-    var c = h('div', { class: 'card' + (NATIVE[s.type] ? '' : ' wait'), id: 'w-' + s.id, 'data-type': s.type },
-      h('div', { class: 'ch' }, img(u), nm, h('span', { class: 'sub' })), h('div', { class: 'cb' }));
-    var prev = S.svc[s.id]; if (prev) setTimeout(function () { paintService(s, prev); }, 0);
-    return c;
+  /* ---------- filtering ---------- */
+  function matches(str) { var q = S.q.trim().toLowerCase(); return !q || String(str).toLowerCase().indexOf(q) >= 0; }
+  function refreshFilters() {
+    if (R.favorites) R.favorites.sig = null;
+    if (R.vms) R.vms.sig = null;
+    paintAll();
+    root.querySelectorAll('.w[data-name]').forEach(function (w) { var m = matches(w.getAttribute('data-name')); w.style.display = m ? '' : 'none'; w.setAttribute('data-match', m && S.q ? '1' : '0'); });
+    root.querySelectorAll('.grp').forEach(function (gr) { var any = [].some.call(gr.querySelectorAll('.w[data-name]'), function (w) { return w.style.display !== 'none'; }); gr.style.display = any || !S.q ? '' : 'none'; });
+    root.querySelectorAll('.rowi[data-name],.tile[data-name]').forEach(function (r) { r.setAttribute('data-match', S.q ? '1' : '0'); });
   }
 
-  function pollSys() {
-    return api('system').then(function (j) { if (j.error) return; S.sys = j; drawRbar(); paintNative(); headRight(); });
+  /* ================= sections ================= */
+  var BUILD = {};
+
+  /* ---- overview ---- */
+  BUILD.overview = function (r) {
+    r.kv = h('div', { class: 'kv' });
+    r.health = h('div', { class: 'chips' });
+    r.qa = h('div', { class: 'qa' });
+    r.body.appendChild(h('div', { class: 'card ov' }, h('div', null, r.kv, h('div', { style: { 'margin-top': '12px' } }, r.health)), r.qa));
+  };
+  function paintOverview(y) {
+    var r = R.overview, s = y.system;
+    if (!s) { if (!r.kv.firstChild) r.kv.appendChild(h('span', { class: 'muted' }, 'Loading…')); return; }
+    var o = s.os_update || {}, a = s.array || {}, dk = dockerStats(y), vm = vmStats(y);
+    var osTxt = (s.os || '-') + (o.staged ? ' · ' + o.staged + ' installed, restart to finish' : o.available ? ' · ' + o.latest + ' available' : o.checked ? ' · up to date' : '');
+    var arr = (a.state || '-').toLowerCase() + (a.resync ? ' · ' + (a.resync_action || 'parity check') + (a.resync_pct !== null ? ' ' + a.resync_pct + '%' : '') : '') + (a.mover ? ' · mover running' : '');
+    var rows = [['Server', s.name], ['Address', s.ip], ['Unraid', osTxt], ['Kernel', s.kernel], ['CPU', (s.cpu.model || '-') + ' · ' + s.cpu.threads + ' threads'], ['Uptime', upt(s.uptime)],
+      ['Array', arr + (a.size ? ' · ' + bytes(a.free) + ' free of ' + bytes(a.size) : a.disks === 0 && (a.pools || []).length ? ' · pools only (' + a.pools.length + ')' : '')],
+      ['Containers', dk ? dk.running + ' running · ' + dk.stopped + ' stopped' + (dk.updates ? ' · ' + dk.updates + ' with updates' : '') : (y.docker && y.docker.error) || '-'],
+      ['VMs', vm ? vm.running + ' running · ' + vm.total + ' total' : (y.vms && y.vms.error) || '-']];
+    var sig = JSON.stringify(rows);
+    if (r.kvSig !== sig) { r.kvSig = sig; clear(r.kv); rows.forEach(function (x) { r.kv.appendChild(h('span', null, x[0])); r.kv.appendChild(h('span', null, x[1])); }); }
+    var chips = [];
+    chips.push(a.state === 'STARTED' ? ['Array started', 'ok'] : ['Array ' + (a.state || 'unknown').toLowerCase(), 'warn']);
+    if (a.bad) chips.push([a.bad + ' disk' + (a.bad > 1 ? 's' : '') + ' need attention', 'bad']); else if (a.disks || (a.pools || []).length) chips.push(['Disks OK', 'ok']);
+    if (a.errors) chips.push([a.errors + ' disk errors', 'bad']);
+    if (a.hot) chips.push([a.hot + ' hot disk' + (a.hot > 1 ? 's' : ''), 'warn']);
+    if (s.cpu.temp !== null && s.cpu.temp !== undefined) chips.push(['CPU ' + Math.round(s.cpu.temp) + '°C', s.cpu.temp >= 85 ? 'bad' : s.cpu.temp >= 75 ? 'warn' : 'ok']);
+    if (dk && dk.unhealthy) chips.push([dk.unhealthy + ' unhealthy container' + (dk.unhealthy > 1 ? 's' : ''), 'bad']);
+    if (s.mem.pct > 90) chips.push(['Memory ' + Math.round(s.mem.pct) + '%', 'warn']);
+    var cs = JSON.stringify(chips);
+    if (r.hSig !== cs) { r.hSig = cs; clear(r.health); chips.forEach(function (c) { r.health.appendChild(h('span', { class: 'badge ' + c[1] }, c[0])); }); }
+    var checking = !!(y.docker && y.docker.checking || S.busy.dcheck);
+    var qs = JSON.stringify([o.available, o.staged, o.job, dk && dk.updates, checking, S.boot.port_enabled]);
+    if (r.qSig === qs) return; r.qSig = qs;
+    clear(r.qa);
+    r.qa.appendChild(h('h4', null, 'Quick actions'));
+    var chk = btn(checking ? 'Checking containers…' : 'Check container updates', checkUpdates, 'sm', 'restart', 'Ask the registries for newer images (Unraid\'s own check)');
+    chk.disabled = checking;
+    r.qa.appendChild(h('div', { class: 'row' }, chk, dk && dk.updates ? btn('Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up') : null));
+    r.qa.appendChild(h('div', { class: 'row' },
+      o.job === 'running' ? btn('Installing Unraid update…', osDialog, 'sm', 'up') : o.available && !o.staged ? btn('Install Unraid ' + o.latest, osDialog, 'sm pri', 'up') : btn('Unraid OS update', osDialog, 'sm', 'up', 'Check for and install Unraid updates'),
+      btn('History', historyDialog, 'sm', 'history', 'Recent operations')));
+    r.qa.appendChild(h('div', { class: 'row' }, btn('Restart server', function () { powerDialog('reboot'); }, 'sm', 'restart'), btn('Shut down', function () { powerDialog('shutdown'); }, 'sm danger', 'power')));
+    var pl = portLink('sm'); if (pl) r.qa.appendChild(h('div', { class: 'row' }, pl));
+  }
+  function portLink(cls) {
+    if (window.UND_STANDALONE) return h('a', { class: 'btn ' + cls, href: UNRAID + '/Dashboard', rel: 'noopener' }, ic('web'), 'Open Unraid');
+    if (!S.boot.port_enabled) return null;
+    return h('a', { class: 'btn ' + cls, href: '/plugins/undash/handoff.php', target: '_blank', rel: 'noopener', title: 'UnDash on its own page (port ' + S.boot.port + '), without Unraid\'s menu' }, ic('web'), 'Open on port ' + S.boot.port);
+  }
+  function serverMenu(from) {
+    var dk = dockerStats(S.live || {});
+    menu(from, [
+      ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
+      ['Check container updates', 'box', checkUpdates, '', !!S.busy.dcheck], dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
+      ['Unraid OS update', 'up', osDialog], ['Recent operations', 'history', historyDialog], 'hr',
+      ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'], ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger']]);
   }
 
-  /* services are fetched in parallel, at most 6 at a time (the browser's per-host limit) */
-  function pollServices() {
-    var list = [];
-    S.boot.layout.groups.forEach(function (g) { g.services.forEach(function (s) { if (!NATIVE[s.type]) list.push(s); }); });
-    var i = 0;
-    function next() {
-      if (i >= list.length || S.tab !== 'dash') return Promise.resolve();
-      var s = list[i++];
-      return api('service', { id: s.id }).then(function (r) { S.svc[s.id] = r; paintService(s, r); }).then(next);
+  /* ---- alerts ---- */
+  BUILD.alerts = function (r) { r.list = h('div', { class: 'alerts' }); r.body.appendChild(r.list); };
+  function paintAlerts(y) {
+    var r = R.alerts, s = y.system, out = [];
+    if (S.conn === 'down') out.push(['bad', 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.']);
+    if (S.conn === 'auth') out.push(['bad', 'Your session ended. Reload the page to sign in again.']);
+    if (s) {
+      var a = s.array || {};
+      if (a.state && a.state !== 'STARTED') out.push(['warn', 'The array is ' + a.state.toLowerCase() + '. Shares, containers and VMs on it are unavailable.']);
+      if (a.resync) out.push(['info', (a.resync_action || 'A parity operation') + ' is running' + (a.resync_pct !== null ? ' (' + a.resync_pct + '%)' : '') + '.']);
+      if (a.bad) out.push(['bad', a.bad + ' disk' + (a.bad > 1 ? 's are' : ' is') + ' disabled, missing or emulated. Check Main in Unraid.']);
+      if (a.errors) out.push(['bad', 'Disks reported ' + a.errors + ' read/write error' + (a.errors > 1 ? 's' : '') + '.']);
+      if (a.hot) out.push(['warn', a.hot + ' disk' + (a.hot > 1 ? 's are' : ' is') + ' at 50°C or more.']);
+      var o = s.os_update || {};
+      if (o.staged) out.push(['info', 'Unraid ' + o.staged + ' is installed and becomes active after a restart.', ['Restart…', function () { powerDialog('reboot'); }]]);
+      else if (o.available) out.push(['info', 'Unraid ' + o.latest + ' is available (running ' + o.installed + ').', ['Details', osDialog]]);
+      if (o.error && !o.available) out.push(['warn', 'The Unraid update check failed: ' + o.error]);
     }
-    for (var k = 0; k < 6; k++) next();
+    var d = y.docker && y.docker.containers;
+    if (d) d.forEach(function (c) {
+      if (pref('docker', c.name).hidden) return;
+      var nm = label('docker', c.name), lg = ['Logs', function () { logs(c.name); }];
+      if (c.health === 'unhealthy') out.push(['bad', nm + ' is unhealthy.', lg]);
+      else if (c.state === 'restarting') out.push(['bad', nm + ' keeps restarting' + (c.restarts ? ' (' + c.restarts + ' restarts)' : '') + '.', lg]);
+      else if (c.state === 'exited' && c.exit && c.autostart) out.push(['warn', nm + ' stopped with exit code ' + c.exit + '.', lg]);
+      if (c.job === 'update_failed') out.push(['bad', 'The update of ' + nm + ' failed.', lg]);
+    });
+    var sig = JSON.stringify(out.map(function (x) { return [x[0], x[1]]; }));
+    if (r.sig === sig) return; r.sig = sig;
+    clear(r.list);
+    txt(r.count, out.length ? String(out.length) : '');
+    if (!out.length) { r.list.appendChild(h('div', { class: 'alert ok' }, ic('check'), h('span', { class: 'grow' }, s ? 'No problems found.' : 'Waiting for data…'))); return; }
+    out.forEach(function (x) { r.list.appendChild(h('div', { class: 'alert ' + x[0] }, h('span', { class: 'grow' }, x[1]), x[2] ? btn(x[2][0], x[2][1], 'sm') : null)); });
   }
 
-  function cardBody(id) { var c = document.getElementById('w-' + id); if (!c) return null; c.classList.remove('wait'); return c.querySelector('.cb'); }
-
-  function blocks(list) {
-    return h('div', { class: 'blocks' }, list.map(function (x) { return h('div', { class: 'blk' }, h('div', { class: 'v' }, fmt(x.value, x.fmt)), h('div', { class: 'l' }, x.label)); }));
+  /* ---- favorites ---- */
+  BUILD.favorites = function (r) { r.list = h('div', { class: 'favs' }); r.body.appendChild(r.list); };
+  function paintFavs(y) {
+    var r = R.favorites, items = [];
+    ((y.docker && y.docker.containers) || []).forEach(function (c) { if (pref('docker', c.name).favorite) items.push(['d', c]); });
+    ((y.vms && y.vms.vms) || []).forEach(function (v) { if (pref('vms', v.name).favorite) items.push(['v', v]); });
+    S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (s.favorite && !s.hidden) items.push(['s', s]); }); });
+    items = items.filter(function (x) { return matches(x[1].name + ' ' + (x[0] === 's' ? '' : label(x[0] === 'd' ? 'docker' : 'vms', x[1].name))); });
+    var sig = JSON.stringify(items.map(function (x) { return [x[0], x[1].name, x[1].state, x[1].health, x[1].webui, x[1].ops, S.busy[(x[0] === 'd' ? 'd:' : 'v:') + x[1].name], x[0] === 's' ? null : pref(x[0] === 'd' ? 'docker' : 'vms', x[1].name)]; }));
+    if (r.sig === sig) return; r.sig = sig;
+    clear(r.list);
+    if (!items.length) { r.list.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, S.q ? 'No favorites match the filter.' : 'Star containers, VMs or services (⋯ menu or Settings) to pin them here.')); return; }
+    items.forEach(function (x) {
+      var it = x[1], el;
+      if (x[0] === 'd') {
+        var run = it.state === 'running';
+        el = h('div', { class: 'fav' }, img(iconUrl(pref('docker', it.name).icon || it.icon), '', 'box'), h('div', { class: 't' }, h('b', null, label('docker', it.name)), dStateBadge(it)),
+          run && it.webui ? h('a', { class: 'btn ic sm', href: it.webui, target: '_blank', rel: 'noopener', title: 'Open WebUI', 'aria-label': 'Open WebUI of ' + it.name }, ic('web')) : null,
+          btn('', function () { dAct(it, run ? 'restart' : 'start'); }, 'sm' + (run ? '' : ' okc'), run ? 'restart' : 'play', (run ? 'Restart ' : 'Start ') + it.name));
+        if (S.busy['d:' + it.name]) el.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      } else if (x[0] === 'v') {
+        var op = it.ops.indexOf('start') >= 0 ? 'start' : it.ops.indexOf('resume') >= 0 ? 'resume' : null;
+        el = h('div', { class: 'fav' }, img(iconUrl(pref('vms', it.name).icon || it.icon), '', 'vm'), h('div', { class: 't' }, h('b', null, label('vms', it.name)), vStateBadge(it.state, S.busy['v:' + it.name])),
+          op ? btn('', function () { vAct(it, op); }, 'sm okc', 'play', VMOPS[op][0] + ' ' + it.name) : null);
+        if (S.busy['v:' + it.name]) el.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      } else {
+        var href = it.href_resolved;
+        el = h('div', { class: 'fav' }, img(iconUrl(it.icon), '', 'tag'), h('div', { class: 't' }, h('b', null, it.name), h('span', { class: 'muted xs' }, it.description || (S.boot.types[it.type] || [''])[0])),
+          href ? h('a', { class: 'btn ic sm', href: href, target: '_blank', rel: 'noopener', title: 'Open ' + it.name, 'aria-label': 'Open ' + it.name }, ic('web')) : null);
+      }
+      r.list.appendChild(el);
+    });
   }
 
-  function paintService(s, r) {
-    var cb = cardBody(s.id); if (!cb) return; clear(cb);
-    var sub = cb.parentNode.querySelector('.ch .sub'); if (sub) sub.textContent = '';
-    if (r.error) {
-      var e = h('div', { class: 'err' + (r.unconfigured ? ' cfg' : ''), onclick: function () { e.classList.toggle('open'); } }, r.unconfigured ? 'Not configured' : 'API error', h('div', { class: 'x' }, r.error));
-      cb.appendChild(e); return;
+  /* ---- metrics ---- */
+  var MET = {
+    cpu: ['CPU', 'cpu'], cores: ['CPU cores', 'cpu'], temp: ['CPU temperature', 'temp'], memory: ['Memory', 'mem'], swap: ['Swap', 'swap'], array: ['Array', 'array'],
+    storage: ['Disk', 'disk'], network: ['Network', 'net'], uptime: ['Uptime', 'clock'], load: ['Load', 'load'], host: ['Host', 'server'], os: ['Unraid', 'server'],
+    docker: ['Containers', 'box'], vms: ['VMs', 'vm'], ups: ['UPS', 'bolt']
+  };
+  BUILD.metrics = function (r) {
+    r.grid = h('div', { class: 'metrics' }); r.body.appendChild(r.grid); r.tiles = {};
+    S.L.dashboard.metrics.forEach(function (m) {
+      if (!m.visible || !MET[m.id]) return;
+      var t = { mv: h('div', { class: 'mv' }, '–'), ms: h('div', { class: 'ms' }) };
+      t.el = h('div', { class: 'metric' + (m.id === 'cores' ? ' wide' : ''), 'data-m': m.id }, h('div', { class: 'mh' }, ic(MET[m.id][1]), MET[m.id][0]), t.mv, t.ms);
+      r.tiles[m.id] = t; r.grid.appendChild(t.el);
+    });
+    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, 'No metrics are turned on (Settings > System).'));
+  };
+  function setMeter(t, p, cls) {
+    if (!t.meter) { t.meter = h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i')); t.el.insertBefore(t.meter, t.ms); }
+    var i = t.meter.firstChild; i.style.width = Math.max(0, Math.min(100, p || 0)).toFixed(1) + '%'; i.className = cls === undefined ? meterCls(p) : cls;
+  }
+  function setSpark(t, vals, max) {
+    if (vals.length < 2) return;
+    var n = vals.length, d = 'M' + vals.map(function (v, i) { return (i / (n - 1) * 100).toFixed(2) + ',' + (40 - Math.max(0, Math.min(1, (v || 0) / (max || 1))) * 38).toFixed(2); }).join(' L');
+    if (!t.spark) {
+      t.spark = document.createElementNS(SVGNS, 'svg'); t.spark.setAttribute('class', 'spark'); t.spark.setAttribute('viewBox', '0 0 100 40'); t.spark.setAttribute('preserveAspectRatio', 'none'); t.spark.setAttribute('aria-hidden', 'true');
+      t.sa = document.createElementNS(SVGNS, 'path'); t.sa.setAttribute('class', 'a'); t.sl = document.createElementNS(SVGNS, 'path'); t.sl.setAttribute('class', 'l'); t.sl.setAttribute('vector-effect', 'non-scaling-stroke');
+      t.spark.appendChild(t.sa); t.spark.appendChild(t.sl); t.el.insertBefore(t.spark, t.el.firstChild);
     }
-    if (r.blocks && r.blocks.length) cb.appendChild(blocks(r.blocks));
-    if (r.list) {
-      var l = h('div', { class: 'lst' });
-      r.list.forEach(function (x) { l.appendChild(h('div', { class: 'r' }, x.label ? h('span', { class: 'lab' }, x.label) : null, h('span', { class: 't', title: x.title }, x.title), x.ts ? h('span', { class: 'w' }, rel(x.ts)) : (x.right ? h('span', { class: 'w' }, x.right) : null))); });
-      if (!r.list.length) l.appendChild(h('div', { class: 'empty' }, 'Nothing yet'));
-      cb.appendChild(l);
-    }
-    if (r.calendar) {
-      var cal = h('div', { class: 'cal' }), last = '';
-      r.calendar.forEach(function (x) {
-        var d = day(x.ts);
-        cal.appendChild(h('span', { class: 'd' }, d === last ? '' : d)); last = d;
-        cal.appendChild(h('span', { class: 'ti', title: x.title + (x.sub ? ' ' + x.sub : '') }, x.title, x.sub && s.options && s.options.show_episode ? h('span', { class: 's' }, x.sub) : null));
-        cal.appendChild(h('span', { class: 'ok', title: x.done ? 'Downloaded' : '' }, x.done ? ic('check') : ''));
-      });
-      if (!r.calendar.length) cb.appendChild(h('div', { class: 'empty' }, r.empty || 'Nothing coming up')); else cb.appendChild(cal);
-    }
-    if (r.streams) {
-      if (!r.streams.length) cb.appendChild(h('div', { class: 'empty' }, r.empty || 'No active streams'));
+    t.sa.setAttribute('d', d + ' L100,40 L0,40 Z'); t.sl.setAttribute('d', d);
+  }
+  function mv(t, main, small) { if (t.mvTxt === main + '|' + small) return; t.mvTxt = main + '|' + small; clear(t.mv); t.mv.appendChild(document.createTextNode(main)); if (small) t.mv.appendChild(h('small', null, small)); }
+  function paintMetrics(y) {
+    var T = R.metrics.tiles, s = y.system;
+    if (!s) return;
+    var hist = s.hist || [], t;
+    if ((t = T.cpu)) { mv(t, pct(s.cpu.pct), ''); txt(t.ms, 'Load ' + s.cpu.load[0].toFixed(2) + ' · ' + s.cpu.threads + ' threads'); setSpark(t, hist.map(function (x) { return x[1]; }), 100); }
+    if ((t = T.cores)) {
+      var cores = s.cpu.cores || [];
+      if (!cores.length) { mv(t, 'Measuring…', ''); }
       else {
-        var st = h('div', { class: 'streams' });
-        r.streams.forEach(function (x) {
-          st.appendChild(h('div', { class: 'stream', title: x.title + (x.user ? ' (' + x.user + ')' : '') + (x.transcode ? ' · ' + x.transcode : '') },
-            h('i', { class: 'pg', style: { width: (x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0) + '%' } }),
-            h('span', { class: 'st' }, ic(x.state === 'paused' ? 'pause' : 'play')),
-            h('span', { class: 'tt' }, x.title + (x.user ? ' (' + x.user + ')' : '')),
-            h('span', { class: 'tm' }, x.dur ? dur(x.pos) + ' / ' + dur(x.dur) : '')));
-        });
-        cb.appendChild(st);
+        mv(t, pct(Math.max.apply(null, cores)), 'busiest core');
+        if (!t.bars || t.bars.childNodes.length !== cores.length) { if (t.bars) t.bars.remove(); t.bars = h('div', { class: 'cores', role: 'img' }); cores.forEach(function () { t.bars.appendChild(h('i')); }); t.el.insertBefore(t.bars, t.ms); }
+        cores.forEach(function (c, i) { t.bars.childNodes[i].style.height = Math.max(2, c) + '%'; t.bars.childNodes[i].title = 'Core ' + i + ': ' + c + '%'; });
+        t.bars.setAttribute('aria-label', 'Per-core load: ' + cores.map(function (c, i) { return i + ': ' + Math.round(c) + '%'; }).join(', '));
+        txt(t.ms, cores.length + ' cores · average ' + pct(s.cpu.pct));
       }
     }
-    if (r.bars) {
-      var bars = h('div', { class: 'bars' });
-      r.bars.forEach(function (x) { var p = x.size ? 100 * x.used / x.size : 0; bars.appendChild(h('div', null, h('div', { class: 'bt' }, h('span', null, x.title, x.sub ? h('span', { class: 'muted' }, ' · ' + x.sub) : null), h('span', null, bytes(x.size - x.used) + ' free of ' + bytes(x.size))), h('div', { class: 'meter' }, h('i', { class: p > 90 ? 'bad' : p > 75 ? 'warn' : '', style: { width: p.toFixed(1) + '%' } })))); });
-      cb.appendChild(bars);
+    if ((t = T.temp)) {
+      if (s.cpu.temp === null || s.cpu.temp === undefined) { mv(t, 'No sensor', ''); txt(t.ms, 'Not reported by this server'); }
+      else { mv(t, Math.round(s.cpu.temp) + '°C', ''); setMeter(t, s.cpu.temp, s.cpu.temp >= 85 ? 'bad' : s.cpu.temp >= 75 ? 'warn' : ''); txt(t.ms, 'CPU package'); }
     }
-    if (r.link) { var a = cb.parentNode.querySelector('.ch .nm'); if (a && a.tagName !== 'A') { a.style.cursor = 'pointer'; a.onclick = function () { go(r.link); }; } }
+    if ((t = T.memory)) { mv(t, pct(s.mem.pct), ''); txt(t.ms, bytes(s.mem.used) + ' used · ' + bytes(s.mem.free) + ' free of ' + bytes(s.mem.total)); setSpark(t, hist.map(function (x) { return x[2]; }), s.mem.total); }
+    if ((t = T.swap)) { if (!s.mem.swap_total) { mv(t, 'None', ''); txt(t.ms, 'No swap configured'); } else { var sp = 100 * s.mem.swap_used / s.mem.swap_total; mv(t, pct(sp), ''); setMeter(t, sp); txt(t.ms, bytes(s.mem.swap_used) + ' of ' + bytes(s.mem.swap_total)); } }
+    if ((t = T.array)) {
+      var a = s.array;
+      var pools = (a.pools || []).filter(function (p) { return p.size > 0; });
+      if (!a.size && pools.length) {
+        // no array data disks (pool-only server): show the pools instead
+        var ps = 0, pf = 0; pools.forEach(function (p) { ps += p.size; pf += p.free; });
+        mv(t, bytes(pf), 'free'); setMeter(t, 100 * (ps - pf) / ps); txt(t.ms, pools.length + ' pool' + (pools.length > 1 ? 's' : '') + ' · ' + pct(100 * (ps - pf) / ps) + ' of ' + bytes(ps) + ' · no array disks');
+      } else if (!a.size) { mv(t, (a.state || '-').toLowerCase(), ''); txt(t.ms, a.state === 'STARTED' ? 'No array disks' : 'Array not started'); }
+      else { var ap = 100 * (a.size - a.free) / a.size; mv(t, bytes(a.free), 'free'); setMeter(t, ap); txt(t.ms, pct(ap) + ' used of ' + bytes(a.size) + ' · ' + a.disks + ' disks' + (a.parity ? ' + ' + a.parity + ' parity' : '')); }
+    }
+    if ((t = T.storage)) {
+      var d = s.disk;
+      if (!d) { mv(t, '-', ''); txt(t.ms, S.L.general.disk_path + ' is not mounted'); }
+      else if (!d.total) { mv(t, 'Not reported', ''); txt(t.ms, d.path + ' has no size here; pick a pool in Settings > System'); }
+      else { mv(t, bytes(d.free), 'free'); setMeter(t, d.pct); txt(t.ms, d.path + ' · ' + pct(d.pct) + ' of ' + bytes(d.total)); }
+    }
+    if ((t = T.network)) {
+      if (s.net.rx === null) { mv(t, 'Measuring…', ''); txt(t.ms, s.net.iface || 'no default route'); }
+      else { mv(t, rate(s.net.rx) + ' ↓', ''); txt(t.ms, rate(s.net.tx) + ' ↑ · ' + (s.net.iface || '-')); setSpark(t, hist.map(function (x) { return x[3] || 0; }), Math.max.apply(null, hist.map(function (x) { return x[3] || 0; }).concat([1024]))); }
+    }
+    if ((t = T.uptime)) { mv(t, upt(s.uptime), ''); txt(t.ms, 'Since ' + new Date((s.now - s.uptime) * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })); }
+    if ((t = T.load)) { mv(t, s.cpu.load[0].toFixed(2), ''); txt(t.ms, '5 min ' + s.cpu.load[1].toFixed(2) + ' · 15 min ' + s.cpu.load[2].toFixed(2)); setMeter(t, 100 * s.cpu.load[0] / s.cpu.threads); }
+    if ((t = T.host)) { mv(t, s.name, ''); txt(t.ms, s.ip); }
+    if ((t = T.os)) { var o = s.os_update || {}; mv(t, s.os || '-', ''); txt(t.ms, o.staged ? o.staged + ' waits for a restart' : o.available ? o.latest + ' available' : o.checked ? 'Up to date · checked ' + rel(o.checked) : 'Not checked yet'); }
+    if ((t = T.docker)) { var dk = dockerStats(y); if (!dk) { mv(t, '-', ''); txt(t.ms, (y.docker && y.docker.error) || 'Loading'); } else { mv(t, String(dk.running), 'of ' + dk.total + ' running'); txt(t.ms, (dk.updates ? dk.updates + ' updates · ' : '') + (dk.unhealthy ? dk.unhealthy + ' unhealthy' : 'none unhealthy')); } }
+    if ((t = T.vms)) { var vm = vmStats(y); if (!vm) { mv(t, '-', ''); txt(t.ms, (y.vms && y.vms.error) || 'Loading'); } else { mv(t, String(vm.running), 'of ' + vm.total + ' running'); txt(t.ms, vm.paused ? vm.paused + ' paused or hibernated' : vm.total ? 'VM service running' : 'No VMs'); } }
+    if ((t = T.ups)) { var u = y.ups; if (!u) { mv(t, 'No UPS', ''); txt(t.ms, 'NUT or apcupsd not found'); } else { mv(t, pct(u.charge), ''); setMeter(t, u.charge, u.charge < 30 ? 'bad' : u.charge < 60 ? 'warn' : ''); txt(t.ms, u.status + (u.load !== null ? ' · load ' + pct(u.load) : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : '')); } }
   }
 
-  function meter(pct, hot) { return h('div', { class: 'meter' }, h('i', { class: hot ? 'hot' : '', style: { width: Math.max(0, Math.min(100, pct || 0)).toFixed(1) + '%' } })); }
-  function res(icon, val, lab, pct, title) { return h('div', { class: 'res', title: title || '' }, ic(icon), h('div', { class: 'rv' }, h('div', { class: 't' }, h('span', null, val), h('span', null, lab)), pct === null ? null : meter(pct, pct > 85))); }
-
-  function drawRbar() {
-    var rb = document.getElementById('und-rbar'); if (!rb) return; clear(rb);
-    var g = S.boot.layout.general, y = S.sys;
-    if (g.show_resources && y) {
-      rb.appendChild(res('cpu', y.cpu.pct === null ? '-' : Math.round(y.cpu.pct) + '%', 'CPU', y.cpu.pct, y.cpu.model));
-      rb.appendChild(res('mem', bytes(y.mem.free), 'Free', y.mem.pct, bytes(y.mem.used) + ' used of ' + bytes(y.mem.total)));
-      if (y.disk) rb.appendChild(res('disk', bytes(y.disk.free), 'Free', y.disk.pct, y.disk.path + ': ' + bytes(y.disk.used) + ' used of ' + bytes(y.disk.total)));
-      rb.appendChild(res('net', rate(y.net.tx) + ' ↑', rate(y.net.rx) + ' ↓', y.net.rx === null ? 0 : Math.min(100, 100 * Math.log10(1 + y.net.rx) / 9), y.net.iface));
-      if (y.cpu.temp !== null) rb.appendChild(res('temp', Math.round(y.cpu.temp) + '°C', 'Temp', y.cpu.temp, 'CPU package temperature'));
-      rb.appendChild(res('clock', upt(y.uptime), 'Up', Math.min(100, y.uptime / 86400 / 30 * 100), 'Uptime'));
-    }
-    if (g.show_date) rb.appendChild(h('div', { class: 'date' }, new Date().toLocaleDateString([], { dateStyle: 'long' })));
-    if (g.show_search) {
-      var E = { duckduckgo: 'https://duckduckgo.com/?q=', google: 'https://www.google.com/search?q=', bing: 'https://www.bing.com/search?q=', startpage: 'https://www.startpage.com/do/search?q=', brave: 'https://search.brave.com/search?q=' };
-      var inp = h('input', { type: 'search', placeholder: 'Search…', 'aria-label': 'Search the web', value: S.q || '' });
-      rb.appendChild(h('form', { onsubmit: function (e) { e.preventDefault(); if (inp.value.trim()) window.open(E[g.search] + encodeURIComponent(inp.value.trim()), '_blank', 'noopener'); } }, inp));
-    }
+  /* ---------- preferences for discovered containers and VMs ---------- */
+  function pref(kind, name) { var it = S.L[kind] && S.L[kind].items; return (it && !Array.isArray(it) && it[name]) || {}; }
+  function label(kind, name) { return pref(kind, name).label || name; }
+  function savePref(kind, name, val) {
+    if (!S.L[kind].items || Array.isArray(S.L[kind].items)) S.L[kind].items = {};
+    S.L[kind].items[name] = Object.assign({}, S.L[kind].items[name] || {}, val);
+    paintAll();
+    return api('prefs', { kind: kind, key: name, value: val }).then(function (j) { if (j.error) toast(j.error, true); else { S.L = j.layout; paintAll(); } });
+  }
+  function customize(kind, it) {
+    var p = Object.assign({ label: '', icon: '', description: '', favorite: false, hidden: false }, pref(kind, it.name));
+    var f = function (lab, k, ph) { return F(lab, h('input', { type: 'text', value: p[k], placeholder: ph || '', oninput: function (e) { p[k] = e.target.value; } })); };
+    var m = modal('Customize ' + it.name, h('div', null,
+      f('Display name', 'label', it.name), f('Icon', 'icon', 'Empty = the template icon. sh-NAME, NAME.png or a URL'), f('Description', 'description', 'Optional note'),
+      h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: p.favorite, onchange: function (e) { p.favorite = e.target.checked; } }), 'Favorite (shown in Favorites)'),
+      h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: p.hidden, onchange: function (e) { p.hidden = e.target.checked; } }), 'Hide from the dashboard'),
+      h('p', { class: 'muted sm' }, 'These are kept by name, so they survive container updates and re-creation.')),
+      [btn('Cancel', function () { m.close(); }), btn('Save', function () { m.close(); savePref(kind, it.name, p); }, 'pri')]);
   }
 
-  function spark(vals, max) {
-    var s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', 'spark'); s.setAttribute('viewBox', '0 0 100 40'); s.setAttribute('preserveAspectRatio', 'none');
-    if (vals.length < 2) return s;
-    var n = vals.length, pts = vals.map(function (v, i) { return [i / (n - 1) * 100, 40 - Math.max(0, Math.min(1, v / max)) * 38]; });
-    var d = 'M' + pts.map(function (p) { return p[0].toFixed(2) + ',' + p[1].toFixed(2); }).join(' L');
-    s.innerHTML = '<defs><linearGradient id="und-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f15a2c" stop-opacity=".35"/><stop offset="1" stop-color="#f15a2c" stop-opacity="0"/></linearGradient></defs>';
-    var a = document.createElementNS(SVGNS, 'path'); a.setAttribute('class', 'a'); a.setAttribute('d', d + ' L100,40 L0,40 Z');
-    var l = document.createElementNS(SVGNS, 'path'); l.setAttribute('class', 'l'); l.setAttribute('d', d); l.setAttribute('vector-effect', 'non-scaling-stroke');
-    s.appendChild(a); s.appendChild(l); return s;
-  }
-
-  function paintNative() {
-    var y = S.sys;
-    S.boot.layout.groups.forEach(function (g) {
-      g.services.forEach(function (s) {
-        if (!NATIVE[s.type] || s.type === 'link') return;
-        var cb = cardBody(s.id); if (!cb) return;
-        var c = cb.parentNode, sub = c.querySelector('.ch .sub');
-        if (!y) { clear(cb).appendChild(h('div', { class: 'empty' }, 'Loading…')); return; }
-        clear(cb); var old = c.querySelector('.spark'); if (old) old.parentNode.removeChild(old);
-        if (s.type === 'system_info') {
-          sub.textContent = y.cpu.model;
-          var o = y.os_update;
-          cb.appendChild(h('div', { class: 'sysinfo' },
-            h('div', null, h('div', null, 'Unraid OS ' + y.os), h('div', null, y.kernel), h('div', null, y.name + (y.array.state ? ' · array ' + y.array.state.toLowerCase() : '')),
-              o && o.available ? h('div', null, h('a', { href: '#system', onclick: function (e) { e.preventDefault(); go('system'); } }, 'Update to ' + o.latest)) : null),
-            h('div', { style: { 'text-align': 'right' } }, h('div', null, h('span', { class: 'k' }, 'CPU'), ' ', Math.round(y.cpu.pct || 0) + '%'), h('div', null, h('span', { class: 'k' }, 'Mem'), ' ', Math.round(y.mem.pct || 0) + '%'),
-              y.cpu.temp !== null ? h('div', null, h('span', { class: 'k' }, 'Temp'), ' ', Math.round(y.cpu.temp) + '°C') : null)));
-        } else if (s.type === 'cpu') {
-          c.insertBefore(spark(y.hist.map(function (x) { return x[1]; }), 100), cb);
-          cb.appendChild(h('div', { class: 'chart-lbl' }, h('span', null, y.cpu.model ? y.cpu.model.replace(/\s*@.*$/, '') : y.cpu.threads + ' threads'), h('span', null, h('b', null, Math.round(y.cpu.pct || 0) + '%'), ' Used')));
-        } else if (s.type === 'memory') {
-          c.insertBefore(spark(y.hist.map(function (x) { return x[2]; }), y.mem.total || 1), cb);
-          cb.appendChild(h('div', { class: 'chart-lbl' }, h('span', null, bytes(y.mem.free) + ' Free', h('br'), bytes(y.mem.total) + ' Total'), h('span', null, h('b', null, bytes(y.mem.used)), ' Used')));
-        }
-      });
+  /* ---- Docker ---- */
+  function dockerStats(y) {
+    var c = y.docker && y.docker.containers; if (!c) return null;
+    var s = { running: 0, stopped: 0, paused: 0, updates: 0, unhealthy: 0, total: c.length, updList: [] };
+    c.forEach(function (x) {
+      if (x.state === 'running') s.running++; else if (x.state === 'paused') s.paused++; else s.stopped++;
+      if (x.update === 'available' && !pref('docker', x.name).hidden) { s.updates++; s.updList.push(x.name); }
+      if (x.health === 'unhealthy') s.unhealthy++;
     });
+    return s;
   }
-
-  /* ================= Docker ================= */
-  function renderDocker(b) {
-    b.appendChild(h('div', { id: 'dk-sum' }));
-    var q = h('input', { type: 'search', placeholder: 'Filter containers…', value: S.q, oninput: function () { S.q = q.value; drawDocker(); } });
-    var f = h('select', { onchange: function () { S.filter = f.value; drawDocker(); } }, [['all', 'All'], ['running', 'Running'], ['stopped', 'Stopped'], ['updates', 'Updates available']].map(function (o) { return h('option', { value: o[0], selected: S.filter === o[0] }, o[1]); }));
-    b.appendChild(h('div', { class: 'tools' }, q, f, h('span', { class: 'grow' }),
-      btn('Check for updates', checkUpdates, '', 'restart', 'Ask the registries for newer images (Unraid\'s own check)'),
-      h('span', { id: 'dk-upall' })));
-    b.appendChild(h('div', { id: 'dk-tbl' }, h('div', { class: 'progress' }, h('i'))));
-    loadDocker(); every('docker', 10, loadDocker);
-    loadStats(); every('stats', 12, loadStats);
+  function dStateBadge(c) {
+    var b = S.busy['d:' + c.name];
+    if (b) return h('span', { class: 'badge info' }, b);
+    if (c.job === 'updating') return h('span', { class: 'badge info' }, 'updating');
+    if (c.state === 'running' && c.health === 'unhealthy') return h('span', { class: 'badge bad' }, 'unhealthy');
+    if (c.state === 'running' && c.health === 'starting') return h('span', { class: 'badge warn' }, 'starting');
+    var m = { running: ['running', 'ok'], exited: ['stopped', 'off'], paused: ['paused', 'warn'], restarting: ['restarting', 'warn'], created: ['created', 'off'], dead: ['dead', 'bad'], removing: ['removing', 'warn'] }[c.state] || [c.state, 'off'];
+    return h('span', { class: 'badge ' + m[1] }, m[0]);
   }
-  function loadDocker() { return api('docker').then(function (j) { S.docker = j; drawDocker(); }); }
-  function loadStats() { return api('docker_stats').then(function (j) { if (!j.error) { S.stats = j.stats || {}; drawDocker(); } }); }
+  function dUpdBadge(c) {
+    if (c.job === 'update_failed') return h('span', { class: 'badge bad', title: 'The last update failed; see the logs' }, 'update failed');
+    if (c.update === 'available') return h('span', { class: 'badge upd' }, '↑ update');
+    if (c.update === 'current') return h('span', { class: 'badge ok' }, 'up to date');
+    return h('span', { class: 'badge plain', title: c.managed ? 'Unraid has not checked this image yet, or the check failed: unknown, not "up to date"' : 'Not created from an Unraid template, so Unraid cannot check it' }, c.managed ? 'not checked' : 'no update check');
+  }
+  function uptimeText(c) { return c.state === 'running' ? String(c.status || '').replace(/\s*\(.*\)\s*$/, '').replace(/^Up\s+/, '') : (String(c.status || '').replace(/^Exited \(\d+\)\s*/, '') || '-'); }
 
-  function drawDocker() {
-    var t = document.getElementById('dk-tbl'); if (!t || !S.docker) return;
-    if (S.docker.error) { clear(t).appendChild(h('div', { class: 'banner bad' }, S.docker.error)); return; }
-    var all = S.docker.containers, run = 0, upd = [];
-    all.forEach(function (c) { if (c.state === 'running') run++; if (c.update === 'available') upd.push(c); });
-    var sum = clear(document.getElementById('dk-sum'));
-    sum.appendChild(h('div', { class: 'cards' }, stat('Containers', all.length), stat('Running', run), stat('Stopped', all.length - run), stat('Updates', upd.length, upd.length > 0)));
-    var ua = clear(document.getElementById('dk-upall'));
-    if (upd.length) ua.appendChild(btn('Update all (' + upd.length + ')', function () { updateMany(upd.map(function (c) { return c.name; })); }, 'pri', 'up'));
-    var q = (S.q || '').toLowerCase();
-    var rows = all.filter(function (c) {
-      if (q && (c.name + ' ' + c.image).toLowerCase().indexOf(q) < 0) return false;
-      if (S.filter === 'running') return c.state === 'running';
-      if (S.filter === 'stopped') return c.state !== 'running';
-      if (S.filter === 'updates') return c.update === 'available';
+  BUILD.docker = function (r) {
+    var D = S.L.docker;
+    r.filters = h('div', { class: 'seg', role: 'group', 'aria-label': 'Show containers' });
+    [['all', 'All'], ['running', 'Running'], ['stopped', 'Stopped'], ['updates', 'Updates'], ['problems', 'Problems'], ['favorites', 'Favorites']].forEach(function (f) {
+      var b = h('button', { type: 'button', class: S.fd === f[0] ? 'on' : '', 'aria-pressed': S.fd === f[0] ? 'true' : 'false', onclick: function () {
+        S.fd = f[0]; [].forEach.call(r.filters.childNodes, function (x) { x.className = x === b ? 'on' : ''; x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); paintDocker(S.live || {});
+      } }, f[1]);
+      r.filters.appendChild(b);
+    });
+    var sort = h('select', { 'aria-label': 'Sort containers', onchange: function () { D.sort = sort.value; api('prefs', { kind: 'docker_view', value: { sort: D.sort } }); paintDocker(S.live || {}); } },
+      [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']].map(function (o) { return h('option', { value: o[0], selected: D.sort === o[0] }, 'Sort: ' + o[1]); }));
+    var lay = h('div', { class: 'seg', role: 'group', 'aria-label': 'Layout' },
+      h('button', { type: 'button', class: D.layout === 'list' ? 'on' : '', title: 'List', 'aria-label': 'List layout', 'aria-pressed': D.layout === 'list' ? 'true' : 'false', onclick: function () { setLayout('docker', 'list'); } }, ic('list')),
+      h('button', { type: 'button', class: D.layout === 'cards' ? 'on' : '', title: 'Cards', 'aria-label': 'Card layout', 'aria-pressed': D.layout === 'cards' ? 'true' : 'false', onclick: function () { setLayout('docker', 'cards'); } }, ic('grid')));
+    r.updAll = h('span');
+    r.tools.appendChild(r.filters); r.tools.appendChild(sort); r.tools.appendChild(lay); r.tools.appendChild(r.updAll);
+    r.list = D.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel' }, h('div', { class: 'rowh', 'aria-hidden': 'true' }, h('span', null, 'Container'), h('span', null, 'Status'), h('span', { class: 'c-res' }, 'CPU / Memory'), h('span', { class: 'c-up' }, 'Uptime'), h('span', { class: 'c-upd' }, 'Version'), h('span', null, 'Actions')));
+    r.rows = D.layout === 'cards' ? r.list : h('div', { role: 'list' });
+    if (D.layout !== 'cards') r.list.appendChild(r.rows);
+    r.foot = h('div', { class: 'more' });
+    r.body.appendChild(r.list); r.body.appendChild(r.foot);
+    r.map = {};
+  };
+  function setLayout(kind, l) { S.L[kind].layout = l; api('prefs', { kind: kind + '_view', value: { layout: l } }); shell(); }
+  function paintDocker(y) {
+    var r = R.docker, D = S.L.docker, d = y.docker;
+    var empty = r.rows.querySelector(':scope > .empty');
+    if (!d) { if (!r.rows.firstChild) r.rows.appendChild(h('div', { class: 'empty' }, 'Loading containers…')); return; }
+    if (d.error) { r.map = {}; clear(r.rows).appendChild(h('div', { class: 'empty' }, d.error)); return; }
+    if (empty) empty.remove();
+    var hiddenN = 0;
+    var list = d.containers.filter(function (c) {
+      var p = pref('docker', c.name);
+      if (p.hidden && !S.showHidden) { hiddenN++; return false; }
+      if (!matches(c.name + ' ' + (p.label || '') + ' ' + c.image)) return false;
+      if (S.fd === 'running') return c.state === 'running';
+      if (S.fd === 'stopped') return c.state !== 'running';
+      if (S.fd === 'updates') return c.update === 'available';
+      if (S.fd === 'problems') return c.health === 'unhealthy' || c.state === 'restarting' || c.job === 'update_failed' || (c.state === 'exited' && c.exit && c.autostart);
+      if (S.fd === 'favorites') return !!p.favorite;
+      if (D.hide_stopped && c.state !== 'running' && !S.q) { hiddenN++; return false; }
       return true;
     });
-    var tb = h('tbody');
-    rows.forEach(function (c) { tb.appendChild(dockerRow(c)); });
-    if (!rows.length) tb.appendChild(h('tr', null, h('td', { colspan: '6', class: 'muted' }, 'No containers match.')));
-    clear(t).appendChild(h('div', { class: 'panel', style: { padding: '0', overflow: 'auto' } }, h('table', { class: 't' },
-      h('thead', null, h('tr', null, h('th', null, 'Container'), h('th', null, 'State'), h('th', null, 'Version'), h('th', null, 'CPU / Memory'), h('th', null, 'Uptime'), h('th', { style: { 'text-align': 'right' } }, 'Actions'))), tb)));
+    var order = { running: 0, restarting: 1, paused: 2, created: 3, exited: 4, dead: 5 };
+    list.sort(function (a, b) {
+      var fa = pref('docker', a.name).favorite ? 0 : 1, fb = pref('docker', b.name).favorite ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      if (D.sort === 'status') return (order[a.state] === undefined ? 9 : order[a.state]) - (order[b.state] === undefined ? 9 : order[b.state]) || a.name.localeCompare(b.name);
+      if (D.sort === 'cpu') return (b.cpu || 0) - (a.cpu || 0) || a.name.localeCompare(b.name);
+      if (D.sort === 'memory') return (b.mem || 0) - (a.mem || 0) || a.name.localeCompare(b.name);
+      return label('docker', a.name).localeCompare(label('docker', b.name));
+    });
+    var seen = {};
+    list.forEach(function (c, i) {
+      var p = pref('docker', c.name);
+      // rows are only rebuilt when something structural changes, so menus and focus survive the 2-second refresh
+      var sig = JSON.stringify([c.state, c.health, c.update, c.job, c.webui, c.managed, S.busy['d:' + c.name] || '', p, c.icon, c.image, D.layout]);
+      var row = r.map[c.name];
+      if (!row || row._sig !== sig) {
+        var had = row && row.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
+        var nrow = D.layout === 'cards' ? dTile(c, p) : dRow(c, p);
+        nrow._sig = sig;
+        if (row && row.parentNode) row.parentNode.replaceChild(nrow, row);
+        r.map[c.name] = row = nrow;
+        if (had) { var f = row.querySelector('[aria-label="' + had.replace(/"/g, '') + '"]'); if (f && !f.disabled) f.focus(); }
+      }
+      dVolatile(row, c);
+      if (r.rows.childNodes[i] !== row) r.rows.insertBefore(row, r.rows.childNodes[i] || null);
+      seen[c.name] = 1;
+    });
+    Object.keys(r.map).forEach(function (n) { if (!seen[n]) { var x = r.map[n]; if (x.parentNode) x.parentNode.removeChild(x); delete r.map[n]; } });
+    if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, S.q ? 'No containers match "' + S.q + '".' : d.containers.length ? 'No containers in this view.' : 'No containers yet.'));
+    var dk = dockerStats(y), fs = JSON.stringify([hiddenN, S.showHidden, dk.updates]);
+    if (r.fSig !== fs) {
+      r.fSig = fs; clear(r.foot); clear(r.updAll);
+      if (hiddenN || S.showHidden) r.foot.appendChild(btn(S.showHidden ? 'Hide hidden containers' : 'Show ' + hiddenN + ' hidden', function () { S.showHidden = !S.showHidden; r.fSig = null; if (R.vms) R.vms.sig = null; paintAll(); }, 'sm ghost', S.showHidden ? 'eyeoff' : 'eye'));
+      if (dk.updates) r.updAll.appendChild(btn('Update all (' + dk.updates + ')', function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up', 'Update every container that has an update'));
+    }
   }
-  function stat(k, v, hot) { return h('div', { class: 'stat' + (hot ? ' hot' : '') }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v)); }
-  function stateBadge(st, health) {
-    var m = { running: ['Started', 'ok'], exited: ['Stopped', 'bad'], paused: ['Paused', 'warn'], restarting: ['Restarting', 'warn'], created: ['Created', ''], dead: ['Dead', 'bad'] }[st] || [st, ''];
-    return h('span', null, h('span', { class: 'badge ' + m[1] }, m[0]), health && health !== 'healthy' ? h('span', { class: 'badge ' + (health === 'unhealthy' ? 'bad' : 'warn'), style: { 'margin-left': '4px' } }, health) : null);
+  function dActions(c, p, inTile) {
+    var run = c.state === 'running', busy = !!S.busy['d:' + c.name] || c.job === 'updating';
+    var a = h('div', { class: 'acts c-acts' });
+    if (run && c.webui) a.appendChild(h('a', { class: 'btn ic sm', href: c.webui, target: '_blank', rel: 'noopener', title: 'Open WebUI', 'aria-label': 'Open WebUI of ' + c.name }, ic('web')));
+    if (c.state === 'paused') a.appendChild(btn('', function () { dAct(c, 'unpause'); }, 'sm okc', 'play', 'Resume ' + c.name));
+    else if (run || c.state === 'restarting') a.appendChild(btn('', function () { dAct(c, 'stop'); }, 'sm danger', 'stop', 'Stop ' + c.name));
+    else a.appendChild(btn('', function () { dAct(c, 'start'); }, 'sm okc', 'play', 'Start ' + c.name));
+    if (c.state !== 'paused') a.appendChild(btn('', function () { dAct(c, 'restart'); }, 'sm', 'restart', 'Restart ' + c.name));
+    if (c.update === 'available' && inTile) a.appendChild(btn('Update', function () { updateMany([c.name]); }, 'sm pri', 'up'));
+    var more = btn('', function () {
+      menu(more, [
+        run ? ['Pause', 'pause', function () { dAct(c, 'pause'); }, '', busy] : null,
+        ['Update' + (c.update === 'available' ? '' : ' (force)'), 'up', function () { updateMany([c.name]); }, '', busy],
+        'hr', ['Logs', 'logs', function () { logs(c.name); }], ['Details', 'info', function () { inspect(c.name); }], 'hr',
+        [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('docker', c.name, { favorite: !p.favorite }); }],
+        [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('docker', c.name, { hidden: !p.hidden }); }],
+        ['Customize…', 'edit', function () { customize('docker', c); }]]);
+    }, 'sm', 'dots', 'More actions for ' + c.name);
+    more.setAttribute('aria-haspopup', 'menu');
+    a.appendChild(more);
+    if (busy) [].forEach.call(a.querySelectorAll('button'), function (b) { if (b !== more) b.disabled = true; });
+    return a;
   }
-  function dockerRow(c) {
-    var busy = S.busy['d:' + c.name] || c.job === 'running';
-    var st = S.stats[c.name];
-    var a = h('td', { class: 'acts' });
-    if (c.webui && c.state === 'running') a.appendChild(h('a', { class: 'btn ic sm', href: c.webui, target: '_blank', rel: 'noopener', title: 'Open WebUI' }, ic('web')));
-    if (c.state === 'running') {
-      a.appendChild(btn('', function () { dAct(c, 'restart'); }, 'ic sm', 'restart', 'Restart'));
-      a.appendChild(btn('', function () { dAct(c, 'pause'); }, 'ic sm', 'pause', 'Pause'));
-      a.appendChild(btn('', function () { dAct(c, 'stop'); }, 'ic sm danger', 'stop', 'Stop'));
-    } else if (c.state === 'paused') {
-      a.appendChild(btn('', function () { dAct(c, 'unpause'); }, 'ic sm okc', 'play', 'Resume'));
-      a.appendChild(btn('', function () { dAct(c, 'stop'); }, 'ic sm danger', 'stop', 'Stop'));
-    } else a.appendChild(btn('', function () { dAct(c, 'start'); }, 'ic sm okc', 'play', 'Start'));
-    a.appendChild(btn('', function () { logs(c.name); }, 'ic sm', 'logs', 'Logs'));
-    if (c.update === 'available' || c.job === 'running') a.appendChild(btn(c.job === 'running' ? 'Updating…' : 'Update', function () { updateOne(c.name); }, 'sm pri', 'up', 'Pull the new image and recreate the container from its Unraid template'));
-    a.querySelectorAll('button').forEach(function (x) { if (busy && !/Updating/.test(x.textContent)) x.disabled = true; });
-    var ver = c.update === 'available' ? h('span', { class: 'badge acc' }, 'Update available') : c.update === 'current' ? h('span', { class: 'badge ok' }, 'Up to date') : h('span', { class: 'badge', title: c.managed ? 'Not checked yet' : 'Not managed by an Unraid template' }, c.managed ? 'Not checked' : 'Not managed');
-    return h('tr', null,
-      h('td', { class: 'name', 'data-l': 'Container' }, h('div', { class: 'nm' }, c.icon ? img(c.icon, '') : h('span', { class: 'ph' }), c.name, c.autostart ? h('span', { class: 'badge info', title: 'Starts with the array' }, 'auto') : null), h('div', { class: 'im' }, c.image)),
-      h('td', null, stateBadge(c.state, c.health)),
-      h('td', null, ver),
-      h('td', { class: 'num' }, st ? st.cpu.toFixed(1) + '% · ' + st.mem : c.state === 'running' ? '…' : '-'),
-      h('td', { class: 'num' }, c.state === 'running' && c.started ? rel(c.started).replace(' ago', '') : '-'),
-      a);
+  function dWho(c, p) {
+    return h('div', { class: 'who c-who' }, img(iconUrl(p.icon || c.icon), '', 'box'),
+      h('div', { class: 'ell' }, h('div', { class: 'nm' }, h('span', { class: 'ell', title: c.name }, p.label || c.name), p.favorite ? ic('star', true) : null),
+        h('div', { class: 'im ell', title: c.image }, p.description || c.image)));
+  }
+  function dRow(c, p) {
+    var row = h('div', { class: 'rowi' + (S.busy['d:' + c.name] ? ' busy' : ''), role: 'listitem', 'data-name': c.name });
+    row._cpu = h('span'); row._mem = h('span', { class: 'muted' }); row._m = h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i')); row._up = h('span', { class: 'c-up num muted sm' }); row._mob = h('span', { class: 'mob muted sm num' });
+    row.appendChild(dWho(c, p));
+    row.appendChild(h('div', { class: 'c-st' }, dStateBadge(c), c.update === 'available' || c.job === 'update_failed' ? h('span', { class: 'mob' }, dUpdBadge(c)) : null, row._mob));
+    row.appendChild(h('div', { class: 'res c-res' }, h('div', { class: 'inl', style: { gap: '6px' } }, row._cpu, row._mem), row._m));
+    row.appendChild(row._up);
+    row.appendChild(h('div', { class: 'c-upd' }, dUpdBadge(c)));
+    row.appendChild(dActions(c, p, false));
+    return row;
+  }
+  function dTile(c, p) {
+    var t = h('div', { class: 'tile' + (S.busy['d:' + c.name] ? ' busy' : ''), role: 'listitem', 'data-name': c.name });
+    t._cpu = h('span'); t._mem = h('span'); t._up = h('span'); t._m = h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i'));
+    t.appendChild(dWho(c, p));
+    t.appendChild(h('div', { class: 'chips' }, dStateBadge(c), dUpdBadge(c)));
+    t.appendChild(h('div', { class: 'stats' }, t._cpu, t._mem, t._up));
+    t.appendChild(t._m);
+    t.appendChild(dActions(c, p, true));
+    return t;
+  }
+  function dVolatile(row, c) {
+    var run = c.state === 'running';
+    txt(row._cpu, run && c.cpu !== null ? c.cpu.toFixed(1) + '%' : run ? '…' : '-');
+    txt(row._mem, run && c.mem !== null ? bytes(c.mem) : '');
+    var i = row._m.firstChild;
+    i.style.width = (run && c.cpu !== null ? Math.min(100, c.cpu) : 0) + '%'; i.className = 'acc';
+    row._cpu.title = 'CPU: 100% = one core (as in Unraid\'s Docker tab)';
+    txt(row._up, uptimeText(c) + (c.restarts ? ' · ' + c.restarts + ' restarts' : ''));
+    if (row._mob) txt(row._mob, run ? (c.cpu !== null ? c.cpu.toFixed(1) + '% · ' : '') + (c.mem !== null ? bytes(c.mem) + ' · ' : '') + uptimeText(c) : uptimeText(c));
   }
   function dAct(c, op) {
-    var go2 = function () {
-      S.busy['d:' + c.name] = true; drawDocker();
-      act('docker_action', { name: c.name, op: op }, c.name + ': ' + op + ' done').then(function () { delete S.busy['d:' + c.name]; loadDocker(); });
+    var key = 'd:' + c.name;
+    if (S.busy[key]) return;
+    var nm = label('docker', c.name);
+    var run = function () {
+      S.busy[key] = { start: 'starting', stop: 'stopping', restart: 'restarting', pause: 'pausing', unpause: 'resuming' }[op] || op;
+      paintAll();
+      api('docker_action', { name: c.name, op: op }, 130000).then(function (j) {
+        delete S.busy[key];
+        if (j.error) toast(nm + ': ' + j.error, true); else toast(nm + ': ' + ({ start: 'started', stop: 'stopped', restart: 'restarted', pause: 'paused', unpause: 'resumed' }[op] || op + ' done'));
+        if (S.paused) { S.paused = false; togglePause(); }
+        refreshNow();
+      });
     };
-    if (op === 'stop') confirmBox('Stop ' + c.name + '?', 'The container will be stopped.', 'Stop', true).then(function (y) { if (y) go2(); }); else go2();
+    if (op === 'stop' || op === 'restart') confirmBox((op === 'stop' ? 'Stop ' : 'Restart ') + nm + '?', op === 'stop' ? 'The container stops; its service is unavailable until it is started again.' : 'The container is stopped and started again; its service is briefly unavailable.', op === 'stop' ? 'Stop' : 'Restart', op === 'stop').then(function (y) { if (y) run(); });
+    else run();
   }
   function checkUpdates() {
-    act('docker_check', {}, 'Checking for updates…').then(function () {
-      var n = 0, t = setInterval(function () {
-        api('docker_job', {}).then(function (j) { if (j.state !== 'running' || ++n > 120) { clearInterval(t); toast('Update check finished'); loadDocker(); } });
-      }, 3000);
-      S.timers.chk = t;
+    if (S.busy.dcheck) return;
+    S.busy.dcheck = true; paintAll();
+    act('docker_check', {}, 'Checking every container for updates…').then(function (j) {
+      if (j.error) { delete S.busy.dcheck; paintAll(); return; }
+      var n = 0;
+      (function poll() {
+        api('docker_job', {}).then(function (k) {
+          if ((k.state === 'running' || k.error) && ++n < 200) { setTimeout(poll, 3000); return; }
+          delete S.busy.dcheck; toast('Container update check finished'); refreshNow();
+        });
+      })();
     });
   }
-  function updateOne(name) { return updateMany([name]); }
+  /* updates run one at a time, each through Unraid's update_container; the dialog shows each one's output */
   function updateMany(names) {
-    var pre = h('pre', { class: 'log wrap' }), prog = h('div', { class: 'progress' }, h('i')), status = h('div', { class: 'muted sm' });
-    var closeBtn = btn('Close', function () { m.close(); });
-    var m = modal('Updating ' + (names.length === 1 ? names[0] : names.length + ' containers'), h('div', null, status, prog, pre), [closeBtn], true);
-    var i = 0, out = '';
+    names = (names || []).filter(function (n) { return !S.busy['d:' + n]; });
+    if (!names.length) return;
+    var list = h('ul', null, names.slice(0, 30).map(function (n) { return h('li', null, label('docker', n)); }), names.length > 30 ? h('li', null, '… and ' + (names.length - 30) + ' more') : null);
+    confirmBox(names.length === 1 ? 'Update ' + label('docker', names[0]) + '?' : 'Update ' + names.length + ' containers?',
+      h('div', null, h('p', null, 'Each container is stopped, its newest image is pulled and it is recreated from its Unraid template (the same as Unraid\'s Docker tab). Its service is unavailable meanwhile. They are updated one after the other.'), list),
+      names.length === 1 ? 'Update' : 'Update all ' + names.length).then(function (y) { if (y) runUpdates(names); });
+  }
+  function runUpdates(names) {
+    var pre = h('pre', { class: 'log wrap' }), prog = h('div', { class: 'progress' }, h('i')), status = h('div', { class: 'sm', role: 'status', 'aria-live': 'polite' });
+    var results = h('div', { class: 'chips', style: { margin: '8px 0' } });
+    var stop = false;
+    var stopB = btn('Stop after this one', function () { stop = true; stopB.disabled = true; });
+    var m = modal('Updating ' + (names.length === 1 ? label('docker', names[0]) : names.length + ' containers'), h('div', null, status, prog, results, pre),
+      [names.length > 1 ? stopB : null, btn('Close', function () { m.close(); })].filter(Boolean), true);
+    var i = 0, out = '', ok = 0, bad = 0;
+    names.forEach(function (n) { S.busy['d:' + n] = 'queued'; });
+    paintAll();
     function next() {
-      if (i >= names.length) { prog.style.display = 'none'; status.textContent = 'Finished.'; loadDocker(); return; }
+      if (i >= names.length || stop) {
+        names.slice(i).forEach(function (n) { delete S.busy['d:' + n]; });
+        prog.style.display = 'none'; stopB.disabled = true;
+        status.textContent = 'Finished: ' + ok + ' updated' + (bad ? ', ' + bad + ' failed' : '') + (stop && i < names.length ? ', ' + (names.length - i) + ' not started' : '') + '.';
+        if (!m.parentNode) toast(status.textContent, bad > 0);
+        refreshNow(); return;
+      }
       var n = names[i++];
-      status.textContent = 'Updating ' + n + ' (' + i + ' of ' + names.length + ')…';
-      api('docker_action', { name: n, op: 'update' }).then(function (j) {
-        if (j.error) { out += '\n[' + n + '] ' + j.error + '\n'; pre.textContent = out; return next(); }
-        var t = setInterval(function () {
+      S.busy['d:' + n] = 'updating'; paintAll();
+      status.textContent = 'Updating ' + label('docker', n) + ' (' + i + ' of ' + names.length + ')…';
+      api('docker_action', { name: n, op: 'update' }, 30000).then(function (j) {
+        if (j.error) { delete S.busy['d:' + n]; bad++; results.appendChild(h('span', { class: 'badge bad' }, n)); out += '[' + n + '] ' + j.error + '\n\n'; pre.textContent = out; return next(); }
+        (function poll() {
           api('docker_job', { name: n }).then(function (k) {
-            pre.textContent = out + '[' + n + ']\n' + (k.out || ''); pre.scrollTop = pre.scrollHeight;
-            if (k.state !== 'running') { clearInterval(t); out = pre.textContent + '\n'; next(); }
+            if (!k.error) { pre.textContent = out + '[' + n + ']\n' + (k.out || ''); pre.scrollTop = pre.scrollHeight; }
+            if (k.state === 'running' || k.error) { setTimeout(poll, 1500); return; }
+            delete S.busy['d:' + n];
+            if (k.ok) { ok++; results.appendChild(h('span', { class: 'badge ok' }, n)); } else { bad++; results.appendChild(h('span', { class: 'badge bad' }, n)); }
+            out = pre.textContent + '\n'; next();
           });
-        }, 1500);
-        m.onclose = function () { clearInterval(t); loadDocker(); };
+        })();
       });
     }
     next();
   }
 
   function logs(name) {
-    var lines = h('select', null, [100, 300, 1000, 5000].map(function (n) { return h('option', { value: n, selected: n === 300 }, n + ' lines'); }));
-    var find = h('input', { type: 'search', placeholder: 'Highlight…' });
+    var lines = h('select', { 'aria-label': 'Number of lines' }, [100, 300, 1000, 5000].map(function (n) { return h('option', { value: n, selected: n === 300 }, n + ' lines'); }));
+    var find = h('input', { type: 'search', placeholder: 'Highlight…', 'aria-label': 'Highlight text in the log' });
     var follow = h('input', { type: 'checkbox', checked: true }), wrap = h('input', { type: 'checkbox', checked: LS.get('wrap', true) });
-    var pre = h('pre', { class: 'log' + (wrap.checked ? ' wrap' : '') }, 'Loading…');
-    var text = '';
+    var pre = h('pre', { class: 'log' + (wrap.checked ? ' wrap' : ''), tabindex: '0', 'aria-label': 'Log of ' + name }, 'Loading…');
+    var text = '', busy = false;
     function paint() {
       var atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 30;
       clear(pre); var q = find.value.trim();
@@ -462,259 +877,322 @@
       }
       if (atEnd || follow.checked) pre.scrollTop = pre.scrollHeight;
     }
-    function load() { return api('docker_logs', { name: name, lines: lines.value }).then(function (j) { text = j.error ? 'Error: ' + j.error : j.log; paint(); }); }
+    function load() { if (busy) return; busy = true; api('docker_logs', { name: name, lines: lines.value }).then(function (j) { busy = false; text = j.error ? 'Error: ' + j.error : j.log; paint(); }); }
     lines.onchange = load; find.oninput = paint; wrap.onchange = function () { LS.set('wrap', wrap.checked); pre.classList.toggle('wrap', wrap.checked); };
-    var dl = btn('Download', function () { var a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/plain' })), download: name + '.log' }); root.appendChild(a); a.click(); root.removeChild(a); }, 'sm');
-    var m = modal(h('span', null, 'Logs · ', name), h('div', null,
-      h('div', { class: 'tools' }, lines, find, h('label', { class: 'switch' }, follow, 'Live'), h('label', { class: 'switch' }, wrap, 'Wrap'), h('span', { class: 'grow' }), btn('Refresh', load, 'sm', 'restart'), dl), pre),
-      [btn('Close', function () { m.close(); })], true);
+    var dl = btn('Download', function () { var a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/plain' })), download: name + '.log' }); root.appendChild(a); a.click(); root.removeChild(a); }, 'sm', 'download');
+    var m = modal('Logs · ' + label('docker', name), h('div', null,
+      h('div', { class: 'ftr', style: { 'margin-bottom': '8px' } }, lines, find, h('label', { class: 'switch' }, follow, 'Live'), h('label', { class: 'switch' }, wrap, 'Wrap'), h('span', { class: 'grow' }), btn('Refresh', load, 'sm', 'restart'), dl), pre),
+      [btn('Details', function () { m.close(); inspect(name); }, '', 'info'), btn('Close', function () { m.close(); })], true);
     var t = setInterval(function () { if (follow.checked && !document.hidden) load(); }, 3000);
     m.onclose = function () { clearInterval(t); };
     load();
   }
-
-  /* ================= VMs ================= */
-  function renderVms(b) {
-    b.appendChild(h('div', { id: 'vm-tbl' }, h('div', { class: 'progress' }, h('i'))));
-    loadVms(); every('vms', 8, loadVms);
+  function inspect(name) {
+    var box = h('div', null, h('div', { class: 'progress' }, h('i')));
+    var m = modal('Details · ' + label('docker', name), box, [btn('Logs', function () { m.close(); logs(name); }, '', 'logs'), btn('Close', function () { m.close(); })], true);
+    api('docker_inspect', { name: name }).then(function (j) {
+      clear(box);
+      if (j.error) { box.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
+      var kv = function (rows) { return h('div', { class: 'kv2' }, rows.filter(Boolean).map(function (r) { return [h('span', null, r[0]), h('span', null, r[1])]; })); };
+      var sub = function (t) { return h('h4', { class: 'muted sm', style: { margin: '14px 0 6px' } }, t); };
+      box.appendChild(kv([['Image', j.image + ' (' + j.image_id + ')'], ['Container id', j.id], ['State', j.state + (j.exit ? ' · exit code ' + j.exit : '') + (j.oom ? ' · killed: out of memory' : '')],
+        j.error ? ['Error', j.error] : null, ['Created', j.created ? new Date(j.created * 1000).toLocaleString() : '-'], ['Started', j.started ? new Date(j.started * 1000).toLocaleString() : '-'],
+        ['Restarts', j.restarts + (j.restart_policy ? ' · policy ' + j.restart_policy : '')], ['Network', j.network_mode + (j.networks.length ? ' · ' + j.networks.map(function (n) { return n.name + (n.ip ? ' ' + n.ip : ''); }).join(', ') : '')],
+        ['Ports', j.ports.join(', ') || 'none'], j.privileged ? ['Privileged', 'yes'] : null]));
+      if (j.health.length) { box.appendChild(sub('Health checks')); j.health.forEach(function (x) { box.appendChild(h('div', { class: 'sm', style: { 'margin-bottom': '4px' } }, h('span', { class: 'badge ' + (x.code ? 'bad' : 'ok') }, x.code ? 'failed' : 'ok'), ' ', x.at ? rel(x.at) : '', ' ', h('span', { class: 'muted' }, x.out))); }); }
+      box.appendChild(sub('Volumes'));
+      box.appendChild(j.mounts.length ? h('div', { class: 'tw' }, h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Host path'), h('th', null, 'Container path'), h('th', null, 'Mode'))),
+        h('tbody', null, j.mounts.map(function (x) { return h('tr', null, h('td', { class: 'mono' }, x.src), h('td', { class: 'mono' }, x.dst), h('td', null, x.rw ? 'read-write' : 'read-only')); })))) : h('div', { class: 'muted sm' }, 'none'));
+      box.appendChild(sub('Environment variables (names only: values often hold passwords)'));
+      box.appendChild(h('div', { class: 'mono muted' }, j.env.join(', ') || 'none'));
+    });
   }
-  function loadVms() { return api('vms').then(function (j) { S.vms = j; drawVms(); }); }
-  function vmBadge(s) {
-    var m = { running: ['Started', 'ok'], 'shut off': ['Stopped', 'bad'], paused: ['Paused', 'warn'], pmsuspended: ['Hibernated', 'warn'], 'in shutdown': ['Shutting down', 'warn'], crashed: ['Crashed', 'bad'] }[s] || [s, ''];
+
+  /* ---- VMs ---- */
+  function vmStats(y) {
+    var v = y.vms && y.vms.vms; if (!v) return null;
+    var s = { running: 0, stopped: 0, paused: 0, total: v.length };
+    v.forEach(function (x) { if (x.state === 'running') s.running++; else if (x.state === 'paused' || x.state === 'pmsuspended') s.paused++; else s.stopped++; });
+    return s;
+  }
+  function vStateBadge(st, busy) {
+    if (busy) return h('span', { class: 'badge info' }, busy);
+    var m = { running: ['running', 'ok'], 'shut off': ['stopped', 'off'], paused: ['paused', 'warn'], pmsuspended: ['hibernated', 'warn'], 'in shutdown': ['shutting down', 'warn'], crashed: ['crashed', 'bad'] }[st] || [st, 'off'];
     return h('span', { class: 'badge ' + m[1] }, m[0]);
   }
-  function drawVms() {
-    var t = document.getElementById('vm-tbl'); if (!t || !S.vms) return;
-    if (S.vms.error) { clear(t).appendChild(h('div', { class: 'banner bad' }, S.vms.error)); return; }
-    var tb = h('tbody');
-    S.vms.vms.forEach(function (v) {
-      var a = h('td', { class: 'acts' }), busy = S.busy['v:' + v.name];
-      if (v.state === 'running') {
-        if (v.vnc) a.appendChild(h('a', { class: 'btn ic sm', href: '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=' + encodeURIComponent(location.port) + '&path=' + encodeURIComponent(v.vnc), target: '_blank', rel: 'noopener', title: 'VNC console' }, ic('screen')));
-        a.appendChild(btn('', function () { vAct(v, 'restart'); }, 'ic sm', 'restart', 'Restart'));
-        a.appendChild(btn('', function () { vAct(v, 'pause'); }, 'ic sm', 'pause', 'Pause'));
-        a.appendChild(btn('', function () { vAct(v, 'hibernate'); }, 'ic sm', 'moon', 'Hibernate (needs the QEMU guest agent)'));
-        a.appendChild(btn('', function () { vAct(v, 'stop'); }, 'ic sm danger', 'stop', 'Stop (ACPI shutdown)'));
-        a.appendChild(btn('', function () { vAct(v, 'kill'); }, 'ic sm danger', 'power', 'Force stop'));
-      } else if (v.state === 'paused' || v.state === 'pmsuspended') {
-        a.appendChild(btn('', function () { vAct(v, 'resume'); }, 'ic sm okc', 'play', 'Resume'));
-        a.appendChild(btn('', function () { vAct(v, 'kill'); }, 'ic sm danger', 'power', 'Force stop'));
-      } else if (v.state === 'in shutdown') {
-        a.appendChild(btn('', function () { vAct(v, 'kill'); }, 'ic sm danger', 'power', 'Force stop'));
-      } else a.appendChild(btn('', function () { vAct(v, 'start'); }, 'ic sm okc', 'play', 'Start'));
-      if (busy) a.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
-      tb.appendChild(h('tr', null,
-        h('td', { class: 'name' }, h('div', { class: 'nm' }, v.icon ? img(v.icon, '') : h('span', { class: 'ph' }), v.name, v.autostart ? h('span', { class: 'badge info' }, 'auto') : null), h('div', { class: 'im' }, v.os || '')),
-        h('td', null, vmBadge(v.state)), h('td', { class: 'num' }, v.cpus + ' vCPU'), h('td', { class: 'num' }, bytes(v.memory)), h('td', null, v.agent ? h('span', { class: 'badge ok', title: 'QEMU guest agent channel present: hibernate is available' }, 'Agent') : h('span', { class: 'badge', title: 'No guest agent channel: hibernate will not work' }, 'No agent')), a));
+  BUILD.vms = function (r) {
+    var V = S.L.vms;
+    r.tools.appendChild(h('div', { class: 'seg', role: 'group', 'aria-label': 'Layout' },
+      h('button', { type: 'button', class: V.layout === 'list' ? 'on' : '', title: 'List', 'aria-label': 'List layout', 'aria-pressed': V.layout === 'list' ? 'true' : 'false', onclick: function () { setLayout('vms', 'list'); } }, ic('list')),
+      h('button', { type: 'button', class: V.layout === 'cards' ? 'on' : '', title: 'Cards', 'aria-label': 'Card layout', 'aria-pressed': V.layout === 'cards' ? 'true' : 'false', onclick: function () { setLayout('vms', 'cards'); } }, ic('grid'))));
+    r.list = V.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel' }, h('div', { class: 'rowh', 'aria-hidden': 'true' }, h('span', null, 'Virtual machine'), h('span', null, 'Status'), h('span', { class: 'c-res' }, 'vCPUs / Memory'), h('span', { class: 'c-up' }, 'Autostart'), h('span', { class: 'c-upd' }, 'Guest agent'), h('span', null, 'Actions')));
+    r.rows = V.layout === 'cards' ? r.list : h('div', { role: 'list' });
+    if (V.layout !== 'cards') r.list.appendChild(r.rows);
+    r.body.appendChild(r.list);
+  };
+  var VMOPS = { start: ['Start', 'play', 'okc'], resume: ['Resume', 'play', 'okc'], stop: ['Shut down', 'stop', 'danger'], restart: ['Restart', 'restart', ''], pause: ['Pause', 'pause', ''], hibernate: ['Hibernate', 'moon', ''], kill: ['Force stop', 'power', 'danger'] };
+  function paintVms(y) {
+    var r = R.vms, v = y.vms;
+    if (!v) { if (!r.rows.firstChild) r.rows.appendChild(h('div', { class: 'empty' }, 'Loading VMs…')); return; }
+    var hidden = 0;
+    var list = v.error ? [] : v.vms.filter(function (x) { var p = pref('vms', x.name); if (p.hidden && !S.showHidden) { hidden++; return false; } return matches(x.name + ' ' + (p.label || '') + ' ' + x.os); });
+    var busy = {}; list.forEach(function (x) { busy[x.name] = S.busy['v:' + x.name] || ''; });
+    var sig = JSON.stringify([v.error, list, hidden, S.showHidden, S.L.vms, busy, S.q]);
+    if (r.sig === sig) return; r.sig = sig;
+    var focus = r.rows.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
+    clear(r.rows);
+    if (v.error) { r.rows.appendChild(h('div', { class: 'empty' }, v.error)); return; }
+    if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, S.q ? 'No VMs match "' + S.q + '".' : v.vms.length ? 'All VMs are hidden.' : 'No virtual machines.'));
+    list.forEach(function (x) {
+      var p = pref('vms', x.name), b = busy[x.name];
+      var a = h('div', { class: 'acts c-acts' });
+      if (x.state === 'running' && x.vnc) a.appendChild(h('a', { class: 'btn ic sm', href: UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=&path=' + encodeURIComponent(x.vnc), target: '_blank', rel: 'noopener', title: 'VNC console', 'aria-label': 'VNC console of ' + x.name }, ic('screen')));
+      var main = x.ops.indexOf('start') >= 0 ? 'start' : x.ops.indexOf('resume') >= 0 ? 'resume' : x.ops.indexOf('stop') >= 0 ? 'stop' : null;
+      if (main) a.appendChild(btn('', function () { vAct(x, main); }, 'sm ' + VMOPS[main][2], VMOPS[main][1], VMOPS[main][0] + ' ' + x.name));
+      var rest = x.ops.filter(function (o) { return o !== main; });
+      var more = btn('', function () {
+        menu(more, rest.map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' ? 'danger' : '', !!b]; })
+          .concat([x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
+            [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('vms', x.name, { favorite: !p.favorite }); }],
+            [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('vms', x.name, { hidden: !p.hidden }); }],
+            ['Customize…', 'edit', function () { customize('vms', x); }]]));
+      }, 'sm', 'dots', 'More actions for ' + x.name);
+      more.setAttribute('aria-haspopup', 'menu');
+      a.appendChild(more);
+      if (b) [].forEach.call(a.querySelectorAll('button'), function (z) { if (z !== more) z.disabled = true; });
+      var who = h('div', { class: 'who c-who' }, img(iconUrl(p.icon || x.icon), '', 'vm'), h('div', { class: 'ell' }, h('div', { class: 'nm' }, h('span', { class: 'ell' }, p.label || x.name), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')));
+      var res = x.cpus + ' vCPU · ' + bytes(x.memory);
+      if (S.L.vms.layout === 'cards') r.rows.appendChild(h('div', { class: 'tile' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'chips' }, vStateBadge(x.state, b), x.autostart ? h('span', { class: 'badge plain' }, 'autostart') : null), h('div', { class: 'stats' }, h('span', null, res), h('span', null, x.agent ? 'guest agent' : 'no guest agent')), a));
+      else r.rows.appendChild(h('div', { class: 'rowi' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'c-st' }, vStateBadge(x.state, b), h('span', { class: 'mob muted sm' }, res)), h('div', { class: 'res c-res' }, res),
+        h('span', { class: 'c-up muted sm' }, x.autostart ? 'autostart' : 'manual'), h('div', { class: 'c-upd' }, x.agent ? h('span', { class: 'badge ok', title: 'Hibernate is available' }, 'agent') : h('span', { class: 'badge plain', title: 'No QEMU guest agent channel: hibernate is not available' }, 'no agent')), a));
     });
-    if (!S.vms.vms.length) tb.appendChild(h('tr', null, h('td', { colspan: '6', class: 'muted' }, 'No virtual machines.')));
-    clear(t).appendChild(h('div', { class: 'panel', style: { padding: '0', overflow: 'auto' } }, h('table', { class: 't' },
-      h('thead', null, h('tr', null, h('th', null, 'Virtual machine'), h('th', null, 'State'), h('th', null, 'CPUs'), h('th', null, 'Memory'), h('th', null, 'Guest agent'), h('th', { style: { 'text-align': 'right' } }, 'Actions'))), tb)));
+    if (hidden || S.showHidden) r.rows.appendChild(h('div', { class: 'more' }, btn(S.showHidden ? 'Hide hidden VMs' : 'Show ' + hidden + ' hidden', function () { S.showHidden = !S.showHidden; if (R.docker) R.docker.fSig = null; r.sig = null; paintAll(); }, 'sm ghost', 'eye')));
+    if (focus) { var f = r.rows.querySelector('[aria-label="' + focus.replace(/"/g, '') + '"]'); if (f && !f.disabled) f.focus(); }
   }
-  function vAct(v, op) {
-    var ask = { stop: ['Stop ' + v.name + '?', 'The VM is asked to shut down (like pressing the power button).', 'Shut down'], kill: ['Force stop ' + v.name + '?', 'This pulls the plug: unsaved work inside the VM is lost.', 'Force stop'],
-                hibernate: ['Hibernate ' + v.name + '?', 'The VM saves its memory to disk and powers off. This needs the QEMU guest agent running inside the VM.', 'Hibernate'], restart: ['Restart ' + v.name + '?', 'The VM is asked to reboot.', 'Restart'] }[op];
-    var run = function () { S.busy['v:' + v.name] = true; drawVms(); act('vm_action', { name: v.name, op: op }, v.name + ': ' + op + ' sent').then(function () { delete S.busy['v:' + v.name]; setTimeout(loadVms, 1200); }); };
-    if (ask) confirmBox(ask[0], ask[1], ask[2], op === 'kill' || op === 'stop').then(function (y) { if (y) run(); }); else run();
-  }
-
-  /* ================= System ================= */
-  function renderSystem(b) {
-    b.appendChild(h('div', { id: 'sy-os' }, h('div', { class: 'progress' }, h('i'))));
-    b.appendChild(h('div', { id: 'sy-hw' }));
-    b.appendChild(h('div', { id: 'sy-st' }));
-    loadOs(); pollSys().then(drawHw); every('sys', 5, function () { pollSys().then(drawHw); });
-    api('storage').then(function (j) { S.storage = j; drawStorage(); });
-  }
-  function loadOs() { return api('os_status').then(function (j) { S.os = j; drawOs(); }); }
-  function drawOs() {
-    var el = document.getElementById('sy-os'); if (!el || !S.os) return; clear(el);
-    var o = S.os, running = o.job === 'running';
-    var p = h('div', { class: 'panel' }, h('h3', null, 'Unraid OS'));
-    p.appendChild(h('div', { class: 'kv' }, h('span', null, 'Installed'), h('span', null, o.installed || '-'), h('span', null, 'Latest'), h('span', null, o.latest || (o.error ? '-' : 'not checked yet')),
-      h('span', null, 'Last check'), h('span', null, o.checked ? rel(o.checked) : 'never')));
-    if (o.error) p.appendChild(h('div', { class: 'banner bad', style: { 'margin-top': '10px' } }, 'Update check failed: ' + o.error));
-    if (o.staged) p.appendChild(h('div', { class: 'banner ok', style: { 'margin-top': '10px' } }, 'Unraid ' + o.staged + ' is installed on the flash drive. Reboot the server (Main > Array Operation > Reboot) to finish. Tools > Update OS > Restore returns to ' + o.installed + ' if needed.'));
-    else if (o.available && !running) p.appendChild(h('div', { class: 'banner acc', style: { 'margin-top': '10px' } }, 'Unraid ' + o.latest + ' is available. Read the release notes before updating; the update is installed on the flash drive and becomes active after a reboot.'));
-    var tools = h('div', { class: 'tools', style: { 'margin-top': '12px' } },
-      btn('Check now', function (e) { e.target.disabled = true; act('os_check', {}).then(function () { loadOs(); pollSys(); }); }, '', 'restart'),
-      o.available && !o.staged ? btn(running ? 'Updating…' : 'Update to ' + o.latest, osUpdate, 'pri', 'up') : null,
-      h('a', { class: 'btn', href: '/Tools/Update', target: '_self' }, 'Open Tools > Update OS'));
-    if (running) tools.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
-    p.appendChild(tools);
-    if (o.log && o.log.state !== 'idle') {
-      p.appendChild(h('h4', null, o.log.state === 'running' ? 'Installing…' : 'Last update output (exit code ' + o.log.code + ')'));
-      if (o.log.state === 'running') p.appendChild(h('div', { class: 'progress' }, h('i')));
-      var pre = h('pre', { class: 'log wrap', style: { 'max-height': '320px', 'min-height': '0' } }, o.log.out || '…'); p.appendChild(pre); setTimeout(function () { pre.scrollTop = pre.scrollHeight; }, 0);
-      if (o.log.state === 'running') S.timers.os = setTimeout(loadOs, 2500);
-    }
-    el.appendChild(p);
-  }
-  function osUpdate() {
-    confirmBox('Update Unraid to ' + S.os.latest + '?', 'The new release is downloaded and installed on the flash drive with Unraid\'s own updater (the same one Tools > Update OS uses). It becomes active after you reboot. Make sure you have a flash backup.', 'Install update').then(function (y) {
-      if (y) act('os_update', {}, 'Update started').then(loadOs);
-    });
-  }
-  function drawHw() {
-    var el = document.getElementById('sy-hw'); if (!el || !S.sys) return; clear(el);
-    var y = S.sys;
-    el.appendChild(h('div', { class: 'cards' }, stat('CPU', Math.round(y.cpu.pct || 0) + '%'), stat('Memory', Math.round(y.mem.pct || 0) + '%'), y.cpu.temp !== null ? stat('CPU temp', Math.round(y.cpu.temp) + '°C') : null,
-      stat('Network', rate(y.net.rx) + ' ↓'), stat('Uptime', upt(y.uptime))));
-    var arr = y.array;
-    el.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Server'), h('div', { class: 'kv' },
-      h('span', null, 'Name'), h('span', null, y.name), h('span', null, 'Unraid'), h('span', null, y.os), h('span', null, 'Kernel'), h('span', null, y.kernel),
-      h('span', null, 'CPU'), h('span', null, y.cpu.model + ' · ' + y.cpu.threads + ' threads'), h('span', null, 'Load'), h('span', null, y.cpu.load.join(' / ')),
-      h('span', null, 'Memory'), h('span', null, bytes(y.mem.used) + ' used of ' + bytes(y.mem.total)), h('span', null, 'Array'), h('span', null, (arr.state || '-') + (arr.resync ? ' · parity check / sync ' + (arr.resync_size ? Math.round(100 * arr.resync_pos / arr.resync_size) + '%' : 'running') : '')),
-      h('span', null, 'Network'), h('span', null, (y.net.iface || '-') + ' · ' + rate(y.net.rx) + ' in, ' + rate(y.net.tx) + ' out'))));
-  }
-  function drawStorage() {
-    var el = document.getElementById('sy-st'); if (!el || !S.storage) return; clear(el);
-    var rows = [].concat(S.storage.parity.map(function (d) { d.k = 'Parity'; return d; }), S.storage.array.map(function (d) { d.k = 'Array'; return d; }), S.storage.pools.map(function (d) { d.k = 'Pool'; return d; }));
-    var tb = h('tbody');
-    rows.forEach(function (d) {
-      var p = d.size ? 100 * (d.size - d.free) / d.size : 0;
-      tb.appendChild(h('tr', null, h('td', null, h('b', null, d.name), h('div', { class: 'muted sm' }, d.k + (d.device ? ' · ' + d.device : ''))),
-        h('td', null, h('span', { class: 'badge ' + (d.status === 'DISK_OK' ? 'ok' : 'bad') }, d.status.replace('DISK_', '').toLowerCase())),
-        h('td', { class: 'num' }, d.temp === null ? (d.spun ? '-' : 'spun down') : d.temp + '°C'),
-        h('td', { style: { 'min-width': '200px' } }, d.size ? [h('div', { class: 'sm' }, bytes(d.size - d.free) + ' / ' + bytes(d.size) + (d.fs ? ' · ' + d.fs : '')), h('div', { class: 'meter' }, h('i', { class: p > 90 ? 'bad' : p > 75 ? 'warn' : '', style: { width: p.toFixed(1) + '%' } }))] : h('span', { class: 'muted' }, '-'))));
-    });
-    if (!rows.length) tb.appendChild(h('tr', null, h('td', { colspan: '4', class: 'muted' }, 'No disk information (is the array started?).')));
-    el.appendChild(h('div', { class: 'panel', style: { padding: '0', overflow: 'auto' } }, h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Disk'), h('th', null, 'Status'), h('th', null, 'Temp'), h('th', null, 'Usage'))), tb)));
-  }
-
-  /* ================= Settings ================= */
-  function renderSettings(b) {
-    if (!S.set) {
-      b.appendChild(h('div', { class: 'progress' }, h('i')));
-      api('settings').then(function (j) {
-        if (j.error) { clear(b).appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
-        S.set = { cfg: j.config, vars: j.secrets.vars, svc: j.secrets.svc || {}, types: j.types, keep: j.keep };
-        if (Array.isArray(S.set.svc)) S.set.svc = {};
-        render();
-      });
-      return;
-    }
-    var D = S.set, g = D.cfg.general;
-    var dirty = function () { S.dirty = true; var sb = document.getElementById('und-save'); if (sb) sb.disabled = false; };
-    var txt = function (o, k, ph, type) { return h('input', { type: type || 'text', value: o[k] === undefined || o[k] === null ? '' : o[k], placeholder: ph || '', oninput: function (e) { o[k] = type === 'number' ? +e.target.value : e.target.value; dirty(); } }); };
-    var chk = function (o, k, label) { return h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!o[k], onchange: function (e) { o[k] = e.target.checked; dirty(); } }), label); };
-    var sel = function (o, k, opts) { return h('select', { onchange: function (e) { o[k] = e.target.value; dirty(); } }, opts.map(function (x) { return h('option', { value: x[0], selected: String(o[k]) === String(x[0]) }, x[1]); })); };
-    var fld = function (label, input, hint) { return h('div', { class: 'fld' }, h('label', null, label), input, hint ? h('div', { class: 'hint' }, hint) : null); };
-
-    b.appendChild(h('div', { class: 'panel' }, h('h3', null, 'General'), h('div', { class: 'grid2' },
-      fld('Title', txt(g, 'title')),
-      fld('Theme', sel(g, 'theme', [['dark', 'Dark (Swiss)'], ['midnight', 'Midnight'], ['light', 'Light']])),
-      fld('Background image', txt(g, 'background', 'https://… or /boot path served by Unraid'), 'Optional wallpaper, like Homepage\'s background.'),
-      fld('Background blur / brightness', h('div', { class: 'inl' }, txt(g, 'blur', '', 'number'), 'px', txt(g, 'brightness', '', 'number'), '%')),
-      fld('System refresh (seconds)', txt(g, 'refresh_system', '', 'number')),
-      fld('Widget refresh (seconds)', txt(g, 'refresh_services', '', 'number')),
-      fld('Disk shown in the top bar', txt(g, 'disk_path', '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
-      fld('Web search', sel(g, 'search', [['duckduckgo', 'DuckDuckGo'], ['google', 'Google'], ['bing', 'Bing'], ['startpage', 'Startpage'], ['brave', 'Brave']])),
-      fld('UPS name (NUT)', txt(g, 'ups_name', 'ups'), 'Used by the UPS card: NUT (upsc) first, then apcupsd.'),
-      fld('Check for Unraid updates every (hours)', txt(g, 'os_check_hours', '', 'number')),
-      h('div', null, chk(g, 'show_resources', 'Show the resource bar'), chk(g, 'show_date', 'Show the date'), chk(g, 'show_search', 'Show web search')))));
-
-    /* variables */
-    var vt = h('tbody');
-    var drawVars = function () {
-      clear(vt);
-      D.vars.forEach(function (v, i) {
-        var val = h('input', { type: v.secret ? 'password' : 'text', value: v.value === D.keep ? '' : v.value, placeholder: v.value === D.keep ? 'stored (leave empty to keep)' : '', autocomplete: 'off',
-          oninput: function (e) { v.value = e.target.value === '' && v.stored ? D.keep : e.target.value; dirty(); } });
-        if (v.value === D.keep) v.stored = true;
-        vt.appendChild(h('tr', null, h('td', null, h('input', { type: 'text', value: v.name, oninput: function (e) { v.name = e.target.value.toUpperCase(); v.secret = /KEY|TOKEN|PASS|SECRET/i.test(v.name); dirty(); } })),
-          h('td', null, val), h('td', { class: 'acts' }, btn('', function () { D.vars.splice(i, 1); dirty(); drawVars(); }, 'ic sm danger', 'trash', 'Remove'))));
+  function vAct(x, op) {
+    var key = 'v:' + x.name; if (S.busy[key]) return;
+    var nm = label('vms', x.name);
+    var ask = { stop: ['Shut down ' + nm + '?', 'The VM is asked to shut down, like pressing its power button. The guest decides how long that takes.', 'Shut down', true],
+      kill: ['Force stop ' + nm + '?', 'This cuts the VM\'s power immediately. Unsaved work inside it is lost and its file system may need repair.', 'Force stop', true],
+      hibernate: ['Hibernate ' + nm + '?', 'The VM saves its memory to disk and powers off; Resume continues where it left off. This needs the QEMU guest agent running inside the VM.', 'Hibernate', false],
+      restart: ['Restart ' + nm + '?', 'The VM is asked to reboot.', 'Restart', false] }[op];
+    var run = function () {
+      S.busy[key] = { start: 'starting', stop: 'shutting down', kill: 'stopping', restart: 'restarting', pause: 'pausing', resume: 'resuming', hibernate: 'hibernating' }[op];
+      paintAll();
+      api('vm_action', { name: x.name, op: op }, 100000).then(function (j) {
+        delete S.busy[key];
+        if (j.error) toast(nm + ': ' + j.error, true); else toast(nm + ': ' + (op === 'stop' ? 'shutdown requested' : VMOPS[op][0].toLowerCase() + ' done'));
+        if (R.vms) R.vms.sig = null;
+        refreshNow();
       });
     };
-    drawVars();
-    b.appendChild(h('div', { class: 'panel vars' }, h('h3', null, 'Variables'),
-      h('p', { class: 'muted sm' }, 'Use {{NAME}} in any URL, link, key or password, like Homepage\'s HOMEPAGE_VAR_… variables. Names containing KEY, TOKEN, PASS or SECRET are stored as secrets and never shown again. {{UNRAID_IP}} is built in.'),
-      h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Value'), h('th'))), vt),
-      h('div', { class: 'tools', style: { 'margin-top': '8px' } }, btn('Add variable', function () { D.vars.push({ name: '', value: '', secret: false }); dirty(); drawVars(); }, 'sm', 'plus'))));
+    if (ask) confirmBox(ask[0], ask[1], ask[2], ask[3]).then(function (y) { if (y) run(); }); else run();
+  }
 
-    /* layout */
-    var lay = h('div');
-    var drawLayout = function () {
-      clear(lay);
-      D.cfg.groups.forEach(function (gr, gi) {
-        var box = h('div', { class: 'lg' });
-        box.appendChild(h('div', { class: 'lh' }, h('input', { type: 'text', value: gr.name, 'aria-label': 'Group name', oninput: function (e) { gr.name = e.target.value; dirty(); } }),
-          h('label', { class: 'inl sm muted' }, 'Columns', h('input', { type: 'number', min: 1, max: 8, value: gr.columns, oninput: function (e) { gr.columns = +e.target.value; dirty(); } })),
-          h('label', { class: 'switch sm' }, h('input', { type: 'checkbox', checked: gr.header, onchange: function (e) { gr.header = e.target.checked; dirty(); } }), 'Show title'),
-          btn('', function () { move(D.cfg.groups, gi, -1); dirty(); drawLayout(); }, 'ic sm', 'upar', 'Move up'),
-          btn('', function () { move(D.cfg.groups, gi, 1); dirty(); drawLayout(); }, 'ic sm', 'dnar', 'Move down'),
-          btn('Add widget', function () { var s = { id: rid(), name: '', type: 'radarr', icon: '', href: '', url: '', fields: [], options: {} }; editService(s, gr, true, drawLayout); }, 'sm', 'plus'),
-          btn('', function () { confirmBox('Delete group "' + gr.name + '"?', 'The group and its ' + gr.services.length + ' widgets are removed when you save.', 'Delete', true).then(function (y) { if (y) { D.cfg.groups.splice(gi, 1); dirty(); drawLayout(); } }); }, 'ic sm danger', 'trash', 'Delete group')));
-        gr.services.forEach(function (s, si) {
-          box.appendChild(h('div', { class: 'ls' }, img(iconUrl(s.icon), ''), h('span', { class: 't' }, h('b', null, s.name), h('span', { class: 'muted sm' }, ' · ' + ((D.types[s.type] || [s.type])[0]) + (s.url ? ' · ' + s.url : ''))),
-            btn('', function () { move(gr.services, si, -1); dirty(); drawLayout(); }, 'ic sm', 'upar', 'Move up'),
-            btn('', function () { move(gr.services, si, 1); dirty(); drawLayout(); }, 'ic sm', 'dnar', 'Move down'),
-            gi > 0 ? btn('', function () { gr.services.splice(si, 1); D.cfg.groups[gi - 1].services.push(s); dirty(); drawLayout(); }, 'ic sm', 'upar', 'Move to the group above') : null,
-            btn('', function () { editService(s, gr, false, drawLayout); }, 'ic sm', 'edit', 'Edit'),
-            btn('', function () { gr.services.splice(si, 1); delete D.svc[s.id]; dirty(); drawLayout(); }, 'ic sm danger', 'trash', 'Remove')));
+  /* ---- storage ---- */
+  BUILD.storage = function (r) { r.box = h('div', { class: 'panel tw' }, h('div', { class: 'empty' }, 'Loading disks…')); r.body.appendChild(r.box); };
+  function loadStorage() {
+    S.storageAt = Date.now();
+    api('storage').then(function (j) {
+      var r = R.storage; if (!r) return;
+      if (j.error) { clear(r.box).appendChild(h('div', { class: 'empty' }, j.error)); return; }
+      var rows = [].concat(j.parity.map(function (d) { d.k = 'Parity'; return d; }), j.array.map(function (d) { d.k = 'Array'; return d; }), j.pools.map(function (d) { d.k = 'Pool'; return d; }));
+      clear(r.box);
+      if (!rows.length) { r.box.appendChild(h('div', { class: 'empty' }, 'No disk information. Is the array started?')); return; }
+      r.box.appendChild(h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Disk'), h('th', null, 'Health'), h('th', null, 'Temp'), h('th', null, 'Usage'))),
+        h('tbody', null, rows.map(function (d) {
+          var p = d.size ? 100 * (d.size - d.free) / d.size : 0;
+          return h('tr', null, h('td', null, h('b', null, d.name), h('div', { class: 'muted xs' }, d.k + (d.device ? ' · ' + d.device : '') + (d.fs ? ' · ' + d.fs : ''))),
+            h('td', null, h('span', { class: 'badge ' + (d.health === 'ok' ? 'ok' : d.health === 'warn' ? 'warn' : 'bad'), title: d.status }, d.health === 'ok' ? 'ok' : d.status.replace('DISK_', '').toLowerCase()), d.errors ? h('span', { class: 'badge bad', style: { 'margin-left': '4px' } }, d.errors + ' errors') : null),
+            h('td', { class: 'num' }, d.temp === null ? h('span', { class: 'muted' }, d.spun ? '-' : 'spun down') : h('span', { style: { color: d.temp >= 50 ? 'var(--bad)' : d.temp >= 45 ? 'var(--warn)' : '' } }, d.temp + '°C')),
+            h('td', { style: { 'min-width': '180px' } }, d.size ? [h('div', { class: 'sm num' }, bytes(d.size - d.free) + ' / ' + bytes(d.size)), h('div', { class: 'meter' }, h('i', { class: meterCls(p), style: { width: p.toFixed(1) + '%' } }))] : h('span', { class: 'muted' }, '-')));
+        }))));
+    });
+  }
+
+  /* ---- services (widgets of other apps) ---- */
+  var NATIVE = { system_info: 1, cpu: 1, memory: 1, link: 1 };
+  BUILD.services = function (r) {
+    var closed = LS.get('closed', {});
+    var groups = S.L.groups.filter(function (g) { return g.services.some(function (s) { return !s.hidden; }); });
+    if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No widgets yet. Add them or import your Homepage config in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Services'), '.')); return; }
+    groups.forEach(function (gr) {
+      var vis = gr.services.filter(function (s) { return !s.hidden; });
+      var grid = h('div', { class: 'grid', style: { '--cols': String(gr.columns) } });
+      var wrap = h('div', { class: 'grp' + (closed[gr.id] ? ' closed' : '') });
+      if (gr.header) wrap.appendChild(h('h3', null, h('button', { type: 'button', 'aria-expanded': closed[gr.id] ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name)));
+      vis.forEach(function (s) { grid.appendChild(widget(s)); });
+      wrap.appendChild(grid); r.body.appendChild(wrap);
+    });
+    clearTimeout(S.svcTimer); S.svcRun = false;
+    setTimeout(pollServices, 0);
+  };
+  function widget(s) {
+    var u = iconUrl(s.icon), href = s.href_resolved || '';
+    if (s.type === 'link') {
+      return h(href ? 'a' : 'div', { class: 'card w link', href: href || null, target: href ? '_blank' : null, rel: href ? 'noopener' : null, title: s.description || href, 'data-name': s.name },
+        h('div', { class: 'ch' }, img(u), h('span', { class: 'nm' }, s.name)));
+    }
+    var nm = href ? h('a', { class: 'nm', href: href, target: '_blank', rel: 'noopener' }, s.name) : h('span', { class: 'nm' }, s.name);
+    var c = h('div', { class: 'card w wait' + (s.span === 2 ? ' span2' : ''), id: 'w-' + s.id, 'data-name': s.name },
+      h('div', { class: 'ch' }, img(u), nm, h('span', { class: 'sub' })), s.description ? h('div', { class: 'desc' }, s.description) : null,
+      h('div', { class: 'cb' }, NATIVE[s.type] ? h('div', { class: 'muted sm' }, 'Shown in the System section now; you can remove this widget.') : h('div', { class: 'muted sm' }, 'Loading…')));
+    var prev = S.svc[s.id]; if (prev) setTimeout(function () { paintService(s, prev); }, 0);
+    return c;
+  }
+  /* widgets of other apps: at most 4 requests at a time; the next round starts only after the last answer */
+  function pollServices() {
+    if (S.svcRun || !R.services || S.power || (document.hidden && S.L.general.background_poll !== 'normal')) return;
+    var list = [];
+    S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (!NATIVE[s.type] && !s.hidden) list.push(s); }); });
+    if (!list.length) return;
+    S.svcRun = true;
+    var i = 0, running = 0;
+    function next() {
+      if (i >= list.length) { if (running === 0) { S.svcRun = false; clearTimeout(S.svcTimer); S.svcTimer = setTimeout(pollServices, S.L.general.refresh_services * 1000); } return; }
+      var s = list[i++]; running++;
+      api('service', { id: s.id }, 25000).then(function (r) { running--; S.svc[s.id] = r; paintService(s, r); next(); });
+    }
+    for (var k = 0; k < 4; k++) next();
+  }
+  function blocks(list) { return h('div', { class: 'blocks' }, list.map(function (x) { return h('div', { class: 'blk' }, h('div', { class: 'v' }, fmt(x.value, x.fmt)), h('div', { class: 'l' }, x.label)); })); }
+  function paintService(s, r) {
+    var c = document.getElementById('w-' + s.id); if (!c) return;
+    c.classList.remove('wait');
+    var cb = clear(c.querySelector('.cb'));
+    if (r.error) {
+      var e = h('button', { type: 'button', class: 'err' + (r.unconfigured ? ' cfg' : ''), 'aria-expanded': 'false', onclick: function () { e.classList.toggle('open'); e.setAttribute('aria-expanded', e.classList.contains('open') ? 'true' : 'false'); } }, r.unconfigured ? 'Not configured' : r.offline ? 'Unreachable' : 'API error', h('div', { class: 'x' }, r.error));
+      cb.appendChild(e); return;
+    }
+    if (r.blocks && r.blocks.length) cb.appendChild(blocks(r.blocks));
+    if (r.list) {
+      var l = h('div', { class: 'lst' });
+      r.list.forEach(function (x) { l.appendChild(h('div', { class: 'r' }, x.label ? h('span', { class: 'lab' }, x.label) : null, h('span', { class: 't', title: x.title }, x.title), x.ts ? h('span', { class: 'when' }, rel(x.ts)) : (x.right ? h('span', { class: 'when' }, x.right) : null))); });
+      if (!r.list.length) l.appendChild(h('div', { class: 'muted sm' }, 'Nothing yet'));
+      cb.appendChild(l);
+    }
+    if (r.calendar) {
+      if (!r.calendar.length) cb.appendChild(h('div', { class: 'muted sm' }, r.empty || 'Nothing coming up'));
+      else {
+        var cal = h('div', { class: 'cal' }), last = '';
+        r.calendar.forEach(function (x) {
+          var d = day(x.ts);
+          cal.appendChild(h('span', { class: 'd' }, d === last ? '' : d)); last = d;
+          cal.appendChild(h('span', { class: 'ti', title: x.title + (x.sub ? ' ' + x.sub : '') }, x.title));
+          cal.appendChild(h('span', { class: 'ok', title: x.done ? 'Downloaded' : '' }, x.done ? ic('check') : ''));
         });
-        if (!gr.services.length) box.appendChild(h('div', { class: 'ls muted sm' }, 'No widgets in this group.'));
-        lay.appendChild(box);
+        cb.appendChild(cal);
+      }
+    }
+    if (r.streams) {
+      if (!r.streams.length) cb.appendChild(h('div', { class: 'muted sm', style: { 'margin-top': '6px' } }, r.empty || 'No active streams'));
+      else cb.appendChild(h('div', { class: 'streams' }, r.streams.map(function (x) {
+        return h('div', { class: 'stream', title: x.title + (x.user ? ' (' + x.user + ')' : '') + (x.transcode ? ' · ' + x.transcode : '') },
+          h('i', { class: 'pg', style: { width: (x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0) + '%' } }), ic(x.state === 'paused' ? 'pause' : 'play'),
+          h('span', { class: 'tt' }, x.title + (x.user ? ' (' + x.user + ')' : '')), h('span', { class: 'tm' }, x.dur ? dur(x.pos) + ' / ' + dur(x.dur) : ''));
+      })));
+    }
+    if (r.bars) cb.appendChild(h('div', { class: 'bars' }, r.bars.map(function (x) { var p = x.size ? 100 * x.used / x.size : 0; return h('div', null, h('div', { class: 'bt' }, h('span', null, x.title, x.sub ? h('span', { class: 'muted' }, ' · ' + x.sub) : null), h('span', null, bytes(x.size - x.used) + ' free')), h('div', { class: 'meter' }, h('i', { class: meterCls(p), style: { width: p.toFixed(1) + '%' } }))); })));
+  }
+
+  /* ================= server: OS update, history, power ================= */
+  function osDialog() {
+    var box = h('div', null, h('div', { class: 'progress' }, h('i')));
+    var m = modal('Unraid OS', box, [btn('Close', function () { m.close(); })]);
+    var t = null;
+    function load() {
+      api('os_status').then(function (o) {
+        if (!box.parentNode) return;
+        clear(box);
+        if (o.error && !o.installed) { box.appendChild(h('div', { class: 'banner bad' }, o.error)); return; }
+        var running = o.job === 'running';
+        box.appendChild(h('div', { class: 'kv2' }, h('span', null, 'Installed'), h('span', null, o.installed || '-'), h('span', null, 'Latest'), h('span', null, o.latest || (o.error ? '-' : 'not checked yet')), h('span', null, 'Last check'), h('span', null, o.checked ? rel(o.checked) : 'never')));
+        if (o.error) box.appendChild(h('div', { class: 'banner bad', style: { 'margin-top': '10px' } }, 'The update check failed: ' + o.error));
+        if (o.staged) box.appendChild(h('div', { class: 'banner ok', style: { 'margin-top': '10px' } }, 'Unraid ' + o.staged + ' is installed on the flash drive and becomes active after a restart. Tools > Update OS > Restore in Unraid returns to ' + o.installed + ' if needed.'));
+        else if (o.available && !running) box.appendChild(h('div', { class: 'banner info', style: { 'margin-top': '10px' } }, 'Unraid ' + o.latest + ' is available. Read the release notes and make a flash backup first. The update is installed on the flash drive and becomes active after a restart.'));
+        var row = h('div', { class: 'ftr', style: { 'margin-top': '12px' } },
+          btn('Check now', function (e) { e.currentTarget.disabled = true; act('os_check', {}).then(function () { load(); refreshNow(); }); }, 'sm', 'restart'),
+          o.available && !o.staged ? btn(running ? 'Installing…' : 'Install ' + o.latest, function () {
+            confirmBox('Install Unraid ' + o.latest + '?', 'Unraid\'s own updater (the one Tools > Update OS uses) downloads and installs the release on the flash drive. Nothing changes until you restart the server.', 'Install').then(function (y) { if (y) act('os_update', {}, 'Unraid update started').then(load); });
+          }, 'sm pri', 'up') : null,
+          o.staged ? btn('Restart server…', function () { m.close(); powerDialog('reboot'); }, 'sm', 'restart') : null,
+          h('a', { class: 'btn sm', href: UNRAID + '/Tools/Update', target: '_blank', rel: 'noopener' }, 'Release notes in Unraid'));
+        if (running) [].forEach.call(row.querySelectorAll('button'), function (b) { b.disabled = true; });
+        box.appendChild(row);
+        if (o.log && o.log.state !== 'idle') {
+          box.appendChild(h('h4', { class: 'muted sm', style: { margin: '14px 0 6px' } }, o.log.state === 'running' ? 'Installing…' : 'Last install output (exit code ' + o.log.code + ')'));
+          var pre = h('pre', { class: 'log wrap', style: { 'max-height': '300px', 'min-height': '0' } }, o.log.out || '…'); box.appendChild(pre); setTimeout(function () { pre.scrollTop = pre.scrollHeight; }, 0);
+          if (running) t = setTimeout(load, 2500);
+        }
       });
-    };
-    drawLayout();
-    b.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Layout'), lay,
-      h('div', { class: 'tools' }, btn('Add group', function () { D.cfg.groups.push({ id: rid(), name: 'New group', columns: 4, header: true, services: [] }); dirty(); drawLayout(); }, 'sm', 'plus'))));
-
-    /* import */
-    var ta = function (ph) { return h('textarea', { rows: 6, placeholder: ph, spellcheck: 'false' }); };
-    var ySvc = ta('Paste services.yaml here'), ySet = ta('Optional: paste settings.yaml (for columns and group titles)'), yEnv = ta('Optional: paste the .env / HOMEPAGE_VAR_… values (KEY=value per line)');
-    var prev = h('div');
-    b.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Import from Homepage'),
-      h('p', { class: 'muted sm' }, 'Brings over groups, widgets, icons, links and {{HOMEPAGE_VAR_…}} variables from a gethomepage/homepage config. Glances cards become UnDash\'s built-in CPU, memory and system cards. This replaces the current layout.'),
-      h('div', { class: 'grid2' }, ySvc, h('div', null, ySet, h('div', { style: { height: '8px' } }), yEnv)),
-      h('div', { class: 'tools', style: { 'margin-top': '8px' } },
-        btn('Preview', function () {
-          api('import_preview', { services: ySvc.value, settings: ySet.value, env: yEnv.value }).then(function (j) {
-            clear(prev);
-            if (j.error) { prev.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
-            var missing = j.vars.filter(function (v) { return !v.set && !v.stored; });
-            prev.appendChild(h('div', { class: 'banner ok' }, j.groups + ' groups, ' + j.services + ' widgets found.'));
-            j.warnings.forEach(function (w) { prev.appendChild(h('div', { class: 'banner' }, w)); });
-            if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' variables have no value yet (fill them in under Variables after importing): ', missing.map(function (v) { return v.name; }).join(', ')));
-            prev.appendChild(h('div', { class: 'kv sm' }, j.layout.map(function (g) { return [h('span', null, g.name), h('span', null, g.services.join(', '))]; })));
-            prev.appendChild(h('div', { class: 'tools', style: { 'margin-top': '10px' } }, btn('Import and replace the layout', function () {
-              confirmBox('Replace the layout?', 'Your current groups and widgets are replaced by the imported ones. Stored variable values are kept.', 'Import', true).then(function (y) {
-                if (!y) return;
-                act('import_apply', { services: ySvc.value, settings: ySet.value, env: yEnv.value }, 'Imported').then(function (k) { if (!k.error) reboot(); });
-              });
-            }, 'pri')));
-          });
-        }, '', 'check')), prev));
-
-    /* backup */
-    b.appendChild(h('div', { class: 'panel' }, h('h3', null, 'Backup'),
-      h('p', { class: 'muted sm' }, 'The layout lives in /boot/config/plugins/undash/config.json and the secrets in secrets.json on the flash drive. The export below contains the layout only (no keys or passwords).'),
-      h('div', { class: 'tools' },
-        btn('Export layout', function () { api('export').then(function (j) { var a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(j.config, null, 2)], { type: 'application/json' })), download: 'undash-layout.json' }); root.appendChild(a); a.click(); root.removeChild(a); }); }, 'sm'),
-        btn('Import layout…', function () {
-          var f = h('input', { type: 'file', accept: '.json,application/json', onchange: function () {
-            var r = new FileReader(); r.onload = function () { try { var c = JSON.parse(r.result); if (!c.groups) throw 0; D.cfg = c; dirty(); render(); toast('Layout loaded: press Save to keep it'); } catch (e) { toast('That is not an UnDash layout file.', true); } }; r.readAsText(f.files[0]);
-          } }); f.click();
-        }, 'sm'),
-        btn('Reset to default', function () { confirmBox('Reset the layout?', 'All groups and widgets are replaced by the default system cards.', 'Reset', true).then(function (y) { if (y) act('reset', {}, 'Layout reset').then(reboot); }); }, 'sm danger'))));
-
-    var save = h('button', { type: 'button', class: 'btn pri', id: 'und-save', disabled: !S.dirty, onclick: function () {
-      save.disabled = true;
-      act('save', payload(), 'Saved').then(function (j) { if (j.error) { save.disabled = false; return; } S.dirty = false; reboot(); });
-    } }, 'Save');
-    b.appendChild(h('div', { class: 'savebar' }, save, btn('Discard changes', function () { S.dirty = false; S.set = null; render(); }), h('span', { class: 'muted sm grow' }, 'Changes apply after saving.')));
+    }
+    m.onclose = function () { clearTimeout(t); };
+    load();
+  }
+  function historyDialog() {
+    var box = h('div', { class: 'hist' }, h('div', { class: 'progress' }, h('i')));
+    var m = modal('Recent operations', box, [btn('Close', function () { m.close(); })]);
+    api('history').then(function (j) {
+      clear(box);
+      if (j.error) { box.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
+      if (!j.history || !j.history.length) { box.appendChild(h('div', { class: 'empty' }, 'Nothing yet. Start, stop, update and power actions are listed here until the server restarts.')); return; }
+      j.history.forEach(function (x) {
+        box.appendChild(h('div', { class: 'hi' }, h('span', { class: 'badge ' + (x.ok ? 'ok' : 'bad') }, x.ok ? 'ok' : 'failed'), h('b', null, x.target), h('span', null, x.op), h('span', { class: 'muted sm grow' }, x.msg), h('span', { class: 'muted sm nowrap', title: new Date(x.at * 1000).toLocaleString() }, rel(x.at))));
+      });
+    });
+  }
+  /* server restart / shutdown: the server issues a one-time confirmation, the user types the server's name, then the command runs */
+  function powerDialog(op) {
+    if (S.power || S.powerOpen) return;
+    S.powerOpen = true;
+    var word = op === 'reboot' ? 'Restart' : 'Shut down';
+    var box = h('div', null, h('div', { class: 'progress' }, h('i')));
+    var go = btn(word + ' server', null, 'danger solid', op === 'reboot' ? 'restart' : 'power');
+    go.disabled = true;
+    var m = modal(word + ' the whole server?', box, [btn('Cancel', function () { m.close(); }), go]);
+    m.onclose = function () { S.powerOpen = false; };
+    api('power_prepare', { op: op }).then(function (j) {
+      clear(box);
+      if (j.error) { box.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
+      var inp = h('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: j.name, id: 'und-pw',
+        oninput: function () { go.disabled = inp.value.trim().toLowerCase() !== j.name.toLowerCase(); }, onkeydown: function (e) { if (e.key === 'Enter' && !go.disabled) go.click(); } });
+      box.appendChild(h('p', null, op === 'reboot'
+        ? 'This restarts the entire Unraid server ' + j.name + ', not just UnDash. The array is stopped cleanly, every container, VM and share goes offline, and this dashboard is unavailable until the server is back (usually a few minutes).'
+        : 'This powers off the entire Unraid server ' + j.name + ', not just UnDash. The array is stopped cleanly and every container, VM and share goes offline. It stays off until someone turns it on again.'));
+      j.warnings.forEach(function (w) { box.appendChild(h('div', { class: 'banner' }, w)); });
+      box.appendChild(h('div', { class: 'fld' }, h('label', { for: 'und-pw' }, 'Type ', h('b', null, j.name), ' to confirm'), inp));
+      setTimeout(function () { inp.focus(); }, 0);
+      go.onclick = function () {
+        go.disabled = true; inp.disabled = true; clear(go).appendChild(document.createTextNode('Sending…'));
+        api('power', { op: op, nonce: j.nonce, confirm: inp.value.trim() }).then(function (k) {
+          m.close();
+          if (k.error) { toast(k.error, true); return; }
+          powerOverlay(op);
+        });
+      };
+    });
+  }
+  function powerOverlay(op) {
+    if (S.power) return;
+    S.power = op; clearTimeout(S.timer); clearTimeout(S.svcTimer); closeMenu(true);
+    var st = h('p', { class: 'sm', style: { opacity: '.8' } }, 'The command was accepted. Waiting for the server to go offline…');
+    root.appendChild(h('div', { class: 'overlay', role: 'alertdialog', 'aria-live': 'assertive', 'aria-label': 'Server power' }, h('div', { class: 'box' },
+      h('h2', null, (op === 'reboot' ? 'Restarting ' : 'Shutting down ') + S.boot.server.name),
+      h('p', null, op === 'reboot' ? 'This page reconnects by itself when the server is back.' : 'You can close this page.'), st)));
+    var down = false, t0 = Date.now();
+    (function poll() {
+      api('live', { parts: 'system' }, 5000).then(function (r) {
+        if (r.error) {
+          if (!down) { down = true; st.textContent = op === 'reboot' ? 'Offline. Waiting for it to come back…' : 'The server is off.'; }
+          if (op === 'shutdown') return;
+        } else if (down && !r.power) { st.textContent = 'Back online. Reloading…'; setTimeout(function () { location.reload(); }, 1500); return; }
+        if (Date.now() - t0 > 900000) { st.textContent = 'This is taking longer than expected. Check the server.'; return; }
+        setTimeout(poll, 3000);
+      });
+    })();
   }
 
-  function payload() {
-    var D = S.set;
-    return { config: D.cfg, vars: D.vars.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }), svc: D.svc };
-  }
-  function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return; var x = arr[i]; arr[i] = arr[j]; arr[j] = x; }
-  function rid() { var s = ''; for (var i = 0; i < 8; i++) s += '0123456789abcdef'[Math.floor(Math.random() * 16)]; return s; }
-  function reboot() { return api('boot').then(function (j) { if (!j.error) { S.boot = j; S.set = null; S.svc = {}; shell(); render(); } }); }
-
-  /* service editor */
+  /* ================= settings drawer ================= */
   var FIELDS = {
     radarr: 'wanted, missing, queued, movies', sonarr: 'wanted, queued, series', lidarr: 'wanted, queued, artists', readarr: 'wanted, queued, books',
     bazarr: 'missingEpisodes, missingMovies', prowlarr: 'numberOfGrabs, numberOfQueries, numberOfFailGrabs, numberOfFailQueries', overseerr: 'pending, approved, processing, completed, available',
@@ -723,31 +1201,281 @@
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
-  function editService(orig, group, isNew, after) {
-    var D = S.set, s = JSON.parse(JSON.stringify(orig)), sec = JSON.parse(JSON.stringify(D.svc[s.id] || {}));
+  var SEC_DESC = { overview: 'Server facts, health and quick actions', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and services', metrics: 'CPU, memory, storage, network and more',
+    docker: 'Every container, found automatically', vms: 'Every VM, found automatically', storage: 'Disks and pools with health and temperatures', services: 'Widgets of your apps (Radarr, Plex, …)' };
+  var MET_DESC = { cpu: 'Usage with history', cores: 'Load of every core', temp: 'CPU package temperature', memory: 'RAM used and available', swap: 'Swap usage', array: 'Array capacity',
+    storage: 'Free space of one path', network: 'Download and upload speed', uptime: 'Time since boot', load: 'Load average', host: 'Hostname and address', os: 'Unraid version and updates',
+    docker: 'Running containers', vms: 'Running VMs', ups: 'UPS battery (NUT or apcupsd)' };
+
+  function openSettings(tab) {
+    if (S.drawer) return;
+    closeMenu(true);
+    var D = { tab: typeof tab === 'string' ? tab : 'dashboard', dirty: false };
+    S.drawer = D;
+    var last = document.activeElement;
+    var bodyEl = h('div', { class: 'db', role: 'tabpanel' });
+    var saveB = btn('Save', save, 'pri'); saveB.disabled = true;
+    var status = h('span', { class: 'muted sm grow', role: 'status' }, 'Loading…');
+    var tabs = h('div', { class: 'dt', role: 'tablist', 'aria-label': 'Settings sections' });
+    [['dashboard', 'Dashboard'], ['system', 'System'], ['appearance', 'Appearance'], ['services', 'Services'], ['config', 'Configuration']].forEach(function (t) {
+      tabs.appendChild(h('button', { type: 'button', role: 'tab', 'data-t': t[0], onclick: function () { D.tab = t[0]; paintTabs(); render(); } }, t[1]));
+    });
+    var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
+      h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), h('span', { class: 'grow' }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')), tabs, bodyEl,
+      h('div', { class: 'df' }, saveB, btn('Discard', function () { if (!D.dirty || window.confirm('Discard your changes?')) close(true); }), status));
+    var bg = h('div', { class: 'drawer-bg', onclick: function () { close(); } });
+    root.appendChild(bg); root.appendChild(drawer);
+    function key(e) {
+      if (root.querySelector('.modal-bg')) return;
+      if (e.key === 'Escape') close();
+      if (e.key === 'Tab') {
+        var f = drawer.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select,textarea');
+        if (!f.length) return;
+        if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+      }
+    }
+    document.addEventListener('keydown', key);
+    function paintTabs() { [].forEach.call(tabs.childNodes, function (b) { var on = b.getAttribute('data-t') === D.tab; b.className = on ? 'on' : ''; b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
+    function dirty() { D.dirty = true; saveB.disabled = false; status.textContent = 'Unsaved changes'; }
+    function close(force) {
+      if (force !== true && D.dirty && !window.confirm('Close settings without saving your changes?')) return;
+      document.removeEventListener('keydown', key);
+      bg.remove(); drawer.remove(); S.drawer = null;
+      if (D.dirty) { applyLook(); applyCss(S.boot.css); }
+      if (last && last.focus && document.body.contains(last)) try { last.focus(); } catch (e) { /* gone */ }
+    }
+    D.close = close;
+    function save() {
+      saveB.disabled = true; status.textContent = 'Saving…';
+      var data = { config: D.cfg, vars: D.vars.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }), svc: D.svc };
+      if (D.cssChanged) data.css = D.css;
+      api('save', data).then(function (j) {
+        if (j.error) { saveB.disabled = false; status.textContent = j.error; toast(j.error, true); return; }
+        D.dirty = false; toast('Settings saved');
+        close(true); reload();
+      });
+    }
+    function render() {
+      clear(bodyEl);
+      if (!D.cfg) { bodyEl.appendChild(h('div', { class: 'progress' }, h('i'))); return; }
+      ({ dashboard: tabDashboard, system: tabSystem, appearance: tabAppearance, services: tabServices, config: tabConfig })[D.tab](bodyEl, D, dirty);
+      bodyEl.scrollTop = 0;
+    }
+    D.render = render;
+    paintTabs(); render();
+    api('settings').then(function (j) {
+      if (j.error) { status.textContent = j.error; return; }
+      D.cfg = j.config; D.vars = j.secrets.vars; D.svc = Array.isArray(j.secrets.svc) ? {} : j.secrets.svc; D.types = j.types; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
+      ['docker', 'vms'].forEach(function (k) { if (Array.isArray(D.cfg[k].items)) D.cfg[k].items = {}; });
+      status.textContent = 'Changes apply after saving.';
+      render();
+      setTimeout(function () { var f = tabs.querySelector('.on'); if (f) f.focus(); }, 0);
+    });
+  }
+  /* small form helpers */
+  function F(label, input, hint) { return h('div', { class: 'fld' }, h('label', null, label), input, hint ? h('div', { class: 'hint' }, hint) : null); }
+  function tIn(o, k, dirty, ph, type, attrs) { return h('input', Object.assign({ type: type || 'text', value: o[k] === undefined || o[k] === null ? '' : o[k], placeholder: ph || '', oninput: function (e) { o[k] = type === 'number' ? +e.target.value : e.target.value; dirty(); } }, attrs || {})); }
+  function cIn(o, k, dirty, lab) { return h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!o[k], onchange: function (e) { o[k] = e.target.checked; dirty(); } }), lab); }
+  function sIn(o, k, dirty, opts, onch) { return h('select', { onchange: function (e) { o[k] = e.target.value; dirty(); if (onch) onch(); } }, opts.map(function (x) { return h('option', { value: x[0], selected: String(o[k]) === String(x[0]) }, x[1]); })); }
+  function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return false; var x = arr[i]; arr[i] = arr[j]; arr[j] = x; return true; }
+  function rid() { var a = new Uint8Array(4); window.crypto.getRandomValues(a); return [].map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function set(title, hint) { var b = h('section', { class: 'set' }, h('h3', null, title), hint ? h('p', { class: 'hint' }, hint) : null); for (var i = 2; i < arguments.length; i++) add(b, arguments[i]); return b; }
+  function orderList(arr, row, dirty, redraw) {
+    return h('div', { class: 'olist' }, arr.map(function (x, i) {
+      return h('div', { class: 'oi' }, row(x, i), btn('', function () { if (move(arr, i, -1)) { dirty(); redraw(); } }, 'sm ghost', 'upar', 'Move up'), btn('', function () { if (move(arr, i, 1)) { dirty(); redraw(); } }, 'sm ghost', 'dnar', 'Move down'));
+    }));
+  }
+
+  function tabDashboard(b, D, dirty) {
+    var c = D.cfg, redraw = function () { D.render(); };
+    b.appendChild(set('Sections', 'Show, hide and order the parts of the dashboard. Half-width sections sit side by side on wide screens.',
+      orderList(c.dashboard.sections, function (s) {
+        return [h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: s.visible, onchange: function (e) { s.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, TITLES[s.id]), h('span', { class: 'muted sm' }, ' · ' + SEC_DESC[s.id]))),
+          sIn(s, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']])];
+      }, dirty, redraw)));
+    b.appendChild(set('Containers', 'Containers are found automatically: new ones appear and removed ones disappear on their own.', h('div', { class: 'grid2' },
+      F('Layout', sIn(c.docker, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])), F('Sort by', sIn(c.docker, 'sort', dirty, [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']]))),
+      cIn(c.docker, 'hide_stopped', dirty, 'Hide stopped containers in the "All" view')));
+    b.appendChild(set('Virtual machines', 'VMs are found automatically through libvirt.', h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])))));
+    var y = S.live || {}, items = [];
+    ((y.docker && y.docker.containers) || []).forEach(function (x) { items.push(['docker', x]); });
+    ((y.vms && y.vms.vms) || []).forEach(function (x) { items.push(['vms', x]); });
+    var filter = h('input', { type: 'search', placeholder: 'Filter…', 'aria-label': 'Filter containers and VMs', oninput: function () { draw(); } });
+    var list = h('div', { class: 'olist' });
+    function draw() {
+      clear(list);
+      var q = filter.value.toLowerCase();
+      items.filter(function (x) { return !q || x[1].name.toLowerCase().indexOf(q) >= 0; }).slice(0, 300).forEach(function (x) {
+        var kind = x[0], it = x[1], bag = c[kind].items;
+        var p = bag[it.name] || { label: '', icon: '', description: '', favorite: false, hidden: false };
+        var put = function () { bag[it.name] = p; dirty(); };
+        list.appendChild(h('div', { class: 'oi' }, img(iconUrl(p.icon || it.icon), '', kind === 'docker' ? 'box' : 'vm'),
+          h('span', { class: 't' }, h('b', null, it.name), h('span', { class: 'muted xs' }, kind === 'docker' ? ' · container' : ' · VM')),
+          h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
+          h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
+          h('label', { class: 'switch', title: 'Favorite' }, h('input', { type: 'checkbox', checked: !!p.favorite, 'aria-label': 'Favorite ' + it.name, onchange: function (e) { p.favorite = e.target.checked; put(); } }), ic('star')),
+          h('label', { class: 'switch', title: 'Hidden from the dashboard' }, h('input', { type: 'checkbox', checked: !!p.hidden, 'aria-label': 'Hide ' + it.name, onchange: function (e) { p.hidden = e.target.checked; put(); } }), ic('eyeoff'))));
+      });
+      if (!list.childNodes.length) list.appendChild(h('div', { class: 'empty' }, items.length ? 'Nothing matches.' : 'No containers or VMs found yet.'));
+    }
+    draw();
+    b.appendChild(set('Favorites, names and visibility', 'Kept by name, so they survive updates and re-created containers. Star = favorite, crossed eye = hidden from the dashboard.', h('div', { style: { 'margin-bottom': '8px' } }, filter), list));
+  }
+
+  function tabSystem(b, D, dirty) {
+    var g = D.cfg.general;
+    b.appendChild(set('Live refresh', 'How often system metrics, containers and VMs update without reloading. Each refresh is one light request; heavier details are cached on the server.', h('div', { class: 'grid2' },
+      F('Refresh every (seconds)', tIn(g, 'refresh', dirty, '2', 'number', { min: 1, max: 300 }), 'Default 2. You can pause it from the dashboard.'),
+      F('When the browser tab is in the background', sIn(g, 'background_poll', dirty, [['slow', 'Slow down (every 30 s)'], ['pause', 'Pause'], ['normal', 'Keep the same speed']])),
+      F('App widgets refresh every (seconds)', tIn(g, 'refresh_services', dirty, '15', 'number', { min: 5, max: 3600 }), 'Radarr, Plex and the other app widgets.'),
+      F('Check for Unraid updates every (hours)', tIn(g, 'os_check_hours', dirty, '6', 'number', { min: 1, max: 168 })))));
+    b.appendChild(set('System metrics', 'Shown in the System section, in this order. A metric the server cannot measure (no sensor, no swap, no UPS) says so instead of showing made-up numbers.',
+      orderList(D.cfg.dashboard.metrics, function (m) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: m.visible, onchange: function (e) { m.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MET[m.id][0]), h('span', { class: 'muted sm' }, ' · ' + MET_DESC[m.id]))); }, dirty, function () { D.render(); })));
+    b.appendChild(set('Display', null, h('div', { class: 'grid2' },
+      F('Dashboard title', tIn(g, 'title', dirty, 'UnDash')),
+      F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
+      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT (upsc) is tried first, then apcupsd.'),
+      F('Web search (Enter in the filter box when nothing matches)', sIn(g, 'search', dirty, [['duckduckgo', 'DuckDuckGo'], ['google', 'Google'], ['bing', 'Bing'], ['startpage', 'Startpage'], ['brave', 'Brave'], ['none', 'Off']])))));
+  }
+
+  function tabAppearance(b, D, dirty) {
+    var a = D.cfg.appearance;
+    var preview = function () { applyLook(a); };
+    var THEMES = [['default', 'Default', ['#1d1b1b', '#232121']], ['light', 'Light', ['#f3f4f6', '#ffffff']], ['amoled', 'AMOLED', ['#000000', '#0b0b0b']]];
+    var tw = h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Theme' });
+    THEMES.forEach(function (t) {
+      tw.appendChild(h('button', { type: 'button', class: 'theme' + (a.theme === t[0] ? ' on' : ''), role: 'radio', 'aria-checked': a.theme === t[0] ? 'true' : 'false', onclick: function () { a.theme = t[0]; dirty(); preview(); D.render(); } },
+        h('span', { class: 'pv', style: { background: t[2][0] } }, h('i', { style: { background: t[2][1] } }), h('i', { style: { background: t[2][1] } }), h('i', { style: { background: a.accent, flex: '0 0 18%' } })), h('b', null, t[1])));
+    });
+    var col, hex;
+    hex = h('input', { type: 'text', value: a.accent, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
+    col = h('input', { type: 'color', value: a.accent, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
+    b.appendChild(set('Theme', 'Three built-in themes. The accent colours buttons, links and selections only; status colours (green, amber, red) never change.', tw,
+      h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex, btn('Default orange', function () { a.accent = '#f15a2c'; hex.value = col.value = a.accent; dirty(); preview(); }, 'sm ghost')),
+      h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Density', sIn(a, 'density', dirty, [['comfortable', 'Comfortable'], ['compact', 'Compact']], preview)))));
+    var pd = function () { dirty(); preview(); };
+    b.appendChild(set('Wallpaper', 'Optional image behind the dashboard (https:// or a path served by Unraid).', h('div', { class: 'grid2' },
+      F('Image URL', tIn(a, 'background', pd, 'https://…')),
+      F('Blur (px) / brightness (%)', h('div', { class: 'inl' }, tIn(a, 'blur', pd, '', 'number', { min: 0, max: 40, style: { width: '90px' } }), tIn(a, 'brightness', pd, '', 'number', { min: 10, max: 100, style: { width: '90px' } }))))));
+    var ta = h('textarea', { rows: 14, spellcheck: 'false', 'aria-label': 'Custom CSS', placeholder: '/* Scoped to UnDash automatically. Examples: */\n.card { border-radius: 12px; }\n.metric .mv { font-size: 26px; }\n--radius: 12px;' });
+    ta.value = D.css || '';
+    var msg = h('div', { class: 'sm muted', role: 'status' });
+    var live = h('input', { type: 'checkbox', checked: true });
+    function check() {
+      var css = ta.value, depth = 0, bad = false;
+      css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '').split('').forEach(function (ch) { if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth < 0) bad = true; } });
+      if (bad || depth !== 0) { msg.textContent = 'Unbalanced { } braces: this CSS will not apply correctly.'; msg.style.color = 'var(--bad)'; return; }
+      var n = null;
+      try { var sh = new CSSStyleSheet(); sh.replaceSync('.und{' + css + '}'); n = sh.cssRules.length && sh.cssRules[0].cssRules ? sh.cssRules[0].cssRules.length : null; } catch (e) { /* older browser */ }
+      msg.style.color = '';
+      msg.textContent = css.trim() ? 'Parsed' + (n !== null ? ': ' + n + ' rule' + (n === 1 ? '' : 's') : '') + '. Invalid declarations are ignored by the browser; @import and scripts are removed when saved.' : 'No custom CSS.';
+    }
+    ta.addEventListener('input', function () { D.css = ta.value; D.cssChanged = true; dirty(); check(); if (live.checked && a.css_enabled) applyCss(ta.value); });
+    ta.addEventListener('keydown', function (e) { if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end'); ta.dispatchEvent(new Event('input')); } });
+    live.addEventListener('change', function () { applyCss(live.checked && a.css_enabled ? ta.value : S.boot.css); });
+    b.appendChild(set('Custom CSS', 'Your own CSS on top of the theme. It only styles UnDash (it is nested under .und), can be switched off without losing it, and is never run as code. Tab indents; Esc then Tab leaves the editor.',
+      h('div', { class: 'inl', style: { 'margin-bottom': '8px' } },
+        h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.css_enabled, onchange: function (e) { a.css_enabled = e.target.checked; dirty(); applyCss(a.css_enabled ? ta.value : ''); } }), 'Enabled'),
+        h('label', { class: 'switch' }, live, 'Live preview'), h('span', { class: 'grow' }),
+        btn('Reset', function () { confirmBox('Clear the custom CSS?', 'The editor is emptied; the theme is not affected. Save to keep the change.', 'Clear', true).then(function (y) { if (y) { ta.value = ''; ta.dispatchEvent(new Event('input')); } }); }, 'sm danger', 'trash')),
+      ta, h('div', { style: { 'margin-top': '6px' } }, msg)));
+    check();
+  }
+
+  function tabServices(b, D, dirty) {
+    var vt = h('div', { class: 'olist' });
+    var drawVars = function () {
+      clear(vt);
+      D.vars.forEach(function (v, i) {
+        if (v.value === D.keep) v.stored = true;
+        vt.appendChild(h('div', { class: 'oi' },
+          h('input', { type: 'text', value: v.name, placeholder: 'NAME', 'aria-label': 'Variable name', style: { flex: '1 1 160px' }, oninput: function (e) { v.name = e.target.value.toUpperCase(); v.secret = /KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i.test(v.name); dirty(); } }),
+          h('input', { type: v.secret ? 'password' : 'text', value: v.value === D.keep ? '' : v.value, placeholder: v.stored ? 'stored (leave empty to keep)' : 'value', autocomplete: 'off', 'aria-label': 'Value of ' + (v.name || 'variable'), style: { flex: '2 1 200px' },
+            oninput: function (e) { v.value = e.target.value === '' && v.stored ? D.keep : e.target.value; dirty(); } }),
+          btn('', function () { D.vars.splice(i, 1); dirty(); drawVars(); }, 'sm ghost danger', 'trash', 'Remove variable ' + v.name)));
+      });
+      if (!D.vars.length) vt.appendChild(h('div', { class: 'empty' }, 'No variables.'));
+    };
+    drawVars();
+    b.appendChild(set('Variables', 'Use {{NAME}} in any URL, link, key or password, like Homepage\'s HOMEPAGE_VAR_… variables. Names containing KEY, TOKEN, PASS or SECRET are secrets: never shown again and left out of redacted exports. {{UNRAID_IP}} is built in.',
+      vt, h('div', { style: { 'margin-top': '8px' } }, btn('Add variable', function () { D.vars.push({ name: '', value: '', secret: false }); dirty(); drawVars(); }, 'sm', 'plus'))));
+    var lay = h('div');
+    var drawLayout = function () {
+      clear(lay);
+      D.cfg.groups.forEach(function (gr, gi) {
+        var box = h('div', { class: 'lg' });
+        box.appendChild(h('div', { class: 'lh' }, h('input', { type: 'text', value: gr.name, 'aria-label': 'Group name', oninput: function (e) { gr.name = e.target.value; dirty(); } }),
+          h('label', { class: 'inl sm muted' }, 'Columns', h('input', { type: 'number', min: 1, max: 8, value: gr.columns, oninput: function (e) { gr.columns = +e.target.value; dirty(); } })),
+          h('label', { class: 'switch sm' }, h('input', { type: 'checkbox', checked: gr.header, onchange: function (e) { gr.header = e.target.checked; dirty(); } }), 'Title'),
+          btn('', function () { if (move(D.cfg.groups, gi, -1)) { dirty(); drawLayout(); } }, 'sm ghost', 'upar', 'Move group ' + gr.name + ' up'),
+          btn('', function () { if (move(D.cfg.groups, gi, 1)) { dirty(); drawLayout(); } }, 'sm ghost', 'dnar', 'Move group ' + gr.name + ' down'),
+          btn('Add widget', function () { editService(D, { id: rid(), name: '', type: 'radarr', icon: '', href: '', url: '', description: '', hidden: false, favorite: false, span: 1, fields: [], options: {} }, gr, true, drawLayout, dirty); }, 'sm', 'plus'),
+          btn('', function () { confirmBox('Delete group "' + gr.name + '"?', 'The group and its ' + gr.services.length + ' widgets are removed when you save.', 'Delete', true).then(function (y) { if (y) { D.cfg.groups.splice(gi, 1); dirty(); drawLayout(); } }); }, 'sm ghost danger', 'trash', 'Delete group ' + gr.name)));
+        gr.services.forEach(function (s, si) {
+          box.appendChild(h('div', { class: 'ls' }, img(iconUrl(s.icon), ''), h('span', { class: 't' }, h('b', null, s.name), h('span', { class: 'muted sm' }, ' · ' + ((D.types[s.type] || [s.type])[0]) + (s.hidden ? ' · hidden' : '') + (s.favorite ? ' · favorite' : ''))),
+            btn('', function () { if (move(gr.services, si, -1)) { dirty(); drawLayout(); } }, 'sm ghost', 'upar', 'Move ' + s.name + ' up'),
+            btn('', function () { if (move(gr.services, si, 1)) { dirty(); drawLayout(); } }, 'sm ghost', 'dnar', 'Move ' + s.name + ' down'),
+            D.cfg.groups.length > 1 ? btn('', function () { var to = D.cfg.groups[gi - 1] || D.cfg.groups[gi + 1]; gr.services.splice(si, 1); to.services.push(s); dirty(); drawLayout(); }, 'sm ghost', 'swap', 'Move ' + s.name + ' to the ' + (gi ? 'previous' : 'next') + ' group') : null,
+            btn('', function () { s.hidden = !s.hidden; dirty(); drawLayout(); }, 'sm ghost', s.hidden ? 'eye' : 'eyeoff', (s.hidden ? 'Show ' : 'Hide ') + s.name),
+            btn('', function () { editService(D, s, gr, false, drawLayout, dirty); }, 'sm', 'edit', 'Edit ' + s.name),
+            btn('', function () { gr.services.splice(si, 1); delete D.svc[s.id]; dirty(); drawLayout(); }, 'sm ghost danger', 'trash', 'Remove ' + s.name)));
+        });
+        if (!gr.services.length) box.appendChild(h('div', { class: 'ls muted sm' }, 'No widgets in this group.'));
+        lay.appendChild(box);
+      });
+    };
+    drawLayout();
+    b.appendChild(set('Widgets', 'App widgets shown in the Services section. Credentials are stored on the server and never shown again.', lay,
+      btn('Add group', function () { D.cfg.groups.push({ id: rid(), name: 'New group', columns: 4, header: true, services: [] }); dirty(); drawLayout(); }, 'sm', 'plus')));
+    var ta = function (ph, lab) { return h('textarea', { rows: 6, placeholder: ph, spellcheck: 'false', 'aria-label': lab }); };
+    var ySvc = ta('Paste services.yaml here', 'services.yaml'), ySet = ta('Optional: settings.yaml (columns and group titles)', 'settings.yaml'), yEnv = ta('Optional: HOMEPAGE_VAR_… values from your .env (KEY=value per line)', '.env values');
+    var prev = h('div', { style: { 'margin-top': '10px' } });
+    b.appendChild(set('Import from Homepage', 'Brings over groups, widgets, icons, links and {{HOMEPAGE_VAR_…}} variables from a gethomepage/homepage config. Only the widgets are replaced; a backup is taken first.',
+      h('div', { class: 'grid2' }, ySvc, h('div', null, ySet, h('div', { style: { height: '8px' } }), yEnv)),
+      h('div', { style: { 'margin-top': '8px' } }, btn('Preview', function () {
+        if (D.dirty) { toast('Save or discard your other changes first.', true); return; }
+        api('import_preview', { services: ySvc.value, settings: ySet.value, env: yEnv.value }).then(function (j) {
+          clear(prev);
+          if (j.error) { prev.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
+          var missing = j.vars.filter(function (v) { return !v.set && !v.stored; });
+          prev.appendChild(h('div', { class: 'banner ok' }, j.groups + ' groups and ' + j.services + ' widgets found.'));
+          j.warnings.forEach(function (w) { prev.appendChild(h('div', { class: 'banner' }, w)); });
+          if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' variables have no value yet (fill them in under Variables afterwards): ' + missing.map(function (v) { return v.name; }).join(', ')));
+          prev.appendChild(h('div', { class: 'kv2 sm' }, j.layout.map(function (g) { return [h('span', null, g.name), h('span', null, g.services.join(', '))]; })));
+          prev.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Import and replace the widgets', function () {
+            confirmBox('Replace the widgets?', 'Your current groups and widgets are replaced. Appearance, container and VM preferences and stored variable values are kept. A backup is taken first.', 'Import', true).then(function (y) {
+              if (y) act('import_apply', { services: ySvc.value, settings: ySet.value, env: yEnv.value }, 'Imported').then(function (k) { if (!k.error) { D.close(true); reload().then(function () { openSettings('services'); }); } });
+            });
+          }, 'pri')));
+        });
+      }, '', 'check')), prev));
+  }
+
+  function editService(D, orig, group, isNew, after, dirtyOuter) {
+    var s = JSON.parse(JSON.stringify(orig)), sec = JSON.parse(JSON.stringify(D.svc[s.id] || {}));
     if (!s.options || Array.isArray(s.options)) s.options = {};
-    var form = h('div');
+    var form = h('div'), noop = function () {};
     var draw = function () {
       clear(form);
       var T = D.types[s.type] || ['', [], false];
-      var f = function (label, input, hint) { return h('div', { class: 'fld' }, h('label', null, label), input, hint ? h('div', { class: 'hint' }, hint) : null); };
-      var t = function (o, k, ph) { return h('input', { type: 'text', value: o[k] === undefined ? '' : o[k], placeholder: ph || '', oninput: function (e) { o[k] = e.target.value; } }); };
-      var typeSel = h('select', { onchange: function (e) { s.type = e.target.value; s.fields = []; s.options = {}; draw(); } },
-        Object.keys(D.types).map(function (k) { return h('option', { value: k, selected: k === s.type }, D.types[k][0]); }));
-      form.appendChild(h('div', { class: 'grid2' }, f('Name', t(s, 'name', T[0])), f('Type', typeSel),
-        f('Icon', t(s, 'icon', 'sh-radarr, radarr.png or https://…'), 'sh-NAME = selfh.st icons, NAME.png = dashboard-icons, or any URL.'),
-        f('Link (opens on click)', t(s, 'href', 'http://{{SERVER_IP}}:7878'))));
-      if (T[2] || s.type === 'customapi') form.appendChild(f('API URL', t(s, 'url', 'http://{{SERVER_IP}}:7878'), 'The address UnDash calls from the server. {{VARIABLES}} work here.'));
+      var typeSel = h('select', { onchange: function (e) { s.type = e.target.value; s.fields = []; s.options = {}; draw(); } }, Object.keys(D.types).map(function (k) { return h('option', { value: k, selected: k === s.type }, D.types[k][0]); }));
+      form.appendChild(h('div', { class: 'grid2' }, F('Name', tIn(s, 'name', noop, T[0])), F('Type', typeSel),
+        F('Icon', tIn(s, 'icon', noop, 'sh-radarr, radarr.png or https://…'), 'sh-NAME = selfh.st icons, NAME.png = dashboard-icons, or any URL.'),
+        F('Link (opens on click)', tIn(s, 'href', noop, 'http://{{SERVER_IP}}:7878')),
+        F('Description', tIn(s, 'description', noop, 'Optional')), F('Width', sIn(s, 'span', noop, [[1, 'Normal'], [2, 'Double']]))));
+      form.appendChild(h('div', { class: 'inl' }, cIn(s, 'favorite', noop, 'Favorite'), cIn(s, 'hidden', noop, 'Hidden')));
+      if (T[2] || s.type === 'customapi') form.appendChild(F('API URL', tIn(s, 'url', noop, 'http://{{SERVER_IP}}:7878'), 'The address UnDash calls from the server. {{VARIABLES}} work here.'));
       var creds = h('div', { class: 'grid2' });
       (T[1] || []).forEach(function (k) {
         var stored = sec[k] === D.keep;
         var inp = h('input', { type: k === 'username' ? 'text' : 'password', autocomplete: 'off', value: stored ? '' : (sec[k] || ''), placeholder: stored ? 'stored (leave empty to keep)' : (k === 'key' ? 'API key or {{VARIABLE}}' : ''),
           oninput: function (e) { sec[k] = e.target.value === '' && stored ? D.keep : e.target.value; } });
-        creds.appendChild(f({ key: s.type === 'plex' ? 'Plex token' : s.type === 'peanut' ? 'Device key' : s.type === 'pihole' ? 'Password / app password' : 'API key', username: 'Username', password: 'Password' }[k],
+        creds.appendChild(F({ key: s.type === 'plex' ? 'Plex token' : s.type === 'peanut' ? 'Device key' : s.type === 'pihole' ? 'Password / app password' : 'API key', username: 'Username', password: 'Password' }[k],
           h('div', { class: 'sec-in' }, inp, stored ? btn('Clear', function () { sec[k] = ''; stored = false; inp.placeholder = ''; }, 'sm') : null)));
       });
       if (creds.childNodes.length) form.appendChild(creds);
-      if (FIELDS[s.type]) form.appendChild(f('Fields to show', h('input', { type: 'text', value: (s.fields || []).join(', '), placeholder: 'all', oninput: function (e) { s.fields = e.target.value.split(/[\s,]+/).filter(Boolean); } }), 'Available: ' + FIELDS[s.type] + '. Empty shows all.'));
+      if (FIELDS[s.type]) form.appendChild(F('Fields to show', h('input', { type: 'text', value: (s.fields || []).join(', '), placeholder: 'all', oninput: function (e) { s.fields = e.target.value.split(/[\s,]+/).filter(Boolean); } }), 'Available: ' + FIELDS[s.type] + '. Empty shows all.'));
       if (s.type === 'calendar') {
         s.options.integrations = s.options.integrations || [];
         var box = h('div');
@@ -760,27 +1488,26 @@
           } }), x.name + ' (' + g.name + ')'));
         }); });
         if (!box.childNodes.length) box.appendChild(h('div', { class: 'muted sm' }, 'Add a Radarr or Sonarr widget first.'));
-        form.appendChild(f('Sources', box));
-        form.appendChild(h('div', { class: 'grid2' }, f('Max events', t(s.options, 'max_events', '8')), f('Days ahead', t(s.options, 'days_ahead', '30')), f('Days back', t(s.options, 'previous_days', '0'))));
+        form.appendChild(F('Sources', box));
+        form.appendChild(h('div', { class: 'grid2' }, F('Max events', tIn(s.options, 'max_events', noop, '8')), F('Days ahead', tIn(s.options, 'days_ahead', noop, '30')), F('Days back', tIn(s.options, 'previous_days', noop, '0'))));
       }
-      if (s.type === 'tautulli_recent') form.appendChild(h('div', { class: 'grid2' }, f('Media type', t(s.options, 'media_type', 'movie, episode, track…')), f('Library section id', t(s.options, 'section_id', 'optional')), f('Count', t(s.options, 'count', '6'))));
-      if (s.type === 'ups') form.appendChild(f('UPS name', t(s.options, 'ups', D.cfg.general.ups_name)));
-      if (s.type === 'emby' || s.type === 'jellyfin') form.appendChild(h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!s.options.hide_blocks, onchange: function (e) { s.options.hide_blocks = e.target.checked; } }), 'Only show the streams (hide the library counts)'));
+      if (s.type === 'tautulli_recent') form.appendChild(h('div', { class: 'grid2' }, F('Media type', tIn(s.options, 'media_type', noop, 'movie, episode, track…')), F('Library section id', tIn(s.options, 'section_id', noop, 'optional')), F('Count', tIn(s.options, 'count', noop, '6'))));
+      if (s.type === 'ups') form.appendChild(F('UPS name', tIn(s.options, 'ups', noop, D.cfg.general.ups_name)));
+      if (s.type === 'emby' || s.type === 'jellyfin') form.appendChild(cIn(s.options, 'hide_blocks', noop, 'Only show the streams (hide the library counts)'));
       if (s.type === 'customapi') {
-        var js = function (k, def) { return h('textarea', { rows: 6, spellcheck: 'false', oninput: function (e) { try { s.options[k] = JSON.parse(e.target.value || def); e.target.style.borderColor = ''; } catch (x) { e.target.style.borderColor = 'var(--bad)'; } } }, JSON.stringify(s.options[k] || JSON.parse(def), null, 2)); };
-        form.appendChild(h('div', { class: 'grid2' }, f('Display', h('select', { onchange: function (e) { s.options.display = e.target.value; } }, [['block', 'Blocks'], ['list', 'List']].map(function (o) { return h('option', { value: o[0], selected: (s.options.display || 'block') === o[0] }, o[1]); }))),
-          f('Method', t(s.options, 'method', 'GET'))));
-        form.appendChild(f('Headers (JSON)', js('headers', '{}'), '{{KEY}} is replaced by the API key above, e.g. {"X-Api-Key": "{{KEY}}"}.'));
-        form.appendChild(f('Mappings (JSON)', js('mappings', '[]'), '[{"field": "data.users", "label": "Users", "format": "number"}]. Formats: number, text, bytes, rate, percent; lists can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
+        var js = function (k, def, lab) { var t = h('textarea', { rows: 6, spellcheck: 'false', 'aria-label': lab, oninput: function (e) { try { s.options[k] = JSON.parse(e.target.value || def); e.target.style.borderColor = ''; } catch (x) { e.target.style.borderColor = 'var(--bad)'; } } }); t.value = JSON.stringify(s.options[k] || JSON.parse(def), null, 2); return t; };
+        form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Blocks'], ['list', 'List']])), F('Method', tIn(s.options, 'method', noop, 'GET'))));
+        form.appendChild(F('Headers (JSON)', js('headers', '{}', 'Headers'), '{{KEY}} is replaced by the API key above, e.g. {"X-Api-Key": "{{KEY}}"}.'));
+        form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}]. Formats: number, text, bytes, rate, percent; lists can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
       }
-      var res = h('div', { id: 'und-test' });
-      if (T[2] || s.type === 'calendar' || s.type === 'customapi') form.appendChild(h('div', { class: 'tools' }, btn('Test', function () {
+      var res = h('div', { role: 'status' });
+      if (T[2] || s.type === 'calendar' || s.type === 'customapi' || s.type === 'ups') form.appendChild(h('div', { class: 'inl' }, btn('Test', function () {
         clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
-        var p = payload(), cfg = JSON.parse(JSON.stringify(p.config)), svc = JSON.parse(JSON.stringify(p.svc));
+        var cfg = JSON.parse(JSON.stringify(D.cfg)), svc = JSON.parse(JSON.stringify(D.svc));
         var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0];
         if (gg) { var k = gg.services.map(function (x) { return x.id; }).indexOf(s.id); if (k < 0) gg.services.push(s); else gg.services[k] = s; }
         svc[s.id] = sec;
-        api('test', { config: cfg, vars: p.vars, svc: svc, id: s.id }).then(function (r) {
+        api('test', { config: cfg, vars: D.vars.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }), svc: svc, id: s.id }).then(function (r) {
           clear(res);
           if (r.error) res.appendChild(h('div', { class: 'banner bad' }, r.error));
           else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' items' : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
@@ -790,22 +1517,112 @@
     draw();
     var m = modal(isNew ? 'Add widget to ' + group.name : 'Edit ' + orig.name, form, [btn('Cancel', function () { m.close(); }), btn(isNew ? 'Add' : 'Apply', function () {
       if (!s.name) s.name = (D.types[s.type] || [''])[0];
+      s.span = +s.span === 2 ? 2 : 1;
       if (isNew) group.services.push(s); else for (var k in s) orig[k] = s[k];
-      D.svc[s.id] = sec; S.dirty = true; m.close(); after();
-      var sb = document.getElementById('und-save'); if (sb) sb.disabled = false;
-    }, 'pri')]);
+      D.svc[s.id] = sec; m.close(); dirtyOuter(); after();
+    }, 'pri')], true);
   }
+
+  function tabConfig(b, D) {
+    var L = Object.assign({}, D.loc);
+    var dir = h('input', { type: 'text', value: L.CONFIG_DIR, oninput: function (e) { L.CONFIG_DIR = e.target.value; } });
+    var port = h('input', { type: 'number', min: 1024, max: 65535, value: L.PORT, oninput: function (e) { L.PORT = e.target.value; } });
+    var bind = h('input', { type: 'text', value: L.BIND, oninput: function (e) { L.BIND = e.target.value; } });
+    var on = h('input', { type: 'checkbox', checked: L.STANDALONE === 'yes', onchange: function (e) { L.STANDALONE = e.target.checked ? 'yes' : 'no'; } });
+    var usingFlash = D.store !== String(L.CONFIG_DIR).replace(/\/$/, '');
+    b.appendChild(set('Location and port', 'Settings are saved in the configuration directory and mirrored to the flash drive, so UnDash keeps working while the array is stopped.',
+      usingFlash ? h('div', { class: 'banner' }, 'The configuration directory is not available right now (is the array started?). Settings are read from and saved to ' + D.flash + ' until it is.') : h('div', { class: 'banner ok' }, 'Using ' + D.store + ' (mirrored to ' + D.flash + ').'),
+      h('div', { class: 'grid2' },
+        F('Configuration directory', dir, 'Default /mnt/user/appdata/undash. Existing files are copied in the first time; nothing is overwritten.'),
+        F('Standalone port', port, 'Default 9099: UnDash on its own page at http://SERVER:PORT, for browsers signed in to Unraid.'),
+        F('Listen address', bind, '0.0.0.0 = every interface, or one address such as your LAN IP.')),
+      h('label', { class: 'switch' }, on, 'Serve UnDash on the standalone port'),
+      h('div', { style: { 'margin-top': '8px' } }, btn('Apply location and port', function () {
+        act('loc_save', { dir: L.CONFIG_DIR, port: L.PORT, bind: L.BIND, standalone: L.STANDALONE }, 'Saved. The standalone port restarts.').then(function (j) { if (!j.error) { D.loc = j.loc; D.store = j.store; S.boot.port = +j.loc.PORT; S.boot.port_enabled = j.loc.STANDALONE === 'yes'; D.render(); } });
+      }, 'pri'))));
+    var dl = function (kind) {
+      api('export', { kind: kind }).then(function (j) {
+        if (j.error) { toast(j.error, true); return; }
+        var a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(j, null, 2)], { type: 'application/json' })), download: 'undash-' + kind + '-' + new Date().toISOString().slice(0, 10) + '.json' });
+        root.appendChild(a); a.click(); root.removeChild(a);
+      });
+    };
+    b.appendChild(set('Export', null,
+      h('div', { class: 'kv2 sm', style: { 'margin-bottom': '10px' } },
+        h('span', null, 'Redacted'), h('span', null, 'Layout, sections, metrics, container and VM preferences, theme, accent, refresh settings, custom CSS and non-secret variables. API keys, passwords, tokens and secret variables are removed, and so are passwords or tokens written into URLs. Safe to share.'),
+        h('span', null, 'Full'), h('span', null, 'Everything above plus every variable, API key and password: a complete backup. Keep it private.')),
+      h('div', { class: 'inl' }, btn('Export redacted', function () { dl('redacted'); }, '', 'download'), btn('Export full', function () {
+        confirmBox('Export with secrets?', 'The file contains your API keys and passwords in plain text. Store it somewhere private.', 'Export full').then(function (y) { if (y) dl('full'); });
+      }, '', 'download'))));
+    var info = h('div', { style: { 'margin-top': '10px' } });
+    var file = h('input', { type: 'file', accept: '.json,application/json', 'aria-label': 'Settings file to import', onchange: function () {
+      var f = file.files[0]; clear(info); if (!f) return;
+      if (f.size > 2097152) { info.appendChild(h('div', { class: 'banner bad' }, 'That file is larger than 2 MB, so it is not an UnDash export.')); return; }
+      var rd = new FileReader();
+      rd.onload = function () {
+        var raw = String(rd.result);
+        api('import_check', { file: raw }).then(function (j) {
+          clear(info);
+          if (j.error) { info.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
+          var s = j.summary;
+          info.appendChild(h('div', { class: 'kv2 sm' },
+            h('span', null, 'Kind'), h('span', null, s.kind === 'full' ? 'Full export (includes secrets)' : s.kind === 'redacted' ? 'Redacted export (your stored secrets are kept)' : 'Layout file (your stored secrets are kept)'),
+            h('span', null, 'Created'), h('span', null, s.created ? new Date(s.created * 1000).toLocaleString() : 'unknown'),
+            h('span', null, 'Widgets'), h('span', null, s.groups + ' groups, ' + s.widgets + ' widgets' + (s.skipped ? ' (' + s.skipped + ' of an unknown type skipped)' : '')),
+            h('span', null, 'Appearance'), h('span', null, s.theme + ' theme, accent ' + s.accent + ', refresh ' + s.refresh + ' s'),
+            h('span', null, 'Custom CSS'), h('span', null, s.css === null ? 'not included (current CSS kept)' : s.css + ' characters'),
+            h('span', null, 'Variables'), h('span', null, s.vars + (s.credentials ? ', credentials for ' + s.credentials + ' widgets' : ''))));
+          info.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Apply this file', function () {
+            confirmBox('Replace your settings?', 'The settings above replace the current ones. A backup is taken first; you can restore it below.', 'Apply', true).then(function (y) {
+              if (y) act('import_file', { file: raw }, 'Settings imported').then(function (k) { if (!k.error) location.reload(); });
+            });
+          }, 'pri')));
+        });
+      };
+      rd.readAsText(f);
+    } });
+    b.appendChild(set('Import', 'Load an UnDash export. You see what it contains before anything changes.', file, info));
+    var vbox = h('div', { role: 'status' });
+    var bbox = h('div', { class: 'olist' }, h('div', { class: 'empty' }, 'Loading…'));
+    b.appendChild(set('Check configuration', 'Looks for widgets without a URL, undefined variables and calendar sources that were removed.',
+      btn('Validate', function () {
+        clear(vbox).appendChild(h('div', { class: 'progress' }, h('i')));
+        api('validate').then(function (j) { clear(vbox); if (j.error) { vbox.appendChild(h('div', { class: 'banner bad' }, j.error)); return; } if (!j.issues.length) vbox.appendChild(h('div', { class: 'banner ok', style: { 'margin-top': '10px' } }, 'No problems found.')); j.issues.forEach(function (x) { vbox.appendChild(h('div', { class: 'banner ' + (x.level === 'bad' ? 'bad' : ''), style: { 'margin-top': '8px' } }, x.msg)); }); });
+      }, '', 'check'), vbox));
+    b.appendChild(set('Backups', 'Taken automatically before every save, import, restore and reset (the newest 15 are kept in backups/ of the configuration directory).', bbox,
+      h('div', { style: { 'margin-top': '10px' } }, btn('Reset to defaults…', function () {
+        confirmBox('Reset the dashboard?', 'Widgets, sections and preferences go back to the defaults. Variables and credentials are kept, and a backup is taken first.', 'Reset', true).then(function (y) { if (y) act('reset', {}, 'Reset').then(function (j) { if (!j.error) location.reload(); }); });
+      }, 'danger', 'trash'))));
+    api('backups').then(function (j) {
+      clear(bbox);
+      if (!j.backups || !j.backups.length) { bbox.appendChild(h('div', { class: 'empty' }, 'No backups yet.')); return; }
+      j.backups.forEach(function (x) {
+        var when = new Date(x.created * 1000).toLocaleString();
+        bbox.appendChild(h('div', { class: 'oi' }, h('span', { class: 't' }, h('b', null, when), h('span', { class: 'muted sm' }, ' · ' + (x.reason || ''))),
+          btn('Restore', function () { confirmBox('Restore this backup?', 'Settings, secrets and custom CSS go back to ' + when + '. The current state is backed up first.', 'Restore', true).then(function (y) { if (y) act('restore', { id: x.id }, 'Restored').then(function (k) { if (!k.error) location.reload(); }); }); }, 'sm', null, 'Restore the backup from ' + when)));
+      });
+    });
+  }
+
+  function reload() {
+    return api('boot').then(function (j) { if (j.error) { toast(j.error, true); return; } S.boot = j; S.L = j.layout; S.svc = {}; shell(); refreshNow(); });
+  }
+
+  /* ---------- keyboard ---------- */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') && !root.querySelector('.modal-bg,.drawer') && R.search) { e.preventDefault(); R.search.focus(); }
+  });
+  window.addEventListener('beforeunload', function (e) { if (S.drawer && S.drawer.dirty) { e.preventDefault(); e.returnValue = ''; } });
 
   /* ---------- start ---------- */
   S.full = LS.get('full', false);
-  var h0 = (location.hash || '').replace('#', '');
-  if (TABS.some(function (t) { return t[0] === h0; })) S.tab = h0;
-  window.addEventListener('beforeunload', function (e) { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && S.boot && S.tab === 'dash') { pollSys(); pollServices(); } });
+  S.paused = LS.get('paused', false);
   api('boot').then(function (j) {
     if (j.error) { clear(root).appendChild(h('div', { class: 'und-loading' }, 'UnDash could not start: ' + j.error)); return; }
-    S.boot = j; shell(); render();
-    if (S.tab !== 'dash' && S.tab !== 'system') pollSys();   // the header shows the Unraid version and update state on every tab
+    S.boot = j; S.L = j.layout;
+    shell();
+    if (S.paused) api('live', { parts: parts() }).then(function (r) { if (!r.error) { S.live = r; S.lastOk = Date.now(); S.conn = 'ok'; paintAll(); paintLive(); } });
+    else tick();
+    if (location.hash === '#settings') openSettings();
   });
-  window.addEventListener('hashchange', function () { var t = (location.hash || '').replace('#', ''); if (t !== S.tab && TABS.some(function (x) { return x[0] === t; })) go(t); });
 })();

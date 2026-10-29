@@ -20,12 +20,15 @@ function und_cpu_pct($now, $prev) {
   return $dTot > 0 ? max(0, min(100, round(100 * ($dTot - $dIdle) / $dTot, 1))) : 0;
 }
 
+/** The interface of the default route. Unraid's macvlan "shim-" interfaces only mirror a bridge, so the bridge itself is preferred. */
 function und_net_iface() {
+  $found = [];
   foreach (array_slice(explode("\n", und_read('/proc/net/route')), 1) as $l) {
     $c = preg_split('/\s+/', trim($l));
-    if (count($c) > 2 && $c[1] === '00000000') return $c[0];
+    if (count($c) > 2 && $c[1] === '00000000') $found[] = $c[0];
   }
-  return '';
+  foreach ($found as $f) if (strpos($f, 'shim-') !== 0) return $f;
+  return $found ? substr($found[0], 5) : '';
 }
 
 function und_net_sample($if) {
@@ -45,6 +48,8 @@ function und_rates() {
   $prev = und_read_json($f, []);
   $now = microtime(true);
   $if = und_net_iface();
+  // several browsers polling at once: a result from the last second is reused instead of sampling again
+  if (!empty($prev['res']) && $now - ($prev['t'] ?? 0) < 1 && $now >= ($prev['t'] ?? 0)) return $prev['res'];
   $cpu = und_cpu_sample(); $net = $if ? und_net_sample($if) : null;
   if (!$prev || $now - ($prev['t'] ?? 0) > 60 || $now - ($prev['t'] ?? 0) < 0.25) {
     usleep(300000);
@@ -59,8 +64,9 @@ function und_rates() {
   }
   $rx = $tx = null;
   if ($net && !empty($prev['net']) && ($prev['if'] ?? '') === $if) { $rx = max(0, ($net['rx'] - $prev['net']['rx']) / $dt); $tx = max(0, ($net['tx'] - $prev['net']['tx']) / $dt); }
-  und_write_json($f, ['t' => $now, 'cpu' => $cpu, 'net' => $net, 'if' => $if]);
-  return ['cpu' => $pct, 'cores' => $cores, 'rx' => $rx, 'tx' => $tx, 'iface' => $if];
+  $res = ['cpu' => $pct, 'cores' => $cores, 'rx' => $rx, 'tx' => $tx, 'iface' => $if];
+  und_write_json($f, ['t' => $now, 'cpu' => $cpu, 'net' => $net, 'if' => $if, 'res' => $res]);
+  return $res;
 }
 
 function und_meminfo() {
@@ -102,8 +108,10 @@ function und_uptime() { return (int)(float)explode(' ', trim(und_read('/proc/upt
 
 function und_disk($path) {
   $p = und_path($path);
+  if (!is_dir($p)) return null;
   $t = @disk_total_space($p); $f = @disk_free_space($p);
-  if (!$t) return null;
+  // /mnt/user reports 0 on servers whose shares live only on ZFS or other pools
+  if (!$t) return ['path' => $path, 'total' => 0, 'free' => 0, 'used' => 0, 'pct' => null];
   return ['path' => $path, 'total' => $t, 'free' => $f, 'used' => $t - $f, 'pct' => round(100 * ($t - $f) / $t, 1)];
 }
 

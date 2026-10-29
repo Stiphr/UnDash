@@ -30,10 +30,12 @@ define('UND_TMP', $state . '/tmp');
 define('UND_ROOT', $repo . '/src');
 $fs = $state . '/fs';
 @mkdir("$fs/proc/net", 0777, true); @mkdir("$fs/etc", 0777, true); @mkdir("$fs/var/local/emhttp", 0777, true); @mkdir("$fs/sys/class/hwmon/hwmon0", 0777, true);
-@mkdir("$fs/var/lib/docker", 0777, true); @mkdir("$fs/mnt/user", 0777, true); @mkdir("$fs/boot/config/plugins", 0777, true);
+@mkdir("$fs/var/lib/docker", 0777, true); @mkdir("$fs/mnt/user/appdata", 0777, true); @mkdir("$fs/boot/config/plugins", 0777, true);
 $t = microtime(true) * 100;
-file_put_contents("$fs/proc/stat", sprintf("cpu  %d 0 %d %d 0 0 0 0 0 0\n", $t * 0.6 + 400 * sin($t / 900), $t * 0.2, $t * 7 - 400 * sin($t / 900)));
-file_put_contents("$fs/proc/meminfo", "MemTotal:       65536000 kB\nMemFree:         2000000 kB\nMemAvailable:   " . (int)(45000000 + 3000000 * sin($t / 2000)) . " kB\n");
+$stat = sprintf("cpu  %d 0 %d %d 0 0 0 0 0 0\n", $t * 12 + 8000 * sin($t / 900), $t * 4, $t * 140 - 8000 * sin($t / 900));
+for ($i = 0; $i < 20; $i++) { $f = 0.2 + 0.8 * abs(sin($i * 1.7 + $t / 3000)); $stat .= sprintf("cpu%d %d 0 %d %d 0 0 0 0 0 0\n", $i, $t * $f, $t * 0.1, $t * (7 - $f)); }
+file_put_contents("$fs/proc/stat", $stat);
+file_put_contents("$fs/proc/meminfo", "MemTotal:       65536000 kB\nMemFree:         2000000 kB\nMemAvailable:   " . (int)(45000000 + 3000000 * sin($t / 2000)) . " kB\nSwapTotal:       0 kB\nSwapFree:        0 kB\n");
 file_put_contents("$fs/proc/cpuinfo", str_repeat("processor\t: 0\nmodel name\t: Intel(R) Core(TM) i5-14500\n\n", 20));
 file_put_contents("$fs/proc/uptime", "151200.55 2000000.1\n");
 file_put_contents("$fs/proc/loadavg", "1.21 1.05 0.98 2/900 1234\n");
@@ -44,7 +46,8 @@ file_put_contents("$fs/sys/class/hwmon/hwmon0/name", "coretemp\n");
 file_put_contents("$fs/sys/class/hwmon/hwmon0/temp1_label", "Package id 0\n");
 file_put_contents("$fs/sys/class/hwmon/hwmon0/temp1_input", (35000 + rand(0, 3000)) . "\n");
 file_put_contents("$fs/etc/unraid-version", "version=\"7.3.4\"\n");
-file_put_contents("$fs/var/local/emhttp/var.ini", "NAME=\"R1ZE\"\nmdState=\"STARTED\"\nmdResync=\"0\"\n");
+file_put_contents("$fs/var/local/emhttp/var.ini", "NAME=\"R1ZE\"\nmdState=\"STARTED\"\nmdResync=\"0\"\ncsrf_token=\"dev\"\n");
+if (!is_file($state . '/flash/undash.cfg')) { @mkdir($state . '/flash', 0777, true); file_put_contents($state . '/flash/undash.cfg', "CONFIG_DIR=\"/mnt/user/appdata/undash\"\nPORT=\"9099\"\nBIND=\"0.0.0.0\"\nSTANDALONE=\"yes\"\n"); }
 file_put_contents("$fs/var/local/emhttp/network.ini", "[eth0]\nIPADDR:0=\"192.168.1.10\"\n");
 file_put_contents("$fs/var/local/emhttp/disks.ini", "[\"parity\"]\nname=\"parity\"\ndevice=\"sdb\"\nstatus=\"DISK_OK\"\ntemp=\"31\"\ntype=\"Parity\"\nfsSize=\"\"\n" .
   "[\"disk1\"]\nname=\"disk1\"\ndevice=\"sdc\"\nstatus=\"DISK_OK\"\ntemp=\"33\"\ntype=\"Data\"\nfsSize=\"11718885324\"\nfsFree=\"2343777064\"\nfsType=\"xfs\"\n" .
@@ -55,31 +58,48 @@ file_put_contents("$fs/var/lib/docker/unraid-autostart", "radarr\nsonarr\nplex\n
 $GLOBALS['UND_FS'] = $fs;
 
 /* ---------- fake commands ---------- */
-$cont = function ($name, $image, $state, $port, $health = '') {
-  return ['Id' => md5($name), 'Name' => '/' . $name, 'State' => ['Status' => $state, 'StartedAt' => gmdate('c', time() - rand(3600, 900000))] + ($health ? ['Health' => ['Status' => $health]] : []),
-    'Config' => ['Image' => $image, 'Labels' => ['net.unraid.docker.managed' => 'dockerman', 'net.unraid.docker.webui' => "http://[IP]:[PORT:$port]/", 'net.unraid.docker.icon' => 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/' . explode('-', $name)[0] . '.png']],
-    'HostConfig' => ['NetworkMode' => 'bridge', 'PortBindings' => ["$port/tcp" => [['HostPort' => (string)$port]]]], 'NetworkSettings' => ['Networks' => ['bridge' => ['IPAddress' => '172.17.0.' . rand(2, 99)]]]];
+$cont = function ($name, $image, $state, $port, $health = '', $restarts = 0) {
+  return ['Id' => md5($name) . md5($name . 'x'), 'Name' => '/' . $name, 'Created' => gmdate('c', time() - 9000000), 'RestartCount' => $restarts,
+    'State' => ['Status' => $state, 'StartedAt' => gmdate('c', time() - (crc32($name) % 900000) - 3600), 'ExitCode' => $state === 'exited' ? ($name === 'homepage' ? 0 : 137) : 0] + ($health ? ['Health' => ['Status' => $health, 'Log' => [['End' => gmdate('c'), 'ExitCode' => $health === 'unhealthy' ? 1 : 0, 'Output' => $health === 'unhealthy' ? 'curl: (7) Failed to connect to localhost port 2283' : 'ok']]]] : []),
+    'Config' => ['Image' => $image, 'Env' => ['PUID=99', 'PGID=100', 'TZ=Asia/Kolkata', 'API_KEY=secret'], 'Labels' => ['net.unraid.docker.managed' => 'dockerman', 'net.unraid.docker.webui' => "http://[IP]:[PORT:$port]/", 'net.unraid.docker.icon' => 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/' . explode('-', $name)[0] . '.png']],
+    'Image' => 'sha256:' . md5($image), 'Mounts' => [['Source' => '/mnt/user/appdata/' . $name, 'Destination' => '/config', 'RW' => true]],
+    'HostConfig' => ['NetworkMode' => 'bridge', 'RestartPolicy' => ['Name' => 'no'], 'PortBindings' => ["$port/tcp" => [['HostIp' => '', 'HostPort' => (string)$port]]]], 'NetworkSettings' => ['Networks' => ['bridge' => ['IPAddress' => '172.17.0.' . (crc32($name) % 90 + 2)]]]];
 };
 $containers = [$cont('radarr', 'lscr.io/linuxserver/radarr', 'running', 7878), $cont('sonarr', 'lscr.io/linuxserver/sonarr', 'running', 8989), $cont('plex', 'plexinc/pms-docker', 'running', 32400, 'healthy'),
-  $cont('homepage', 'ghcr.io/gethomepage/homepage:latest', 'exited', 3000), $cont('qbittorrent', 'lscr.io/linuxserver/qbittorrent', 'paused', 8080), $cont('immich', 'ghcr.io/immich-app/immich-server:release', 'running', 2283, 'unhealthy')];
+  $cont('homepage', 'ghcr.io/gethomepage/homepage:latest', 'exited', 3000), $cont('qbittorrent', 'lscr.io/linuxserver/qbittorrent', 'paused', 8080), $cont('immich', 'ghcr.io/immich-app/immich-server:release', 'running', 2283, 'unhealthy', 3),
+  $cont('prowlarr', 'lscr.io/linuxserver/prowlarr', 'running', 9696), $cont('bazarr', 'lscr.io/linuxserver/bazarr', 'running', 6767), $cont('tautulli', 'lscr.io/linuxserver/tautulli', 'running', 8181),
+  $cont('sabnzbd', 'lscr.io/linuxserver/sabnzbd', 'exited', 8085), $cont('adguard', 'adguard/adguardhome', 'running', 3001)];
 $ds = $state . '/docker-state.json';
 $dstate = is_file($ds) ? json_decode(file_get_contents($ds), true) : [];
-foreach ($containers as &$c) { $n = ltrim($c['Name'], '/'); if (isset($dstate[$n])) $c['State']['Status'] = $dstate[$n]; } unset($c);
+foreach ($containers as &$c) {
+  $n = ltrim($c['Name'], '/'); if (isset($dstate[$n])) $c['State']['Status'] = $dstate[$n];
+  if ($c['State']['Status'] === 'running') {   // cgroup v2 files, as on Unraid 7
+    $cg = "$fs/sys/fs/cgroup/docker/" . $c['Id']; @mkdir($cg, 0777, true);
+    $w = (crc32($n) % 50) / 10 + 0.2;
+    file_put_contents("$cg/cpu.stat", 'usage_usec ' . (int)($t * 10000 * $w * 0.2) . "\n");
+    file_put_contents("$cg/memory.current", (string)(crc32($n . 'm') % 2000 * 1048576 + 80 * 1048576));
+    file_put_contents("$cg/memory.stat", "inactive_file 10485760\n");
+  }
+} unset($c);
 $vs = $state . '/vm-state.json';
 $vstate = is_file($vs) ? json_decode(file_get_contents($vs), true) : ['Windows 11' => 'running', 'Home Assistant' => 'shut off', 'Ubuntu Server' => 'paused'];
 
 $GLOBALS['UND_EXEC_MOCK'] = function ($argv) use ($containers, $ds, $dstate, $vs, $vstate) {
   $cmd = basename($argv[0]);
   if ($cmd === 'docker') {
-    if ($argv[1] === 'ps') return ['out' => implode("\n", array_map(function ($c) { return $c['Id']; }, $containers))];
-    if ($argv[1] === 'inspect') return ['out' => json_encode($containers)];
+    if ($argv[1] === 'ps') return ['out' => implode("\n", array_map(function ($c) {
+      $st = $c['State']['Status']; $h = $c['State']['Health']['Status'] ?? '';
+      $status = $st === 'running' ? 'Up ' . (int)((time() - strtotime($c['State']['StartedAt'])) / 3600) . ' hours' . ($h ? " ($h)" : '') : ($st === 'paused' ? 'Up 2 days (Paused)' : 'Exited (' . $c['State']['ExitCode'] . ') 3 hours ago');
+      return $c['Id'] . '|' . ltrim($c['Name'], '/') . '|' . $st . '|' . $status . '|' . $c['Config']['Image'];
+    }, $containers))];
+    if ($argv[1] === 'inspect') { $want = array_slice($argv, 2); return ['out' => json_encode(array_values(array_filter($containers, function ($c) use ($want) { return in_array($c['Id'], $want, true) || in_array(ltrim($c['Name'], '/'), $want, true); })))]; }
     if ($argv[1] === 'stats') { $o = ''; foreach ($containers as $c) if ($c['State']['Status'] === 'running') $o .= json_encode(['Name' => ltrim($c['Name'], '/'), 'CPUPerc' => rand(0, 900) / 100 . '%', 'MemUsage' => rand(80, 2000) . 'MiB / 62.5GiB', 'MemPerc' => '1.2%']) . "\n"; return ['out' => $o]; }
     if ($argv[1] === 'logs') { $o = ''; for ($i = 0; $i < 60; $i++) $o .= gmdate('Y-m-d\TH:i:s', time() - 600 + $i * 10) . '.123456789Z [Info] ' . $argv[5] . ": line $i " . ($i % 7 ? 'everything is fine' : 'RSS sync completed, 3 releases found') . "\n"; return ['out' => $o, 'err' => gmdate('Y-m-d\TH:i:s', time() - 30) . ".5Z [Warn] a warning on stderr\n"]; }
     $map = ['start' => 'running', 'stop' => 'exited', 'restart' => 'running', 'pause' => 'paused', 'unpause' => 'running'];
     if (isset($map[$argv[1]])) { $dstate[$argv[2]] = $map[$argv[1]]; file_put_contents($ds, json_encode($dstate)); return ['out' => $argv[2]]; }
   }
   if ($cmd === 'virsh') {
-    if ($argv[1] === 'list') return ['out' => implode("\n", array_keys($vstate)) . "\n"];
+    if ($argv[1] === 'list') { $o = " Id   Name              State\n--------------------------------------\n"; $i = 1; foreach ($vstate as $n => $st) $o .= sprintf(" %-4s %-17s %s\n", $st === 'running' || $st === 'paused' ? $i++ : '-', $n, $st); return ['out' => $o]; }
     if ($argv[1] === 'dominfo') return ['out' => "Name: {$argv[2]}\nState: " . $vstate[$argv[2]] . "\nCPU(s): 8\nMax memory: 16777216 KiB\nAutostart: " . ($argv[2] === 'Windows 11' ? 'enable' : 'disable') . "\n"];
     if ($argv[1] === 'dumpxml') return ['out' => '<domain><metadata><vmtemplate xmlns="unraid" name="Windows 11" icon="' . ($argv[2] === 'Windows 11' ? 'windows11.png' : 'linux.png') . '" os="' . ($argv[2] === 'Windows 11' ? 'windowstpm' : 'linux') . '"/></metadata><graphics type="vnc" port="5900" websocket="5700"/>' . ($argv[2] === 'Windows 11' ? '<channel type="unix"><target type="virtio" name="org.qemu.guest_agent.0"/></channel>' : '') . '</domain>'];
     $map = ['start' => 'running', 'shutdown' => 'shut off', 'destroy' => 'shut off', 'reboot' => 'running', 'suspend' => 'paused', 'resume' => 'running', 'dompmsuspend' => 'pmsuspended', 'dompmwakeup' => 'running'];
