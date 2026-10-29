@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "2026.10.31b">
+<!ENTITY version "2026.10.31e">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###2026.10.31e
+- System tiles are separate cards with bigger numbers; CPU, memory, network and disk temperature show their recent history as a small chart under the value.
+- New Launcher section (right after System): one-click icons for every app with a link, with a status dot taken from the container of the same name. Hide or move it in Settings > Dashboard.
+- App cards: large numbers are shortened (16.9K, exact value on hover), latency is rounded, and labels no longer break mid-word.
+
 ###2026.10.31b
 - Media: four equal columns (upcoming movies, upcoming episodes, recently added movies, recently added episodes) as compact lists that scroll on their own; 4, 2 or 1 columns depending on the space. Each column has its own item count (Settings > Dashboard > Media).
 - Alerts: Ignore on each alert, for 1 hour, 24 hours, 7 days, a custom time or permanently, or for every alert of that type (with a confirmation). Undo right after ignoring. Disk alerts are now per disk.
@@ -97,7 +102,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '2026.10.31b');
+define('UND_VERSION', '2026.10.31e');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -266,7 +271,7 @@ foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>051271c681c6ff5c4f96b25d0b1f45b8137dfdb8e6f9d69bb6855d4802eeda3c</SHA256>
+<SHA256>ad1560a215e453c7d67dbba08e23a54a52269b4838c10db018ee0ad10a9aa79c</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -307,7 +312,7 @@ function und_types() {
 }
 
 /** Dashboard sections, in their default order. */
-function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'apps', 'docker', 'vms']; }
+function und_section_ids() { return ['overview', 'launcher', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'apps', 'docker', 'vms']; }
 
 /** System metrics the overview can show, in their default order. */
 function und_metric_ids() { return ['cpu', 'memory', 'storage', 'network', 'health', 'disks', 'uptime', 'ups', 'cores', 'swap', 'load', 'path', 'docker', 'vms']; }
@@ -584,6 +589,13 @@ function und_normalize(array $c) {
     return $out;
   };
   $sections = $order($db['sections'] ?? [], und_section_ids(), $d['dashboard']['sections'], ['visible' => 'bool', 'width' => ['full', 'half'], 'collapsed' => 'bool']);
+  // a section added in a later version goes where it belongs by default, not at the bottom
+  $had = array_column(array_filter((array)($db['sections'] ?? []), 'is_array'), 'id');
+  if ($had && !in_array('launcher', $had, true)) {
+    $l = null; foreach ($sections as $i => $x) if ($x['id'] === 'launcher') { $l = $x; array_splice($sections, $i, 1); break; }
+    $at = 0; foreach ($sections as $i => $x) if ($x['id'] === 'overview') $at = $i + 1;
+    array_splice($sections, $at, 0, [$l]);
+  }
   $metrics = $order($db['metrics'] ?? [], und_metric_ids(), $d['dashboard']['metrics'], ['visible' => 'bool']);
 
   $items = function ($list, $extra = []) {
@@ -805,7 +817,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>f040982bf140fc1b340d7334ad1707e9afeda78a810a8d87b54eea8a4752cf89</SHA256>
+<SHA256>ee3cf261f7410dc73d72a92d07e504c763df12baecc2fb0117a623acaefab627</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -3933,15 +3945,22 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .sec-h h2 button{color:var(--text)}
 
 /* stats bar */
-.und .stats{display:flex;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.und .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px}
 .und .stats.is-stale{opacity:.6}
-.und button.stat{all:unset;box-sizing:border-box;flex:1 1 150px;display:flex;flex-direction:column;gap:2px;padding:10px 12px 12px;background:var(--panel);cursor:pointer;position:relative;min-width:0;min-height:76px;box-shadow:1px 0 0 var(--line),0 1px 0 var(--line)}
+.und button.stat{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;padding:11px 13px 13px;background:var(--panel);cursor:pointer;position:relative;min-width:0;min-height:92px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;isolation:isolate}
+.und button.stat>.k,.und button.stat>.v,.und button.stat>.s{position:relative;z-index:1}
+.und .stat .sp{position:absolute;left:0;right:0;bottom:0;height:30px;z-index:0;pointer-events:none}
+.und button.stat.has-sp{padding-bottom:34px}
+.und .stat .sp svg{width:100%;height:100%;display:block}
+.und .stat .sp path.a{fill:var(--accent);fill-opacity:.13}.und .stat .sp path.l{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-opacity:.85}
+.und .stat.warn .sp path.a{fill:var(--warn)}.und .stat.warn .sp path.l{stroke:var(--warn)}.und .stat.bad .sp path.a{fill:var(--bad)}.und .stat.bad .sp path.l{stroke:var(--bad)}
+.und .stat.has-sp .bar{display:none}
 .und button.stat:hover{background:var(--panel-2)}
 .und button.stat:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.und button.stat.on{background:var(--panel-2);box-shadow:inset 0 -2px 0 var(--accent)}
+.und button.stat.on{background:var(--panel-2);border-color:var(--accent)}
 .und .stat .k{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 .und .stat .k svg{width:13px;height:13px}
-.und .stat .v{font-size:18px;font-weight:600;color:var(--title);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.und .stat .v{font-size:22px;font-weight:650;letter-spacing:-.01em;color:var(--title);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .und .stat .s{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .stat .bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:transparent}
 .und .stat .bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .35s}
@@ -3957,6 +3976,19 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .spark2 path.a{fill:var(--accent);fill-opacity:.14}.und .spark2 path.l{fill:none;stroke:var(--accent);stroke-width:1.5}
 .und .detail .cores{height:60px;margin:0;grid-auto-columns:minmax(4px,1fr)}
 .und .stale{font-size:12px;color:var(--warn);margin:0 0 6px}
+
+/* launcher: app icons with a status dot */
+.und .launch{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px}
+.und a.lnk{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px 8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);color:var(--text);text-decoration:none!important;min-width:0;transition:border-color .15s,background .15s}
+.und a.lnk:hover{border-color:var(--accent);background:var(--panel-2)}
+.und a.lnk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.und .lic{position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center}
+.und .lic img{width:34px;height:34px;object-fit:contain}
+.und .lph{width:34px;height:34px;border-radius:8px;background:var(--panel-2);color:var(--muted);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;text-transform:uppercase}
+.und .ldot{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;border:2px solid var(--panel);background:var(--off)}
+.und .ldot.ok{background:var(--ok)}.und .ldot.warn{background:var(--warn)}.und .ldot.bad{background:var(--bad)}
+.und .ln{font-size:11.5px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.und a.lnk:hover .ln{color:var(--title)}
 
 /* media: four equal columns, by the section's own width (a half-width section gets 2 or 1) */
 .und .mbody{container-type:inline-size}
@@ -4046,8 +4078,9 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   .und .rowi.c>.c-cpu,.und .rowi.c>.c-mem{display:none}
 }
 @media (max-width:640px){
-  .und button.stat{flex-basis:40%}
-  .und button.stat{min-height:68px;padding:8px 10px 10px}.und .stat .v{font-size:16px}
+  .und .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .und button.stat{min-height:76px;padding:9px 10px 10px}.und .stat .v{font-size:18px}
+  .und .launch{grid-template-columns:repeat(auto-fill,minmax(64px,1fr))}
   .und .ai{display:none}.und .an{min-width:0;flex:1}
   .und .adet{padding-left:12px}
 }
@@ -4081,11 +4114,12 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .ac .ch .nm{font-size:13.5px;font-weight:600}
 .und .ac .ch .sub{margin-left:auto}
 .und .ac .ch .btn{margin-left:2px!important}
-.und .ac .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:0;background:var(--panel-2);border-radius:6px;padding:6px 0}
+.und .ac .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(54px,1fr));gap:0;background:var(--panel-2);border-radius:6px;padding:6px 0}
 .und .ac .blk{background:transparent;padding:0 6px;border-left:1px solid var(--line);border-radius:0;min-width:0}
 .und .ac .blk:first-child{border-left:0}
 .und .ac .blk .v{font-size:14px;font-weight:600;color:var(--title)}
-.und .ac .blk .l{font-size:10px;font-weight:600;color:var(--muted)}
+.und .ac .blk .l{font-size:9.5px;font-weight:600;color:var(--muted);letter-spacing:.02em;white-space:normal;line-height:1.2;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.und .ac .blk .v{font-size:15px}
 .und .ac .streams{margin-top:0}
 .und .ac .stream{font-size:12px}
 .und .ac button.err{padding:5px 8px!important;text-align:left}
@@ -4100,7 +4134,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--panel-2)}
 .und .switch.pk{margin:3px 0;font-size:13px;min-width:0}
 ]]></INLINE>
-<SHA256>53848387be96a37e13a360c9ad97a9de66c44713e37be8950ddf7c84c2a47a8a</SHA256>
+<SHA256>a3ed40a80c9e598f3a3ce2278bd1fc7e58bd7fcf9eac89d2b8226f604510e8dc</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -4189,7 +4223,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   function upt(s) { var d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), mm = Math.floor(s % 3600 / 60); return d ? d + 'd ' + hh + 'h' : hh ? hh + 'h ' + mm + 'm' : mm + 'm'; }
   function pct(v) { return v === null || v === undefined ? '-' : (Math.round(v * 10) / 10) + '%'; }
   function fmt(v, f) {
-    if (f === 'bytes') return bytes(v); if (f === 'rate') return rate(v); if (f === 'ms') return num(v) + ' ms';
+    if (f === 'bytes') return bytes(v); if (f === 'rate') return rate(v); if (f === 'ms') return v === null || v === undefined || v === '' || !isFinite(+v) ? num(v) : num(+v >= 10 ? Math.round(+v) : Math.round(+v * 10) / 10) + ' ms';
     if (f === 'pct') return pct(v); if (f === 'dur') return dur(v);
     if (f === 'text') return v === null || v === undefined || v === '' ? '-' : (typeof v === 'number' ? v.toLocaleString() : String(v));
     return num(v);
@@ -4385,7 +4419,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   }
   function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
-  var TITLES = { overview: 'System', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
+  var TITLES = { overview: 'System', launcher: 'Launcher', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
   function buildSection(sec) {
     var tools = h('div', { class: 'tools' });
     var count = h('span', { class: 'count' });
@@ -4405,7 +4439,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   /* which parts the live request needs, so hidden sections cost nothing */
   function parts() {
     var p = ['system'];
-    if (R.docker || R.favorites || R.alerts || tileOn('docker')) p.push('docker');
+    if (R.docker || R.favorites || R.alerts || R.launcher || tileOn('docker')) p.push('docker');
     if (R.vms || R.favorites || tileOn('vms')) p.push('vms');
     if (tileOn('ups')) p.push('ups');
     return p.join(',');
@@ -4473,6 +4507,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var y = S.live || {};
     if (R.overview && open('overview')) paintOverview(y);
     if (R.alerts) paintAlerts(y);
+    if (R.launcher && open('launcher')) paintLauncher(y);
     if (R.favorites && open('favorites')) paintFavs(y);
     if (R.docker && open('docker')) paintDocker(y);
     if (R.vms && open('vms')) paintVms(y);
@@ -4510,9 +4545,9 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     S.L.dashboard.metrics.forEach(function (m) {
       if (!m.visible || !MET[m.id]) return;
       if ((m.id === 'load' || m.id === 'path') && S.boot.caps.mode === 'api') return;     // not offered by the Unraid API
-      var t = { id: m.id, v: h('span', { class: 'v' }, '–'), s: h('span', { class: 's' }), m: h('i') };
+      var t = { id: m.id, v: h('span', { class: 'v' }, '–'), s: h('span', { class: 's' }), m: h('i'), sp: h('span', { class: 'sp', 'aria-hidden': 'true' }) };
       t.el = h('button', { type: 'button', class: 'stat', role: 'listitem', 'aria-expanded': 'false', onclick: function () { toggleDetail(m.id); } },
-        h('span', { class: 'k' }, ic(MET[m.id][1]), MET[m.id][0]), t.v, t.s, h('span', { class: 'bar', 'aria-hidden': 'true' }, t.m));
+        t.sp, h('span', { class: 'k' }, ic(MET[m.id][1]), MET[m.id][0]), t.v, t.s, h('span', { class: 'bar', 'aria-hidden': 'true' }, t.m));
       r.tiles[m.id] = t; r.bar.appendChild(t.el);
     });
     r.detail = h('div', { class: 'detail', hidden: true });
@@ -4531,6 +4566,23 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     txt(t.v, val); txt(t.s, sub || '');
     t.m.style.width = (p === null || p === undefined ? 0 : Math.max(0, Math.min(100, p))) + '%';
     t.el.className = 'stat ' + (lvl || '') + (R.overview.open === id ? ' on' : '');
+  }
+  /* a tile's history as an area chart behind the number (Grafana-style); the plain bar stays for tiles without history */
+  /* hi null = scale to the data, never below floor (so a quiet 3% CPU still shows its shape without looking busy) */
+  function sparkTile(id, vals, lo, hi, floor) {
+    var t = R.overview.tiles[id]; if (!t) return;
+    vals = vals.filter(function (v) { return v !== null && v !== undefined && isFinite(v); });
+    var sig = vals.length + ':' + (vals[vals.length - 1] || 0) + ':' + lo + ':' + hi;
+    if (t.spSig === sig) return; t.spSig = sig;
+    clear(t.sp); t.el.classList.toggle('has-sp', vals.length > 1);
+    if (vals.length < 2) return;
+    if (hi === null) hi = Math.max(Math.max.apply(null, vals) * 1.25, floor || 1);
+    var n = vals.length, sc = function (v) { return (40 - Math.max(0, Math.min(1, (v - lo) / ((hi - lo) || 1))) * 36).toFixed(2); };
+    var d = 'M' + vals.map(function (v, i) { return (i / (n - 1) * 100).toFixed(2) + ',' + sc(v); }).join(' L');
+    var sv = document.createElementNS(SVGNS, 'svg'); sv.setAttribute('viewBox', '0 0 100 40'); sv.setAttribute('preserveAspectRatio', 'none');
+    var a = document.createElementNS(SVGNS, 'path'); a.setAttribute('class', 'a'); a.setAttribute('d', d + ' L100,40 L0,40 Z');
+    var l = document.createElementNS(SVGNS, 'path'); l.setAttribute('class', 'l'); l.setAttribute('d', d); l.setAttribute('vector-effect', 'non-scaling-stroke');
+    sv.appendChild(a); sv.appendChild(l); t.sp.appendChild(sv);
   }
   function lvl(p, w, b) { return p === null || p === undefined ? 'na' : p >= b ? 'bad' : p >= w ? 'warn' : 'ok'; }
   function paintOverview(y) {
@@ -4567,6 +4619,13 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     if (s.disk) tile('path', s.disk.total ? bytes(s.disk.free) + ' free' : 'n/a', s.disk.total ? s.disk.path + ' · ' + pct(s.disk.pct) : s.disk.path + ' reports no size', s.disk.pct, s.disk.total ? lvl(s.disk.pct, 85, 95) : 'na');
     if (dk) tile('docker', dk.running + ' / ' + dk.total, 'running' + (dk.updates ? ' · ' + dk.updates + ' updates' : ''), 100 * dk.running / (dk.total || 1), dk.unhealthy ? 'bad' : '');
     if (vm) tile('vms', vm.running + ' / ' + vm.total, 'running', 100 * vm.running / (vm.total || 1), '');
+    var hs = (s.hist || []).slice(-60);
+    sparkTile('cpu', hs.map(function (x) { return x[1]; }), 0, null, 25);
+    if (s.mem.total) sparkTile('memory', hs.map(function (x) { return x[2]; }), 0, s.mem.total);
+    sparkTile('network', hs.map(function (x) { return (x[3] || 0) + (x[4] || 0); }), 0, null, 131072);
+    // disk temperatures are not in the server history: keep the last few minutes here
+    if (hot !== null && S.tempAt !== y.at) { S.tempAt = y.at; (S.tempHist = S.tempHist || []).push(hot); if (S.tempHist.length > 60) S.tempHist.shift(); }
+    if (S.tempHist) sparkTile('disks', S.tempHist, 20, 60);
     paintDetail(y);
   }
   function paintDetail(y) {
@@ -4775,6 +4834,36 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
       ignHold({ del: ids });
       if (okMsg) toast(okMsg);
       return j;
+    });
+  }
+
+  /* ---- launcher: one icon per app with a link, the dot comes from the container of the same name ---- */
+  BUILD.launcher = function (r) {
+    r.grid = h('div', { class: 'launch', role: 'list' }); r.items = [];
+    S.L.groups.forEach(function (g) { g.services.forEach(function (s) {
+      if (s.hidden || !s.href_resolved) return;
+      var dot = h('span', { class: 'ldot', hidden: true }), u = iconUrl(s.icon);
+      var a = h('a', { class: 'lnk', role: 'listitem', href: s.href_resolved, target: '_blank', rel: 'noopener', title: s.name + (s.description ? ' · ' + s.description : ''), 'data-name': s.name },
+        h('span', { class: 'lic' }, u ? img(u, 'aico') : h('span', { class: 'lph' }, s.name.slice(0, 2)), dot), h('span', { class: 'ln' }, s.name));
+      r.items.push({ s: s, a: a, dot: dot, keys: lkeys(s.name) }); r.grid.appendChild(a);
+    }); });
+    if (!r.items.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'Apps with a link (Settings > Apps) show up here as one-click icons.'));
+    txt(r.count, r.items.length ? String(r.items.length) : '');
+    r.body.appendChild(r.grid);
+  };
+  /* "Radarr Movies" matches a container called radarr; "Seerr Requests" matches seerr; a longer container name only when nothing matches exactly */
+  function lkeys(n) { var a = String(n).toLowerCase(), k = [a.replace(/[^a-z0-9]/g, '')], f = a.split(/[\s_.-]+/)[0].replace(/[^a-z0-9]/g, ''); if (f && f !== k[0]) k.push(f); return k; }
+  function paintLauncher(y) {
+    var r = R.launcher, cs = (y.docker && y.docker.containers) || [], by = {};
+    cs.forEach(function (c) { by[c.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = c; });
+    r.items.forEach(function (x) {
+      var c = null; x.keys.some(function (k) { return (c = by[k] || null); });
+      // then a container named the app plus a short extra word: Emby -> EmbyServer, Adguard -> AdGuard-Home (but not Unraid -> Unraid-Cloudflared-Tunnel)
+      if (!c && x.keys[0].length >= 4) { var best = ''; Object.keys(by).forEach(function (k) { if (k.indexOf(x.keys[0]) === 0 && k.length - x.keys[0].length <= 6 && (!best || k.length < best.length)) best = k; }); c = best ? by[best] : null; }
+      var st = !c ? '' : c.health === 'unhealthy' || c.state === 'restarting' ? 'bad' : c.state === 'running' ? (c.health === 'starting' ? 'warn' : 'ok') : c.state === 'paused' ? 'warn' : 'off';
+      x.dot.hidden = !st; x.dot.className = 'ldot ' + st;
+      x.dot.setAttribute('title', c ? c.name + ': ' + (c.health && c.health !== 'none' ? c.health : c.state) : '');
+      x.a.style.display = matches(x.s.name) ? '' : 'none';
     });
   }
 
@@ -5359,7 +5448,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     else if (j.version) x.extra.appendChild(h('span', { class: 'muted xs' }, 'v' + j.version));
     clear(x.det);
     if (j.error) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
-    if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(function (b) { return h('div', { class: 'blk' }, h('div', { class: 'v' }, fmt(b.value, b.fmt)), h('div', { class: 'l' }, b.label)); })));
+    if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(blk)));
     (j.health || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, (z.source ? z.source + ': ' : '') + z.msg))); });
     (j.issues || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, h('b', null, z.title), ' · ' + z.msg))); });
     if (j.online && !issues && !j.error) x.det.appendChild(h('div', { class: 'muted sm' }, 'No warnings' + (j.version ? ' · version ' + j.version : '') + '.'));
@@ -5478,7 +5567,15 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     for (var k = 0; k < 4; k++) next();
   }
 
-  function blocks(list) { return h('div', { class: 'blocks' }, list.map(function (x) { return h('div', { class: 'blk' }, h('div', { class: 'v' }, fmt(x.value, x.fmt)), h('div', { class: 'l' }, x.label)); })); }
+  /* stat blocks: big numbers are shortened (45.3K) so they fit, the exact value is in the tooltip */
+  var CMP = window.Intl ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }) : null;
+  function blkVal(x) {
+    var n = typeof x.value === 'number' ? x.value : (typeof x.value === 'string' && /^-?\d+(\.\d+)?$/.test(x.value) ? +x.value : null);
+    if (CMP && n !== null && Math.abs(n) >= 10000 && (!x.fmt || x.fmt === 'n' || x.fmt === 'text')) return CMP.format(n);
+    return fmt(x.value, x.fmt);
+  }
+  function blk(x) { var full = fmt(x.value, x.fmt); return h('div', { class: 'blk', title: x.label + ': ' + full }, h('div', { class: 'v' }, blkVal(x)), h('div', { class: 'l' }, x.label)); }
+  function blocks(list) { return h('div', { class: 'blocks' }, list.map(blk)); }
   function paintService(s, r) {
     var c = document.getElementById('w-' + s.id); if (!c) return;
     c.classList.remove('wait');
@@ -5626,7 +5723,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
-  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
+  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', launcher: 'One-click icons for your apps, with a status dot from the matching container', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
     docker: 'Every container, found automatically', vms: 'Every VM, found automatically', apps: 'Plex, Immich, AdGuard, links and other apps' };
   var MET_DESC = { cpu: 'Usage and temperature', memory: 'RAM used and available', storage: 'Array (or pools) capacity', network: 'Download and upload speed', health: 'Array state, disk problems, parity checks',
@@ -6188,7 +6285,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   });
 })();
 ]]></INLINE>
-<SHA256>24606dda7a2638b106713878262c2172c2c18c877f9c7a2b00cb513aa0a5bf92</SHA256>
+<SHA256>1f09f6a43f23fa8a6237ec78ffa892dc3ea78312854d127e79af5e94fbc78d3b</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
