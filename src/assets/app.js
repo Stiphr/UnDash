@@ -835,19 +835,16 @@
       var it = x[1], el;
       if (x[0] === 'd') {
         var run = it.state === 'running';
-        el = h('div', { class: 'fav' }, img(iconUrl(pref('docker', it.name).icon || it.icon), '', 'box'), h('div', { class: 't' }, h('b', null, label('docker', it.name)), dStateBadge(it)),
-          run && it.webui ? h('a', { class: 'btn ic sm', href: it.webui, target: '_blank', rel: 'noopener', title: 'Open WebUI', 'aria-label': 'Open WebUI of ' + it.name }, ic('web')) : null,
-          btn('', function () { dAct(it, run ? 'restart' : 'start'); }, 'sm' + (run ? '' : ' okc'), run ? 'restart' : 'play', (run ? 'Restart ' : 'Start ') + it.name));
-        if (S.busy['d:' + it.name]) el.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+        var fw = dWeb(it), ft = fw ? 'Open the web UI of ' + it.name : it.name;
+        el = h('div', { class: 'fav' }, webA(fw, ft, img(iconUrl(pref('docker', it.name).icon || it.icon), '', 'box')), h('div', { class: 't' }, webA(fw, ft, h('b', null, label('docker', it.name))), dStateBadge(it)),
+          dActions(it, pref('docker', it.name)));
       } else if (x[0] === 'v') {
-        var op = it.ops.indexOf('start') >= 0 ? 'start' : it.ops.indexOf('resume') >= 0 ? 'resume' : null;
-        el = h('div', { class: 'fav' }, img(iconUrl(pref('vms', it.name).icon || it.icon), '', 'vm'), h('div', { class: 't' }, h('b', null, label('vms', it.name)), vStateBadge(it.state, S.busy['v:' + it.name])),
-          op ? btn('', function () { vAct(it, op); }, 'sm okc', 'play', VMOPS[op][0] + ' ' + it.name) : null);
-        if (S.busy['v:' + it.name]) el.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+        var vw = vWeb(it), vt = vw ? 'Open the console of ' + it.name : it.name;
+        el = h('div', { class: 'fav' }, webA(vw, vt, img(iconUrl(pref('vms', it.name).icon || it.icon), '', 'vm')), h('div', { class: 't' }, webA(vw, vt, h('b', null, label('vms', it.name))), vStateBadge(it.state, S.busy['v:' + it.name])),
+          vActions(it, pref('vms', it.name)));
       } else {
         var href = it.href_resolved;
-        el = h('div', { class: 'fav' }, img(iconUrl(it.icon), '', 'tag'), h('div', { class: 't' }, h('b', null, it.name), h('span', { class: 'muted xs' }, it.description || (S.boot.types[it.type] || [''])[0])),
-          href ? h('a', { class: 'btn ic sm', href: href, target: '_blank', rel: 'noopener', title: 'Open ' + it.name, 'aria-label': 'Open ' + it.name }, ic('web')) : null);
+        el = h('div', { class: 'fav' }, webA(href, 'Open ' + it.name, img(iconUrl(it.icon), '', 'tag')), h('div', { class: 't' }, webA(href, 'Open ' + it.name, h('b', null, it.name)), h('span', { class: 'muted xs' }, it.description || (S.boot.types[it.type] || [''])[0])));
       }
       r.list.appendChild(el);
     });
@@ -1006,33 +1003,40 @@
       if (dk.updates) r.updAll.appendChild(btn('Update all (' + dk.updates + ')', function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up', 'Update every container that has an update'));
     }
   }
-  function dActions(c, p, inTile) {
-    var run = c.state === 'running', busy = !!S.busy['d:' + c.name] || c.job === 'updating';
+  /* every container action sits behind one gear button; the web UI opens from the icon or the name */
+  function dWeb(c) { return c.state === 'running' && c.webui ? c.webui : ''; }
+  function webA(url, title, kids) { return url ? h('a', { class: 'wl', href: url, target: '_blank', rel: 'noopener', title: title }, kids) : h('span', { class: 'wl' }, kids); }
+  function gear(name, items) {
+    var g = btn('', function () { menu(g, items()); }, 'sm gear', 'gear', 'Actions for ' + name);
+    g.setAttribute('aria-haspopup', 'menu');
+    return g;
+  }
+  function dActions(c, p) {
+    var run = c.state === 'running', web = dWeb(c);
     var a = h('div', { class: 'acts c-acts' });
-    if (run && c.webui) a.appendChild(h('a', { class: 'btn ic sm', href: c.webui, target: '_blank', rel: 'noopener', title: 'Open WebUI', 'aria-label': 'Open WebUI of ' + c.name }, ic('web')));
-    if (c.state === 'paused') a.appendChild(btn('', function () { dAct(c, 'unpause'); }, 'sm okc', 'play', 'Resume ' + c.name));
-    else if (run || c.state === 'restarting') a.appendChild(btn('', function () { dAct(c, 'stop'); }, 'sm danger', 'stop', 'Stop ' + c.name));
-    else a.appendChild(btn('', function () { dAct(c, 'start'); }, 'sm okc', 'play', 'Start ' + c.name));
-    if (c.state !== 'paused') a.appendChild(btn('', function () { dAct(c, 'restart'); }, 'sm', 'restart', 'Restart ' + c.name));
-    if (c.update === 'available' && inTile) a.appendChild(btn('Update', function () { updateMany([c.name]); }, 'sm pri', 'up'));
-    var more = btn('', function () {
-      menu(more, [
+    a.appendChild(gear(c.name, function () {
+      var busy = !!S.busy['d:' + c.name] || c.job === 'updating';
+      return [
+        web ? ['Open web UI', 'web', function () { window.open(web, '_blank', 'noopener'); }] : null,
+        web ? 'hr' : null,
+        c.state === 'paused' ? ['Resume', 'play', function () { dAct(c, 'unpause'); }, '', busy]
+          : run || c.state === 'restarting' ? ['Stop', 'stop', function () { dAct(c, 'stop'); }, 'danger', busy]
+          : ['Start', 'play', function () { dAct(c, 'start'); }, '', busy],
+        c.state !== 'paused' ? ['Restart', 'restart', function () { dAct(c, 'restart'); }, '', busy] : null,
         run ? ['Pause', 'pause', function () { dAct(c, 'pause'); }, '', busy] : null,
         ['Update' + (c.update === 'available' ? '' : ' (force)'), 'up', function () { updateMany([c.name]); }, '', busy],
         'hr', ['Logs', 'logs', function () { logs(c.name); }], ['Details', 'info', function () { inspect(c.name); }], 'hr',
         [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('docker', c.name, { favorite: !p.favorite }); }],
         [S.L.docker.selected.indexOf(c.name) >= 0 ? 'Remove from "Selected"' : 'Show in "Selected"', 'check', function () { toggleSelected(c.name); }],
         [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('docker', c.name, { hidden: !p.hidden }); }],
-        ['Customize…', 'edit', function () { customize('docker', c); }]]);
-    }, 'sm', 'dots', 'More actions for ' + c.name);
-    more.setAttribute('aria-haspopup', 'menu');
-    a.appendChild(more);
-    if (busy) [].forEach.call(a.querySelectorAll('button'), function (b) { if (b !== more) b.disabled = true; });
+        ['Customize…', 'edit', function () { customize('docker', c); }]];
+    }));
     return a;
   }
   function dWho(c, p) {
-    return h('div', { class: 'who c-who' }, img(iconUrl(p.icon || c.icon), '', 'box'),
-      h('div', { class: 'ell' }, h('div', { class: 'nm' }, h('span', { class: 'ell', title: c.name }, p.label || c.name), p.favorite ? ic('star', true) : null),
+    var web = dWeb(c), t = web ? 'Open the web UI of ' + c.name : c.name;
+    return h('div', { class: 'who c-who' }, webA(web, t, img(iconUrl(p.icon || c.icon), '', 'box')),
+      h('div', { class: 'ell' }, h('div', { class: 'nm' }, webA(web, t, h('span', { class: 'ell', title: c.name }, p.label || c.name)), p.favorite ? ic('star', true) : null),
         h('div', { class: 'im ell', title: c.image }, p.description || c.image)));
   }
   function dRow(c, p) {
@@ -1043,18 +1047,19 @@
     row.appendChild(h('div', { class: 'res c-res' }, h('div', { class: 'inl', style: { gap: '6px' } }, row._cpu, row._mem), row._m));
     row.appendChild(row._up);
     row.appendChild(h('div', { class: 'c-upd' }, dUpdBadge(c)));
-    row.appendChild(dActions(c, p, false));
+    row.appendChild(dActions(c, p));
     return row;
   }
   /* compact row: icon, name, state, CPU, memory, an update badge only when there is one, and the actions */
   function dRowC(c, p) {
     var row = h('div', { class: 'rowi c' + (S.busy['d:' + c.name] ? ' busy' : ''), role: 'listitem', 'data-name': c.name, title: c.image });
     row._cpu = h('span', { class: 'c-cpu num' }); row._mem = h('span', { class: 'c-mem num muted' });
-    row.appendChild(h('div', { class: 'who c-who' }, img(iconUrl(p.icon || c.icon), '', 'box'), h('span', { class: 'nm ell' }, p.label || c.name, p.favorite ? ic('star', true) : null)));
+    var web = dWeb(c), wt = web ? 'Open the web UI of ' + c.name : c.name;
+    row.appendChild(h('div', { class: 'who c-who' }, webA(web, wt, img(iconUrl(p.icon || c.icon), '', 'box')), webA(web, wt, h('span', { class: 'nm ell' }, p.label || c.name, p.favorite ? ic('star', true) : null))));
     row.appendChild(h('div', { class: 'c-st' }, dStateBadge(c)));
     row.appendChild(row._cpu); row.appendChild(row._mem);
     row.appendChild(h('div', { class: 'c-upd' }, c.update === 'available' || c.job === 'update_failed' ? dUpdBadge(c) : null));
-    row.appendChild(dActions(c, p, false));
+    row.appendChild(dActions(c, p));
     return row;
   }
   /* grid cell: icon, name, state dot, CPU / memory, update badge only when there is one, and the main actions */
@@ -1069,10 +1074,11 @@
     if (cell._up) sub.appendChild(cell._up);
     if (sh('image')) sub.appendChild(h('span', { class: 'ell' }, c.image));
     if (!sub.childNodes.length || c.state !== 'running') { clear(sub); sub.appendChild(h('span', null, st.textContent)); cell._cpu = h('span'); cell._mem = h('span'); cell._up = null; }
-    cell.appendChild(img(iconUrl(p.icon || c.icon), 'cico', 'box'));
-    cell.appendChild(h('div', { class: 'cn' }, h('span', { class: 'cname ell', title: c.name + ' · ' + c.image }, dot, p.label || c.name, p.favorite ? ic('star', true) : null), sub));
+    var web = dWeb(c), wt = web ? 'Open the web UI of ' + c.name : c.name + ' · ' + c.image;
+    cell.appendChild(webA(web, wt, img(iconUrl(p.icon || c.icon), 'cico', 'box')));
+    cell.appendChild(h('div', { class: 'cn' }, h('span', { class: 'cname ell' }, dot, webA(web, wt, p.label || c.name), p.favorite ? ic('star', true) : null), sub));
     if (sh('update') && (c.update === 'available' || c.job === 'update_failed')) cell.appendChild(dUpdBadge(c));
-    cell.appendChild(dActions(c, p, false));
+    cell.appendChild(dActions(c, p));
     return cell;
   }
   function dTile(c, p) {
@@ -1082,7 +1088,7 @@
     t.appendChild(h('div', { class: 'chips' }, dStateBadge(c), dUpdBadge(c)));
     t.appendChild(h('div', { class: 'stats' }, t._cpu, t._mem, t._up));
     t.appendChild(t._m);
-    t.appendChild(dActions(c, p, true));
+    t.appendChild(dActions(c, p));
     return t;
   }
   function dVolatile(row, c) {
@@ -1256,23 +1262,9 @@
     if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, S.q ? 'No VMs match "' + S.q + '".' : v.vms.length ? 'All VMs are hidden.' : 'No virtual machines.'));
     list.forEach(function (x) {
       var p = pref('vms', x.name), b = busy[x.name];
-      var a = h('div', { class: 'acts c-acts' });
-      if (x.state === 'running' && x.vnc) a.appendChild(h('a', { class: 'btn ic sm', href: UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=&path=' + encodeURIComponent(x.vnc), target: '_blank', rel: 'noopener', title: 'VNC console', 'aria-label': 'VNC console of ' + x.name }, ic('screen')));
-      var main = x.ops.indexOf('start') >= 0 ? 'start' : x.ops.indexOf('resume') >= 0 ? 'resume' : x.ops.indexOf('stop') >= 0 ? 'stop' : null;
-      if (main) a.appendChild(btn('', function () { vAct(x, main); }, 'sm ' + VMOPS[main][2], VMOPS[main][1], VMOPS[main][0] + ' ' + x.name));
-      var rest = x.ops.filter(function (o) { return o !== main; });
-      var more = btn('', function () {
-        menu(more, rest.map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' ? 'danger' : '', !!b]; })
-          .concat([x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
-            [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('vms', x.name, { favorite: !p.favorite }); }],
-            [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('vms', x.name, { hidden: !p.hidden }); }],
-            ['Customize…', 'edit', function () { customize('vms', x); }]]));
-      }, 'sm', 'dots', 'More actions for ' + x.name);
-      more.setAttribute('aria-haspopup', 'menu');
-      a.appendChild(more);
-      if (b) [].forEach.call(a.querySelectorAll('button'), function (z) { if (z !== more) z.disabled = true; });
-      var who = S.L.vms.layout === 'cards' ? h('div', { class: 'who c-who' }, img(iconUrl(p.icon || x.icon), '', 'vm'), h('div', { class: 'ell' }, h('div', { class: 'nm' }, h('span', { class: 'ell' }, p.label || x.name), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')))
-        : h('div', { class: 'who c-who' }, img(iconUrl(p.icon || x.icon), '', 'vm'), h('span', { class: 'nm ell', title: x.os || '' }, p.label || x.name, p.favorite ? ic('star', true) : null));
+      var a = vActions(x, p), vw = vWeb(x), vt = vw ? 'Open the console of ' + x.name : x.os || x.name;
+      var who = S.L.vms.layout === 'cards' ? h('div', { class: 'who c-who' }, webA(vw, vt, img(iconUrl(p.icon || x.icon), '', 'vm')), h('div', { class: 'ell' }, h('div', { class: 'nm' }, webA(vw, vt, h('span', { class: 'ell' }, p.label || x.name)), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')))
+        : h('div', { class: 'who c-who' }, webA(vw, vt, img(iconUrl(p.icon || x.icon), '', 'vm')), webA(vw, vt, h('span', { class: 'nm ell' }, p.label || x.name, p.favorite ? ic('star', true) : null)));
       var res = x.cpus ? x.cpus + ' vCPU · ' + bytes(x.memory) : '';
       if (S.L.vms.layout === 'cards') r.rows.appendChild(h('div', { class: 'tile' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'chips' }, vStateBadge(x.state, b), x.autostart ? h('span', { class: 'badge plain' }, 'autostart') : null), h('div', { class: 'stats' }, h('span', null, res), h('span', null, x.agent ? 'guest agent' : 'no guest agent')), a));
       else r.rows.appendChild(h('div', { class: 'rowi c' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'c-st' }, vStateBadge(x.state, b)),
@@ -1281,6 +1273,21 @@
     });
     if (hidden || S.showHidden) r.rows.appendChild(h('div', { class: 'more' }, btn(S.showHidden ? 'Hide hidden VMs' : 'Show ' + hidden + ' hidden', function () { S.showHidden = !S.showHidden; if (R.docker) R.docker.fSig = null; r.sig = null; paintAll(); }, 'sm ghost', 'eye')));
     if (focus) { var f = r.rows.querySelector('[aria-label="' + focus.replace(/"/g, '') + '"]'); if (f && !f.disabled) f.focus(); }
+  }
+  /* the VM's "web UI" is its VNC console */
+  function vWeb(x) { return x.state === 'running' && x.vnc ? UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=&path=' + encodeURIComponent(x.vnc) : ''; }
+  function vActions(x, p) {
+    var a = h('div', { class: 'acts c-acts' }), web = vWeb(x);
+    a.appendChild(gear(x.name, function () {
+      var b = !!S.busy['v:' + x.name];
+      return [web ? ['Open console (VNC)', 'screen', function () { window.open(web, '_blank', 'noopener'); }] : null, web ? 'hr' : null]
+        .concat(x.ops.map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' || o === 'stop' ? 'danger' : '', b]; }))
+        .concat([x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
+          [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('vms', x.name, { favorite: !p.favorite }); }],
+          [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('vms', x.name, { hidden: !p.hidden }); }],
+          ['Customize…', 'edit', function () { customize('vms', x); }]]);
+    }));
+    return a;
   }
   function vAct(x, op) {
     var key = 'v:' + x.name; if (S.busy[key]) return;
