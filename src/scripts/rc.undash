@@ -4,6 +4,7 @@
 EM=/usr/local/emhttp/plugins/undash
 CFG=/boot/config/plugins/undash/undash.cfg
 PIDF=/var/run/undash.pid
+CPIDF=/var/run/undash-check.pid
 
 val() { sed -n "s/^$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}\$/\1/p" "$CFG" 2>/dev/null | tail -1; }
 PORT=$(val PORT); BIND=$(val BIND); ON=$(val STANDALONE)
@@ -40,10 +41,23 @@ stop() {
   rm -f $PIDF
 }
 
+# the alert history: one check a minute in the background, whether or not the standalone port is on
+checking() { [[ -f $CPIDF ]] && kill -0 "$(cat $CPIDF)" 2>/dev/null && grep -q "undash-alertcheck" "/proc/$(cat $CPIDF)/cmdline" 2>/dev/null; }
+start_check() {
+  checking && return 0
+  mkdir -p /tmp/undash
+  setsid nohup bash -c 'exec -a undash-alertcheck bash -c "while true; do nice -n 10 /usr/bin/php -d auto_prepend_file= -d error_log=syslog -d display_errors=0 '"$EM"'/scripts/alertcheck.php; sleep 60; done"' > /dev/null 2>&1 &
+  echo $! > $CPIDF
+}
+stop_check() {
+  if checking; then pkill -P "$(cat $CPIDF)" 2>/dev/null; kill "$(cat $CPIDF)" 2>/dev/null; fi
+  rm -f $CPIDF
+}
+
 case "$1" in
-  start) start ;;
-  stop) stop ;;
-  restart) stop; start ;;
-  status) running && echo "running on $BIND:$PORT (pid $(cat $PIDF))" || echo "stopped" ;;
+  start) start_check; start ;;
+  stop) stop; stop_check ;;
+  restart) stop; stop_check; start_check; start ;;
+  status) running && echo "running on $BIND:$PORT (pid $(cat $PIDF))" || echo "stopped"; checking && echo "alert checker running (pid $(cat $CPIDF))" || echo "alert checker stopped" ;;
   *) echo "usage: $0 start|stop|restart|status"; exit 1 ;;
 esac
