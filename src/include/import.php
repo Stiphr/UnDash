@@ -74,17 +74,48 @@ function und_yaml_scalar($v) {
   if ($v === '' || $v === '~' || $v === 'null') return null;
   if ($v[0] === '"') { $e = strrpos($v, '"'); return stripcslashes((string)substr($v, 1, ($e ?: strlen($v)) - 1)); }
   if ($v[0] === "'") return str_replace("''", "'", (string)substr($v, 1, (strrpos($v, "'") ?: strlen($v)) - 1));
-  if ($v[0] === '[') {
-    $in = trim(substr($v, 1, (strrpos($v, ']') ?: strlen($v)) - 1));
-    if ($in === '') return [];
-    preg_match_all('/"(?:[^"\\\\]|\\\\.)*"|\'[^\']*\'|[^,]+/', $in, $m);
-    return array_map('und_yaml_scalar', array_map('trim', $m[0]));
-  }
+  // flow collections: [a, b] and { key: value }, nested; "{{NAME}}" written without quotes stays a string
+  if (($v[0] === '[' || $v[0] === '{') && !preg_match('/^\{\{[^{}]*\}\}/', $v)) { $i = 0; $r = und_yaml_flow($v, $i); if ($r !== null) return $r; }
   if (in_array(strtolower($v), ['true', 'yes', 'on'], true)) return true;
   if (in_array(strtolower($v), ['false', 'no', 'off'], true)) return false;
   if (preg_match('/^-?\d+$/', $v)) return (int)$v;
   if (preg_match('/^-?\d+\.\d+$/', $v)) return (float)$v;
   return $v;
+}
+
+/** One flow collection starting at $v[$i]; null when it is not well formed (the caller keeps the text). */
+function und_yaml_flow($v, &$i) {
+  $open = $v[$i]; $close = $open === '[' ? ']' : '}'; $out = []; $i++;
+  $n = strlen($v);
+  while (true) {
+    while ($i < $n && ($v[$i] === ' ' || $v[$i] === ',')) $i++;
+    if ($i >= $n) return null;
+    if ($v[$i] === $close) { $i++; return $out; }
+    $key = null;
+    if ($open === '{') {
+      $k = und_yaml_flow_item($v, $i, ':');
+      if ($k === null || $k === '' || $i >= $n || $v[$i] !== ':') return null;
+      $i++; $key = (string)und_yaml_scalar($k);
+      while ($i < $n && $v[$i] === ' ') $i++;
+    }
+    if ($i < $n && ($v[$i] === '[' || $v[$i] === '{')) { $val = und_yaml_flow($v, $i); if ($val === null) return null; }
+    else { $at = $i; $t = und_yaml_flow_item($v, $i, ''); if ($t === null || $i === $at) return null; $val = und_yaml_scalar($t); }   // no progress = a stray bracket
+    if ($key === null) $out[] = $val; else $out[$key] = $val;
+  }
+}
+/** The text of one flow scalar (quoted or plain) up to a comma, the closing bracket or, for keys, the colon. */
+function und_yaml_flow_item($v, &$i, $stop) {
+  $n = strlen($v); $s = $i;
+  if ($i >= $n) return null;
+  if ($v[$i] === '"' || $v[$i] === "'") {
+    $q = $v[$i]; $i++;
+    while ($i < $n && $v[$i] !== $q) { if ($q === '"' && $v[$i] === '\\') $i++; $i++; }
+    if ($i >= $n) return null;
+    $i++;
+    return substr($v, $s, $i - $s);
+  }
+  while ($i < $n && $v[$i] !== ',' && $v[$i] !== ']' && $v[$i] !== '}' && !($stop === ':' && $v[$i] === ':' && ($i + 1 >= $n || $v[$i + 1] === ' '))) $i++;
+  return trim(substr($v, $s, $i - $s));
 }
 
 /* ---------- Homepage -> UnDash ---------- */
@@ -199,17 +230,15 @@ function und_hp_convert($servicesYaml, $settingsYaml = '', $envText = '') {
   return ['config' => $cfg, 'secrets' => $secrets, 'vars' => $vars, 'warnings' => $warn, 'groups' => count($groups), 'services' => $count];
 }
 
-/** Save an import: replaces the layout; keeps stored variable values unless the .env gave a new one. */
+/** Save a converted import: the layout becomes config.yaml, addresses are written into the apps, keys go to .env. */
 function und_hp_apply(array $conv) {
-  $old = und_secrets();
-  $vars = $old['vars'];
-  foreach ($conv['vars'] as $n => $v) if ($v !== null || !isset($vars[$n])) $vars[$n] = $v === null ? (string)($vars[$n] ?? '') : (string)$v;
-  und_save_config($conv['config']);
-  $saved = und_load_config();
-  $ids = [];
-  foreach ($saved['groups'] as $g) foreach ($g['services'] as $s) $ids[] = $s['id'];
-  $svc = [];
-  foreach ($conv['secrets'] as $id => $c) if (in_array($id, $ids, true)) $svc[$id] = $c;
-  und_save_secrets(['vars' => $vars, 'svc' => $svc]);
+  und_config_lock();
+  $vars = und_secrets()['vars'];
+  foreach ($conv['vars'] as $n => $v) if ($v !== null) $vars[strtoupper($n)] = (string)$v;
+  $res = und_store_convert(und_normalize($conv['config']), $vars, $conv['secrets']);
+  und_save_config($res['config']);
+  $env = und_env();
+  foreach ($res['env'] as $k => $v) if ($v !== '' || !isset($env[$k])) $env[$k] = $v;
+  und_env_write($env);
   return ['ok' => true];
 }

@@ -7,6 +7,7 @@ ARG VERSION=docker-dev
 WORKDIR /build
 COPY src/ src/
 COPY tests/ tests/
+COPY examples/ examples/
 RUN set -e; \
     for f in $(find src tests -name '*.php'); do php -l "$f" > /dev/null; done; \
     php tests/run.php; php tests/api_mode_test.php; php tests/router_test.php; php tests/docker_auth_test.php; \

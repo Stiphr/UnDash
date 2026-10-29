@@ -7,7 +7,7 @@ A compact dashboard for Unraid. System health, alerts, media, Arr apps, download
 - **System**: CPU, memory, storage, network, array health, disk temperatures, uptime and UPS, with short history charts.
 - **Alerts**: problems only (unhealthy or restarting containers, disk errors and heat, array state, updates). Each alert can be ignored for a while or for good. A history keeps when each problem started and ended.
 - **Media**: upcoming and recently added movies and episodes from Radarr and Sonarr.
-- **Arr Stack**, **Downloads** (qBittorrent, SABnzbd), **Now playing** (Plex, Emby, Jellyfin, Tautulli) and **Requests** (Overseerr / Jellyseerr, with approve and decline).
+- **Arr Stack**, **Downloads** (qBittorrent, [qui](https://github.com/autobrr/qui), SABnzbd), **Now playing** (Plex, Emby, Jellyfin, Tautulli) and **Requests** (Overseerr / Jellyseerr, with approve and decline).
 - **Containers and VMs**: start, stop, restart, update and logs from one gear menu. Click an icon or name to open its web UI.
 - **Endpoint health**: HTTP status and latency of every app and container web UI.
 - **Search**: filters the dashboard, and finds movies and series in Seerr to request.
@@ -70,21 +70,20 @@ Open it from the **UnDash** tab in Unraid's menu, or full-window at `http://YOUR
 
 ## Set up
 
-1. **Add your apps** in **Settings > Apps**: Radarr, Sonarr, qBittorrent, Plex, Overseerr and so on, each with its address and API key. UnDash puts each app in the right section on its own.
-   - **Coming from Homepage?** Use *Import from Homepage* on the same page: paste `services.yaml` (and optionally `.env`), preview, import.
-   - **Want a ready-made layout?** See [Start from the template](#start-from-the-template).
+Everything is set up in **Settings**; you never have to edit a file.
+
+1. **Add your apps** in **Settings > Apps > Add app**: pick Radarr, qBittorrent, Plex and so on, enter its address and API key, press **Test**. Each app goes to the right section on its own (Arr Stack, Downloads, Apps). Edit, hide, reorder or remove any app from the same list.
 2. **Arrange the dashboard** in **Settings > Layout**: show, hide and order sections; half-width sections sit side by side.
 3. **Pick a look** in **Settings > Theme**: theme, light / dark / system mode, accent colour, spacing and wallpaper.
 
-Credentials stay on the server and are never sent to the browser. Use `{{NAME}}` variables (Settings > Apps > Variables) to keep addresses and keys in one place.
+Press **Preview** next to Save to see the dashboard with your changes before saving them.
 
-### Start from the template
+### Start from the example
 
-[`examples/undash-template.json`](examples/undash-template.json) is a complete working setup: 7 groups, 31 apps, all sections, Default theme. Every key, password, user name and real address is removed.
+[`examples/config.yaml`](examples/config.yaml) is a complete working setup: 7 groups, 31 apps, all sections, Default theme, with no keys, passwords or real addresses.
 
 1. Download it, then go to **Settings > Backup & import > Import** and choose the file. You see what it contains before anything changes, and a backup is taken first.
-2. In **Settings > Apps > Variables**, set `HOMEPAGE_VAR_SERVER_IP` (it says `192.168.1.10`) and the other addresses and ports to yours. Then fill in the empty `…_API_KEY`, `…_USERNAME` and `…_PASSWORD` variables.
-3. Delete the apps you don't run.
+2. In **Settings > Apps**, change each address (`192.168.1.10` is a placeholder) and add the API keys; apps still missing one are marked. Remove the apps you don't run.
 
 ## Settings at a glance
 
@@ -95,9 +94,14 @@ Credentials stay on the server and are never sent to the browser. Use `{{NAME}}`
 | Settings > Refresh & display | refresh interval (default 2 s), search engine, title |
 | Settings > Ignored alerts | alerts you have ignored |
 | Settings > Connection | Docker: Unraid API and dashboard password. Plugin: settings folder and the 9099 port |
-| Settings > Backup & import | export (redacted or full), import, automatic backups |
+| Settings > Backup & import | export and import `config.yaml` and `.env`, automatic backups, import from another dashboard |
 
-Settings are stored in `config.json` and `secrets.json` (mode 600) in the config folder: `/config` in Docker, `/mnt/user/appdata/undash` for the plugin. A backup is taken before every save, import and restore. A **redacted** export removes keys, passwords, tokens, user names and e-mail addresses, so it is safe to share.
+UnDash keeps two files in its config folder (`/config` in Docker, `/mnt/user/appdata/undash` for the plugin):
+
+- **`config.yaml`**: everything you set in Settings. It never holds a key or password (apps refer to them by name, like `{{RADARR_API_KEY}}`), so it is safe to share.
+- **`.env`** (mode 600): the API keys, user names and passwords you enter in Settings.
+
+Both are backed up before every save, import and restore (`data/backups`). Settings from older versions are converted on first start; the old files are kept in `data/legacy`. The format is described in [docs/CONFIG.md](docs/CONFIG.md).
 
 Keyboard: `/` filter · `r` refresh · `p` pause · `,` settings · `?` all shortcuts · `g` + a letter jumps to a section.
 
@@ -112,7 +116,7 @@ More detail: [docs/DOCKER.md](docs/DOCKER.md) (Docker version) · [docs/CONFIG.m
 
 ## Development
 
-Plain PHP 7.4+ with vanilla JS and CSS, no build step for the app. `python3 build.py 0.5.1` writes `undash.plg`; pushing a `vX.Y.Z` tag builds and publishes the Docker image.
+Plain PHP 7.4+ with vanilla JS and CSS, no build step for the app. `python3 build.py 0.6.0` writes `undash.plg`; pushing a `vX.Y.Z` tag builds and publishes the Docker image.
 
 ```bash
 php tests/run.php && php tests/api_mode_test.php && php tests/router_test.php && php tests/docker_auth_test.php
@@ -122,4 +126,4 @@ UNDASH_DEV_MODE=api php -S 127.0.0.1:8089 dev/server.php      # the same in Dock
 
 ## License
 
-Apache 2.0. Inspired by [Homepage](https://github.com/gethomepage/homepage) (no code from it). The Inter typeface is bundled under the SIL Open Font License 1.1 ([docs/licenses/Inter-OFL.txt](docs/licenses/Inter-OFL.txt)). Theme palettes are built from the MIT-licensed [Kanagawa](https://github.com/rebelot/kanagawa.nvim), [Catppuccin](https://github.com/catppuccin/catppuccin), [Nord](https://www.nordtheme.com) and [Tokyo Night](https://github.com/folke/tokyonight.nvim) schemes and the [shadcn/ui](https://ui.shadcn.com) neutral and zinc scales.
+Apache 2.0. The Inter typeface is bundled under the SIL Open Font License 1.1 ([docs/licenses/Inter-OFL.txt](docs/licenses/Inter-OFL.txt)). Theme palettes are built from the MIT-licensed [Kanagawa](https://github.com/rebelot/kanagawa.nvim), [Catppuccin](https://github.com/catppuccin/catppuccin), [Nord](https://www.nordtheme.com) and [Tokyo Night](https://github.com/folke/tokyonight.nvim) schemes and the [shadcn/ui](https://ui.shadcn.com) neutral and zinc scales.
