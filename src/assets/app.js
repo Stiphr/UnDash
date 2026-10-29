@@ -697,7 +697,7 @@
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
       caps.docker_check ? ['Check container updates', 'box', checkUpdates, '', !!S.busy.dcheck] : null, dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
-      caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog],
+      caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog], ['Keyboard shortcuts  ?', 'grid', keysHelp],
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
       window.UND_STANDALONE ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
       caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
@@ -2385,8 +2385,43 @@
   }
 
   /* ---------- keyboard ---------- */
+  // g then a letter jumps to a section (it opens a collapsed one); ? lists everything
+  var GOTO = { o: 'overview', a: 'alerts', f: 'favorites', m: 'media', s: 'arr', d: 'downloads', n: 'playing', q: 'requests', p: 'apps', c: 'docker', v: 'vms', h: 'health' };
+  function jumpTo(id) {
+    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Dashboard).', true); return; }
+    if (r.sec.collapsed) r.el.querySelector('.sec-h h2 button').click();
+    r.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    var b = r.el.querySelector('.sec-h h2 button'); if (b) try { b.focus({ preventScroll: true }); } catch (x) { b.focus(); }
+  }
+  function refreshAll() {
+    refreshNow();
+    if (R.media) loadMedia(true); if (R.arr) loadArr(true); if (R.downloads) loadDl(true);
+    Object.keys(POLL).forEach(function (k) { pollKick(k); });
+    toast('Refreshing everything');
+  }
+  function keysHelp() {
+    var row = function (k, what) { return h('div', { class: 'kh' }, h('span', null, k.split(' ').map(function (x) { return h('kbd', null, x); })), h('span', null, what)); };
+    var go = Object.keys(GOTO).map(function (k) { return row('g ' + k, TITLES[GOTO[k]]); });
+    modal('Keyboard shortcuts', h('div', { class: 'keys' },
+      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Filter the dashboard'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
+        row(',', 'Settings'), row('?', 'This list'), row('Esc', 'Close a dialog, menu or the filter')),
+      h('div', null, h('h4', { class: 'ign-h' }, 'Go to a section'), go)), null, true);
+  }
   document.addEventListener('keydown', function (e) {
-    if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') && !root.querySelector('.modal-bg,.drawer') && R.search) { e.preventDefault(); R.search.focus(); }
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || (document.activeElement && document.activeElement.isContentEditable);
+    if (typing || e.ctrlKey || e.metaKey || e.altKey || !S.L || root.querySelector('.modal-bg,.drawer') || S.menu) { S.gKey = 0; return; }
+    var k = e.key;
+    if (S.gKey && Date.now() - S.gKey < 1500) {
+      S.gKey = 0;
+      if (GOTO[k.toLowerCase()]) { e.preventDefault(); jumpTo(GOTO[k.toLowerCase()]); }
+      return;
+    }
+    if (k === '/' && R.search) { e.preventDefault(); R.search.focus(); }
+    else if (k === 'g') { S.gKey = Date.now(); }
+    else if (k === '?') { e.preventDefault(); keysHelp(); }
+    else if (k === 'r') { e.preventDefault(); refreshAll(); }
+    else if (k === 'p') { e.preventDefault(); togglePause(); toast(S.paused ? 'Live refresh paused' : 'Live refresh resumed'); }
+    else if (k === ',') { e.preventDefault(); openSettings(); }
   });
   window.addEventListener('beforeunload', function (e) { if (S.drawer && S.drawer.dirty) { e.preventDefault(); e.returnValue = ''; } });
 
