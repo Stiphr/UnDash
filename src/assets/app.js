@@ -699,7 +699,7 @@
       caps.docker_check ? ['Check container updates', 'box', checkUpdates, '', !!S.busy.dcheck] : null, dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
       caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog], ['Keyboard shortcuts  ?', 'grid', keysHelp],
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
-      window.UND_STANDALONE ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
+      window.UND_STANDALONE && S.boot.auth !== 'open' ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
       caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
   }
 
@@ -714,7 +714,7 @@
   var ALERT_CAT = {
     'docker.unhealthy': 'Container unhealthy', 'docker.restarting': 'Container restarting', 'docker.exited': 'Container stopped with an error', 'docker.update_failed': 'Container update failed',
     'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature',
-    'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
+    'auth.open': 'No dashboard password', 'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
   };
   /* the rules in force, by the server's clock (live.at), plus this tab's own changes until the next refresh confirms them */
   function ignRules(y) {
@@ -742,6 +742,7 @@
     var out = [];
     if (S.conn === 'down') out.push({ lv: 'bad', msg: 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.', btn: null, cat: '', res: '' });
     if (S.conn === 'auth') out.push({ lv: 'bad', msg: 'Your session ended. Reload the page to sign in again.', btn: null, cat: '', res: '' });
+    if (S.boot && S.boot.auth === 'open') out.push({ lv: 'warn', msg: 'No dashboard password: anyone who can open this address can see and control your containers and VMs. Setting one is recommended.', btn: ['Set password', function () { openSettings('config'); }], cat: 'auth.open', res: 'dashboard' });
     (y.alerts || []).forEach(function (a) { out.push({ lv: a.lv, msg: a.msg, btn: ALERT_ACT[a.act] ? ALERT_ACT[a.act](a.res) : null, cat: a.cat, res: a.res }); });
     return out;
   }
@@ -2268,10 +2269,39 @@
   }
 
   function tabConfig(b, D) {
-    if (S.boot.caps.mode === 'api') unraidConn(b); else locPort(b, D);
+    if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D);
     configCommon(b, D);
   }
   /* Docker version: where the Unraid API is and its key (the key is never shown again once saved) */
+  /* Docker version: the dashboard's own password (it can be skipped at setup and added here later) */
+  function dashPass(b) {
+    var box = h('div', null, h('div', { class: 'progress' }, h('i')));
+    b.appendChild(set('Dashboard password', 'The Docker version has its own password (the plugin uses your Unraid login).', box));
+    function paint(kind) {
+      clear(box);
+      S.boot.auth = kind;
+      if (kind === 'env') { box.appendChild(h('div', { class: 'banner' }, 'Set by UNDASH_PASSWORD in the container settings (Docker tab > UnDash > Edit). Change or remove it there.')); return; }
+      var v = { current: '', password: '', password2: '' }, msg = h('div', { class: 'sm', role: 'status', style: { 'margin-top': '8px' } });
+      var pw = function (k, lab, ac) { return F(lab, h('input', { type: 'password', autocomplete: ac, value: '', oninput: function (e) { v[k] = e.target.value; } })); };
+      if (kind !== 'file') box.appendChild(h('div', { class: 'banner warn', style: { 'margin-bottom': '10px' } }, 'No password is set: anyone who can open this address can see and control your containers and VMs. Setting one is recommended.'));
+      else box.appendChild(h('p', { class: 'muted sm' }, 'A password is set. Changing it signs out every other browser.'));
+      box.appendChild(h('div', { class: 'grid2' }, kind === 'file' ? pw('current', 'Current password', 'current-password') : null,
+        pw('password', kind === 'file' ? 'New password (10+ characters)' : 'Password (10+ characters)', 'new-password'), pw('password2', 'Repeat it', 'new-password')));
+      var done = function (j, ok) { if (j.error) { msg.style.color = 'var(--bad)'; txt(msg, j.error); return; } toast(ok); if (R.alerts) { R.alerts.sig = null; paintAlerts(S.live || {}); } paint(j.kind); };
+      box.appendChild(h('div', { class: 'inl', style: { 'margin-top': '8px' } },
+        btn(kind === 'file' ? 'Change password' : 'Set password', function () {
+          if (v.password.length < 10) { msg.style.color = 'var(--bad)'; txt(msg, 'Use at least 10 characters.'); return; }
+          if (v.password !== v.password2) { msg.style.color = 'var(--bad)'; txt(msg, 'The passwords do not match.'); return; }
+          api('password_set', v).then(function (j) { done(j, kind === 'file' ? 'Password changed' : 'Password set'); });
+        }, 'pri', 'check'),
+        kind === 'file' ? btn('Remove password…', function () {
+          if (!v.current) { msg.style.color = 'var(--bad)'; txt(msg, 'Enter the current password first.'); return; }
+          confirmBox('Go without a password?', 'Anyone who can open this address will be able to see and control your containers and VMs, without signing in. You can set a password again here at any time.', 'Remove password', true)
+            .then(function (y) { if (y) api('password_remove', { current: v.current, confirm: 'yes' }).then(function (j) { done(j, 'Password removed'); }); });
+        }, 'danger', 'trash') : null), msg);
+    }
+    api('auth_status').then(function (j) { if (j.error) { clear(box).appendChild(h('div', { class: 'banner bad' }, j.error)); return; } paint(j.kind); });
+  }
   function unraidConn(b) {
     var box = h('div', null, h('div', { class: 'progress' }, h('i')));
     b.appendChild(set('Unraid connection', 'The Docker version reads the server through the official Unraid API. Create a key in Unraid under Settings > Management Access > API Keys with read access to Info, Array, Disk, Docker and VMs, plus update access to Docker and VMs for the buttons.', box));

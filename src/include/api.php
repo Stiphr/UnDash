@@ -5,6 +5,7 @@
  * On the standalone port, standalone/router.php checks the Unraid login (or UnDash's own session) and its CSRF token first.
  */
 require_once __DIR__ . '/lib.php';
+require_once __DIR__ . '/auth.php';      // the Docker version's password (Settings > Configuration)
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -35,7 +36,8 @@ switch ($action) {
     out(['version' => UND_VERSION, 'layout' => und_layout_view($cfg), 'types' => und_types(), 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
          'server' => ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip()],
          'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes' && !und_api_mode(), 'caps' => und_caps(),
-         'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null]);
+         'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null,
+         'auth' => und_api_mode() ? und_auth_kind() : 'unraid']);
   }
 
   /* one call per refresh: system metrics, containers and VMs (each part can be skipped when its section is hidden) */
@@ -203,6 +205,25 @@ switch ($action) {
     out(['ok' => true]);
   }
   case 'unraid_test': out(und_api_test());
+
+  /* ---- the dashboard password (Docker version) ---- */
+  case 'auth_status': out(['kind' => und_api_mode() ? und_auth_kind() : 'unraid']);
+  case 'password_set': case 'password_remove': {
+    if (!und_api_mode()) fail('The plugin signs in with your Unraid login.');
+    $kind = und_auth_kind();
+    if ($kind === 'env') fail('The password comes from UNDASH_PASSWORD in the container settings; change it there.');
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+    if ($kind === 'file') {
+      if (und_login_throttled($ip)) fail('Too many wrong passwords. Wait 15 minutes.', 429);
+      if (!und_password_ok($P('current'))) { und_login_failed($ip); fail('The current password is wrong.', 403); }
+    }
+    if ($action === 'password_remove') { if ($P('confirm') !== 'yes') fail('Confirm going without a password.'); $r = und_auth_open(); }
+    else { if ($P('password') !== $P('password2')) fail('The passwords do not match.'); $r = und_password_set($P('password')); }
+    if (isset($r['error'])) fail($r['error']);
+    if ($action === 'password_set') und_sess_drop_others();
+    und_history_add('server', 'Dashboard password', $action === 'password_remove' ? 'removed' : ($kind === 'file' ? 'changed' : 'set'), true);
+    out(['ok' => true, 'kind' => und_auth_kind()]);
+  }
   case 'loc_save': {
     $r = und_save_loc(['CONFIG_DIR' => $P('dir'), 'PORT' => $P('port'), 'BIND' => $P('bind'), 'STANDALONE' => $P('standalone') === 'yes' ? 'yes' : 'no']);
     if (isset($r['error'])) fail($r['error']);

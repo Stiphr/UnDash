@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "2026.11.02b">
+<!ENTITY version "2026.11.02c">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###2026.11.02c
+- Docker version: the first-start page can be skipped ("Continue without a password", no setup code needed); a password is still recommended. Add, change or remove it any time in Settings > Configuration > Dashboard password. While there is none, an alert says so (it can be ignored like any other).
+- Setting or changing the password signs out every other browser, including ones that came in while there was no password.
+
 ###2026.11.02b
 - Docker version: a container stuck in a restart loop is now flagged (the Unraid API reports it as exited with a "Restarting" status). Checked against a real server: Docker mode now reports the same containers, updates, VMs, pools and alerts as the plugin.
 - Docker docs: the UPS tile needs apcupsd in Docker mode; a NUT-only UPS is read by the plugin only.
@@ -128,7 +132,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '2026.11.02b');
+define('UND_VERSION', '2026.11.02c');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -297,7 +301,7 @@ foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>eaa070dd638a1edaf64f82cb7954c5aba63f2c68f65245df159a48c10df17398</SHA256>
+<SHA256>64dc87923bf753109e30c090d9a8cc474c8670bd075cacb52272427d88b554ee</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -2332,7 +2336,7 @@ function und_log_syslog($msg) {
  * Either way UnDash then keeps its own session (HttpOnly, SameSite=Strict, 12 h, renewed while used) with its own CSRF token.
  */
 
-define('UND_SESS_TTL', 12 * 3600);
+if (!defined('UND_SESS_TTL')) define('UND_SESS_TTL', 12 * 3600);
 
 function und_sess_dir() { $d = und_tmp('sess'); @mkdir($d, 0700, true); return $d; }
 
@@ -2346,6 +2350,12 @@ function und_sess_get() {
   if (!is_array($s) || (int)($s['exp'] ?? 0) < time()) { @unlink(und_sess_file($sid)); return null; }
   if ((int)$s['exp'] - time() < UND_SESS_TTL - 600) { $s['exp'] = time() + UND_SESS_TTL; und_write_json(und_sess_file($sid), $s, true); }
   return $s;
+}
+
+/** After a password change: every other browser has to sign in again (sessions opened without a password included). */
+function und_sess_drop_others() {
+  $keep = und_sess_file((string)($_COOKIE['undash_sid'] ?? ''));
+  foreach (glob(und_sess_dir() . '/*.json') ?: [] as $f) if ($f !== $keep) @unlink($f);
 }
 
 function und_sess_new($how) {
@@ -2412,11 +2422,20 @@ function und_handoff_use($t) {
 function und_auth_file() { return UND_DIR . '/auth.json'; }
 function und_setup_file() { return UND_DIR . '/setup-code.txt'; }
 
-/** none = nobody can sign in yet (first start), env = UNDASH_PASSWORD, file = password set in the setup page. */
+/** none = not set up yet (first start), env = UNDASH_PASSWORD, file = password set in the dashboard,
+ *  open = the owner chose to go without a password for now (anyone who reaches the port is signed in). */
 function und_auth_kind() {
   if ((string)getenv('UNDASH_PASSWORD') !== '') return 'env';
   $a = und_read_json(und_auth_file(), []);
-  return !empty($a['hash']) ? 'file' : 'none';
+  return !empty($a['hash']) ? 'file' : (!empty($a['open']) ? 'open' : 'none');
+}
+
+/** Skip the password (setup page) or remove it later (Settings). A password can be added again at any time. */
+function und_auth_open() {
+  if (und_auth_kind() === 'env') return ['error' => 'The password comes from UNDASH_PASSWORD in the container settings; remove it there.'];
+  if (!und_write_json(und_auth_file(), ['open' => true, 'set' => time()], true)) return ['error' => 'Could not write ' . und_auth_file() . '. Check the /config volume.'];
+  @unlink(und_setup_file());
+  return ['ok' => true];
 }
 
 function und_password_ok($pw) {
@@ -2457,7 +2476,7 @@ function und_login_failed($ip) {
   $a[] = time(); und_write_json($f, $a, true);
 }
 ]]></INLINE>
-<SHA256>00e97a7e03eb85810d27b1a8a97140e64e9a65735893a27f62918d6b14e0ac94</SHA256>
+<SHA256>146ab02dec95a1e6ce599da4460ab32109b8673aad402aff87a2c08f9079b4c9</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/unraid_api.php" Mode="0644">
@@ -3085,7 +3104,7 @@ function und_alert_categories() {
           'docker.update_failed' => 'Container update failed', 'array.state' => 'Array not started', 'array.resync' => 'Parity operation running',
           'disk.bad' => 'Disk disabled or missing', 'disk.errors' => 'Disk read/write errors', 'disk.hot' => 'Disk temperature',
           'os.staged' => 'Unraid update waiting for restart', 'os.available' => 'Unraid update available', 'os.check_failed' => 'Unraid update check failed',
-          'api.error' => 'Unraid API problem'];
+          'api.error' => 'Unraid API problem', 'auth.open' => 'No dashboard password'];
 }
 
 const UND_IGNORE_MAX = 500;
@@ -3185,7 +3204,7 @@ function und_ignore_purge_expired() {
   });
 }
 ]]></INLINE>
-<SHA256>21d8488a50eeed03c7297e9f8d3e8890e0907bb7acd0e7ef12bbbcb6aef55bc9</SHA256>
+<SHA256>fbcbd6b5641d1b4156896c59f162e1807c3717f7de135f9c7612207f61f09768</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/alerts.php" Mode="0644">
@@ -3612,6 +3631,7 @@ function und_request_action(array $cfg, $app, $id, $op) {
  * On the standalone port, standalone/router.php checks the Unraid login (or UnDash's own session) and its CSRF token first.
  */
 require_once __DIR__ . '/lib.php';
+require_once __DIR__ . '/auth.php';      // the Docker version's password (Settings > Configuration)
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -3642,7 +3662,8 @@ switch ($action) {
     out(['version' => UND_VERSION, 'layout' => und_layout_view($cfg), 'types' => und_types(), 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
          'server' => ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip()],
          'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes' && !und_api_mode(), 'caps' => und_caps(),
-         'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null]);
+         'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null,
+         'auth' => und_api_mode() ? und_auth_kind() : 'unraid']);
   }
 
   /* one call per refresh: system metrics, containers and VMs (each part can be skipped when its section is hidden) */
@@ -3810,6 +3831,25 @@ switch ($action) {
     out(['ok' => true]);
   }
   case 'unraid_test': out(und_api_test());
+
+  /* ---- the dashboard password (Docker version) ---- */
+  case 'auth_status': out(['kind' => und_api_mode() ? und_auth_kind() : 'unraid']);
+  case 'password_set': case 'password_remove': {
+    if (!und_api_mode()) fail('The plugin signs in with your Unraid login.');
+    $kind = und_auth_kind();
+    if ($kind === 'env') fail('The password comes from UNDASH_PASSWORD in the container settings; change it there.');
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+    if ($kind === 'file') {
+      if (und_login_throttled($ip)) fail('Too many wrong passwords. Wait 15 minutes.', 429);
+      if (!und_password_ok($P('current'))) { und_login_failed($ip); fail('The current password is wrong.', 403); }
+    }
+    if ($action === 'password_remove') { if ($P('confirm') !== 'yes') fail('Confirm going without a password.'); $r = und_auth_open(); }
+    else { if ($P('password') !== $P('password2')) fail('The passwords do not match.'); $r = und_password_set($P('password')); }
+    if (isset($r['error'])) fail($r['error']);
+    if ($action === 'password_set') und_sess_drop_others();
+    und_history_add('server', 'Dashboard password', $action === 'password_remove' ? 'removed' : ($kind === 'file' ? 'changed' : 'set'), true);
+    out(['ok' => true, 'kind' => und_auth_kind()]);
+  }
   case 'loc_save': {
     $r = und_save_loc(['CONFIG_DIR' => $P('dir'), 'PORT' => $P('port'), 'BIND' => $P('bind'), 'STANDALONE' => $P('standalone') === 'yes' ? 'yes' : 'no']);
     if (isset($r['error'])) fail($r['error']);
@@ -3851,7 +3891,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>31c13b429f8efd002060a919f7a55bda1fefccb16cf2e6e000e29f5aa0a71d56</SHA256>
+<SHA256>583f076939e3e2b721a48a0125152a3b7a7c760aacc3431cd2e1df45ee1217e3</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -3898,7 +3938,7 @@ function sa_deny($code, $msg) { http_response_code($code); header('Content-Type:
 function sa_unraid_base() { $h = und_req_host(); return $h === '' ? '' : 'http://' . $h; }
 
 /** The login / setup page (Docker version). Plain HTML, no script, so the strict CSP still applies. */
-function sa_form_page($title, $intro, $fields, $error = '') {
+function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
   $pre = bin2hex(random_bytes(16));
   setcookie('undash_pre', $pre, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
   $e = function ($x) { return htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8'); };
@@ -3908,7 +3948,14 @@ function sa_form_page($title, $intro, $fields, $error = '') {
        '<div class="brand"><img src="/favicon.png" alt="" width="40" height="40"><h1 class="und-name">', $e($title), '</h1></div><p class="muted">', $e($intro), '</p>';
   if ($error !== '') echo '<div class="banner bad" role="alert">', $e($error), '</div>';
   foreach ($fields as $f) echo '<div class="fld"><label for="', $f[0], '">', $e($f[1]), '</label><input id="', $f[0], '" name="', $f[0], '" type="', $f[2], '" autocomplete="', $f[3], '" required', $f[0] === $fields[0][0] ? ' autofocus' : '', '></div>';
-  echo '<input type="hidden" name="pre" value="', $pre, '"><button class="btn pri" type="submit">Continue</button></form></div></body></html>';
+  echo '<input type="hidden" name="pre" value="', $pre, '"><button class="btn pri" type="submit">Set password and continue</button>';
+  if ($skip) {
+    // a second form, so skipping never needs the code or the password fields
+    echo '</form><form class="login card skip" method="post"><input type="hidden" name="pre" value="', $pre, '"><input type="hidden" name="skip" value="1">',
+         '<p class="muted"><b>Recommended:</b> set a password. Without one, anyone who can open this address can see and control your containers and VMs. ',
+         'You can add a password later in Settings &gt; Configuration.</p><button class="btn" type="submit">Continue without a password</button>';
+  }
+  echo '</form></div></body></html>';
   exit;
 }
 function sa_pre_ok() { $c = (string)($_COOKIE['undash_pre'] ?? ''); return $c !== '' && hash_equals($c, (string)($_POST['pre'] ?? '')); }
@@ -3935,7 +3982,11 @@ if (!$sess && und_api_mode()) {
   if ($kind === 'none') {
     if ($uri !== '/setup') { if ($method === 'GET' && $uri === '/') { header('Location: /setup', true, 303); exit; } sa_deny(401, 'Not signed in.'); }
     $err = '';
-    if ($method === 'POST') {
+    if ($method === 'POST' && ($_POST['skip'] ?? '') === '1') {
+      // going without a password cannot lock anybody out (a password can be set later), so it needs no setup code
+      if (!sa_pre_ok()) $err = 'The form expired. Try again.';
+      else { $r = und_auth_open(); if (isset($r['error'])) $err = $r['error']; else { error_log('undash: dashboard password skipped from ' . sa_ip()); und_sess_new('open'); header('Location: /', true, 303); exit; } }
+    } elseif ($method === 'POST') {
       $code = trim((string)@file_get_contents(und_setup_file()));
       if (!sa_pre_ok()) $err = 'The form expired. Try again.';
       elseif (und_login_throttled(sa_ip())) $err = 'Too many attempts. Wait 15 minutes.';
@@ -3944,8 +3995,10 @@ if (!$sess && und_api_mode()) {
       else { $r = und_password_set((string)$_POST['password']); if (isset($r['error'])) $err = $r['error']; else { und_sess_new('setup'); header('Location: /', true, 303); exit; } }
     }
     sa_form_page('Set up UnDash', 'Choose the password for this dashboard. The setup code is printed in the container log (Docker tab > UnDash > Logs).',
-      [['code', 'Setup code', 'text', 'one-time-code'], ['password', 'New password (10+ characters)', 'password', 'new-password'], ['password2', 'Repeat the password', 'password', 'new-password']], $err);
+      [['code', 'Setup code', 'text', 'one-time-code'], ['password', 'New password (10+ characters)', 'password', 'new-password'], ['password2', 'Repeat the password', 'password', 'new-password']], $err, true);
   }
+  if ($kind === 'open') { $sess = und_sess_new('open'); }   // no password chosen: everyone who reaches the port is signed in
+  else {
   if ($uri === '/login' || ($method === 'GET' && $uri === '/')) {
     $err = '';
     if ($method === 'POST' && $uri === '/login') {
@@ -3957,6 +4010,7 @@ if (!$sess && und_api_mode()) {
     sa_form_page('UnDash', 'Sign in to the dashboard.', [['password', 'Password', 'password', 'current-password']], $err);
   }
   sa_deny(401, 'Not signed in.');
+  }
 }
 if (!$sess && $method === 'GET' && isset($_GET['t'])) {
   if (und_handoff_use((string)$_GET['t'])) { und_sess_new('handoff'); header('Location: /', true, 303); exit; }
@@ -3975,6 +4029,7 @@ if (!$sess) {
 }
 
 /* ---- routes ---- */
+if ($sess && $method === 'GET' && ($uri === '/setup' || $uri === '/login')) { header('Location: /', true, 303); exit; }
 if ($uri === '/logout') { und_sess_end(); header('Location: ' . (und_api_mode() ? '/login' : sa_unraid_base() . '/'), true, 303); exit; }
 
 if ($uri === '/api') {
@@ -4032,7 +4087,7 @@ if ($uri === '/' || $uri === '/index.html') {
 }
 sa_deny(404, 'Not found');
 ]]></INLINE>
-<SHA256>f6d0edb52ee50e39c18722adec1c8be4b0495434f954cc1e7f354b5424c44b31</SHA256>
+<SHA256>f6f214361e772eca9e72d738c52bf326129a0b36c0395f7984f2ff021ba2dc3d</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/scripts/oscheck.php" Mode="0755">
@@ -4624,6 +4679,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .login{max-width:380px;margin:12vh auto 0;padding:24px}
 .und .login .brand{margin-bottom:10px}.und .login .btn{width:100%;margin-top:6px!important}
 .und .login input{width:100%}
+.und .login.skip{margin-top:12px;padding:16px 24px}.und .login.skip p{margin:0 0 6px;font-size:12.5px}
 
 @media (max-width:1100px){
   .und .rowh.c,.und .rowi.c{grid-template-columns:minmax(150px,2fr) minmax(90px,1fr) 64px 76px 48px}
@@ -4712,7 +4768,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und[data-theme=fluent] .modal,.und[data-theme=fluent] .menu,.und[data-theme=fluent] .toast{background:rgba(17,19,24,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-color:rgba(255,255,255,.12)}
 .und[data-theme=fluent] *{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.12) transparent}
 ]]></INLINE>
-<SHA256>8edee1b4025b52ef2df1c38b0a3f8e4b0945930f8f11c4ed451c4e47eab247ca</SHA256>
+<SHA256>6f30bc015830d1989d1b5e59bed7a4e29c1b6d6e0ffcdc53d233ce35170751d6</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -5417,7 +5473,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
       caps.docker_check ? ['Check container updates', 'box', checkUpdates, '', !!S.busy.dcheck] : null, dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
       caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog], ['Keyboard shortcuts  ?', 'grid', keysHelp],
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
-      window.UND_STANDALONE ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
+      window.UND_STANDALONE && S.boot.auth !== 'open' ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
       caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
   }
 
@@ -5432,7 +5488,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   var ALERT_CAT = {
     'docker.unhealthy': 'Container unhealthy', 'docker.restarting': 'Container restarting', 'docker.exited': 'Container stopped with an error', 'docker.update_failed': 'Container update failed',
     'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature',
-    'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
+    'auth.open': 'No dashboard password', 'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
   };
   /* the rules in force, by the server's clock (live.at), plus this tab's own changes until the next refresh confirms them */
   function ignRules(y) {
@@ -5460,6 +5516,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var out = [];
     if (S.conn === 'down') out.push({ lv: 'bad', msg: 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.', btn: null, cat: '', res: '' });
     if (S.conn === 'auth') out.push({ lv: 'bad', msg: 'Your session ended. Reload the page to sign in again.', btn: null, cat: '', res: '' });
+    if (S.boot && S.boot.auth === 'open') out.push({ lv: 'warn', msg: 'No dashboard password: anyone who can open this address can see and control your containers and VMs. Setting one is recommended.', btn: ['Set password', function () { openSettings('config'); }], cat: 'auth.open', res: 'dashboard' });
     (y.alerts || []).forEach(function (a) { out.push({ lv: a.lv, msg: a.msg, btn: ALERT_ACT[a.act] ? ALERT_ACT[a.act](a.res) : null, cat: a.cat, res: a.res }); });
     return out;
   }
@@ -6986,10 +7043,39 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   }
 
   function tabConfig(b, D) {
-    if (S.boot.caps.mode === 'api') unraidConn(b); else locPort(b, D);
+    if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D);
     configCommon(b, D);
   }
   /* Docker version: where the Unraid API is and its key (the key is never shown again once saved) */
+  /* Docker version: the dashboard's own password (it can be skipped at setup and added here later) */
+  function dashPass(b) {
+    var box = h('div', null, h('div', { class: 'progress' }, h('i')));
+    b.appendChild(set('Dashboard password', 'The Docker version has its own password (the plugin uses your Unraid login).', box));
+    function paint(kind) {
+      clear(box);
+      S.boot.auth = kind;
+      if (kind === 'env') { box.appendChild(h('div', { class: 'banner' }, 'Set by UNDASH_PASSWORD in the container settings (Docker tab > UnDash > Edit). Change or remove it there.')); return; }
+      var v = { current: '', password: '', password2: '' }, msg = h('div', { class: 'sm', role: 'status', style: { 'margin-top': '8px' } });
+      var pw = function (k, lab, ac) { return F(lab, h('input', { type: 'password', autocomplete: ac, value: '', oninput: function (e) { v[k] = e.target.value; } })); };
+      if (kind !== 'file') box.appendChild(h('div', { class: 'banner warn', style: { 'margin-bottom': '10px' } }, 'No password is set: anyone who can open this address can see and control your containers and VMs. Setting one is recommended.'));
+      else box.appendChild(h('p', { class: 'muted sm' }, 'A password is set. Changing it signs out every other browser.'));
+      box.appendChild(h('div', { class: 'grid2' }, kind === 'file' ? pw('current', 'Current password', 'current-password') : null,
+        pw('password', kind === 'file' ? 'New password (10+ characters)' : 'Password (10+ characters)', 'new-password'), pw('password2', 'Repeat it', 'new-password')));
+      var done = function (j, ok) { if (j.error) { msg.style.color = 'var(--bad)'; txt(msg, j.error); return; } toast(ok); if (R.alerts) { R.alerts.sig = null; paintAlerts(S.live || {}); } paint(j.kind); };
+      box.appendChild(h('div', { class: 'inl', style: { 'margin-top': '8px' } },
+        btn(kind === 'file' ? 'Change password' : 'Set password', function () {
+          if (v.password.length < 10) { msg.style.color = 'var(--bad)'; txt(msg, 'Use at least 10 characters.'); return; }
+          if (v.password !== v.password2) { msg.style.color = 'var(--bad)'; txt(msg, 'The passwords do not match.'); return; }
+          api('password_set', v).then(function (j) { done(j, kind === 'file' ? 'Password changed' : 'Password set'); });
+        }, 'pri', 'check'),
+        kind === 'file' ? btn('Remove password…', function () {
+          if (!v.current) { msg.style.color = 'var(--bad)'; txt(msg, 'Enter the current password first.'); return; }
+          confirmBox('Go without a password?', 'Anyone who can open this address will be able to see and control your containers and VMs, without signing in. You can set a password again here at any time.', 'Remove password', true)
+            .then(function (y) { if (y) api('password_remove', { current: v.current, confirm: 'yes' }).then(function (j) { done(j, 'Password removed'); }); });
+        }, 'danger', 'trash') : null), msg);
+    }
+    api('auth_status').then(function (j) { if (j.error) { clear(box).appendChild(h('div', { class: 'banner bad' }, j.error)); return; } paint(j.kind); });
+  }
   function unraidConn(b) {
     var box = h('div', null, h('div', { class: 'progress' }, h('i')));
     b.appendChild(set('Unraid connection', 'The Docker version reads the server through the official Unraid API. Create a key in Unraid under Settings > Management Access > API Keys with read access to Info, Array, Disk, Docker and VMs, plus update access to Docker and VMs for the buttons.', box));
@@ -7156,7 +7242,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   });
 })();
 ]]></INLINE>
-<SHA256>3e4c61caa7a76901e53ff26747da947a25aa4fb8b5f9e593f0d970418b582fbd</SHA256>
+<SHA256>8cd8f43b68a661d3733e78eb2a1bb3f3f06a0ae6692ad644f502b252a06e89a6</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
