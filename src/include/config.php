@@ -54,7 +54,7 @@ function und_default_config() {
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo',
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
     'appearance' => ['theme' => 'default', 'accent' => '#f15a2c', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'brightness' => 75, 'css_enabled' => true],
-    'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true]; }, und_media_ids())],
+    'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
     'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
@@ -135,7 +135,7 @@ function und_array_mounted($dir) {
 /** First use of a configuration directory: copy the flash files into it, never over existing ones. */
 function und_migrate_into($dir) {
   if ($dir === UND_DIR) return;
-  foreach (['config.json', 'secrets.json', 'custom.css'] as $f) {
+  foreach (['config.json', 'secrets.json', 'custom.css', 'ignores.json'] as $f) {
     if (!is_file("$dir/$f") && is_file(UND_DIR . "/$f")) { @copy(UND_DIR . "/$f", "$dir/$f"); if ($f === 'secrets.json') @chmod("$dir/$f", 0600); }
   }
 }
@@ -329,6 +329,12 @@ function und_normalize(array $c) {
   $media = ['radarr' => preg_match('/^[a-f0-9]{8}$/', (string)$md['radarr']) ? $md['radarr'] : '', 'sonarr' => preg_match('/^[a-f0-9]{8}$/', (string)$md['sonarr']) ? $md['sonarr'] : '',
             'count' => max(4, min(40, (int)$md['count'])), 'days_ahead' => max(7, min(120, (int)$md['days_ahead'])),
             'widgets' => $order($md['widgets'] ?? [], und_media_ids(), $d['media']['widgets'], ['visible' => 'bool'])];
+  // the four columns always come in this order; each has its own length (older configurations used the shared count)
+  $raw = []; foreach ((array)($md['widgets'] ?? []) as $x) if (is_array($x) && is_string($x['id'] ?? null)) $raw[$x['id']] = $x;
+  $byId = []; foreach ($media['widgets'] as $w) $byId[$w['id']] = $w;
+  $media['widgets'] = array_map(function ($id) use ($byId, $raw, $media) {
+    return ['id' => $id, 'visible' => $byId[$id]['visible'], 'count' => max(1, min(50, (int)($raw[$id]['count'] ?? $media['count'])))];
+  }, und_media_ids());
   $dl = (isset($c['downloads']) && is_array($c['downloads']) ? $c['downloads'] : []) + $d['downloads'];
   $downloads = ['items' => max(0, min(20, (int)$dl['items']))];
   $dk = (isset($c['docker']) && is_array($c['docker']) ? $c['docker'] : []) + $d['docker'];

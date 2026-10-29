@@ -94,6 +94,10 @@ putenv('UNDASH_PASSWORD=from-env-password');
 t('UNDASH_PASSWORD takes over', und_auth_kind() === 'env' && und_password_ok('from-env-password') && !und_password_ok('a long password'));
 putenv('UNDASH_PASSWORD');
 t('Unraid sessions and handoff links are ignored in Docker mode', und_unraid_logged_in() === false && und_handoff_use(str_repeat('a', 48)) === false);
+$ar = und_api_array(['state' => 'STARTED', 'parities' => [['name' => 'parity', 'status' => 'DISK_OK', 'temp' => 38, 'fsSize' => 0, 'numErrors' => 0]],
+  'disks' => [['name' => 'disk1', 'status' => 'DISK_OK', 'temp' => 55, 'fsSize' => 100, 'fsFree' => 50, 'numErrors' => 0], ['name' => 'disk2', 'status' => 'DISK_DSBL', 'temp' => null, 'fsSize' => 100, 'fsFree' => 10, 'numErrors' => 3]], 'caches' => []]);
+t('API-mode array names the hot, bad and erroring disks', $ar['hot_disks'] === [['name' => 'disk1', 'temp' => 55]] && $ar['bad_disks'] === ['disk2'] && $ar['error_disks'] === [['name' => 'disk2', 'errors' => 3]] && $ar['bad'] === 1, json_encode($ar));
+t('ignore rules are stored in /config in Docker mode', !empty(und_ignore_add('type', 'os.available', '', 'permanent')['ok']) && is_file(UND_DIR . '/ignores.json'));
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

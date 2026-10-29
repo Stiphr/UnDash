@@ -47,6 +47,20 @@ $r = req('POST', '/api', [$C, 'Content-Type: application/x-www-form-urlencoded',
 t('cross-origin API call refused', $r['code'] === 403);
 $r = req('POST', '/api', [$C, 'Content-Type: application/x-www-form-urlencoded', "X-CSRF-Token: $csrf", 'Origin: http://tower.local:9099'], 'action=history');
 t('valid API call works', $r['code'] === 200 && isset(json_decode($r['body'], true)['history']), $r['body']);
+$H = [$C, 'Content-Type: application/x-www-form-urlencoded', "X-CSRF-Token: $csrf"];
+t('ignoring needs the CSRF token', req('POST', '/api', [$C, 'Content-Type: application/x-www-form-urlencoded'], 'action=ignore_add&kind=instance&category=disk.hot&resource=disk3&duration=3600')['code'] === 403);
+$r = req('POST', '/api', $H, 'action=ignore_add&kind=instance&category=disk.hot&resource=disk3&duration=3600&title=hot&severity=warn');
+$j = json_decode($r['body'], true);
+t('ignore an alert over HTTP', $r['code'] === 200 && ($j['rule']['key'] ?? '') === 'disk.hot:disk3', $r['body']);
+t('a bad ignore request is a 400 and adds nothing', req('POST', '/api', $H, 'action=ignore_add&kind=type&category=../x&duration=3600')['code'] === 400
+  && req('POST', '/api', $H, 'action=ignore_add&kind=instance&category=disk.hot&resource=disk1&duration=-5')['code'] === 400);
+$l = json_decode(req('POST', '/api', $H, 'action=ignores_list')['body'], true);
+t('the list has exactly the one rule', count($l['rules'] ?? []) === 1 && isset($l['categories']['disk.hot']));
+$lv = json_decode(req('POST', '/api', $H, 'action=live&parts=none')['body'], true);
+t('live refresh carries the active rules', count($lv['ignores'] ?? []) === 1 && $lv['ignores'][0]['key'] === 'disk.hot:disk3');
+t('restore all needs confirmation', req('POST', '/api', $H, 'action=ignore_restore_all')['code'] === 400);
+$r = req('POST', '/api', $H, 'action=ignore_remove&ids=' . rawurlencode(json_encode([$j['rule']['id'] ?? ''])));
+t('restore by id', $r['code'] === 200 && json_decode($r['body'], true)['removed'] === 1, $r['body']);
 t('GET on the API refused', req('GET', '/api', [$C])['code'] === 405);
 t('icon paths cannot escape their folder', req('GET', '/state/plugins/dynamix.docker.manager/images/..%2F..%2F..%2Fetc%2Fpasswd', [$C])['code'] === 404);
 t('unknown paths are 404', req('GET', '/include/config.php', [$C])['code'] === 404);

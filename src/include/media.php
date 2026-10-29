@@ -33,9 +33,10 @@ function und_media(array $cfg, $kind) {
   $type = in_array($kind, ['upcoming_movies', 'recent_movies'], true) ? 'radarr' : 'sonarr';
   $id = und_media_source($cfg, $type);
   if (!$id) return ['items' => [], 'unconfigured' => true, 'error' => 'Add a ' . ($type === 'radarr' ? 'Radarr' : 'Sonarr') . ' app in Settings > Apps to see this.'];
-  $count = max(4, min(40, (int)($cfg['media']['count'] ?? 15)));
+  $count = max(1, min(50, (int)($cfg['media']['count'] ?? 15)));
+  foreach ((array)($cfg['media']['widgets'] ?? []) as $w) if (($w['id'] ?? '') === $kind && isset($w['count'])) $count = max(1, min(50, (int)$w['count']));
   $days = max(7, min(120, (int)($cfg['media']['days_ahead'] ?? 30)));
-  return und_api_cached('media-' . $kind . '-' . $id, 60, function () use ($cfg, $id, $kind, $count, $days) {
+  return und_api_cached('media-' . $kind . '-' . $id . '-' . $count . '-' . $days, 60, function () use ($cfg, $id, $kind, $count, $days) {
     $s = und_service_full($cfg, $id);
     if (trim($s['url']) === '' || und_has($s['url'], '{{')) return ['items' => [], 'unconfigured' => true, 'error' => $s['name'] . ' has no API URL yet.'];
     $base = rtrim($s['url'], '/'); $link = rtrim($s['href'] ?: $s['url'], '/');
