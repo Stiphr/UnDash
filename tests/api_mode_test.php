@@ -81,14 +81,14 @@ t('OS update refused in Docker mode', isset(und_os_update()['error']));
 // secrets
 $view = json_encode(und_secrets_view(und_secrets()));
 t('the API key is not in the settings view', strpos($view, 'SECRETKEY123') === false);
-$red = json_encode(und_export('redacted'));
-t('the API key is not in a redacted export', strpos($red, 'SECRETKEY123') === false && strpos($red, 'tower.local') !== false);
-t('the API key is in a full export', strpos(json_encode(und_export('full')), 'SECRETKEY123') !== false);
+$red = und_export('config')['text'];
+t('the API key is not in the config.yaml export', strpos($red, 'SECRETKEY123') === false && strpos($red, 'tower.local') !== false);
+t('the API key is in the .env export', strpos(und_export('env')['text'], 'SECRETKEY123') !== false);
 // password sign-in
 t('no password yet: setup code created', und_auth_kind() === 'none' && preg_match('/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/', und_setup_code_ensure()));
 t('short passwords refused', isset(und_password_set('short')['error']));
 t('password set, setup code removed', isset(und_password_set('a long password')['ok']) && !is_file(und_setup_file()) && und_auth_kind() === 'file');
-t('password checked with a hash', und_password_ok('a long password') && !und_password_ok('wrong') && strpos(file_get_contents(und_auth_file()), 'a long password') === false);
+t('password checked with a hash', und_password_ok('a long password') && !und_password_ok('wrong') && strpos(file_get_contents(und_store_dir() . '/.env'), 'a long password') === false && !empty(und_env()['UNDASH_PASSWORD_HASH']));
 for ($i = 0; $i < 5; $i++) und_login_failed('10.0.0.9');
 t('5 wrong passwords lock that address out', und_login_throttled('10.0.0.9') && !und_login_throttled('10.0.0.8'));
 putenv('UNDASH_PASSWORD=from-env-password');
@@ -100,7 +100,7 @@ t('a restart loop reported as EXITED + "Restarting" is a restart loop', $gl && $
 $ar = und_api_array(['state' => 'STARTED', 'parities' => [['name' => 'parity', 'status' => 'DISK_OK', 'temp' => 38, 'fsSize' => 0, 'numErrors' => 0]],
   'disks' => [['name' => 'disk1', 'status' => 'DISK_OK', 'temp' => 55, 'fsSize' => 100, 'fsFree' => 50, 'numErrors' => 0], ['name' => 'disk2', 'status' => 'DISK_DSBL', 'temp' => null, 'fsSize' => 100, 'fsFree' => 10, 'numErrors' => 3]], 'caches' => []]);
 t('API-mode array names the hot, bad and erroring disks', $ar['hot_disks'] === [['name' => 'disk1', 'temp' => 55]] && $ar['bad_disks'] === ['disk2'] && $ar['error_disks'] === [['name' => 'disk2', 'errors' => 3]] && $ar['bad'] === 1, json_encode($ar));
-t('ignore rules are stored in /config in Docker mode', !empty(und_ignore_add('type', 'os.available', '', 'permanent')['ok']) && is_file(UND_DIR . '/ignores.json'));
+t('ignore rules are stored in /config in Docker mode', !empty(und_ignore_add('type', 'os.available', '', 'permanent')['ok']) && strpos((string)@file_get_contents(UND_DIR . '/config.yaml'), 'os.available') !== false);
 $id = und_server_identity();
 t('in Docker mode the title shows the server (here: the API host, as the system read is not answered), never the container', $id['name'] === 'tower.local' && $id['ip'] === 'tower.local' && $id['name'] !== gethostname(), json_encode($id));
 exec('rm -rf ' . escapeshellarg($SB));

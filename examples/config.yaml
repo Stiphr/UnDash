@@ -1,0 +1,794 @@
+# UnDash example settings: 7 groups, 31 apps, every section, Default theme.
+# Import it in Settings > Backup & import, then change the addresses to yours (192.168.1.10 is a placeholder)
+# and add each app's API key or login in Settings > Apps. No keys, passwords or user names are in this file.
+version: 5
+general:
+  title: UnDash
+  refresh_services: 15
+  disk_path: /mnt/user
+  search: duckduckgo
+  show_search: true
+  show_date: true
+  os_check_hours: 6
+  ups_name: ups
+  refresh: 2
+  background_poll: slow
+appearance:
+  theme: default
+  background: ""
+  blur: 15
+  brightness: 35
+  accent: ""
+  density: comfortable
+  css_enabled: true
+  mode: dark
+  blur_target: cards
+  safe_x: -1
+  safe_y: -1
+dashboard:
+  sections:
+    - id: overview
+      visible: true
+      width: full
+      collapsed: false
+    - id: alerts
+      visible: true
+      width: full
+      collapsed: false
+    - id: favorites
+      visible: false
+      width: full
+      collapsed: false
+    - id: media
+      visible: true
+      width: half
+      collapsed: false
+    - id: arr
+      visible: true
+      width: half
+      collapsed: false
+    - id: downloads
+      visible: true
+      width: half
+      collapsed: false
+    - id: playing
+      visible: true
+      width: half
+      collapsed: false
+    - id: requests
+      visible: true
+      width: half
+      collapsed: true
+    - id: apps
+      visible: true
+      width: full
+      collapsed: false
+    - id: docker
+      visible: true
+      width: full
+      collapsed: false
+    - id: vms
+      visible: true
+      width: full
+      collapsed: false
+    - id: health
+      visible: true
+      width: full
+      collapsed: true
+  metrics:
+    - id: cpu
+      visible: true
+    - id: memory
+      visible: true
+    - id: storage
+      visible: true
+    - id: network
+      visible: true
+    - id: health
+      visible: true
+    - id: disks
+      visible: true
+    - id: uptime
+      visible: true
+    - id: ups
+      visible: true
+    - id: cores
+      visible: false
+    - id: swap
+      visible: false
+    - id: load
+      visible: false
+    - id: path
+      visible: false
+    - id: docker
+      visible: false
+    - id: vms
+      visible: false
+media:
+  radarr: ""
+  sonarr: ""
+  count: 10
+  days_ahead: 30
+  widgets:
+    - id: upcoming_movies
+      visible: true
+      count: 10
+    - id: upcoming_episodes
+      visible: true
+      count: 10
+    - id: recent_movies
+      visible: true
+      count: 10
+    - id: recent_episodes
+      visible: true
+      count: 10
+downloads:
+  items: 4
+apps:
+  columns: 0
+  links: false
+  headers: false
+docker:
+  layout: grid
+  view: compact
+  filter: running
+  selected: []
+  columns: 0
+  sort: name
+  show:
+    - cpu
+    - memory
+    - update
+  hide_stopped: false
+  items: []
+vms:
+  layout: list
+  show:
+    - status
+    - cpus
+    - memory
+  items: []
+groups:
+  - id: "7a3062f0"
+    name: System
+    columns: 4
+    header: true
+    services:
+      - id: "4a847e82"
+        name: UPS
+        type: peanut
+        icon: ""
+        href: ""
+        url: http://192.168.1.10:8288
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields:
+          - battery_charge
+          - ups_load
+          - ups_status
+        options: []
+        key: ""
+        username: ""
+        password: ""
+  - id: "5aee964f"
+    name: Media Info
+    columns: 4
+    header: true
+    services:
+      - id: "2e77c848"
+        name: Upcoming Movies
+        type: calendar
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/radarr-light.svg
+        href: ""
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options:
+          max_events: 8
+          previous_days: 0
+          days_ahead: 30
+          integrations:
+            - service: "2a38b660"
+              unmonitored: true
+        key: ""
+        username: ""
+        password: ""
+      - id: a7c8819e
+        name: Upcoming Shows
+        type: calendar
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/sonarr-light.svg
+        href: ""
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options:
+          max_events: 8
+          previous_days: 0
+          days_ahead: 30
+          integrations:
+            - service: "5a7417a9"
+              unmonitored: true
+        key: ""
+        username: ""
+        password: ""
+      - id: c67db270
+        name: Recently Added Shows
+        type: customapi
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/plex-light.svg
+        href: ""
+        url: "http://192.168.1.10:8181/api/v2?apikey={{TAUTULLI_API_KEY}}&cmd=get_recently_added&count=6&media_type=episode&section_id=2"
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options:
+          display: list
+          method: GET
+          headers: []
+          mappings:
+            - field: response.data.recently_added.0.grandparent_title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.0.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.1.grandparent_title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.1.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.2.grandparent_title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.2.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.3.grandparent_title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.3.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.4.grandparent_title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.4.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.5.grandparent_title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.5.added_at
+                format: relativeDate
+                scale: 1000
+        key: ""
+        username: ""
+        password: ""
+      - id: "41cf50c2"
+        name: Recently Added Movies
+        type: customapi
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/plex-light.svg
+        href: ""
+        url: "http://192.168.1.10:8181/api/v2?apikey={{TAUTULLI_API_KEY}}&cmd=get_recently_added&count=6&media_type=movie"
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options:
+          display: list
+          method: GET
+          headers: []
+          mappings:
+            - field: response.data.recently_added.0.title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.0.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.1.title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.1.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.2.title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.2.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.3.title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.3.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.4.title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.4.added_at
+                format: relativeDate
+                scale: 1000
+            - field: response.data.recently_added.5.title
+              label: ""
+              format: text
+              additional:
+                field: response.data.recently_added.5.added_at
+                format: relativeDate
+                scale: 1000
+        key: ""
+        username: ""
+        password: ""
+  - id: "728ed103"
+    name: Arr Automation
+    columns: 4
+    header: true
+    services:
+      - id: "2a38b660"
+        name: Radarr
+        type: radarr
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/radarr-light.svg
+        href: ""
+        url: http://192.168.1.10:7878
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields:
+          - wanted
+          - queued
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "5a7417a9"
+        name: Sonarr
+        type: sonarr
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/sonarr-light.svg
+        href: ""
+        url: http://192.168.1.10:8989
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields:
+          - wanted
+          - queued
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "5328a8ba"
+        name: Lidarr
+        type: lidarr
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/lidarr-light.svg
+        href: http://192.168.1.10:8687/
+        url: http://192.168.1.10:8687
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "7cecbc77"
+        name: Bazarr
+        type: bazarr
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/bazarr-light.svg
+        href: http://192.168.1.10:6767/
+        url: http://192.168.1.10:6767
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields:
+          - missingEpisodes
+          - missingMovies
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "4adb2d10"
+        name: Prowlarr
+        type: prowlarr
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/prowlarr-light.svg
+        href: ""
+        url: http://192.168.1.10:9696/
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "3aa565fd"
+        name: Overseerr
+        type: overseerr
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/overseerr-light.svg
+        href: ""
+        url: http://192.168.1.10:5055
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "7d55c1a0"
+        name: Autobrr
+        type: autobrr
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/autobrr-light.svg
+        href: ""
+        url: http://192.168.1.10:7474
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "77295045"
+        name: Wizarr
+        type: customapi
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/invio-light.svg
+        href: http://192.168.1.10:5690
+        url: http://192.168.1.10:5690/api/status
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options:
+          display: block
+          method: GET
+          headers:
+            X-API-Key: "{{WIZARR_API_KEY}}"
+          mappings:
+            - field: users
+              label: Users
+              format: text
+            - field: invites
+              label: Invites
+              format: text
+            - field: pending
+              label: Pending
+              format: text
+            - field: expired
+              label: Expired
+              format: text
+        key: ""
+        username: ""
+        password: ""
+  - id: a50492aa
+    name: Downloaders
+    columns: 4
+    header: true
+    services:
+      - id: "27181202"
+        name: qBittorrent Private
+        type: qbittorrent
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/qbittorrent-light.svg
+        href: ""
+        url: http://192.168.1.10:8080
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "64265f16"
+        name: qBittorrent Public
+        type: qbittorrent
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/qbittorrent-light.svg
+        href: ""
+        url: http://192.168.1.10:8081
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "1053d2b7"
+        name: SABnzbd
+        type: sabnzbd
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/sabnzbd-light.svg
+        href: ""
+        url: http://192.168.1.10:8686
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+  - id: c6dace2f
+    name: Streaming Status
+    columns: 4
+    header: true
+    services:
+      - id: "3509b159"
+        name: Emby
+        type: emby
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/emby-light.svg
+        href: ""
+        url: http://192.168.1.10:8096/
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "8893ac7c"
+        name: Plex
+        type: plex
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/plex-light.svg
+        href: ""
+        url: http://192.168.1.10:37668
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields:
+          - streams
+          - movies
+          - tv
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "9f1c8077"
+        name: Tautulli
+        type: tautulli
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/tautulli-light.svg
+        href: ""
+        url: http://192.168.1.10:8181
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+  - id: "6926dc5a"
+    name: Other
+    columns: 4
+    header: true
+    services:
+      - id: "5b51953c"
+        name: Adguard
+        type: adguard
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/adguard-home-light.svg
+        href: ""
+        url: http://192.168.1.20
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields:
+          - queries
+          - blocked
+          - filtered
+          - latency
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "1745ac44"
+        name: Nginx Proxy Manager
+        type: npm
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/nginx-proxy-manager-light.svg
+        href: ""
+        url: http://192.168.1.10:7818/
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields:
+          - enabled
+          - disabled
+          - total
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: a0e21fc7
+        name: Immich
+        type: immich
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/immich-light.svg
+        href: http://192.168.1.10:8883/photos
+        url: http://192.168.1.10:8883
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields:
+          - photos
+          - videos
+          - storage
+        options: []
+        key: ""
+        username: ""
+        password: ""
+  - id: c7e60bc1
+    name: Services
+    columns: 4
+    header: true
+    services:
+      - id: "1953e344"
+        name: Unraid
+        type: link
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/unraid-light.svg
+        href: http://192.168.1.10/Dashboard
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: e0c98f5f
+        name: Windows VM
+        type: link
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/microsoft-windows-light.svg
+        href: "http://192.168.1.10/plugins/dynamix.vm.manager/vnc.html?v=1729196260&resize=scale&autoconnect=true&host=192.168.1.10&port=&path=/wsproxy/5700/"
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: ab598fe3
+        name: ArchiSteamFarm
+        type: link
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/steam-light.svg
+        href: http://192.168.1.10:1242/
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: a82322a3
+        name: Pinvin Share
+        type: link
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/pingvin-share-light.svg
+        href: http://192.168.1.10:4004/
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: fe9245e0
+        name: Twitch Drops
+        type: link
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/twitch-light.svg
+        href: http://192.168.1.10:5800/
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "25575594"
+        name: File Browser
+        type: link
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/filebrowser-quantum-light.svg
+        href: http://192.168.1.10:8861/
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: d3dc9a3c
+        name: QUI
+        type: link
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/qui-light.svg
+        href: http://192.168.1.10:7476/instances
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "3cfb1190"
+        name: Requesterr
+        type: link
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/requestrr-light.svg
+        href: http://192.168.1.10:7676/
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""
+      - id: "60b526e0"
+        name: Profilarr
+        type: link
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/profilarr-light.svg
+        href: http://192.168.1.10:6868/
+        url: ""
+        description: ""
+        hidden: false
+        favorite: false
+        span: 1
+        fields: []
+        options: []
+        key: ""
+        username: ""
+        password: ""

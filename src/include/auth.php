@@ -93,21 +93,28 @@ function und_handoff_use($t) {
 
 /* ---------- password sign-in (Docker version: there is no Unraid session to reuse) ---------- */
 
-function und_auth_file() { return UND_DIR . '/auth.json'; }
 function und_setup_file() { return UND_DIR . '/setup-code.txt'; }
+
+/** The password hash (or the choice to go without one) is kept in .env as UNDASH_PASSWORD_HASH / UNDASH_AUTH=open. */
+function und_auth_set(array $set) {
+  und_config_lock();
+  $env = und_env();
+  unset($env['UNDASH_PASSWORD_HASH'], $env['UNDASH_AUTH']);
+  return und_env_write($env + $set);
+}
 
 /** none = not set up yet (first start), env = UNDASH_PASSWORD, file = password set in the dashboard,
  *  open = the owner chose to go without a password for now (anyone who reaches the port is signed in). */
 function und_auth_kind() {
   if ((string)getenv('UNDASH_PASSWORD') !== '') return 'env';
-  $a = und_read_json(und_auth_file(), []);
-  return !empty($a['hash']) ? 'file' : (!empty($a['open']) ? 'open' : 'none');
+  $e = und_env();
+  return !empty($e['UNDASH_PASSWORD_HASH']) ? 'file' : (($e['UNDASH_AUTH'] ?? '') === 'open' ? 'open' : 'none');
 }
 
 /** Skip the password (setup page) or remove it later (Settings). A password can be added again at any time. */
 function und_auth_open() {
   if (und_auth_kind() === 'env') return ['error' => 'The password comes from UNDASH_PASSWORD in the container settings; remove it there.'];
-  if (!und_write_json(und_auth_file(), ['open' => true, 'set' => time()], true)) return ['error' => 'Could not write ' . und_auth_file() . '. Check the /config volume.'];
+  if (!und_auth_set(['UNDASH_AUTH' => 'open'])) return ['error' => 'Could not write the .env file. Check the /config volume.'];
   @unlink(und_setup_file());
   return ['ok' => true];
 }
@@ -115,13 +122,13 @@ function und_auth_open() {
 function und_password_ok($pw) {
   $pw = (string)$pw;
   if (und_auth_kind() === 'env') return hash_equals((string)getenv('UNDASH_PASSWORD'), $pw);
-  $a = und_read_json(und_auth_file(), []);
-  return !empty($a['hash']) && password_verify($pw, (string)$a['hash']);
+  $h = (string)(und_env()['UNDASH_PASSWORD_HASH'] ?? '');
+  return $h !== '' && password_verify($pw, $h);
 }
 
 function und_password_set($pw) {
   if (strlen((string)$pw) < 10) return ['error' => 'Use at least 10 characters.'];
-  if (!und_write_json(und_auth_file(), ['hash' => password_hash((string)$pw, PASSWORD_DEFAULT), 'set' => time()], true)) return ['error' => 'Could not write ' . und_auth_file() . '. Check the /config volume.'];
+  if (!und_auth_set(['UNDASH_PASSWORD_HASH' => password_hash((string)$pw, PASSWORD_DEFAULT)])) return ['error' => 'Could not write the .env file. Check the /config volume.'];
   @unlink(und_setup_file());
   return ['ok' => true];
 }
