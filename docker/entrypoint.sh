@@ -15,6 +15,8 @@ php -d auto_prepend_file= /usr/local/bin/firstrun.php
 
 # the alert history: one check a minute in the background
 ( while true; do php -d auto_prepend_file= -d display_errors=0 -d log_errors=1 -d error_log=/dev/stderr /app/scripts/alertcheck.php; sleep 60; done ) &
+# the Unraid API's slow reads (network rates, primary interface), refreshed while a dashboard is open
+( while true; do php -d auto_prepend_file= -d display_errors=0 -d log_errors=1 -d error_log=/dev/stderr /app/scripts/apipoll.php; sleep 5; done ) &
 
 echo "UnDash listening on port $PORT (inside the container)"
 # PHP's built-in server prints every connection; only errors and UnDash's own messages are kept

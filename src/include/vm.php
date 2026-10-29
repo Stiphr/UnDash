@@ -70,8 +70,6 @@ function und_vm_live() {
   return ['vms' => $out];
 }
 
-function und_vm_list() { return und_vm_live(); }
-
 function und_vm_action($name, $op) {
   if (!und_valid_vm($name)) return ['error' => 'Invalid VM name.'];
   if (und_api_mode()) return und_api_vm_action($name, $op);

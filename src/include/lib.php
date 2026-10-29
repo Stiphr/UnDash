@@ -33,7 +33,6 @@ function und_path($p) { return isset($GLOBALS['UND_FS']) ? $GLOBALS['UND_FS'] . 
 function und_read($p) { $s = @file_get_contents(und_path($p)); return $s === false ? '' : $s; }
 
 function und_has($s, $p)    { return $p === '' || strpos((string)$s, $p) !== false; }
-function und_starts($s, $p) { return strncmp((string)$s, $p, strlen($p)) === 0; }
 
 /* ---------- JSON files ---------- */
 
@@ -142,7 +141,6 @@ function und_clip($s, $max) {
   return strlen($s) > $max ? substr($s, 0, $max - 3) . '...' : $s;
 }
 
-function und_valid_name($n) { return is_string($n) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_. +()\-]{0,127}$/', $n) === 1; }
 
 /* ---------- Unraid ---------- */
 
@@ -165,11 +163,7 @@ function und_os_version() {
 /** Name, address and Unraid version of the server for the title bar. In a container the local host name and address are the
  *  container's own, so they come from the Unraid API there (its system read is cached, so this costs nothing extra). */
 function und_server_identity() {
-  if (und_api_mode()) {
-    $s = und_api_system(und_load_config());
-    $host = (string)parse_url(und_api_conf()['url'], PHP_URL_HOST);
-    return ['name' => (string)($s['name'] ?? '') ?: $host, 'ip' => (string)($s['ip'] ?? '') ?: $host, 'os' => (string)($s['os'] ?? '')];
-  }
+  if (und_api_mode()) return und_api_identity();
   return ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip(), 'os' => function_exists('und_os_version') ? und_os_version() : ''];
 }
 
