@@ -14,7 +14,7 @@
  *   backups/      a snapshot of the three files before every save, import and restore (newest 15 kept)
  */
 
-define('UND_SCHEMA', 3);
+define('UND_SCHEMA', 4);
 
 /** Every widget type: [label, credential fields it uses, needs url]. */
 function und_types() {
@@ -35,7 +35,7 @@ function und_types() {
 }
 
 /** Dashboard sections, in their default order. */
-function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'docker', 'vms', 'apps']; }
+function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'apps', 'docker', 'vms']; }
 
 /** System metrics the overview can show, in their default order. */
 function und_metric_ids() { return ['cpu', 'memory', 'storage', 'network', 'health', 'disks', 'uptime', 'ups', 'cores', 'swap', 'load', 'path', 'docker', 'vms']; }
@@ -56,8 +56,9 @@ function und_default_config() {
     'appearance' => ['theme' => 'default', 'accent' => '#f15a2c', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'brightness' => 75, 'css_enabled' => true],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true]; }, und_media_ids())],
     'downloads' => ['items' => 4],
+    'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
     'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
-    'docker' => ['layout' => 'list', 'view' => 'compact', 'sort' => 'name', 'show' => ['status', 'cpu', 'memory', 'uptime', 'image', 'update'], 'hide_stopped' => false, 'items' => new stdClass()],
+    'docker' => ['layout' => 'grid', 'view' => 'compact', 'filter' => 'running', 'selected' => [], 'columns' => 0, 'sort' => 'name', 'show' => ['cpu', 'memory', 'update'], 'hide_stopped' => false, 'items' => new stdClass()],
     'vms' => ['layout' => 'list', 'show' => ['status', 'cpus', 'memory'], 'items' => new stdClass()],
     'groups' => [
       ['id' => und_id(), 'name' => 'Apps', 'columns' => 4, 'header' => true, 'services' => []],
@@ -249,6 +250,22 @@ function und_migrate(array $c) {
     if (($c['appearance']['density'] ?? '') === 'comfortable') $c['appearance']['density'] = 'comfortable';
     $c['schema'] = 3;
   }
+  if ($v < 4) {
+    // version 4 (2026.10.31): Apps sit right below Arr Stack and Downloads, containers show as a compact grid of the
+    // running ones, and shortcut links are no longer drawn (they stay in the settings; Apps > Show shortcuts brings them back)
+    $secs = isset($c['dashboard']['sections']) && is_array($c['dashboard']['sections']) ? $c['dashboard']['sections'] : [];
+    $apps = null; $rest = [];
+    foreach ($secs as $sec) { if (($sec['id'] ?? '') === 'apps') $apps = $sec; else $rest[] = $sec; }
+    if ($apps) {
+      $out = []; $placed = false;
+      foreach ($rest as $sec) { $out[] = $sec; if (($sec['id'] ?? '') === 'downloads') { $out[] = $apps; $placed = true; } }
+      if (!$placed) $out[] = $apps;
+      $c['dashboard']['sections'] = $out;
+    }
+    if (isset($c['docker']) && is_array($c['docker'])) { if (($c['docker']['layout'] ?? 'list') === 'list') $c['docker']['layout'] = 'grid'; $c['docker']['filter'] = 'running'; $c['docker']['show'] = ['cpu', 'memory', 'update']; }
+    $c['apps'] = ['columns' => 0, 'links' => false, 'headers' => false];
+    $c['schema'] = 4;
+  }
   return $c;
 }
 
@@ -315,9 +332,15 @@ function und_normalize(array $c) {
   $dl = (isset($c['downloads']) && is_array($c['downloads']) ? $c['downloads'] : []) + $d['downloads'];
   $downloads = ['items' => max(0, min(20, (int)$dl['items']))];
   $dk = (isset($c['docker']) && is_array($c['docker']) ? $c['docker'] : []) + $d['docker'];
-  $docker = ['layout' => $dk['layout'] === 'cards' ? 'cards' : 'list', 'view' => $dk['view'] === 'expanded' ? 'expanded' : 'compact', 'sort' => in_array($dk['sort'], ['name', 'status', 'cpu', 'memory'], true) ? $dk['sort'] : 'name',
+  $sel = [];
+  foreach ((array)$dk['selected'] as $n) if (is_string($n) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/', $n) && count($sel) < 500) $sel[$n] = 1;
+  $docker = ['layout' => in_array($dk['layout'], ['grid', 'list', 'cards'], true) ? $dk['layout'] : 'grid', 'view' => $dk['view'] === 'expanded' ? 'expanded' : 'compact',
+             'filter' => in_array($dk['filter'], ['running', 'all', 'selected'], true) ? $dk['filter'] : 'running', 'selected' => array_keys($sel), 'columns' => max(0, min(4, (int)$dk['columns'])),
+             'sort' => in_array($dk['sort'], ['name', 'status', 'cpu', 'memory'], true) ? $dk['sort'] : 'name',
              'show' => array_values(array_intersect((array)$dk['show'], ['status', 'cpu', 'memory', 'uptime', 'image', 'update', 'ports', 'restarts', 'network'])),
              'hide_stopped' => !empty($dk['hide_stopped']), 'items' => $items($dk['items'] ?? [])];
+  $ap = (isset($c['apps']) && is_array($c['apps']) ? $c['apps'] : []) + $d['apps'];
+  $apps = ['columns' => max(0, min(6, (int)$ap['columns'])), 'links' => !empty($ap['links']), 'headers' => !empty($ap['headers'])];
   $vm = (isset($c['vms']) && is_array($c['vms']) ? $c['vms'] : []) + $d['vms'];
   $vms = ['layout' => $vm['layout'] === 'cards' ? 'cards' : 'list', 'show' => array_values(array_intersect((array)$vm['show'], ['status', 'cpus', 'memory', 'os', 'autostart'])), 'items' => $items($vm['items'] ?? [])];
 
@@ -337,7 +360,7 @@ function und_normalize(array $c) {
     }
     $groups[] = $out;
   }
-  return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics], 'media' => $media, 'downloads' => $downloads,
+  return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics], 'media' => $media, 'downloads' => $downloads, 'apps' => $apps,
           'docker' => $docker, 'vms' => $vms, 'groups' => $groups];
 }
 

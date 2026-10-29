@@ -658,36 +658,55 @@
     if (c.update === 'current') return h('span', { class: 'badge ok' }, 'up to date');
     return h('span', { class: 'badge plain', title: c.managed ? 'Unraid has not checked this image yet, or the check failed: unknown, not "up to date"' : 'Not created from an Unraid template, so Unraid cannot check it' }, c.managed ? 'not checked' : 'no update check');
   }
+  /* "134 hours" -> "134h", "About an hour" -> "1h", "3 days" -> "3d" (the grid has little room) */
+  function shortUp(t) { return String(t).replace(/^about an? /i, '1 ').replace(/^less than a second/i, '0s').replace(/ ?(second|minute|hour|day|week|month|year)s?\b/gi, function (m, u) { return u === 'month' ? 'mo' : u.charAt(0).toLowerCase(); }); }
   function uptimeText(c) { return c.state === 'running' ? String(c.status || '').replace(/\s*\(.*\)\s*$/, '').replace(/^Up\s+/, '') : (String(c.status || '').replace(/^Exited \(\d+\)\s*/, '') || '-'); }
 
+  /* containers: a compact multi-column grid by default, showing the running ones (or the ones you picked) */
+  var DFILTERS = [['selected', 'Selected'], ['running', 'Running'], ['all', 'All'], ['stopped', 'Stopped'], ['updates', 'Updates'], ['problems', 'Problems']];
   BUILD.docker = function (r) {
     var D = S.L.docker;
+    if (!S.fdSet) S.fd = D.filter === 'selected' && !D.selected.length ? 'running' : D.filter;
     r.filters = h('div', { class: 'seg', role: 'group', 'aria-label': 'Show containers' });
-    [['all', 'All'], ['running', 'Running'], ['stopped', 'Stopped'], ['updates', 'Updates'], ['problems', 'Problems'], ['favorites', 'Favorites']].forEach(function (f) {
-      var b = h('button', { type: 'button', class: S.fd === f[0] ? 'on' : '', 'aria-pressed': S.fd === f[0] ? 'true' : 'false', onclick: function () {
-        S.fd = f[0]; [].forEach.call(r.filters.childNodes, function (x) { x.className = x === b ? 'on' : ''; x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); paintDocker(S.live || {});
+    DFILTERS.forEach(function (f) {
+      if (f[0] === 'selected' && !D.selected.length) return;
+      var b = h('button', { type: 'button', class: S.fd === f[0] ? 'on' : '', 'aria-pressed': S.fd === f[0] ? 'true' : 'false', title: f[0] === 'selected' ? 'The containers you picked (⋯ > Show in "Selected")' : null, onclick: function () {
+        S.fd = f[0]; S.fdSet = true; [].forEach.call(r.filters.childNodes, function (x) { x.className = x === b ? 'on' : ''; x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); r.fSig = null; paintDocker(S.live || {});
       } }, f[1]);
       r.filters.appendChild(b);
     });
     var sort = h('select', { 'aria-label': 'Sort containers', onchange: function () { D.sort = sort.value; api('prefs', { kind: 'docker_view', value: { sort: D.sort } }); paintDocker(S.live || {}); } },
       [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']].map(function (o) { return h('option', { value: o[0], selected: D.sort === o[0] }, 'Sort: ' + o[1]); }));
     var lay = h('div', { class: 'seg', role: 'group', 'aria-label': 'Layout' },
-      h('button', { type: 'button', class: D.layout === 'list' ? 'on' : '', title: 'List', 'aria-label': 'List layout', 'aria-pressed': D.layout === 'list' ? 'true' : 'false', onclick: function () { setLayout('docker', 'list'); } }, ic('list')),
-      h('button', { type: 'button', class: D.layout === 'cards' ? 'on' : '', title: 'Cards', 'aria-label': 'Card layout', 'aria-pressed': D.layout === 'cards' ? 'true' : 'false', onclick: function () { setLayout('docker', 'cards'); } }, ic('grid')));
+      [['grid', 'grid', 'Compact grid'], ['list', 'list', 'Table'], ['cards', 'box', 'Cards']].map(function (l) {
+        return h('button', { type: 'button', class: D.layout === l[0] ? 'on' : '', title: l[2], 'aria-label': l[2], 'aria-pressed': D.layout === l[0] ? 'true' : 'false', onclick: function () { setLayout('docker', l[0]); } }, ic(l[1]));
+      }));
     r.updAll = h('span');
     var view = h('button', { type: 'button', class: 'btn sm ghost', title: D.view === 'compact' ? 'Show image, uptime and restarts' : 'Compact rows', 'aria-pressed': D.view === 'expanded' ? 'true' : 'false',
       onclick: function () { D.view = D.view === 'compact' ? 'expanded' : 'compact'; api('prefs', { kind: 'docker_view', value: { view: D.view } }); shell(); } }, D.view === 'compact' ? 'Expanded' : 'Compact');
     r.tools.appendChild(r.filters); r.tools.appendChild(sort); r.tools.appendChild(lay); if (D.layout === 'list') r.tools.appendChild(view); r.tools.appendChild(r.updAll);
     var cmp = D.view === 'compact';
-    r.list = D.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel' + (cmp ? ' compact' : '') }, cmp
-      ? h('div', { class: 'rowh c', 'aria-hidden': 'true' }, h('span', null, 'Container'), h('span', null, 'Status'), h('span', { class: 'c-cpu' }, 'CPU'), h('span', { class: 'c-mem' }, 'Memory'), h('span', null, ''), h('span', null, ''))
-      : h('div', { class: 'rowh', 'aria-hidden': 'true' }, h('span', null, 'Container'), h('span', null, 'Status'), h('span', { class: 'c-res' }, 'CPU / Memory'), h('span', { class: 'c-up' }, 'Uptime'), h('span', { class: 'c-upd' }, 'Version'), h('span', null, 'Actions')));
-    r.rows = D.layout === 'cards' ? r.list : h('div', { role: 'list' });
-    if (D.layout !== 'cards') r.list.appendChild(r.rows);
+    if (D.layout === 'grid') {
+      r.list = r.rows = h('div', { class: 'cgrid', role: 'list', style: D.columns ? { '--cc': String(D.columns) } : null });
+      if (D.columns) r.list.classList.add('fixed');
+    } else {
+      r.list = D.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel' + (cmp ? ' compact' : '') }, cmp
+        ? h('div', { class: 'rowh c', 'aria-hidden': 'true' }, h('span', null, 'Container'), h('span', null, 'Status'), h('span', { class: 'c-cpu' }, 'CPU'), h('span', { class: 'c-mem' }, 'Memory'), h('span', null, ''), h('span', null, ''))
+        : h('div', { class: 'rowh', 'aria-hidden': 'true' }, h('span', null, 'Container'), h('span', null, 'Status'), h('span', { class: 'c-res' }, 'CPU / Memory'), h('span', { class: 'c-up' }, 'Uptime'), h('span', { class: 'c-upd' }, 'Version'), h('span', null, 'Actions')));
+      r.rows = D.layout === 'cards' ? r.list : h('div', { role: 'list' });
+      if (D.layout !== 'cards') r.list.appendChild(r.rows);
+    }
     r.foot = h('div', { class: 'more' });
     r.body.appendChild(r.list); r.body.appendChild(r.foot);
     r.map = {};
   };
+  function toggleSelected(name) {
+    var D = S.L.docker, i = D.selected.indexOf(name), first = !D.selected.length;
+    if (i >= 0) D.selected.splice(i, 1); else D.selected.push(name);
+    api('prefs', { kind: 'docker_view', value: { selected: D.selected } }).then(function (j) { if (j.error) toast(j.error, true); });
+    toast(i >= 0 ? name + ' removed from "Selected"' : name + ' added to "Selected"' + (first ? '. Pick "Selected" as the default view in Settings > Dashboard.' : ''));
+    shell();
+  }
   function setLayout(kind, l) { S.L[kind].layout = l; api('prefs', { kind: kind + '_view', value: { layout: l } }); shell(); }
   function paintDocker(y) {
     var r = R.docker, D = S.L.docker, d = y.docker;
@@ -700,6 +719,7 @@
       var p = pref('docker', c.name);
       if (p.hidden && !S.showHidden) { hiddenN++; return false; }
       if (!matches(c.name + ' ' + (p.label || '') + ' ' + c.image)) return false;
+      if (S.fd === 'selected') return D.selected.indexOf(c.name) >= 0;
       if (S.fd === 'running') return c.state === 'running';
       if (S.fd === 'stopped') return c.state !== 'running';
       if (S.fd === 'updates') return c.update === 'available';
@@ -721,11 +741,11 @@
     list.forEach(function (c, i) {
       var p = pref('docker', c.name);
       // rows are only rebuilt when something structural changes, so menus and focus survive the 2-second refresh
-      var sig = JSON.stringify([c.state, c.health, c.update, c.job, c.webui, c.managed, S.busy['d:' + c.name] || '', p, c.icon, c.image, D.layout, D.view]);
+      var sig = JSON.stringify([c.state, c.health, c.update, c.job, c.webui, c.managed, S.busy['d:' + c.name] || '', p, c.icon, c.image, D.layout, D.view, D.show, D.selected.indexOf(c.name) >= 0]);
       var row = r.map[c.name];
       if (!row || row._sig !== sig) {
         var had = row && row.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
-        var nrow = D.layout === 'cards' ? dTile(c, p) : D.view === 'compact' ? dRowC(c, p) : dRow(c, p);
+        var nrow = D.layout === 'grid' ? dCell(c, p) : D.layout === 'cards' ? dTile(c, p) : D.view === 'compact' ? dRowC(c, p) : dRow(c, p);
         nrow._sig = sig;
         if (row && row.parentNode) row.parentNode.replaceChild(nrow, row);
         r.map[c.name] = row = nrow;
@@ -736,10 +756,11 @@
       seen[c.name] = 1;
     });
     Object.keys(r.map).forEach(function (n) { if (!seen[n]) { var x = r.map[n]; if (x.parentNode) x.parentNode.removeChild(x); delete r.map[n]; } });
-    if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, S.q ? 'No containers match "' + S.q + '".' : d.containers.length ? 'No containers in this view.' : 'No containers yet.'));
-    var dk = dockerStats(y), fs = JSON.stringify([hiddenN, S.showHidden, dk.updates]);
+    if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, S.q ? 'No containers match "' + S.q + '".' : S.fd === 'selected' ? 'None of your selected containers exist any more.' : d.containers.length ? 'No containers in this view.' : 'No containers yet.'));
+    var dk = dockerStats(y), fs = JSON.stringify([hiddenN, S.showHidden, dk.updates, S.fd, list.length, d.containers.length]);
     if (r.fSig !== fs) {
       r.fSig = fs; clear(r.foot); clear(r.updAll);
+      if (S.fd !== 'all' && !S.q && list.length < d.containers.length) r.foot.appendChild(btn('Show all ' + d.containers.length, function () { S.fd = 'all'; S.fdSet = true; shell(); }, 'sm ghost', 'eye', 'Show every container'));
       if (hiddenN || S.showHidden) r.foot.appendChild(btn(S.showHidden ? 'Hide hidden containers' : 'Show ' + hiddenN + ' hidden', function () { S.showHidden = !S.showHidden; r.fSig = null; if (R.vms) R.vms.sig = null; paintAll(); }, 'sm ghost', S.showHidden ? 'eyeoff' : 'eye'));
       if (dk.updates) r.updAll.appendChild(btn('Update all (' + dk.updates + ')', function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up', 'Update every container that has an update'));
     }
@@ -759,6 +780,7 @@
         ['Update' + (c.update === 'available' ? '' : ' (force)'), 'up', function () { updateMany([c.name]); }, '', busy],
         'hr', ['Logs', 'logs', function () { logs(c.name); }], ['Details', 'info', function () { inspect(c.name); }], 'hr',
         [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('docker', c.name, { favorite: !p.favorite }); }],
+        [S.L.docker.selected.indexOf(c.name) >= 0 ? 'Remove from "Selected"' : 'Show in "Selected"', 'check', function () { toggleSelected(c.name); }],
         [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('docker', c.name, { hidden: !p.hidden }); }],
         ['Customize…', 'edit', function () { customize('docker', c); }]]);
     }, 'sm', 'dots', 'More actions for ' + c.name);
@@ -794,6 +816,24 @@
     row.appendChild(dActions(c, p, false));
     return row;
   }
+  /* grid cell: icon, name, state dot, CPU / memory, update badge only when there is one, and the main actions */
+  function dCell(c, p) {
+    var D = S.L.docker, sh = function (k) { return D.show.indexOf(k) >= 0; };
+    var cell = h('div', { class: 'ci' + (S.busy['d:' + c.name] ? ' busy' : '') + ' st-' + c.state, role: 'listitem', 'data-name': c.name });
+    var st = dStateBadge(c), dot = h('span', { class: 'sdot ' + ({ ok: 'ok', warn: 'warn', bad: 'bad', info: 'warn' }[(st.className.match(/badge (\w+)/) || [])[1]] || 'na'), role: 'img', 'aria-label': st.textContent, title: st.textContent });
+    cell._cpu = h('span', { class: 'num' }); cell._mem = h('span', { class: 'num' }); cell._up = sh('uptime') ? h('span') : null;
+    var sub = h('span', { class: 'cs' });
+    if (sh('cpu') && S.boot.caps.docker_stats) sub.appendChild(cell._cpu);
+    if (sh('memory') && S.boot.caps.docker_stats) sub.appendChild(cell._mem);
+    if (cell._up) sub.appendChild(cell._up);
+    if (sh('image')) sub.appendChild(h('span', { class: 'ell' }, c.image));
+    if (!sub.childNodes.length || c.state !== 'running') { clear(sub); sub.appendChild(h('span', null, st.textContent)); cell._cpu = h('span'); cell._mem = h('span'); cell._up = null; }
+    cell.appendChild(img(iconUrl(p.icon || c.icon), 'cico', 'box'));
+    cell.appendChild(h('div', { class: 'cn' }, h('span', { class: 'cname ell', title: c.name + ' · ' + c.image }, dot, p.label || c.name, p.favorite ? ic('star', true) : null), sub));
+    if (sh('update') && (c.update === 'available' || c.job === 'update_failed')) cell.appendChild(dUpdBadge(c));
+    cell.appendChild(dActions(c, p, false));
+    return cell;
+  }
   function dTile(c, p) {
     var t = h('div', { class: 'tile' + (S.busy['d:' + c.name] ? ' busy' : ''), role: 'listitem', 'data-name': c.name });
     t._cpu = h('span'); t._mem = h('span'); t._up = h('span'); t._m = h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i'));
@@ -811,7 +851,7 @@
     txt(row._mem, na ? '' : run && c.mem !== null ? bytes(c.mem) : '');
     row._cpu.title = na ? '' : 'CPU: 100% = one core (as in Unraid\'s Docker tab)';
     if (row._m) { var i = row._m.firstChild; i.style.width = (run && c.cpu !== null ? Math.min(100, c.cpu) : 0) + '%'; i.className = 'acc'; }
-    if (row._up) txt(row._up, uptimeText(c) + (c.restarts ? ' · ' + c.restarts + ' restarts' : ''));
+    if (row._up) txt(row._up, row.classList.contains('ci') ? shortUp(uptimeText(c)) : uptimeText(c) + (c.restarts ? ' · ' + c.restarts + ' restarts' : ''));
     if (row._mob) txt(row._mob, run ? (c.cpu !== null ? c.cpu.toFixed(1) + '% · ' : '') + (c.mem !== null ? bytes(c.mem) + ' · ' : '') + uptimeText(c) : uptimeText(c));
   }
   function dAct(c, op) {
@@ -1177,31 +1217,39 @@
 
   /* ---- apps: everything that is not Arr, a download client, media or already in the overview ---- */
   var NATIVE = { system_info: 1, cpu: 1, memory: 1, link: 1 };
+  /* apps: one flat grid of compact cards (group titles and shortcut links only when turned on in Settings) */
   BUILD.apps = function (r) {
-    var closed = LS.get('closed', {});
-    var groups = S.L.groups.map(function (g) { return { g: g, s: g.services.filter(function (s) { return s.zone === 'apps' && !s.hidden; }) }; }).filter(function (x) { return x.s.length; });
-    if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No other apps. Add Plex, Immich, AdGuard, links… in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Apps'), '.')); return; }
-    groups.forEach(function (x) {
-      var gr = x.g;
-      var links = x.s.every(function (s) { return s.type === 'link'; });
-      var grid = h('div', { class: 'grid' + (links ? ' links' : ''), style: { '--cols': String(links ? Math.max(gr.columns, 6) : gr.columns) } });
-      var wrap = h('div', { class: 'grp' + (closed[gr.id] ? ' closed' : '') });
-      if (gr.header && groups.length > 1) wrap.appendChild(h('h3', null, h('button', { type: 'button', 'aria-expanded': closed[gr.id] ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name)));
-      x.s.forEach(function (s) { grid.appendChild(widget(s)); });
-      wrap.appendChild(grid); r.body.appendChild(wrap);
+    var A = S.L.apps, closed = LS.get('closed', {});
+    var groups = S.L.groups.map(function (g) { return { g: g, s: g.services.filter(function (s) { return s.zone === 'apps' && !s.hidden && (A.links || s.type !== 'link'); }) }; }).filter(function (x) { return x.s.length; });
+    if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No other apps to show. Add Plex, Immich, AdGuard… in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Apps'), '.')); return; }
+    var grid = function () { var g = h('div', { class: 'agrid' + (A.columns ? ' fixed' : ''), role: 'list' }); if (A.columns) g.style.setProperty('--ac', String(A.columns)); return g; };
+    if (!A.headers) {
+      var all = grid(), links = h('div', { class: 'alinks' });
+      groups.forEach(function (x) { x.s.forEach(function (s) { (s.type === 'link' ? links : all).appendChild(widget(s)); }); });
+      if (all.childNodes.length) r.body.appendChild(all);
+      if (links.childNodes.length) r.body.appendChild(links);
+    } else groups.forEach(function (x) {
+      var gr = x.g, wrap = h('div', { class: 'grp' + (closed[gr.id] ? ' closed' : '') }), gd = grid(), links = h('div', { class: 'alinks' });
+      wrap.appendChild(h('h3', null, h('button', { type: 'button', 'aria-expanded': closed[gr.id] ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name)));
+      x.s.forEach(function (s) { (s.type === 'link' ? links : gd).appendChild(widget(s)); });
+      if (gd.childNodes.length) wrap.appendChild(gd);
+      if (links.childNodes.length) wrap.appendChild(links);
+      r.body.appendChild(wrap);
     });
+    txt(r.count, String(groups.reduce(function (n, x) { return n + x.s.length; }, 0)));
     clearTimeout(S.svcTimer); S.svcRun = false;
     setTimeout(pollServices, 0);
   };
   function widget(s) {
     var u = iconUrl(s.icon), href = s.href_resolved || '';
     if (s.type === 'link') {
-      return h(href ? 'a' : 'div', { class: 'card w link', href: href || null, target: href ? '_blank' : null, rel: href ? 'noopener' : null, title: s.description || href, 'data-name': s.name },
-        h('div', { class: 'ch' }, img(u), h('span', { class: 'nm' }, s.name)));
+      return h(href ? 'a' : 'span', { class: 'alink', href: href || null, target: href ? '_blank' : null, rel: href ? 'noopener' : null, title: s.description || href, 'data-name': s.name }, img(u, 'aico', 'tag'), s.name);
     }
     var nm = href ? h('a', { class: 'nm', href: href, target: '_blank', rel: 'noopener' }, s.name) : h('span', { class: 'nm' }, s.name);
-    var c = h('div', { class: 'card w wait' + (s.span === 2 ? ' span2' : ''), id: 'w-' + s.id, 'data-name': s.name },
-      h('div', { class: 'ch' }, img(u), nm, h('span', { class: 'sub' })), s.description ? h('div', { class: 'desc' }, s.description) : null,
+    var c = h('div', { class: 'card w ac wait' + (s.span === 2 ? ' span2' : ''), id: 'w-' + s.id, 'data-name': s.name, role: 'listitem' },
+      h('div', { class: 'ch' }, img(u, 'aico', 'tag'), nm, h('span', { class: 'sdot na', role: 'img', 'aria-label': 'loading' }), h('span', { class: 'sub' }),
+        href ? h('a', { class: 'btn ic sm ghost', href: href, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('web')) : null),
+      s.description ? h('div', { class: 'desc' }, s.description) : null,
       h('div', { class: 'cb' }, NATIVE[s.type] ? h('div', { class: 'muted sm' }, 'Shown in the overview now; you can remove this widget.') : h('div', { class: 'muted sm' }, 'Loading…')));
     var prev = S.svc[s.id]; if (prev) setTimeout(function () { paintService(s, prev); }, 0);
     return c;
@@ -1226,6 +1274,8 @@
   function paintService(s, r) {
     var c = document.getElementById('w-' + s.id); if (!c) return;
     c.classList.remove('wait');
+    var dot = c.querySelector('.ch .sdot');
+    if (dot) { dot.className = 'sdot ' + (r.error ? (r.unconfigured ? 'na' : 'bad') : 'ok'); dot.setAttribute('aria-label', r.error ? (r.unconfigured ? 'not configured' : 'error') : 'online'); }
     var cb = clear(c.querySelector('.cb'));
     if (r.error) {
       var e = h('button', { type: 'button', class: 'err' + (r.unconfigured ? ' cfg' : ''), 'aria-expanded': 'false', onclick: function () { e.classList.toggle('open'); e.setAttribute('aria-expanded', e.classList.contains('open') ? 'true' : 'false'); } }, r.unconfigured ? 'Not configured' : r.offline ? 'Unreachable' : 'API error', h('div', { class: 'x' }, r.error));
@@ -1482,9 +1532,42 @@
       h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Radarr', sIn(c.media, 'radarr', dirty, radarrs)), F('Sonarr', sIn(c.media, 'sonarr', dirty, sonarrs)),
         F('Items per row', tIn(c.media, 'count', dirty, '15', 'number', { min: 4, max: 40 })), F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 })))));
     b.appendChild(set('Downloads', null, h('div', { class: 'grid2' }, F('Active items shown per client', tIn(c.downloads, 'items', dirty, '4', 'number', { min: 0, max: 20 }), '0 shows the totals only.'))));
-    b.appendChild(set('Containers', 'Containers are found automatically: new ones appear and removed ones disappear on their own.', h('div', { class: 'grid2' },
-      F('Layout', sIn(c.docker, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])), F('Rows', sIn(c.docker, 'view', dirty, [['compact', 'Compact'], ['expanded', 'Expanded (image, uptime, restarts)']])), F('Sort by', sIn(c.docker, 'sort', dirty, [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']]))),
-      cIn(c.docker, 'hide_stopped', dirty, 'Hide stopped containers in the "All" view')));
+    var D2 = c.docker;
+    var shows = [['cpu', 'CPU'], ['memory', 'Memory'], ['uptime', 'Uptime'], ['image', 'Image'], ['update', 'Update badge']];
+    var showBox = h('div', { class: 'inl' }, shows.map(function (x) {
+      return h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D2.show.indexOf(x[0]) >= 0, onchange: function (e) {
+        D2.show = D2.show.filter(function (k) { return k !== x[0]; }); if (e.target.checked) D2.show.push(x[0]); dirty(); } }), x[1]);
+    }));
+    var all = ((S.live || {}).docker || {}).containers || [];
+    var pick = h('div', { class: 'picks' }), pf = h('input', { type: 'search', placeholder: 'Filter…', 'aria-label': 'Filter containers', oninput: function () { drawPick(); } });
+    function drawPick() {
+      clear(pick);
+      var q = pf.value.toLowerCase();
+      all.filter(function (x) { return !q || x.name.toLowerCase().indexOf(q) >= 0; }).forEach(function (x) {
+        pick.appendChild(h('label', { class: 'switch pk' }, h('input', { type: 'checkbox', checked: D2.selected.indexOf(x.name) >= 0, onchange: function (e) {
+          D2.selected = D2.selected.filter(function (n) { return n !== x.name; }); if (e.target.checked) D2.selected.push(x.name); txt(selCount, D2.selected.length + ' selected'); dirty(); } }),
+          h('span', { class: 'sdot ' + (x.state === 'running' ? 'ok' : 'na') }), h('span', { class: 'ell' }, x.name)));
+      });
+      if (!all.length) pick.appendChild(h('div', { class: 'muted sm' }, 'Containers appear here once the dashboard has loaded them.'));
+    }
+    var selCount = h('span', { class: 'muted sm' }, D2.selected.length + ' selected');
+    drawPick();
+    b.appendChild(set('Containers', 'Found automatically: new containers appear and removed ones disappear on their own.',
+      h('div', { class: 'grid2' },
+        F('Show by default', sIn(D2, 'filter', dirty, [['running', 'Running containers'], ['selected', 'Selected containers (below)'], ['all', 'All containers']])),
+        F('Layout', sIn(D2, 'layout', dirty, [['grid', 'Compact grid'], ['list', 'Table'], ['cards', 'Cards']])),
+        F('Grid columns', sIn(D2, 'columns', dirty, [[0, 'Automatic (fits the width)'], [1, '1'], [2, '2'], [3, '3'], [4, '4']])),
+        F('Sort by', sIn(D2, 'sort', dirty, [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']]))),
+      F('Details on each container', showBox, S.boot.caps.docker_stats ? null : 'CPU and memory are not available through the Unraid API (Docker version).'),
+      h('div', { class: 'fld' }, h('label', null, 'Selected containers ', selCount),
+        h('div', { class: 'inl', style: { 'margin-bottom': '6px' } }, pf,
+          btn('Select running', function () { D2.selected = all.filter(function (x) { return x.state === 'running'; }).map(function (x) { return x.name; }); txt(selCount, D2.selected.length + ' selected'); drawPick(); dirty(); }, 'sm'),
+          btn('Clear', function () { D2.selected = []; txt(selCount, '0 selected'); drawPick(); dirty(); }, 'sm ghost')),
+        pick, h('div', { class: 'hint' }, 'Also from the dashboard: ⋯ > Show in "Selected".'))));
+    var A2 = c.apps;
+    b.appendChild(set('Apps', 'Plex, Emby, Immich, AdGuard and your other apps, below Arr Stack and Downloads.', h('div', { class: 'grid2' },
+      F('Columns', sIn(A2, 'columns', dirty, [[0, 'Automatic'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']]))),
+      cIn(A2, 'headers', dirty, 'Show group titles (Streaming, Other …)'), cIn(A2, 'links', dirty, 'Show shortcut links (the old Services links) as small buttons')));
     b.appendChild(set('Virtual machines', 'VMs are found automatically through libvirt.', h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])))));
     var y = S.live || {}, items = [];
     ((y.docker && y.docker.containers) || []).forEach(function (x) { items.push(['docker', x]); });

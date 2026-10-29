@@ -1,12 +1,12 @@
-# config.json (schema 3)
+# config.json (schema 4)
 
 UnDash writes this file itself; you normally change it through Settings. Unknown keys are dropped and every value is
 clamped when the file is read, so a hand edit can never break the dashboard. Older files are migrated on read
-(`schema` missing or `1` = version 2026.10.29, `2` = 2026.10.29e).
+(`schema` missing or `1` = version 2026.10.29, `2` = 2026.10.29e, `3` = 2026.10.30).
 
 ```jsonc
 {
-  "schema": 3,
+  "schema": 4,
   "general": {
     "title": "UnDash",            // up to 60 characters
     "refresh": 2,                 // seconds between live refreshes, 1-300
@@ -28,7 +28,7 @@ clamped when the file is read, so a hand edit can never break the dashboard. Old
   "dashboard": {
     "sections": [                 // order = order on the page
       { "id": "overview", "visible": true, "width": "full", "collapsed": false }
-      // ids: overview alerts favorites media arr downloads docker vms apps; width: full | half
+      // ids: overview alerts favorites media arr downloads apps docker vms; width: full | half
     ],
     "metrics": [                  // order = order of the tiles in the System overview
       { "id": "cpu", "visible": true }
@@ -41,9 +41,14 @@ clamped when the file is read, so a hand edit can never break the dashboard. Old
     "widgets": [ { "id": "upcoming_movies", "visible": true } ]   // upcoming_movies upcoming_episodes recent_movies recent_episodes
   },
   "downloads": { "items": 4 },    // active items shown per download client
+  "apps": { "columns": 0, "headers": false, "links": false },   // Apps grid; group titles; shortcut links
   "docker": {
-    "layout": "list",             // list | cards
-    "view": "compact",            // compact | expanded (list layout)
+    "layout": "grid",             // grid (compact multi-column) | list (table) | cards
+    "view": "compact",            // compact | expanded (table layout)
+    "filter": "running",          // what shows by default: running | selected | all
+    "selected": ["plex", "radarr"],   // the "Selected" set (container names)
+    "columns": 0,                 // grid columns, 0 = as many as fit
+    "show": ["cpu", "memory", "update"],   // details on each container: cpu memory uptime image update
     "sort": "name",               // name | status | cpu | memory
     "hide_stopped": false,
     "items": {                    // per container NAME, kept when a container is re-created

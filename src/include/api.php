@@ -133,7 +133,7 @@ switch ($action) {
       unset($s);
     } elseif ($kind === 'docker_view' || $kind === 'vms_view') {
       $k = $kind === 'docker_view' ? 'docker' : 'vms';
-      $cfg[$k] = array_merge($cfg[$k], array_intersect_key($val, ['layout' => 1, 'sort' => 1, 'hide_stopped' => 1]));
+      $cfg[$k] = array_merge($cfg[$k], array_intersect_key($val, ['layout' => 1, 'sort' => 1, 'hide_stopped' => 1, 'view' => 1, 'filter' => 1, 'selected' => 1, 'columns' => 1]));
     } elseif ($kind === 'service') {
       foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) if ($s['id'] === $key) $s = array_merge($s, array_intersect_key($val, ['favorite' => 1, 'hidden' => 1]));
       unset($g, $s);
