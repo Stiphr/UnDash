@@ -4,7 +4,7 @@
  *
  * Export file: {"undash_export": 1, "schema": 2, "kind": "full"|"redacted", "created": unix time, "config": {...}, "css": "...", "vars": {...}, "secrets": {...}}
  *   full      layout, preferences, appearance, custom CSS, every variable and every widget credential (a complete backup; keep it private)
- *   redacted  the same without anything secret: credentials are dropped, secret-looking variables are emptied, and passwords or
+ *   redacted  the same without anything secret: credentials are dropped, secret-looking and login/e-mail variables are emptied, and passwords or
  *             tokens written straight into URLs (user:pass@host, ?apikey=...) are replaced by {{REDACTED}}
  * Neither contains anything but UnDash's own settings.
  */
@@ -16,7 +16,7 @@ function und_export($kind) {
   if ($out['kind'] === 'full') { $out['vars'] = (object)$sec['vars']; $out['secrets'] = (object)$sec['svc']; $out['unraid'] = (object)$sec['unraid']; return $out; }
   if (!empty($sec['unraid']['url'])) $out['unraid'] = ['url' => und_redact_url((string)$sec['unraid']['url'])];
   $vars = [];
-  foreach ($sec['vars'] as $k => $v) $vars[$k] = und_var_is_secret($k) ? '' : und_redact_url((string)$v);
+  foreach ($sec['vars'] as $k => $v) $vars[$k] = und_var_is_private($k, $v) ? '' : und_redact_url((string)$v);
   $out['vars'] = (object)$vars;
   foreach ($out['config']['groups'] as &$g) foreach ($g['services'] as &$s) {
     $s['url'] = und_redact_url($s['url']); $s['href'] = und_redact_url($s['href']);
@@ -91,7 +91,8 @@ function und_import_apply($raw) {
   if (!und_save_config($f['config'], false)) return ['error' => 'Could not write the configuration directory.'];
   $unraid = $old['unraid'];
   if (isset($j_unraid) && is_array($j_unraid)) {
-    if (!empty($j_unraid['url']) && is_string($j_unraid['url']) && preg_match('#^https?://#i', $j_unraid['url'])) $unraid['url'] = und_clip($j_unraid['url'], 300);
+    // a full export is a restore and replaces the address; a redacted one (a shared layout) only fills it in when none is set
+    if (!empty($j_unraid['url']) && is_string($j_unraid['url']) && preg_match('#^https?://#i', $j_unraid['url']) && ($f['kind'] === 'full' || (string)($unraid['url'] ?? '') === '')) $unraid['url'] = und_clip($j_unraid['url'], 300);
     if ($f['kind'] === 'full' && !empty($j_unraid['key']) && is_string($j_unraid['key'])) $unraid['key'] = und_clip($j_unraid['key'], 300);
   }
   und_save_secrets(['vars' => $vars, 'svc' => $svc, 'unraid' => $unraid]);

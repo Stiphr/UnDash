@@ -1,3 +1,8 @@
+###0.5.2
+- Redacted exports now also leave out user names, logins and e-mail addresses (they were kept before), so they are safe to share.
+- Importing a redacted export (a shared layout) no longer replaces your Unraid API address; a full export (a restore) still does.
+- README rewritten: what UnDash is, how to install and set it up (Docker and plugin), and a ready-made template (examples/undash-template.json) to start from.
+
 ###0.5.1
 - Version numbers are now x.y.z (this is 0.5.1); releases are the vX.Y.Z tags. Plugin users coming from a 2026.x.x date version: reinstall the plugin once, as Unraid compares the old and new numbers as text.
 - Title bar: the UnDash logo and name, your server, its Unraid version and the UnDash version, each with an "available" badge when a newer one exists (UnDash checks its GitHub releases at most every 6 hours). The Docker version now shows the server's name and address instead of the container's.
