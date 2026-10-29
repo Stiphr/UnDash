@@ -181,6 +181,19 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
         $res[] = ['id' => $r[0], 'status' => $status, 'type' => $r[3], 'is4k' => $r[0] === 12, 'createdAt' => gmdate('c', time() - $r[6] * 3600), 'requestedBy' => ['displayName' => $r[5]],
                   'media' => ['tmdbId' => $r[4], 'mediaType' => $r[3], 'status' => $status === 2 ? $r[2] : 2], 'seasons' => $r[3] === 'tv' ? [['seasonNumber' => 1], ['seasonNumber' => 2]] : []]; }
       return $j(['pageInfo' => ['results' => count($res)], 'results' => $res]);
+    case $p === '/api/v1/search':
+      $all = [[693134, 'movie', 'Dune: Part Two', '2024-02-27', 5], [438631, 'movie', 'Dune', '2021-09-15', 5], [841, 'movie', 'Dune', '1984-12-14', 1], [90228, 'tv', 'Dune: Prophecy', '2024-11-17', 3],
+              [1399, 'tv', 'Game of Thrones', '2011-04-17', 4], [27205, 'movie', 'Inception', '2010-07-15', 1], [1396, 'tv', 'Breaking Bad', '2008-01-20', 2]];
+      $res = [['id' => 9, 'mediaType' => 'person', 'name' => 'Denis Villeneuve']];
+      $st = json_decode((string)@file_get_contents(sys_get_temp_dir() . '/undash-dev/seerr-new.json'), true) ?: [];
+      foreach ($all as $x) if (stripos($x[2], (string)($q['query'] ?? '')) !== false) $res[] = ['id' => $x[0], 'mediaType' => $x[1], $x[1] === 'tv' ? 'name' : 'title' => $x[2],
+        $x[1] === 'tv' ? 'firstAirDate' : 'releaseDate' => $x[3], 'posterPath' => '/dev' . $x[0] . '.jpg', 'overview' => 'A dev search result.', 'mediaInfo' => ['status' => $st[$x[0]] ?? $x[4]]];
+      return $j(['page' => 1, 'results' => $res]);
+    case $p === '/api/v1/request' && $method === 'POST':
+      $b = json_decode((string)($o['body'] ?? ''), true) ?: [];
+      $sf = sys_get_temp_dir() . '/undash-dev/seerr-new.json'; $st = json_decode((string)@file_get_contents($sf), true) ?: [];
+      if (($st[$b['mediaId'] ?? 0] ?? 1) > 1) return $j(['message' => 'Request already exists'], 409);
+      $st[(int)($b['mediaId'] ?? 0)] = 2; @file_put_contents($sf, json_encode($st)); return $j(['id' => 99, 'status' => 1], 201);
     case preg_match('#^/api/v1/request/(\d+)/(approve|decline)$#', $p, $m) === 1 && $method === 'POST':
       $sf = sys_get_temp_dir() . '/undash-dev/seerr.json'; $st = json_decode((string)@file_get_contents($sf), true) ?: [];
       $st[$m[1]] = $m[2] === 'approve' ? 2 : 3; @file_put_contents($sf, json_encode($st)); return $j(['id' => (int)$m[1]]);

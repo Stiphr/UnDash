@@ -41,7 +41,16 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .und-sub{font-size:12.5px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .und .top .search{flex:1 1 220px;max-width:440px;margin-left:auto;position:relative}
 .und .top .search input{width:100%;padding-left:32px!important}
-.und .top .search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--faint);pointer-events:none}
+.und .sbox{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:9000;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);box-shadow:0 12px 32px rgba(0,0,0,.35);max-height:min(70vh,560px);overflow:auto;padding:6px;min-width:min(420px,calc(100vw - 24px))}
+.und[data-theme=fluent] .sbox{background:rgba(17,19,24,.97)}.und[data-theme=fluent][data-mode=light] .sbox{background:rgba(255,255,255,.98)}
+.und .sbox .sb-h{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:4px 6px 8px}.und .sbox .sb-h>svg{width:14px;height:14px;flex:none}
+.und .sbox .sb-r{display:flex;align-items:center;gap:12px;padding:8px;border-radius:calc(var(--radius) - 2px)}
+.und .sbox .sb-r:hover{background:var(--bar)}
+.und .sbox .sb-r .rqp{width:34px;height:51px}
+.und .sbox .sb-r>.btn,.und .sbox .sb-r>.badge{flex:none}
+.und .sbox .sb-o{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.und .sbox>.empty{padding:10px 8px}
+.und .top .search>svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--faint);pointer-events:none}
 .und .top .acts{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .und .live{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:2px 3px 2px 10px;white-space:nowrap}
 .und .live .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
@@ -106,6 +115,13 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .sec-h .tools .seg{max-width:100%;overflow-x:auto;scrollbar-width:none}.und .sec-h .tools .seg::-webkit-scrollbar{display:none}.und .seg button{flex:none}
 .und .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:var(--pad);min-width:0;box-shadow:var(--shadow);position:relative}
 .und.has-bg .card,.und.has-bg .panel,.und.has-bg .metric,.und.has-bg .tile{background:color-mix(in srgb,var(--panel) 88%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+/* frosted glass: the wallpaper stays sharp, every card blurs what is behind it */
+.und.glass .card,.und.glass .panel,.und.glass .metric,.und.glass .tile,.und.glass button.stat,.und.glass .ci,.und.glass .alert,.und.glass .olist,.und.glass .fav,.und.glass .pl,.und.glass .rq,.und.glass .detail,.und.glass .htab{
+  background:color-mix(in srgb,var(--panel) 62%,transparent);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.15);backdrop-filter:blur(var(--glass-blur)) saturate(1.15)}
+/* text that sits straight on a wallpaper (title bar, section headings, their tools) gets a frosted chip behind it */
+.und.has-bg .top .brand,.und.has-bg .sec-h h2,.und.has-bg .sec-h .tools>.muted,.und.has-bg .sec-h .tools>span:not(:empty){background:color-mix(in srgb,var(--panel) 72%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:8px;padding:3px 10px}
+.und.has-bg .top .brand{padding:6px 12px 6px 6px;border-radius:var(--radius)}
+.und.has-bg .sec-h .tools .btn.ghost{background:color-mix(in srgb,var(--panel) 72%,transparent)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 .und .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);min-width:0;overflow:hidden}
 .und .empty{color:var(--muted);font-size:13px;padding:16px;text-align:center}
 
@@ -120,7 +136,9 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 /* alerts */
 .und .alerts{display:flex;flex-direction:column;gap:6px}
 .und .alert{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-left:3px solid var(--warn);background:var(--panel);border-radius:var(--radius);padding:8px 12px;font-size:13px;flex-wrap:wrap}
-.und .alert.bad{border-left-color:var(--bad)}.und .alert.info{border-left-color:var(--accent)}.und .alert.ok{border-left-color:var(--ok)}
+.und .alert.bad{border-left-color:var(--bad)}
+.und .alert.crit{background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 55%,var(--line));border-left:4px solid var(--bad);padding:11px 14px;box-shadow:0 0 0 1px color-mix(in srgb,var(--bad) 18%,transparent),0 6px 18px -8px color-mix(in srgb,var(--bad) 55%,transparent)}
+.und .alert.crit>svg{color:var(--bad);width:18px;height:18px;flex:none}.und .alert.crit b{color:var(--title)}.und .alert.info{border-left-color:var(--accent)}.und .alert.ok{border-left-color:var(--ok)}
 .und .alert .grow{min-width:0}.und .alert>svg{color:var(--ok)}
 
 /* metrics */
@@ -584,3 +602,13 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 /* overlays stay solid so text over moving content is readable */
 .und[data-theme=fluent] .modal,.und[data-theme=fluent] .menu,.und[data-theme=fluent] .toast{background:rgba(17,19,24,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-color:rgba(255,255,255,.12)}
 .und[data-theme=fluent] *{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.12) transparent}
+
+/* Fluent Light: the same glass look on a light background */
+.und[data-theme=fluent][data-mode=light]{background:radial-gradient(1100px 600px at 0% -10%,rgba(37,99,235,.12),transparent 60%),radial-gradient(900px 520px at 100% 0%,rgba(99,102,241,.10),transparent 60%),var(--bg)}
+.und[data-theme=fluent][data-mode=light] .card,.und[data-theme=fluent][data-mode=light] button.stat,.und[data-theme=fluent][data-mode=light] .ci,.und[data-theme=fluent][data-mode=light] .alert,.und[data-theme=fluent][data-mode=light] .panel,.und[data-theme=fluent][data-mode=light] .olist{box-shadow:0 4px 12px -4px rgba(15,23,42,.12)}
+.und[data-theme=fluent][data-mode=light] .card:hover,.und[data-theme=fluent][data-mode=light] button.stat:hover,.und[data-theme=fluent][data-mode=light] .ci:hover,.und[data-theme=fluent][data-mode=light] a.mi:hover{background-color:rgba(255,255,255,.85);border-color:rgba(37,99,235,.6);box-shadow:0 0 15px rgba(37,99,235,.18)}
+.und[data-theme=fluent][data-mode=light] .aico,.und[data-theme=fluent][data-mode=light] .ci img,.und[data-theme=fluent][data-mode=light] .w .ch .ico{background:rgba(15,23,42,.04)}
+.und[data-theme=fluent][data-mode=light] .meter,.und[data-theme=fluent][data-mode=light] .progress{background:rgba(15,23,42,.08);box-shadow:inset 0 1px 2px rgba(15,23,42,.12)}
+.und[data-theme=fluent][data-mode=light] .meter i,.und[data-theme=fluent][data-mode=light] .progress i,.und[data-theme=fluent][data-mode=light] .stat .bar i{background:linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa);box-shadow:0 0 6px rgba(37,99,235,.3)}
+.und[data-theme=fluent][data-mode=light] .modal,.und[data-theme=fluent][data-mode=light] .menu,.und[data-theme=fluent][data-mode=light] .toast{background:rgba(255,255,255,.97);border-color:rgba(15,23,42,.12)}
+.und[data-theme=fluent][data-mode=light] *{scrollbar-color:rgba(15,23,42,.2) transparent}
