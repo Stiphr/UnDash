@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.6.0">
+<!ENTITY version "0.6.1">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,13 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.6.1
+- Much faster loading in Docker. The page no longer waits for a full server read before it appears, and live refreshes no longer wait for the two slow parts of the Unraid API (network rates and the server's address, about 2 s each on a busy server): a background task keeps them fresh while the dashboard is open.
+- More parallel requests: the container serves 12 at a time (was 4), and the page keeps app and media reads to 4 at a time, so the live refresh and your clicks never queue behind a slow app.
+- Prowlarr's grab and query totals are kept for 10 minutes; Prowlarr needs 10 s and more to work them out on every request.
+- Several browsers asking for the same app at the same moment share one request.
+- Less clutter: the UPS tile hides itself when there is no UPS, Uptime shows since when instead of repeating the Unraid version, VMs drop the empty vCPU and memory columns in the Docker version, requests are one compact line each, and app cards with four numbers show them as two even rows.
+
 ###0.6.0
 - Settings in two files: config.yaml holds everything you set (apps, layout, theme, preferences, ignored alerts, custom CSS) and never a key or password; .env holds the API keys, user names and passwords. Your current settings are converted on first start, with a backup; the old files are kept in data/legacy.
 - Settings &gt; Apps rebuilt: Add app (pick a type, enter the address and key, Test), and edit, hide, reorder or remove any app from one list grouped by where it shows (Arr Stack, Downloads, Media, Apps). Apps still missing an address or key are marked. Keys go to .env on their own; the old Variables list is gone (an optional "Shared values" box remains for values several apps use).
@@ -160,7 +167,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.6.0');
+define('UND_VERSION', '0.6.1');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -181,7 +188,6 @@ function und_path($p) { return isset($GLOBALS['UND_FS']) ? $GLOBALS['UND_FS'] . 
 function und_read($p) { $s = @file_get_contents(und_path($p)); return $s === false ? '' : $s; }
 
 function und_has($s, $p)    { return $p === '' || strpos((string)$s, $p) !== false; }
-function und_starts($s, $p) { return strncmp((string)$s, $p, strlen($p)) === 0; }
 
 /* ---------- JSON files ---------- */
 
@@ -290,7 +296,6 @@ function und_clip($s, $max) {
   return strlen($s) > $max ? substr($s, 0, $max - 3) . '...' : $s;
 }
 
-function und_valid_name($n) { return is_string($n) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_. +()\-]{0,127}$/', $n) === 1; }
 
 /* ---------- Unraid ---------- */
 
@@ -313,11 +318,7 @@ function und_os_version() {
 /** Name, address and Unraid version of the server for the title bar. In a container the local host name and address are the
  *  container's own, so they come from the Unraid API there (its system read is cached, so this costs nothing extra). */
 function und_server_identity() {
-  if (und_api_mode()) {
-    $s = und_api_system(und_load_config());
-    $host = (string)parse_url(und_api_conf()['url'], PHP_URL_HOST);
-    return ['name' => (string)($s['name'] ?? '') ?: $host, 'ip' => (string)($s['ip'] ?? '') ?: $host, 'os' => (string)($s['os'] ?? '')];
-  }
+  if (und_api_mode()) return und_api_identity();
   return ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip(), 'os' => function_exists('und_os_version') ? und_os_version() : ''];
 }
 
@@ -340,7 +341,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>b038693afd62726935a225703c34a05c9399b9a65f76246180fff58eab63d48d</SHA256>
+<SHA256>803b5e453bfb61dd95fac5787befc90ac7cf5a54c84f9c7c554529c492b41b92</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -837,43 +838,6 @@ function und_save_secrets(array $s) {
 
 function und_var_is_secret($name) { return preg_match('/KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i', $name) === 1; }
 
-/** Stricter, for redacted exports that may be shared: login names and e-mail addresses go too (half a credential, and personal). */
-function und_var_is_private($name, $value) {
-  return und_var_is_secret($name) || preg_match('/USER|LOGIN|EMAIL|MAIL|ACCOUNT/i', $name) === 1 || preg_match('/[^\s@]+@[^\s@]+\.[a-z]{2,}/i', (string)$value) === 1;
-}
-
-/** What the browser may see: secret variables and stored credentials are replaced by UND_KEEP. */
-function und_secrets_view(array $s) {
-  $vars = [];
-  foreach ($s['vars'] as $k => $v) $vars[] = ['name' => $k, 'value' => und_var_is_secret($k) && $v !== '' ? UND_KEEP : $v, 'secret' => und_var_is_secret($k)];
-  $svc = [];
-  foreach ($s['svc'] as $id => $c) foreach (['key', 'password', 'username'] as $f) {
-    if (!isset($c[$f]) || $c[$f] === '') continue;
-    $svc[$id][$f] = ($f === 'username' || preg_match('/^\{\{\s*[A-Za-z0-9_]+\s*\}\}$/', $c[$f])) ? $c[$f] : UND_KEEP;
-  }
-  return ['vars' => $vars, 'svc' => (object)$svc];
-}
-
-/** Merge what the browser sent back with what is stored (UND_KEEP = unchanged). */
-function und_secrets_merge(array $old, array $vars, array $svc, array $ids) {
-  $new = ['vars' => [], 'svc' => []];
-  foreach ($vars as $v) {
-    $n = strtoupper(trim((string)($v['name'] ?? '')));
-    if (!preg_match('/^[A-Z][A-Z0-9_]{0,63}$/', $n)) continue;
-    $val = (string)($v['value'] ?? '');
-    $new['vars'][$n] = $val === UND_KEEP ? (string)($old['vars'][$n] ?? '') : und_clip($val, 2000);
-  }
-  foreach ($ids as $id) {
-    $in = isset($svc[$id]) && is_array($svc[$id]) ? $svc[$id] : [];
-    foreach (['key', 'password', 'username'] as $f) {
-      $val = (string)($in[$f] ?? '');
-      if ($val === UND_KEEP) $val = (string)($old['svc'][$id][$f] ?? '');
-      if ($val !== '') $new['svc'][$id][$f] = und_clip($val, 2000);
-    }
-  }
-  return $new;
-}
-
 /** Replace {{NAME}} with variable values. UNRAID_IP is built in. Unknown names are left as they are. */
 function und_resolve($s, array $vars) {
   if (!und_has($s, '{{')) return $s;
@@ -897,13 +861,6 @@ function und_service_full(array $cfg, $id) {
     $s['options'] = json_decode(und_resolve(json_encode($s['options']), array_map(function ($v) { return trim(json_encode((string)$v), '"'); }, $sec['vars'])), true) ?: [];
     $s['_group'] = $g['name'];
     return $s;
-  }
-  return null;
-}
-
-function und_find_service(array $cfg, $group, $name, $type = null) {
-  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) {
-    if (strcasecmp($s['name'], (string)$name) === 0 && ($group === null || $group === '' || strcasecmp($g['name'], (string)$group) === 0) && ($type === null || $s['type'] === $type)) return $s['id'];
   }
   return null;
 }
@@ -960,7 +917,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>e9fb9e4105b6e447a643b3926ecf0bedc32c9f5e50a9a24fd54120930b424955</SHA256>
+<SHA256>a9a6457d40dfef57f85c0e502fca326081b499cd4c15327a657f3943e774ad51</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -1363,9 +1320,6 @@ function und_docker_live($withDetails = true) {
   return ['containers' => $out, 'checking' => $chk['state'] === 'running', 'checked' => is_file(und_path(UND_UPDSTATUS)) ? (int)@filemtime(und_path(UND_UPDSTATUS)) : null];
 }
 
-/** Older callers (summary widget). */
-function und_docker_list() { return und_docker_live(); }
-
 function und_docker_action($name, $op) {
   if (!und_valid_container($name)) return ['error' => 'Invalid container name.'];
   if (und_api_mode()) return und_api_docker_action($name, $op);
@@ -1479,7 +1433,7 @@ function und_docker_summary() {
   return $s;
 }
 ]]></INLINE>
-<SHA256>555c568e743a33e967b2b085742fe645febb16b63f61cf577d7c20707c86c2d7</SHA256>
+<SHA256>0a94e01cbd4ccebbf15c7374dc8e00b6c1df404e381699d2dc49bdbafea3c903</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/vm.php" Mode="0644">
@@ -1555,8 +1509,6 @@ function und_vm_live() {
   return ['vms' => $out];
 }
 
-function und_vm_list() { return und_vm_live(); }
-
 function und_vm_action($name, $op) {
   if (!und_valid_vm($name)) return ['error' => 'Invalid VM name.'];
   if (und_api_mode()) return und_api_vm_action($name, $op);
@@ -1591,7 +1543,7 @@ function und_vm_summary() {
   return $s;
 }
 ]]></INLINE>
-<SHA256>d6379d3477d36740161d8fbf4515c33ff6283423cf33a3cf386528e2e422afa2</SHA256>
+<SHA256>f789a89bdfa4ff4376eb19408fe973320c7c5f552cae4ad69ea85ed95b4ed70e</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/services.php" Mode="0644">
@@ -1743,7 +1695,8 @@ function und_w_bazarr($s) {
 }
 
 function und_w_prowlarr($s) {
-  $st = und_get(und_u($s['url'], '/api/v1/indexerstats'), und_arr_h($s));
+  // Prowlarr works these totals out from its whole 30-day history (10 s and more on a busy instance), so they are kept for 10 minutes
+  $st = und_api_cached('prowlarr-' . md5($s['url'] . $s['key']), 600, function () use ($s) { return und_get(und_u($s['url'], '/api/v1/indexerstats'), und_arr_h($s) + ['timeout' => 30]); });
   $t = ['g' => 0, 'q' => 0, 'fg' => 0, 'fq' => 0];
   foreach ((array)($st['indexers'] ?? []) as $i) { $t['g'] += (int)($i['numberOfGrabs'] ?? 0); $t['q'] += (int)($i['numberOfQueries'] ?? 0); $t['fg'] += (int)($i['numberOfFailedGrabs'] ?? 0); $t['fq'] += (int)($i['numberOfFailedQueries'] ?? 0); }
   return ['blocks' => [und_b('numberOfGrabs', 'Grabs', $t['g']), und_b('numberOfQueries', 'Queries', $t['q']), und_b('numberOfFailGrabs', 'Fail grabs', $t['fg']), und_b('numberOfFailQueries', 'Fail queries', $t['fq'])]];
@@ -2015,7 +1968,7 @@ function und_w_customapi($s) {
   return ['blocks' => $b];
 }
 ]]></INLINE>
-<SHA256>17eec05a3ce3ca89dbd22e9a0ee90bcbbead252d345718f6f733c90e0e8a235f</SHA256>
+<SHA256>5fc62b24156db3b4160ed4710be17a24ef16ad8b72600686bad9d33567904cf0</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/import.php" Mode="0644">
@@ -2728,9 +2681,59 @@ function und_api_cached($name, $ttl, $fn) {
   $f = und_tmp('api-' . $name . '.json');
   $c = und_read_json($f, null);
   if (is_array($c) && microtime(true) - (float)$c['t'] < $ttl) return $c['v'];
+  // one request reads; the others asking at the same moment wait for its answer instead of asking again
+  $lk = @fopen($f . '.lock', 'c');
+  if ($lk) {
+    flock($lk, LOCK_EX);
+    $c = und_read_json($f, null);
+    if (is_array($c) && microtime(true) - (float)$c['t'] < $ttl) { fclose($lk); return $c['v']; }
+  }
   $v = $fn();
   und_write_json($f, ['t' => microtime(true), 'v' => $v]);
+  if ($lk) fclose($lk);
   return $v;
+}
+
+/*
+ * Two parts of the API are slow (about 2 s each on a busy server, whatever fields are asked for): the network interface
+ * list and the primary interface. In Docker, scripts/apipoll.php keeps them fresh in the background while someone has the
+ * dashboard open, so page loads and refreshes never wait for them. Without it (tests, dev server) they are read inline.
+ * name => [refresh every N seconds, oldest copy still shown, query]
+ */
+const UND_API_SLOW = [
+  'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname } versions { core { unraid } } } vars { name } }'],
+  'net'   => [2, 20, 'query { metrics { network { name rxSec txSec } } }'],
+];
+
+function und_api_poller_alive() { clearstatcache(); $b = @filemtime(und_tmp('apipoll.beat')); return $b && time() - $b < 30; }
+
+/** A slow read (UND_API_SLOW): the background copy while the poller runs, else read now. Returns the und_gql result or null. */
+function und_api_slow($name) {
+  list($ttl, $max, $q) = UND_API_SLOW[$name];
+  if (!und_api_poller_alive()) return und_api_cached($name, $ttl, function () use ($q) { return und_gql($q); });
+  @touch(und_tmp('viewer'));
+  $c = und_read_json(und_tmp('api-' . $name . '.json'), null);
+  return is_array($c) && microtime(true) - (float)$c['t'] < $max ? $c['v'] : null;
+}
+
+/** One round of the background poller: refreshes what is due. Errors are not stored, so the last good copy stays. */
+function und_api_poll_due() {
+  foreach (UND_API_SLOW as $name => $x) {
+    $f = und_tmp('api-' . $name . '.json');
+    $c = und_read_json($f, null);
+    if (is_array($c) && microtime(true) - (float)$c['t'] < $x[0]) continue;
+    $r = und_gql($x[2]);
+    if (!isset($r['error'])) und_write_json($f, ['t' => microtime(true), 'v' => $r]);
+  }
+}
+
+/** Name, address and Unraid version for the page title, without waiting for a full system read. */
+function und_api_identity() {
+  $id = und_read_json(und_tmp('api-ident.json'), null);
+  $d = is_array($id) ? ($id['v']['data'] ?? []) : (und_api_cached('name', 600, function () { return und_gql('query { info { os { hostname } versions { core { unraid } } } vars { name } }', [], 5); })['data'] ?? []);
+  $host = (string)parse_url(und_api_conf()['url'], PHP_URL_HOST);
+  return ['name' => (string)($d['vars']['name'] ?? $d['info']['os']['hostname'] ?? '') ?: $host, 'ip' => (string)($d['info']['primaryNetwork']['ipAddress'] ?? '') ?: $host,
+          'os' => (string)($d['info']['versions']['core']['unraid'] ?? '')];
 }
 
 function und_api_bigint($v) { return is_numeric($v) ? (float)$v : 0.0; }
@@ -2738,12 +2741,11 @@ function und_api_bigint($v) { return is_numeric($v) ? (float)$v : 0.0; }
 /** Overview data in the same shape as the plugin's und_system(). */
 function und_api_system(array $cfg) {
   $q = 'query {
-    info { os { hostname uptime kernel } cpu { brand threads } versions { core { unraid } } primaryNetwork { name ipAddress } }
+    info { os { hostname uptime kernel } versions { core { unraid } } }
     metrics {
       cpu { percentTotal cpus { percentTotal } }
       memory { total used available swapTotal swapUsed percentTotal }
       temperature { sensors { type current { value } } summary { hottest { current { value } } } }
-      network { name rxSec txSec }
     }
     array { state capacity { kilobytes { free used total } } parityCheckStatus { running progress status }
       parities { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
@@ -2755,6 +2757,7 @@ function und_api_system(array $cfg) {
   if (isset($r['error']) && empty($r['data'])) return ['error' => $r['error'], 'auth' => !empty($r['auth'])];
   $d = $r['data']; $now = time();
   $m = $d['metrics'] ?? []; $info = $d['info'] ?? [];
+  $ident = und_api_slow('ident')['data']['info'] ?? [];
   $mem = $m['memory'] ?? null;
   $total = und_api_bigint($mem['total'] ?? 0); $avail = und_api_bigint($mem['available'] ?? 0);
   $memOut = $mem ? ['total' => $total, 'used' => max(0, $total - $avail), 'free' => $avail, 'pct' => $total ? round(100 * ($total - $avail) / $total, 1) : null,
@@ -2763,7 +2766,7 @@ function und_api_system(array $cfg) {
   foreach ((array)($m['temperature']['sensors'] ?? []) as $sn) if (($sn['type'] ?? '') === 'CPU_PACKAGE') { $temp = (float)$sn['current']['value']; break; }
   if ($temp === null) foreach ((array)($m['temperature']['sensors'] ?? []) as $sn) if (($sn['type'] ?? '') === 'CPU_CORE') $temp = max((float)$temp, (float)$sn['current']['value']);
   // the main interface: Unraid's primary network, else the first bridge / bond / ethernet
-  $nets = (array)($m['network'] ?? []); $want = (string)($info['primaryNetwork']['name'] ?? ''); $net = null;
+  $nets = (array)(und_api_slow('net')['data']['metrics']['network'] ?? []); $want = (string)($ident['primaryNetwork']['name'] ?? ''); $net = null;
   foreach ($nets as $n) if ($n['name'] === $want) $net = $n;
   if (!$net) foreach (['br0', 'bond0', 'eth0'] as $w) foreach ($nets as $n) if (!$net && $n['name'] === $w) $net = $n;
   $cpu = $m['cpu'] ?? null;
@@ -2773,10 +2776,10 @@ function und_api_system(array $cfg) {
   if ($cpu && (empty($hist) || $now - (int)end($hist)[0] >= 2)) { $hist[] = [$now, round((float)$cpu['percentTotal'], 1), $memOut['used'], $net ? (float)$net['rxSec'] : null, $net ? (float)$net['txSec'] : null]; $hist = array_slice($hist, -150); und_write_json(und_tmp('hist.json'), $hist); }
   $arr = und_api_array($d['array'] ?? []);
   return [
-    'now' => $now, 'name' => (string)($d['vars']['name'] ?? $info['os']['hostname'] ?? ''), 'ip' => (string)($info['primaryNetwork']['ipAddress'] ?? ''),
+    'now' => $now, 'name' => (string)($d['vars']['name'] ?? $info['os']['hostname'] ?? ''), 'ip' => (string)($ident['primaryNetwork']['ipAddress'] ?? ''),
     'os' => (string)($info['versions']['core']['unraid'] ?? ''), 'kernel' => (string)($info['os']['kernel'] ?? ''),
     'cpu' => ['pct' => $cpu ? round((float)$cpu['percentTotal'], 1) : null, 'cores' => $cpu ? array_map(function ($c) { return round((float)$c['percentTotal'], 1); }, (array)$cpu['cpus']) : [],
-              'model' => (string)($info['cpu']['brand'] ?? ''), 'threads' => (int)($info['cpu']['threads'] ?? 0), 'temp' => $temp, 'load' => null],
+              'model' => (string)($ident['cpu']['brand'] ?? ''), 'threads' => (int)($ident['cpu']['threads'] ?? 0), 'temp' => $temp, 'load' => null],
     'mem' => $memOut, 'net' => ['rx' => $net ? (float)$net['rxSec'] : null, 'tx' => $net ? (float)$net['txSec'] : null, 'iface' => $net ? $net['name'] : ''],
     'disk' => null, 'uptime' => $up, 'array' => $arr, 'hist' => $hist,
     'os_update' => ['installed' => (string)($info['versions']['core']['unraid'] ?? ''), 'latest' => '', 'checked' => 0, 'error' => '', 'available' => false, 'staged' => '', 'job' => 'idle'],
@@ -2966,7 +2969,7 @@ function und_api_vm_action($name, $op) {
   return $ok ? ['ok' => true] : ['error' => $err];
 }
 ]]></INLINE>
-<SHA256>062853bb817cc1085d5ce95b348bc5b11ce2332800a4b53385cf8345d9c1b682</SHA256>
+<SHA256>133dba252db69f51d5ee5712d336e8276576f7dbb8dc4e04af94ccd9c1ddb847</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/media.php" Mode="0644">
@@ -5256,7 +5259,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .badge.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
 
 /* now playing */
-.und .plist,.und .rqlist{display:flex;flex-direction:column;gap:8px}
+.und .plist{display:flex;flex-direction:column;gap:8px}.und .rqlist{display:flex;flex-direction:column;gap:6px}
 .und .pl{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;min-width:0}
 .und .pl.paused{opacity:.75}
 .und .pl>.aico,.und .pl>.ph{width:28px;height:28px;flex:none;border-radius:6px;object-fit:contain;margin-top:2px}
@@ -5267,9 +5270,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .pl .meter{height:4px}
 
 /* requests */
-.und .rq{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;min-width:0}
+.und .rq{display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:6px 10px;min-width:0}
 .und .rq.pend{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
-.und .rqp{flex:none;width:38px;height:57px;border-radius:5px;background:var(--panel-2);overflow:hidden;border:1px solid var(--line);display:block}
+.und .rqp{flex:none;width:28px;height:42px;border-radius:5px;background:var(--panel-2);overflow:hidden;border:1px solid var(--line);display:block}
 .und .rqp img{width:100%;height:100%;object-fit:cover;display:block}
 .und .rqt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.und .rqt b{color:var(--title);font-size:13.5px}
 .und .rqa{display:flex;gap:6px;flex:none}
@@ -5358,6 +5361,10 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .rowi.c .c-cpu,.und .rowi.c .c-mem{font-size:12.5px}
 .und .rowi.c .acts .btn.sm{min-height:30px!important}.und .rowi.c .acts .btn.ic.sm{width:30px;min-width:30px!important}
 .und .panel.compact .rowh{padding-top:5px;padding-bottom:5px}
+@media (min-width:901px){
+  .und .slim .rowh.c,.und .slim .rowi.c{grid-template-columns:minmax(160px,2.4fr) minmax(90px,1fr) 48px}
+  .und .slim .c-cpu,.und .slim .c-mem,.und .slim .c-upd{display:none}
+}
 
 /* apps */
 .und .grid.links{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
@@ -5423,12 +5430,14 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .ac .ch .nm{font-size:13.5px;font-weight:600}
 .und .ac .ch .sub{margin-left:auto}
 .und .ac .ch .btn{margin-left:2px!important}
-.und .ac .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(54px,1fr));gap:0;background:var(--panel-2);border-radius:6px;padding:6px 0}
+.und .ac .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(54px,1fr));gap:6px 0;background:var(--panel-2);border-radius:6px;padding:6px 0}
+/* four numbers in a narrow card: two rows of two instead of three and one */
+.und .card.ac{container-type:inline-size}
+@container (max-width:300px){.und .ac .blocks.even{grid-template-columns:repeat(2,1fr)}.und .ac .blocks.even .blk:nth-child(3){border-left:0}}
 .und .ac .blk{background:transparent;padding:0 6px;border-left:1px solid var(--line);border-radius:0;min-width:0}
 .und .ac .blk:first-child{border-left:0}
-.und .ac .blk .v{font-size:14px;font-weight:600;color:var(--title)}
+.und .ac .blk .v{font-size:13.5px;font-weight:600;color:var(--title)}
 .und .ac .blk .l{font-size:9.5px;font-weight:600;color:var(--muted);letter-spacing:.02em;white-space:normal;line-height:1.2;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.und .ac .blk .v{font-size:14px}
 .und .ac .streams{margin-top:0}
 .und .ac .stream{font-size:12px}
 .und .ac button.err{padding:5px 8px!important;text-align:left}
@@ -5498,7 +5507,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
 }
 ]]></INLINE>
-<SHA256>43e75966123945743926bec83c54d5b0bec66559b01fea6c00d63c59d888ee90</SHA256>
+<SHA256>3e618ddcdf5a65f2f53c7e724227e4b7867205ccce2a3d04fec26c64fed43c88</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -5636,6 +5645,13 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       var known = function (id) { return S.drawer.saved.groups.some(function (g) { return g.services.some(function (x) { return x.id === id; }); }); };
       if (/^(dl|arr|service)$/.test(action) && data && data.id && !known(data.id)) return Promise.resolve({ error: 'Loads once you save.', preview: true, unconfigured: true, online: false });
     }
+    if (BG.test(action)) return new Promise(function (done) { BGQ.push(function () { return send(action, data, timeoutMs).then(done); }); bgNext(); });
+    return send(action, data, timeoutMs);
+  }
+  /* a browser opens at most 6 connections to one server: app and media reads share 4 of them, so the live refresh and clicks never queue behind a slow app */
+  var BG = /^(media|arr|dl|service|playing|requests|health|self_update|alert_history|history|storage|os_status)$/, BGQ = [], bgRun = 0;
+  function bgNext() { while (bgRun < 4 && BGQ.length) { bgRun++; BGQ.shift()().then(function () { bgRun--; bgNext(); }); } }
+  function send(action, data, timeoutMs) {
     var fd = new URLSearchParams(); fd.append('action', action);   // urlencoded: multipart POSTs hang on Unraid's web server
     fd.append('csrf_token', window.UND_CSRF || '');
     for (var k in (data || {})) fd.append(k, typeof data[k] === 'object' ? JSON.stringify(data[k]) : data[k]);
@@ -6213,9 +6229,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     if (S.storage) [].concat(S.storage.parity || [], S.storage.array || [], S.storage.pools || []).forEach(function (d) { if (d.temp !== null && d.temp !== undefined) temps.push(d.temp); });
     var hot = temps.length ? Math.max.apply(null, temps) : null;
     tile('disks', hot === null ? 'n/a' : hot + '°C', hot === null ? 'No disk temperatures (spun down?)' : 'hottest · ' + (a.hot ? a.hot + ' at 50°C+' : 'all below 50°C'), hot === null ? null : Math.min(100, hot / 60 * 100), hot === null ? 'na' : hot >= 55 ? 'bad' : hot >= 50 ? 'warn' : 'ok');
-    tile('uptime', upt(s.uptime), s.os ? 'Unraid ' + s.os : '', null, '');
+    tile('uptime', upt(s.uptime), s.uptime ? 'since ' + new Date((s.now - s.uptime) * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '', null, '');
     var u = y.ups;
-    if (R.overview.tiles.ups) { if (!u) tile('ups', 'n/a', 'No UPS found', null, 'na'); else tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
+    if (R.overview.tiles.ups) { R.overview.tiles.ups.el.hidden = !u; if (u) tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
     var cores = s.cpu.cores || [];
     tile('cores', cores.length ? pct(Math.max.apply(null, cores)) : 'n/a', cores.length ? 'busiest of ' + cores.length + ' cores' : '', cores.length ? Math.max.apply(null, cores) : null, cores.length ? lvl(Math.max.apply(null, cores), 90, 99) : 'na');
     tile('swap', s.mem.swap_total ? pct(100 * s.mem.swap_used / s.mem.swap_total) : 'None', s.mem.swap_total ? bytes(s.mem.swap_used) + ' of ' + bytes(s.mem.swap_total) : 'No swap configured', s.mem.swap_total ? 100 * s.mem.swap_used / s.mem.swap_total : null, s.mem.swap_total ? '' : 'na');
@@ -6872,7 +6888,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     r.tools.appendChild(h('div', { class: 'seg', role: 'group', 'aria-label': 'Layout' },
       h('button', { type: 'button', class: V.layout === 'list' ? 'on' : '', title: 'List', 'aria-label': 'List layout', 'aria-pressed': V.layout === 'list' ? 'true' : 'false', onclick: function () { setLayout('vms', 'list'); } }, ic('list')),
       h('button', { type: 'button', class: V.layout === 'cards' ? 'on' : '', title: 'Cards', 'aria-label': 'Card layout', 'aria-pressed': V.layout === 'cards' ? 'true' : 'false', onclick: function () { setLayout('vms', 'cards'); } }, ic('grid'))));
-    r.list = V.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel compact' }, h('div', { class: 'rowh c', 'aria-hidden': 'true' }, h('span', null, 'Virtual machine'), h('span', null, 'Status'), h('span', { class: 'c-cpu' }, 'vCPUs'), h('span', { class: 'c-mem' }, 'Memory'), h('span', { class: 'c-upd' }, S.boot.caps.vm_details ? 'Guest agent' : ''), h('span', null, '')));
+    r.list = V.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel compact' + (S.boot.caps.vm_details ? '' : ' slim') }, h('div', { class: 'rowh c', 'aria-hidden': 'true' }, h('span', null, 'Virtual machine'), h('span', null, 'Status'), h('span', { class: 'c-cpu' }, 'vCPUs'), h('span', { class: 'c-mem' }, 'Memory'), h('span', { class: 'c-upd' }, S.boot.caps.vm_details ? 'Guest agent' : ''), h('span', null, '')));
     r.rows = V.layout === 'cards' ? r.list : h('div', { role: 'list' });
     if (V.layout !== 'cards') r.list.appendChild(r.rows);
     r.body.appendChild(r.list);
@@ -7078,8 +7094,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       r.list.appendChild(h('div', { class: 'rq' + (x.status === 'pending' ? ' pend' : ''), role: 'listitem', 'data-name': x.title },
         h(x.href ? 'a' : 'span', { class: 'rqp', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title },
           x.poster ? h('img', { src: x.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
-        h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs ell' }, what),
-          h('span', { class: 'muted xs ell' }, (x.user ? x.user + ' · ' : '') + (x.at ? rel(x.at) : ''))),
+        h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs ell' }, [what, x.user, x.at ? rel(x.at) : ''].filter(Boolean).join(' · '))),
         x.status === 'pending' ? h('div', { class: 'rqa' },
           btn('Approve', function () { reqAct(x, 'approve'); }, 'sm pri', 'check', 'Approve ' + title),
           btn('', function () { confirmBox('Decline ' + title + '?', (x.user || 'The requester') + ' asked for it ' + (x.at ? rel(x.at) : '') + '. Declining tells them in ' + x.app_name + ' and cannot be undone here.', 'Decline', true).then(function (y) { if (y) reqAct(x, 'decline'); }); }, 'sm danger', 'x', 'Decline ' + title))
@@ -7301,10 +7316,11 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   function blkVal(x) {
     var n = typeof x.value === 'number' ? x.value : (typeof x.value === 'string' && /^-?\d+(\.\d+)?$/.test(x.value) ? +x.value : null);
     if (CMP && n !== null && Math.abs(n) >= 10000 && (!x.fmt || x.fmt === 'n' || x.fmt === 'text')) return CMP.format(n);
+    if (x.fmt === 'bytes') return bytes(x.value).replace(/^(\d{2,})\.\d+ /, '$1 ');      // 54 GiB, not 54.0 GiB
     return fmt(x.value, x.fmt);
   }
   function blk(x) { var full = fmt(x.value, x.fmt); return h('div', { class: 'blk', title: x.label + ': ' + full }, h('div', { class: 'v' }, blkVal(x)), h('div', { class: 'l' }, x.label)); }
-  function blocks(list) { return h('div', { class: 'blocks' }, list.map(blk)); }
+  function blocks(list) { return h('div', { class: 'blocks' + (list.length === 4 ? ' even' : '') }, list.map(blk)); }
   function paintService(s, r) {
     var c = document.getElementById('w-' + s.id); if (!c) return;
     c.classList.remove('wait');
@@ -8275,7 +8291,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>f2ff84699dbe087af1896cb36d39476676768b91a027853e2143eb09c5296032</SHA256>
+<SHA256>e2ce17bf8acdb8283b1993be4eb8a75b08778964106b36f617ac6c22e225d74f</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
