@@ -57,7 +57,7 @@
     eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', eyeoff: 'M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.1 3.9M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2',
     search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
     grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', chev: 'M6 9l6 6 6-6', history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
-    download: 'M12 4v12M6 10l6 6 6-6M4 20h16'
+    download: 'M12 4v12M6 10l6 6 6-6M4 20h16', mute: 'M9 18h6M6 15V10a6 6 0 0 1 9.5-4.9M18 10v5l1.5 2H8M3 3l18 18'
   };
   function ic(n, fill) {
     var s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor');
@@ -114,10 +114,13 @@
   function meterCls(p) { return p > 90 ? 'bad' : p > 75 ? 'warn' : ''; }
 
   var toastBox = null;
-  function toast(msg, bad) {
+  /* undo: optional [label, fn], a button in the toast (it stays up longer so there is time to press it) */
+  function toast(msg, bad, undo) {
     if (!toastBox || !toastBox.parentNode) { toastBox = h('div', { class: 'toasts', 'aria-live': 'polite' }); root.appendChild(toastBox); }
-    var t = h('div', { class: 'toast' + (bad ? ' bad' : ''), role: bad ? 'alert' : 'status' }, msg); toastBox.appendChild(t);
-    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, bad ? 8000 : 3500);
+    var t = h('div', { class: 'toast' + (bad ? ' bad' : '') + (undo ? ' act' : ''), role: bad ? 'alert' : 'status' }, h('span', null, msg),
+      undo ? h('button', { type: 'button', class: 'btn sm', onclick: function () { if (t.parentNode) t.parentNode.removeChild(t); undo[1](); } }, undo[0]) : null);
+    toastBox.appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, undo ? 10000 : bad ? 8000 : 3500);
   }
 
   /* ---------- API ---------- */
@@ -543,39 +546,130 @@
   }
 
   /* ---- alerts ---- */
-  BUILD.alerts = function (r) { r.list = h('div', { class: 'alerts' }); r.body.appendChild(r.list); };
-  function paintAlerts(y) {
-    var r = R.alerts, s = y.system, out = [];
-    if (S.conn === 'down') out.push(['bad', 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.']);
-    if (S.conn === 'auth') out.push(['bad', 'Your session ended. Reload the page to sign in again.']);
-    if (s && s.error) { out.push(['bad', s.error + (s.auth ? ' Check Settings > Configuration.' : ''), ['Settings', function () { openSettings('config'); }]]); s = null; }
+  BUILD.alerts = function (r) {
+    r.list = h('div', { class: 'alerts' }); r.body.appendChild(r.list);
+    r.ign = h('button', { type: 'button', class: 'btn ghost sm', hidden: true, onclick: function () { openSettings('ignored'); } });
+    r.tools.appendChild(r.ign);
+  };
+  /* Alert ids are "<category>:<resource>" (see include/ignores.php); an alert without a category cannot be ignored. */
+  var ALERT_CAT = {
+    'docker.unhealthy': 'Container unhealthy', 'docker.restarting': 'Container restarting', 'docker.exited': 'Container stopped with an error', 'docker.update_failed': 'Container update failed',
+    'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature',
+    'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
+  };
+  /* the rules in force, by the server's clock (live.at), plus this tab's own changes until the next refresh confirms them */
+  function ignRules(y) {
+    var list = (y.ignores || []).slice(), t = Date.now();
+    // a refresh that was already on its way when the rule changed would undo the change for a moment
+    S.ignHold = (S.ignHold || []).filter(function (c) { return c.exp > t; });
+    S.ignHold.forEach(function (c) {
+      if (c.add) list = list.filter(function (z) { return z.id !== c.add.id && !(z.kind === c.add.kind && z.key === c.add.key); }).concat([c.add]);
+      else list = list.filter(function (z) { return c.del.indexOf(z.id) < 0; });
+    });
+    return list;
+  }
+  function ignoredBy(y, cat, res) {
+    var now = y.at || Date.now() / 1000, key = cat + ':' + res;
+    return ignRules(y).filter(function (g) { return (g.until === null || g.until > now) && (g.kind === 'type' ? g.key === cat : g.key === key); })[0] || null;
+  }
+  function alertList(y) {
+    var s = y.system, out = [];
+    function add(lv, msg, b, cat, res) { out.push({ lv: lv, msg: msg, btn: b || null, cat: cat || '', res: res === undefined ? '' : String(res) }); }
+    if (S.conn === 'down') add('bad', 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.');
+    if (S.conn === 'auth') add('bad', 'Your session ended. Reload the page to sign in again.');
+    if (s && s.error) { add('bad', s.error + (s.auth ? ' Check Settings > Configuration.' : ''), ['Settings', function () { openSettings('config'); }], s.auth ? '' : 'api.error', 'unraid'); s = null; }
     if (s) {
       var a = s.array || {};
-      if (a.state && a.state !== 'STARTED') out.push(['warn', 'The array is ' + a.state.toLowerCase() + '. Shares, containers and VMs on it are unavailable.']);
-      if (a.resync) out.push(['info', (a.resync_action || 'A parity operation') + ' is running' + (a.resync_pct !== null ? ' (' + a.resync_pct + '%)' : '') + '.']);
-      if (a.bad) out.push(['bad', a.bad + ' disk' + (a.bad > 1 ? 's are' : ' is') + ' disabled, missing or emulated. Check Main in Unraid.']);
-      if (a.errors) out.push(['bad', 'Disks reported ' + a.errors + ' read/write error' + (a.errors > 1 ? 's' : '') + '.']);
-      if (a.hot) out.push(['warn', a.hot + ' disk' + (a.hot > 1 ? 's are' : ' is') + ' at 50°C or more.']);
+      if (a.state && a.state !== 'STARTED') add('warn', 'The array is ' + a.state.toLowerCase() + '. Shares, containers and VMs on it are unavailable.', null, 'array.state', a.state);
+      if (a.resync) add('info', (a.resync_action || 'A parity operation') + ' is running' + (a.resync_pct !== null ? ' (' + a.resync_pct + '%)' : '') + '.', null, 'array.resync', 'array');
+      if (a.bad_disks) a.bad_disks.forEach(function (n) { add('bad', n + ' is disabled, missing or emulated. Check Main in Unraid.', null, 'disk.bad', n); });
+      else if (a.bad) add('bad', a.bad + ' disk' + (a.bad > 1 ? 's are' : ' is') + ' disabled, missing or emulated. Check Main in Unraid.', null, 'disk.bad', 'array');
+      if (a.error_disks) a.error_disks.forEach(function (d) { add('bad', d.name + ' reported ' + d.errors + ' read/write error' + (d.errors > 1 ? 's' : '') + '.', null, 'disk.errors', d.name); });
+      else if (a.errors) add('bad', 'Disks reported ' + a.errors + ' read/write error' + (a.errors > 1 ? 's' : '') + '.', null, 'disk.errors', 'array');
+      if (a.hot_disks) a.hot_disks.forEach(function (d) { add('warn', d.name + ' is at ' + d.temp + '°C.', null, 'disk.hot', d.name); });
+      else if (a.hot) add('warn', a.hot + ' disk' + (a.hot > 1 ? 's are' : ' is') + ' at 50°C or more.', null, 'disk.hot', 'array');
       var o = s.os_update || {};
-      if (o.staged) out.push(['info', 'Unraid ' + o.staged + ' is installed and becomes active after a restart.', ['Restart…', function () { powerDialog('reboot'); }]]);
-      else if (o.available) out.push(['info', 'Unraid ' + o.latest + ' is available (running ' + o.installed + ').', ['Details', osDialog]]);
-      if (o.error && !o.available) out.push(['warn', 'The Unraid update check failed: ' + o.error]);
+      if (o.staged) add('info', 'Unraid ' + o.staged + ' is installed and becomes active after a restart.', ['Restart…', function () { powerDialog('reboot'); }], 'os.staged', o.staged);
+      else if (o.available) add('info', 'Unraid ' + o.latest + ' is available (running ' + o.installed + ').', ['Details', osDialog], 'os.available', o.latest);
+      if (o.error && !o.available) add('warn', 'The Unraid update check failed: ' + o.error, null, 'os.check_failed', 'server');
     }
     var d = y.docker && y.docker.containers;
     if (d) d.forEach(function (c) {
       if (pref('docker', c.name).hidden) return;
       var nm = label('docker', c.name), lg = ['Logs', function () { logs(c.name); }];
-      if (c.health === 'unhealthy') out.push(['bad', nm + ' is unhealthy.', lg]);
-      else if (c.state === 'restarting') out.push(['bad', nm + ' keeps restarting' + (c.restarts ? ' (' + c.restarts + ' restarts)' : '') + '.', lg]);
-      else if (c.state === 'exited' && c.exit && c.autostart) out.push(['warn', nm + ' stopped with exit code ' + c.exit + '.', lg]);
-      if (c.job === 'update_failed') out.push(['bad', 'The update of ' + nm + ' failed.', lg]);
+      if (c.health === 'unhealthy') add('bad', nm + ' is unhealthy.', lg, 'docker.unhealthy', c.name);
+      else if (c.state === 'restarting') add('bad', nm + ' keeps restarting' + (c.restarts ? ' (' + c.restarts + ' restarts)' : '') + '.', lg, 'docker.restarting', c.name);
+      else if (c.state === 'exited' && c.exit && c.autostart) add('warn', nm + ' stopped with exit code ' + c.exit + '.', lg, 'docker.exited', c.name);
+      if (c.job === 'update_failed') add('bad', 'The update of ' + nm + ' failed.', lg, 'docker.update_failed', c.name);
     });
-    var sig = JSON.stringify([!!s, out.map(function (x) { return [x[0], x[1]]; })]);
+    return out;
+  }
+  function paintAlerts(y) {
+    var r = R.alerts, all = alertList(y), hidden = 0;
+    var out = all.filter(function (x) { if (x.cat && ignoredBy(y, x.cat, x.res)) { hidden++; return false; } return true; });
+    var sig = JSON.stringify([!!y.system, hidden, out.map(function (x) { return [x.lv, x.msg, x.cat, x.res]; })]);
     if (r.sig === sig) return; r.sig = sig;
     clear(r.list);
     txt(r.count, out.length ? String(out.length) : '');
-    if (!out.length) { r.list.appendChild(h('div', { class: 'alert ok' }, ic('check'), h('span', { class: 'grow' }, s ? 'No problems found.' : 'Waiting for data…'))); return; }
-    out.forEach(function (x) { r.list.appendChild(h('div', { class: 'alert ' + x[0] }, h('span', { class: 'grow' }, x[1]), x[2] ? btn(x[2][0], x[2][1], 'sm') : null)); });
+    r.ign.hidden = !hidden; clear(r.ign); r.ign.appendChild(ic('mute')); r.ign.appendChild(document.createTextNode(hidden + ' ignored'));
+    r.ign.title = 'Alerts hidden by ignore rules. Open Settings > Ignored alerts.';
+    if (!out.length) { r.list.appendChild(h('div', { class: 'alert ok' }, ic('check'), h('span', { class: 'grow' }, !y.system ? 'Waiting for data…' : hidden ? 'No problems found apart from ignored alerts.' : 'No problems found.'))); return; }
+    out.forEach(function (x) {
+      var mb = x.cat ? h('button', { type: 'button', class: 'btn ghost sm', 'aria-haspopup': 'menu', title: 'Ignore this alert', 'aria-label': 'Ignore: ' + x.msg, onclick: function (e) { ignoreMenu(e.currentTarget, x); } }, ic('mute'), 'Ignore') : null;
+      r.list.appendChild(h('div', { class: 'alert ' + x.lv, 'data-alert': x.cat ? x.cat + ':' + x.res : null }, h('span', { class: 'grow' }, x.msg), x.btn ? btn(x.btn[0], x.btn[1], 'sm') : null, mb));
+    });
+  }
+  function durText(sec) { return sec === 'permanent' ? 'permanently' : sec % 86400 === 0 ? 'for ' + sec / 86400 + ' day' + (sec > 86400 ? 's' : '') : sec % 3600 === 0 ? 'for ' + sec / 3600 + ' hour' + (sec > 3600 ? 's' : '') : 'for ' + Math.round(sec / 60) + ' minutes'; }
+  function ignoreMenu(from, x) {
+    var one = function (d) { return function () { ignoreAdd('instance', x, d); }; };
+    menu(from, [['Ignore for 1 hour', 'clock', one(3600)], ['Ignore for 24 hours', 'clock', one(86400)], ['Ignore for 7 days', 'clock', one(604800)],
+      ['Ignore for…', 'clock', function () { customDur('Ignore this alert', x.msg, function (d) { ignoreAdd('instance', x, d); }); }],
+      ['Ignore permanently', 'mute', one('permanent')], 'hr',
+      ['Ignore all “' + ALERT_CAT[x.cat] + '” alerts…', 'mute', function () { ignoreTypeDialog(x); }]]);
+  }
+  /* duration picker: the presets, or a number of minutes / hours / days (5 minutes to a year) */
+  function durField(withPresets) {
+    var sel = h('select', { 'aria-label': 'How long' }, (withPresets ? [['3600', '1 hour'], ['86400', '24 hours'], ['604800', '7 days'], ['custom', 'Custom…'], ['permanent', 'Permanently']] : [])
+      .map(function (o) { return h('option', { value: o[0] }, o[1]); }));
+    var n = h('input', { type: 'number', min: '1', max: '366', value: '2', 'aria-label': 'Amount', style: { width: '80px' } });
+    var u = h('select', { 'aria-label': 'Unit' }, [['60', 'minutes'], ['3600', 'hours'], ['86400', 'days']].map(function (o) { return h('option', { value: o[0], selected: o[0] === '3600' }, o[1]); }));
+    var cust = h('span', { class: 'ign-dur', hidden: withPresets }, n, u);
+    sel.onchange = function () { cust.hidden = sel.value !== 'custom'; };
+    return { el: h('div', { class: 'ign-dur' }, withPresets ? sel : null, cust), value: function () {
+      if (withPresets && sel.value !== 'custom') return sel.value === 'permanent' ? 'permanent' : +sel.value;
+      var v = Math.round(+n.value * +u.value);
+      return isFinite(v) && v >= 300 && v <= 366 * 86400 ? v : null;
+    } };
+  }
+  function customDur(title, text, done) {
+    var f = durField(false), err = h('div', { class: 'muted sm', role: 'alert' }), m;
+    m = modal(title, h('div', null, h('p', null, text), h('label', { class: 'muted sm' }, 'Ignore for'), f.el, err),
+      [btn('Cancel', function () { m.close(); }), btn('Ignore', function () { var v = f.value(); if (v === null) { txt(err, 'Choose between 5 minutes and 366 days.'); return; } m.close(); done(v); }, 'pri')]);
+  }
+  function ignoreTypeDialog(x) {
+    var f = durField(true), err = h('div', { class: 'muted sm', role: 'alert' }), m, lab = ALERT_CAT[x.cat];
+    m = modal('Ignore all “' + lab + '” alerts', h('div', null,
+      h('p', null, 'This hides every “' + lab + '” alert, for every ' + (x.cat.indexOf('docker.') === 0 ? 'container' : x.cat.indexOf('disk.') === 0 ? 'disk' : 'occurrence') + ', including ones that appear later, not just this one.'),
+      h('p', { class: 'muted sm' }, 'UnDash keeps checking; the alerts come back when you restore them in Settings > Ignored alerts or the time runs out.'),
+      h('label', { class: 'muted sm' }, 'Ignore'), f.el, err),
+      [btn('Cancel', function () { m.close(); }), btn('Ignore all', function () { var v = f.value(); if (v === null) { txt(err, 'Choose between 5 minutes and 366 days.'); return; } m.close(); ignoreAdd('type', x, v); }, 'danger solid')]);
+  }
+  function ignoreAdd(kind, x, dur) {
+    api('ignore_add', { kind: kind, category: x.cat, resource: kind === 'type' ? '' : x.res, duration: dur, title: kind === 'type' ? ALERT_CAT[x.cat] : x.msg, severity: x.lv }).then(function (j) {
+      if (j.error) { toast(j.error, true); return; }
+      var g = j.rule;
+      ignHold({ add: { id: g.id, kind: g.kind, key: g.key, until: g.until } });
+      toast((kind === 'type' ? 'All “' + ALERT_CAT[x.cat] + '” alerts' : 'Alert') + ' ignored ' + durText(dur) + '.', false, ['Undo', function () { ignoreRemove([g.id], 'Alert restored.'); }]);
+    });
+  }
+  function ignHold(c) { c.exp = Date.now() + 8000; (S.ignHold = S.ignHold || []).push(c); if (R.alerts) paintAlerts(S.live || {}); }
+  function ignoreRemove(ids, okMsg) {
+    return api('ignore_remove', { ids: ids }).then(function (j) {
+      if (j.error) { toast(j.error, true); return j; }
+      ignHold({ del: ids });
+      if (okMsg) toast(okMsg);
+      return j;
+    });
   }
 
   /* ---- favorites ---- */
@@ -1061,18 +1155,21 @@
     if (ask) confirmBox(ask[0], ask[1], ask[2], ask[3]).then(function (y) { if (y) run(); }); else run();
   }
 
-  /* ---- media: four poster rows, each refreshed on its own ---- */
+  /* ---- media: four equal columns (4 / 2 / 1 by the section's width), each a compact list refreshed on its own ---- */
   var MEDIA = { upcoming_movies: ['Upcoming movies', 'Nothing scheduled in the coming weeks.'], upcoming_episodes: ['Upcoming episodes', 'No episodes airing soon.'],
                 recent_movies: ['Recently added movies', 'No movies imported recently.'], recent_episodes: ['Recently added episodes', 'No episodes imported recently.'] };
+  var MEDIA_ORDER = ['upcoming_movies', 'upcoming_episodes', 'recent_movies', 'recent_episodes'];
   BUILD.media = function (r) {
     r.grid = h('div', { class: 'media' }); r.w = {};
-    S.L.media.widgets.forEach(function (w) {
-      if (!w.visible || !MEDIA[w.id]) return;
-      var x = { link: h('span'), row: h('div', { class: 'posters', role: 'list', 'aria-label': MEDIA[w.id][0] }, h('div', { class: 'empty' }, 'Loading…')), count: h('span', { class: 'count' }) };
-      x.el = h('div', { class: 'mw card' }, h('div', { class: 'mh' }, h('h3', null, MEDIA[w.id][0]), x.count, h('span', { class: 'grow' }), x.link), x.row);
-      r.w[w.id] = x; r.grid.appendChild(x.el);
+    var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; });
+    MEDIA_ORDER.forEach(function (id) {
+      if (vis[id] === false) return;
+      var x = { link: h('span'), row: h('div', { class: 'mlist', role: 'list', 'aria-label': MEDIA[id][0], tabindex: '0' }, h('div', { class: 'empty' }, 'Loading…')), count: h('span', { class: 'count' }) };
+      x.el = h('div', { class: 'mw card' }, h('div', { class: 'mh' }, h('h3', null, MEDIA[id][0]), x.count, h('span', { class: 'grow' }), x.link), x.row);
+      r.w[id] = x; r.grid.appendChild(x.el);
     });
-    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media widgets are hidden (Settings > Dashboard).'));
+    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Dashboard).'));
+    r.body.classList.add('mbody');
     r.body.appendChild(r.grid);
     clearTimeout(S.mediaTimer); loadMedia(true);
   };
@@ -1088,22 +1185,27 @@
   }
   function paintMedia(k, j) {
     var x = R.media && R.media.w[k]; if (!x) return;
-    var sig = JSON.stringify(j); if (x.sig === sig) return; x.sig = sig;
+    var sig = JSON.stringify([j, S.q]); if (x.sig === sig) return; x.sig = sig;
     clear(x.row); clear(x.link);
     if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name }, j.app.name, ic('web')));
     if (j.error && !(j.items || []).length) { x.row.appendChild(h('div', { class: 'empty ' + (j.unconfigured ? '' : 'err-t') }, j.error)); txt(x.count, ''); return; }
+    var items = (j.items || []).filter(function (it) { return matches(it.title + ' ' + (it.sub || '')); });
     txt(x.count, String(j.items.length));
     if (!j.items.length) { x.row.appendChild(h('div', { class: 'empty' }, MEDIA[k][1])); return; }
+    if (!items.length) { x.row.appendChild(h('div', { class: 'empty' }, 'Nothing here matches the filter.')); return; }
     var upcoming = k.indexOf('upcoming') === 0;
-    j.items.forEach(function (it) {
-      if (!matches(it.title + ' ' + (it.sub || ''))) return;
-      var d = new Date(it.ts * 1000);
-      var when = upcoming ? (it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' }))
-        : rel(it.ts);
-      x.row.appendChild(h('a', { class: 'poster', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: 'noopener', title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.sub ? '\n' + it.sub : '') + '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() },
-        h('span', { class: 'pimg' }, it.poster ? h('img', { src: it.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null,
-          it.done ? h('span', { class: 'pdone', title: 'Already downloaded' }, ic('check')) : null, upcoming && it.when !== 'Airs' ? h('span', { class: 'ptag' }, it.when) : null),
-        h('span', { class: 'pt' }, it.title), h('span', { class: 'ps' }, it.sub ? it.sub : (it.year ? String(it.year) : '')), h('span', { class: 'pd' }, when)));
+    items.forEach(function (it) {
+      var d = it.ts ? new Date(it.ts * 1000) : null;
+      var when = !d ? '' : upcoming ? (it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' })) : rel(it.ts);
+      // only what Radarr / Sonarr reported: no year, episode or quality line when they did not send one
+      var sub = it.sub || (it.year ? String(it.year) : '');
+      var tags = [upcoming && it.when && it.when !== 'Airs' ? h('span', { class: 'badge plain' }, it.when) : null, it.quality ? h('span', { class: 'badge plain' }, it.quality) : null,
+        it.done ? h('span', { class: 'badge ok', title: 'Already downloaded' }, 'Downloaded') : null].filter(Boolean);
+      x.row.appendChild(h(it.href ? 'a' : 'div', { class: 'mi', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: it.href ? 'noopener' : null,
+          title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.sub ? '\n' + it.sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') },
+        h('span', { class: 'mimg' }, it.poster ? h('img', { src: it.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
+        h('span', { class: 'mt' }, h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null,
+          h('span', { class: 'pm' }, when ? h('span', { class: 'pd' }, when) : null, tags))));
     });
   }
 
@@ -1436,7 +1538,7 @@
     var saveB = btn('Save', save, 'pri'); saveB.disabled = true;
     var status = h('span', { class: 'muted sm grow', role: 'status' }, 'Loading…');
     var tabs = h('div', { class: 'dt', role: 'tablist', 'aria-label': 'Settings sections' });
-    [['dashboard', 'Dashboard'], ['system', 'System'], ['appearance', 'Appearance'], ['services', 'Apps'], ['config', 'Configuration']].forEach(function (t) {
+    [['dashboard', 'Dashboard'], ['system', 'System'], ['appearance', 'Appearance'], ['services', 'Apps'], ['ignored', 'Ignored alerts'], ['config', 'Configuration']].forEach(function (t) {
       tabs.appendChild(h('button', { type: 'button', role: 'tab', 'data-t': t[0], onclick: function () { D.tab = t[0]; paintTabs(); render(); } }, t[1]));
     });
     var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
@@ -1478,7 +1580,7 @@
     function render() {
       clear(bodyEl);
       if (!D.cfg) { bodyEl.appendChild(h('div', { class: 'progress' }, h('i'))); return; }
-      ({ dashboard: tabDashboard, system: tabSystem, appearance: tabAppearance, services: tabServices, config: tabConfig })[D.tab](bodyEl, D, dirty);
+      ({ dashboard: tabDashboard, system: tabSystem, appearance: tabAppearance, services: tabServices, ignored: tabIgnored, config: tabConfig })[D.tab](bodyEl, D, dirty);
       bodyEl.scrollTop = 0;
     }
     D.render = render;
@@ -1527,10 +1629,14 @@
       orderList(c.dashboard.metrics, function (m) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: m.visible, onchange: function (e) { m.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MET[m.id][0]), h('span', { class: 'muted sm' }, ' · ' + MET_DESC[m.id]))); }, dirty, redraw)));
     var radarrs = [['', 'First Radarr app']], sonarrs = [['', 'First Sonarr app']];
     c.groups.forEach(function (g) { g.services.forEach(function (x) { if (x.type === 'radarr') radarrs.push([x.id, x.name]); if (x.type === 'sonarr') sonarrs.push([x.id, x.name]); }); });
-    b.appendChild(set('Media', 'Posters and dates from your Radarr and Sonarr apps.',
-      orderList(c.media.widgets, function (w) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: w.visible, onchange: function (e) { w.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MEDIA[w.id][0]), h('span', { class: 'muted sm' }, ' · ' + MEDIA_DESC[w.id]))); }, dirty, redraw),
+    b.appendChild(set('Media', 'Four columns, always in this order, with posters and dates from your Radarr and Sonarr apps. Each column scrolls on its own.',
+      h('div', { class: 'olist' }, c.media.widgets.map(function (w) {
+        return h('div', { class: 'oi' }, h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: w.visible, onchange: function (e) { w.visible = e.target.checked; dirty(); } }),
+          h('span', null, h('b', null, MEDIA[w.id][0]), h('span', { class: 'muted sm' }, ' · ' + MEDIA_DESC[w.id]))),
+          h('label', { class: 'muted sm nowrap' }, 'Items ', tIn(w, 'count', dirty, '15', 'number', { min: 1, max: 50, style: 'width:70px', 'aria-label': 'Items in ' + MEDIA[w.id][0] })));
+      })),
       h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Radarr', sIn(c.media, 'radarr', dirty, radarrs)), F('Sonarr', sIn(c.media, 'sonarr', dirty, sonarrs)),
-        F('Items per row', tIn(c.media, 'count', dirty, '15', 'number', { min: 4, max: 40 })), F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 })))));
+        F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 }), 'How far the two Upcoming columns look ahead.'))));
     b.appendChild(set('Downloads', null, h('div', { class: 'grid2' }, F('Active items shown per client', tIn(c.downloads, 'items', dirty, '4', 'number', { min: 0, max: 20 }), '0 shows the totals only.'))));
     var D2 = c.docker;
     var shows = [['cpu', 'CPU'], ['memory', 'Memory'], ['uptime', 'Uptime'], ['image', 'Image'], ['update', 'Update badge']];
@@ -1606,6 +1712,54 @@
       F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
       F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT (upsc) is tried first, then apcupsd.'),
       F('Web search (Enter in the filter box when nothing matches)', sIn(g, 'search', dirty, [['duckduckgo', 'DuckDuckGo'], ['google', 'Google'], ['bing', 'Bing'], ['startpage', 'Startpage'], ['brave', 'Brave'], ['none', 'Off']])))));
+  }
+
+  /* Ignored alerts: changes apply at once (no Save needed); restoring only removes the rule, the next refresh shows the alert again if it still applies */
+  function tabIgnored(b) {
+    var list = h('div', { class: 'olist ign-list', 'aria-live': 'polite' }), V = { q: '', sev: '', rules: null, now: 0, cats: {} };
+    var q = h('input', { type: 'search', placeholder: 'Filter by title, resource or category', 'aria-label': 'Filter ignored alerts', oninput: function () { V.q = q.value.toLowerCase(); paint(); } });
+    var sev = h('select', { 'aria-label': 'Severity', onchange: function () { V.sev = sev.value; paint(); } }, [['', 'All severities'], ['bad', 'Critical'], ['warn', 'Warning'], ['info', 'Info']].map(function (o) { return h('option', { value: o[0] }, o[1]); }));
+    var purge = btn('Delete expired', function () { act('ignore_purge_expired', {}).then(function (j) { if (!j.error) { toast(j.removed ? j.removed + ' expired rule' + (j.removed > 1 ? 's' : '') + ' deleted.' : 'Nothing had expired.'); load(); } }); }, 'sm', 'trash');
+    var all = btn('Restore all', function () {
+      confirmBox('Restore every ignored alert?', (V.rules.length > 1 ? 'All ' + V.rules.length + ' ignore rules are' : 'The ignore rule is') + ' removed. Alerts whose condition still exists show up again on the next refresh.', 'Restore all', true).then(function (y) {
+        if (y) act('ignore_restore_all', { confirm: 'yes' }).then(function (j) { if (!j.error) { toast('All ignored alerts restored.'); S.ignHold = []; refreshNow(); load(); } });
+      });
+    }, 'sm danger', 'restart');
+    b.appendChild(set('Ignored alerts', 'Ignoring only hides an alert on the dashboard. UnDash keeps checking, and an alert comes back when its rule is restored or runs out while the problem is still there.',
+      h('div', null, h('div', { class: 'ign-bar' }, q, sev, h('span', { class: 'grow' }), purge, all), list)));
+    function when(t) { return new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
+    function row(r) {
+      var expired = r.until !== null && r.until <= V.now;
+      return h('div', { class: 'oi ign' + (expired ? ' expired' : '') },
+        h('span', { class: 'badge ' + (r.severity === 'bad' ? 'bad' : r.severity === 'info' ? 'plain' : 'warn') }, r.severity === 'bad' ? 'critical' : r.severity === 'info' ? 'info' : 'warning'),
+        h('span', { class: 't' }, h('b', null, r.title || V.cats[r.category] || r.category),
+          h('span', { class: 'muted sm' }, [V.cats[r.category] || r.category, r.kind === 'type' ? 'every ' + (r.category.indexOf('docker.') === 0 ? 'container' : r.category.indexOf('disk.') === 0 ? 'disk' : 'occurrence') : r.resource,
+            r.kind === 'type' ? 'scope: alert type' : 'scope: this alert', 'ignored ' + when(r.created),
+            r.until === null ? 'never expires' : (expired ? 'expired ' : 'until ') + when(r.until)].join(' · '))),
+        btn('Restore', function () { ignoreRemove([r.id], 'Alert restored.').then(function (j) { if (!j.error) load(); }); }, 'sm'));
+    }
+    function paint() {
+      clear(list);
+      if (!V.rules) { list.appendChild(h('div', { class: 'progress' }, h('i'))); return; }
+      all.disabled = !V.rules.length;
+      purge.disabled = !V.rules.some(function (r) { return r.until !== null && r.until <= V.now; });
+      if (!V.rules.length) { list.appendChild(h('div', { class: 'empty' }, 'No ignored alerts. Use Ignore on an alert in the Alerts section to hide it for a while or for good.')); return; }
+      var rs = V.rules.filter(function (r) {
+        if (V.sev && r.severity !== V.sev) return false;
+        return !V.q || [r.title, r.resource, r.category, V.cats[r.category] || ''].join(' ').toLowerCase().indexOf(V.q) >= 0;
+      });
+      if (!rs.length) { list.appendChild(h('div', { class: 'empty' }, 'No ignored alerts match the filter.')); return; }
+      [['Temporarily ignored', function (r) { return r.kind === 'instance' && r.until !== null; }], ['Permanently ignored', function (r) { return r.kind === 'instance' && r.until === null; }],
+       ['Ignored alert types', function (r) { return r.kind === 'type'; }]].forEach(function (g) {
+        var items = rs.filter(g[1]);
+        if (!items.length) return;
+        items.sort(function (a, c) { return c.created - a.created; });
+        list.appendChild(h('h4', { class: 'ign-h' }, g[0] + ' (' + items.length + ')'));
+        items.forEach(function (r) { list.appendChild(row(r)); });
+      });
+    }
+    function load() { api('ignores_list').then(function (j) { if (j.error) { clear(list); list.appendChild(h('div', { class: 'empty' }, j.error)); return; } V.rules = j.rules; V.now = j.now; V.cats = j.categories || {}; paint(); }); }
+    paint(); load();
   }
 
   function tabAppearance(b, D, dirty) {
