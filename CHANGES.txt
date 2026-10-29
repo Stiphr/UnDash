@@ -1,3 +1,9 @@
+###2026.11.02d
+- Themes: every theme now has a light and a dark version (AMOLED is pure white in light mode, Fluent Dark becomes Fluent Light), so Light / Dark / System always applies.
+- Wallpaper: brightness 0-100%, and the blur can cover the whole wallpaper or only what is behind the cards (frosted glass, the picture stays sharp). Text on the wallpaper gets a frosted backing so it stays readable.
+- Search box: type a title to find movies and series in Overseerr / Jellyseerr and request them right there (series: all seasons).
+- Docker version: the "no dashboard password" alert is red, highlighted and always first.
+
 ###2026.11.02c
 - Docker version: the first-start page can be skipped ("Continue without a password", no setup code needed); a password is still recommended. Add, change or remove it any time in Settings > Configuration > Dashboard password. While there is none, an alert says so (it can be ignored like any other).
 - Setting or changing the password signs out every other browser, including ones that came in while there was no password.

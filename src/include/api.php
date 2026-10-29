@@ -93,6 +93,12 @@ switch ($action) {
     out($r);
   }
   case 'health': out(und_health(und_load_config(), $P('force') === '1'));
+  case 'seerr_search': out(und_seerr_search(und_load_config(), $P('q')));
+  case 'seerr_request': {
+    $r = und_seerr_request(und_load_config(), $P('app'), $P('type'), $P('id'));
+    if (isset($r['error'])) fail($r['error'], 409);
+    out($r);
+  }
   case 'dl_action': {
     if (!preg_match('/^[a-f0-9]{8}$/', $P('id'))) fail('Invalid client id.');
     $r = und_dl_action(und_load_config(), $P('id'), $P('op'));
