@@ -1,3 +1,8 @@
+###2026.11.01a
+- Themes: Light / Dark / System mode and ten colour themes: Default, AMOLED, Minimal, Zinc Blue, Kanagawa Wave, Kanagawa Dragon, Catppuccin, Nord, Tokyo Night and Fluent Dark (frosted glass with blue accents). Most have light and dark versions. The accent follows the theme unless you pick your own.
+- Smart heights: app cards in a row are the same height, and in the two-column area the shorter column ends level with the taller one (Media shows more items, otherwise the last box stretches).
+- Inter-first font stack and 10 px corners, closer to qui's look. Your current theme and accent are unchanged; the old Light theme is now Default in light mode.
+
 ###2026.11.01
 - Less wasted space: the System tiles and the Apps cards now fill the whole row, app cards are only as tall as their content, and sections sit closer together.
 - Half-width sections that follow each other (e.g. Media, Arr Stack, Downloads) are stacked in two balanced columns, so a short section no longer leaves a gap beside a tall one.
