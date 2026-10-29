@@ -102,3 +102,64 @@ function und_request_action(array $cfg, $app, $id, $op) {
     return ['error' => $s['name'] . ': ' . $m];
   }
 }
+
+/* ---------- search and request from the dashboard's search box ---------- */
+
+/** Movies and series matching $q in the first Seerr app, with whether they are already there or requested. */
+function und_seerr_search(array $cfg, $q) {
+  $q = trim((string)$q);
+  if (mb_strlen($q) < 2 || mb_strlen($q) > 100) return ['items' => [], 'error' => 'Type 2 to 100 characters.'];
+  $src = und_seerr_sources($cfg);
+  if (!$src) return ['items' => [], 'unconfigured' => true];
+  $s = und_service_full($cfg, $src[0]['id']);
+  if (trim($s['url']) === '' || und_has($s['url'], '{{')) return ['items' => [], 'error' => $s['name'] . ' has no API URL yet.'];
+  $link = rtrim($s['href'] ?: $s['url'], '/');
+  try {
+    // Seerr wants %20, not +, in the query
+    $j = und_get(und_u($s['url'], '/api/v1/search?query=' . rawurlencode($q) . '&page=1&language=en'), und_arr_h($s) + ['timeout' => 12]);
+  } catch (Throwable $e) {
+    return ['items' => [], 'error' => $s['name'] . ': ' . und_redact($e->getMessage(), [$s['key']])];
+  }
+  $st = [2 => ['requested', 'Requested'], 3 => ['processing', 'Processing'], 4 => ['partial', 'Partly available'], 5 => ['available', 'Available']];
+  $items = [];
+  foreach ((array)($j['results'] ?? []) as $r) {
+    $type = (string)($r['mediaType'] ?? '');
+    if ($type !== 'movie' && $type !== 'tv') continue;          // people are not requestable
+    $date = (string)($r['releaseDate'] ?? $r['firstAirDate'] ?? '');
+    $ms = (int)($r['mediaInfo']['status'] ?? 1);
+    $items[] = ['id' => (int)$r['id'], 'type' => $type, 'title' => und_clip((string)($r['title'] ?? $r['name'] ?? ''), 150), 'year' => $date !== '' ? (int)substr($date, 0, 4) : 0,
+      'overview' => und_clip((string)($r['overview'] ?? ''), 220),
+      'poster' => !empty($r['posterPath']) && preg_match('#^/[A-Za-z0-9_.-]+$#', $r['posterPath']) ? 'https://image.tmdb.org/t/p/w92' . $r['posterPath'] : '',
+      'status' => $st[$ms][0] ?? 'none', 'status_label' => $st[$ms][1] ?? '',
+      'href' => preg_match('#^https?://#', $link) ? $link . '/' . $type . '/' . (int)$r['id'] : ''];
+    if (count($items) >= 8) break;
+  }
+  return ['items' => $items, 'app' => ['id' => $s['id'], 'name' => $s['name']]];
+}
+
+/** Request a movie, or every season of a series, as the owner of the API key. */
+function und_seerr_request(array $cfg, $app, $type, $tmdb) {
+  if (!in_array($type, ['movie', 'tv'], true) || !ctype_digit((string)$tmdb) || (int)$tmdb < 1) return ['error' => 'Unknown title.'];
+  $s0 = null; foreach (und_seerr_sources($cfg) as $x) if ($x['id'] === $app) $s0 = $x;
+  if (!$s0) return ['error' => 'Unknown request app.'];
+  $s = und_service_full($cfg, $app);
+  $lock = und_lock('seerr-new:' . $app . ':' . $type . ':' . (int)$tmdb);
+  if (!$lock) return ['error' => 'That title is already being requested.'];
+  $body = ['mediaType' => $type, 'mediaId' => (int)$tmdb] + ($type === 'tv' ? ['seasons' => 'all'] : []);
+  try {
+    $r = und_http('POST', und_u($s['url'], '/api/v1/request'), ['headers' => ['X-Api-Key' => $s['key'], 'Content-Type' => 'application/json', 'Accept' => 'application/json'], 'body' => json_encode($body), 'timeout' => 20]);
+    if ($r['err'] !== '') throw new Exception($r['err']);
+    if ($r['code'] === 401 || $r['code'] === 403) throw new Exception('The API key may not request (HTTP ' . $r['code'] . ').');
+    if ($r['code'] === 409) throw new Exception('It is already requested.');
+    if ($r['code'] < 200 || $r['code'] >= 300) throw new Exception('HTTP ' . $r['code'] . (is_array($r['json']) && !empty($r['json']['message']) ? ': ' . und_clip((string)$r['json']['message'], 200) : ''));
+    und_unlock($lock);
+    @unlink(und_tmp('api-requests.json'));
+    und_history_add('request', $s['name'] . ' ' . $type . ' ' . (int)$tmdb, 'request', true);
+    return ['ok' => true];
+  } catch (Throwable $e) {
+    und_unlock($lock);
+    $m = und_redact($e->getMessage(), [$s['key']]);
+    und_history_add('request', $s['name'] . ' ' . $type . ' ' . (int)$tmdb, 'request', false, $m);
+    return ['error' => $s['name'] . ': ' . $m];
+  }
+}
