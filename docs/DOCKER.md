@@ -14,7 +14,7 @@ Everything was checked against the API's own schema for Unraid API 4.37.7 (Unrai
 | CPU (total, per core), memory, swap, CPU temperature, network speed | `metrics { cpu memory temperature network }` | ✓ |
 | Host, kernel, uptime, Unraid version | `info { os cpu versions primaryNetwork }`, `vars { name }` | ✓ |
 | Array state, capacity, every disk with status, temperature, errors; parity check | `array { state parities disks caches parityCheckStatus }` | ✓ |
-| UPS | `upsDevices` | ✓ (needs a UPS configured in Unraid) |
+| UPS | `upsDevices` | ✓ apcupsd only: the Unraid API reads the UPS through `apcaccess`, so a UPS run by NUT shows as not found (the plugin reads NUT directly) |
 | Containers: list, state, health, update available, icon, WebUI | `docker { containers }` | ✓ |
 | Start, stop, restart, pause, resume | `docker { start stop restart pause unpause }` | ✓ |
 | Update a container | `docker { updateContainer }` | ✓ (runs in the background, progress in the dialog) |

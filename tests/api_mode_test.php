@@ -49,7 +49,8 @@ $GLOBALS['ANSWER'] = function ($req) use (&$state) {
   if (strpos($q, 'vms {') !== false) return ['json' => ['data' => ['vms' => ['domains' => [['id' => 'v1', 'name' => 'Win', 'state' => 'RUNNING'], ['id' => 'v2', 'name' => 'Off', 'state' => 'SHUTOFF']]]]]];
   if (strpos($q, 'docker {') !== false) return ['json' => ['data' => ['docker' => ['containers' => [
     ['id' => 'c1', 'names' => ['/plex'], 'image' => 'plexinc/pms', 'state' => $state['plex'], 'status' => 'Up 2 hours (healthy)', 'autoStart' => true, 'iconUrl' => 'https://x/plex.png', 'webUiUrl' => 'http://10.0.0.2:32400/web', 'isUpdateAvailable' => true, 'isRebuildReady' => false, 'ports' => [], 'hostConfig' => ['networkMode' => 'bridge']],
-    ['id' => 'c2', 'names' => ['/old'], 'image' => 'old/img', 'state' => $state['old'], 'status' => 'Exited (1) 3 days ago', 'autoStart' => false, 'iconUrl' => 'javascript:alert(1)', 'webUiUrl' => null, 'isUpdateAvailable' => null, 'isRebuildReady' => null, 'ports' => [], 'hostConfig' => null]]]]]];
+    ['id' => 'c2', 'names' => ['/old'], 'image' => 'old/img', 'state' => $state['old'], 'status' => 'Exited (1) 3 days ago', 'autoStart' => false, 'iconUrl' => 'javascript:alert(1)', 'webUiUrl' => null, 'isUpdateAvailable' => null, 'isRebuildReady' => null, 'ports' => [], 'hostConfig' => null],
+    ['id' => 'c3', 'names' => ['/gluetun'], 'image' => 'qmcgaw/gluetun', 'state' => 'EXITED', 'status' => 'Restarting (1) 45 seconds ago', 'autoStart' => true, 'iconUrl' => '', 'webUiUrl' => null, 'isUpdateAvailable' => false, 'isRebuildReady' => false, 'ports' => [], 'hostConfig' => ['networkMode' => 'bridge']]]]]]];
   return ['json' => ['data' => []]];
 };
 clear_cache();
@@ -94,6 +95,8 @@ putenv('UNDASH_PASSWORD=from-env-password');
 t('UNDASH_PASSWORD takes over', und_auth_kind() === 'env' && und_password_ok('from-env-password') && !und_password_ok('a long password'));
 putenv('UNDASH_PASSWORD');
 t('Unraid sessions and handoff links are ignored in Docker mode', und_unraid_logged_in() === false && und_handoff_use(str_repeat('a', 48)) === false);
+$gl = array_values(array_filter(und_docker_live()['containers'] ?? [], function ($c) { return $c['name'] === 'gluetun'; }));
+t('a restart loop reported as EXITED + "Restarting" is a restart loop', $gl && $gl[0]['state'] === 'restarting', json_encode($gl));
 $ar = und_api_array(['state' => 'STARTED', 'parities' => [['name' => 'parity', 'status' => 'DISK_OK', 'temp' => 38, 'fsSize' => 0, 'numErrors' => 0]],
   'disks' => [['name' => 'disk1', 'status' => 'DISK_OK', 'temp' => 55, 'fsSize' => 100, 'fsFree' => 50, 'numErrors' => 0], ['name' => 'disk2', 'status' => 'DISK_DSBL', 'temp' => null, 'fsSize' => 100, 'fsFree' => 10, 'numErrors' => 3]], 'caches' => []]);
 t('API-mode array names the hot, bad and erroring disks', $ar['hot_disks'] === [['name' => 'disk1', 'temp' => 55]] && $ar['bad_disks'] === ['disk2'] && $ar['error_disks'] === [['name' => 'disk2', 'errors' => 3]] && $ar['bad'] === 1, json_encode($ar));

@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "2026.11.02a">
+<!ENTITY version "2026.11.02b">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###2026.11.02b
+- Docker version: a container stuck in a restart loop is now flagged (the Unraid API reports it as exited with a "Restarting" status). Checked against a real server: Docker mode now reports the same containers, updates, VMs, pools and alerts as the plugin.
+- Docker docs: the UPS tile needs apcupsd in Docker mode; a NUT-only UPS is read by the plugin only.
+
 ###2026.11.02a
 - New sections: Now playing (Plex, Emby, Jellyfin, Tautulli streams with progress, direct play or transcode, quality and bandwidth), Requests (Overseerr / Jellyseerr, approve or decline pending requests) and Endpoint health (status and latency of every app and container web UI, with Re-probe).
 - Alert history: when each problem started and ended, checked once a minute in the background (also when no dashboard is open), kept for 30 days. Alerts > History.
@@ -124,7 +128,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '2026.11.02a');
+define('UND_VERSION', '2026.11.02b');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -293,7 +297,7 @@ foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>a61ade0dacfb99a6f05c79ae72f2752786a81f9c8ab95b1dc5d42dde3a667e15</SHA256>
+<SHA256>eaa070dd638a1edaf64f82cb7954c5aba63f2c68f65245df159a48c10df17398</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -2638,7 +2642,8 @@ function und_api_docker_live() {
     $status = (string)$c['status'];
     $health = preg_match('/\((healthy|unhealthy|health: starting)\)/', $status, $m) ? str_replace('health: ', '', $m[1]) : '';
     $state = strtolower((string)$c['state']);
-    if ($state === 'running' && stripos($status, 'restarting') === 0) $state = 'restarting';
+    // a restart loop shows up as EXITED (or RUNNING) with a "Restarting (1) …" status
+    if (stripos($status, 'restarting') === 0) $state = 'restarting';
     $ports = [];
     foreach ((array)($c['ports'] ?? []) as $p) if (!empty($p['publicPort'])) $ports[$p['privatePort'] . '/' . strtolower((string)$p['type'])] = (int)$p['publicPort'];
     $job = und_job(und_tmp('docker-update-' . $name . '.log'));
@@ -2764,7 +2769,7 @@ function und_api_vm_action($name, $op) {
   return $ok ? ['ok' => true] : ['error' => $err];
 }
 ]]></INLINE>
-<SHA256>748604d5e248d908e87ba718eb8e2d609070e61e179b491cdecfe422e40ec6a5</SHA256>
+<SHA256>84dd8b0896a7d0bc6216fa7aebca2bced6282b13982a282f89d4bdc3f72a611c</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/media.php" Mode="0644">
