@@ -146,7 +146,8 @@ function und_w_bazarr($s) {
 }
 
 function und_w_prowlarr($s) {
-  $st = und_get(und_u($s['url'], '/api/v1/indexerstats'), und_arr_h($s));
+  // Prowlarr works these totals out from its whole 30-day history (10 s and more on a busy instance), so they are kept for 10 minutes
+  $st = und_api_cached('prowlarr-' . md5($s['url'] . $s['key']), 600, function () use ($s) { return und_get(und_u($s['url'], '/api/v1/indexerstats'), und_arr_h($s) + ['timeout' => 30]); });
   $t = ['g' => 0, 'q' => 0, 'fg' => 0, 'fq' => 0];
   foreach ((array)($st['indexers'] ?? []) as $i) { $t['g'] += (int)($i['numberOfGrabs'] ?? 0); $t['q'] += (int)($i['numberOfQueries'] ?? 0); $t['fg'] += (int)($i['numberOfFailedGrabs'] ?? 0); $t['fq'] += (int)($i['numberOfFailedQueries'] ?? 0); }
   return ['blocks' => [und_b('numberOfGrabs', 'Grabs', $t['g']), und_b('numberOfQueries', 'Queries', $t['q']), und_b('numberOfFailGrabs', 'Fail grabs', $t['fg']), und_b('numberOfFailQueries', 'Fail queries', $t['fq'])]];

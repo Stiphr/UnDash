@@ -1,3 +1,10 @@
+###0.6.1
+- Much faster loading in Docker. The page no longer waits for a full server read before it appears, and live refreshes no longer wait for the two slow parts of the Unraid API (network rates and the server's address, about 2 s each on a busy server): a background task keeps them fresh while the dashboard is open.
+- More parallel requests: the container serves 12 at a time (was 4), and the page keeps app and media reads to 4 at a time, so the live refresh and your clicks never queue behind a slow app.
+- Prowlarr's grab and query totals are kept for 10 minutes; Prowlarr needs 10 s and more to work them out on every request.
+- Several browsers asking for the same app at the same moment share one request.
+- Less clutter: the UPS tile hides itself when there is no UPS, Uptime shows since when instead of repeating the Unraid version, VMs drop the empty vCPU and memory columns in the Docker version, requests are one compact line each, and app cards with four numbers show them as two even rows.
+
 ###0.6.0
 - Settings in two files: config.yaml holds everything you set (apps, layout, theme, preferences, ignored alerts, custom CSS) and never a key or password; .env holds the API keys, user names and passwords. Your current settings are converted on first start, with a backup; the old files are kept in data/legacy.
 - Settings > Apps rebuilt: Add app (pick a type, enter the address and key, Test), and edit, hide, reorder or remove any app from one list grouped by where it shows (Arr Stack, Downloads, Media, Apps). Apps still missing an address or key are marked. Keys go to .env on their own; the old Variables list is gone (an optional "Shared values" box remains for values several apps use).

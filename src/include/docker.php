@@ -132,9 +132,6 @@ function und_docker_live($withDetails = true) {
   return ['containers' => $out, 'checking' => $chk['state'] === 'running', 'checked' => is_file(und_path(UND_UPDSTATUS)) ? (int)@filemtime(und_path(UND_UPDSTATUS)) : null];
 }
 
-/** Older callers (summary widget). */
-function und_docker_list() { return und_docker_live(); }
-
 function und_docker_action($name, $op) {
   if (!und_valid_container($name)) return ['error' => 'Invalid container name.'];
   if (und_api_mode()) return und_api_docker_action($name, $op);

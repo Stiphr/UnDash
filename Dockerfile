@@ -34,7 +34,7 @@ RUN chmod 755 /usr/local/bin/entrypoint.sh && find /app -type d -exec chmod 755 
 ENV UNDASH_MODE=api \
     UNDASH_CONFIG=/config \
     UNDASH_PORT=9099 \
-    PHP_CLI_SERVER_WORKERS=4
+    PHP_CLI_SERVER_WORKERS=12
 VOLUME /config
 EXPOSE 9099
 USER 99:100

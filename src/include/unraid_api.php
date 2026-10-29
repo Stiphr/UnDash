@@ -68,9 +68,59 @@ function und_api_cached($name, $ttl, $fn) {
   $f = und_tmp('api-' . $name . '.json');
   $c = und_read_json($f, null);
   if (is_array($c) && microtime(true) - (float)$c['t'] < $ttl) return $c['v'];
+  // one request reads; the others asking at the same moment wait for its answer instead of asking again
+  $lk = @fopen($f . '.lock', 'c');
+  if ($lk) {
+    flock($lk, LOCK_EX);
+    $c = und_read_json($f, null);
+    if (is_array($c) && microtime(true) - (float)$c['t'] < $ttl) { fclose($lk); return $c['v']; }
+  }
   $v = $fn();
   und_write_json($f, ['t' => microtime(true), 'v' => $v]);
+  if ($lk) fclose($lk);
   return $v;
+}
+
+/*
+ * Two parts of the API are slow (about 2 s each on a busy server, whatever fields are asked for): the network interface
+ * list and the primary interface. In Docker, scripts/apipoll.php keeps them fresh in the background while someone has the
+ * dashboard open, so page loads and refreshes never wait for them. Without it (tests, dev server) they are read inline.
+ * name => [refresh every N seconds, oldest copy still shown, query]
+ */
+const UND_API_SLOW = [
+  'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname } versions { core { unraid } } } vars { name } }'],
+  'net'   => [2, 20, 'query { metrics { network { name rxSec txSec } } }'],
+];
+
+function und_api_poller_alive() { clearstatcache(); $b = @filemtime(und_tmp('apipoll.beat')); return $b && time() - $b < 30; }
+
+/** A slow read (UND_API_SLOW): the background copy while the poller runs, else read now. Returns the und_gql result or null. */
+function und_api_slow($name) {
+  list($ttl, $max, $q) = UND_API_SLOW[$name];
+  if (!und_api_poller_alive()) return und_api_cached($name, $ttl, function () use ($q) { return und_gql($q); });
+  @touch(und_tmp('viewer'));
+  $c = und_read_json(und_tmp('api-' . $name . '.json'), null);
+  return is_array($c) && microtime(true) - (float)$c['t'] < $max ? $c['v'] : null;
+}
+
+/** One round of the background poller: refreshes what is due. Errors are not stored, so the last good copy stays. */
+function und_api_poll_due() {
+  foreach (UND_API_SLOW as $name => $x) {
+    $f = und_tmp('api-' . $name . '.json');
+    $c = und_read_json($f, null);
+    if (is_array($c) && microtime(true) - (float)$c['t'] < $x[0]) continue;
+    $r = und_gql($x[2]);
+    if (!isset($r['error'])) und_write_json($f, ['t' => microtime(true), 'v' => $r]);
+  }
+}
+
+/** Name, address and Unraid version for the page title, without waiting for a full system read. */
+function und_api_identity() {
+  $id = und_read_json(und_tmp('api-ident.json'), null);
+  $d = is_array($id) ? ($id['v']['data'] ?? []) : (und_api_cached('name', 600, function () { return und_gql('query { info { os { hostname } versions { core { unraid } } } vars { name } }', [], 5); })['data'] ?? []);
+  $host = (string)parse_url(und_api_conf()['url'], PHP_URL_HOST);
+  return ['name' => (string)($d['vars']['name'] ?? $d['info']['os']['hostname'] ?? '') ?: $host, 'ip' => (string)($d['info']['primaryNetwork']['ipAddress'] ?? '') ?: $host,
+          'os' => (string)($d['info']['versions']['core']['unraid'] ?? '')];
 }
 
 function und_api_bigint($v) { return is_numeric($v) ? (float)$v : 0.0; }
@@ -78,12 +128,11 @@ function und_api_bigint($v) { return is_numeric($v) ? (float)$v : 0.0; }
 /** Overview data in the same shape as the plugin's und_system(). */
 function und_api_system(array $cfg) {
   $q = 'query {
-    info { os { hostname uptime kernel } cpu { brand threads } versions { core { unraid } } primaryNetwork { name ipAddress } }
+    info { os { hostname uptime kernel } versions { core { unraid } } }
     metrics {
       cpu { percentTotal cpus { percentTotal } }
       memory { total used available swapTotal swapUsed percentTotal }
       temperature { sensors { type current { value } } summary { hottest { current { value } } } }
-      network { name rxSec txSec }
     }
     array { state capacity { kilobytes { free used total } } parityCheckStatus { running progress status }
       parities { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
@@ -95,6 +144,7 @@ function und_api_system(array $cfg) {
   if (isset($r['error']) && empty($r['data'])) return ['error' => $r['error'], 'auth' => !empty($r['auth'])];
   $d = $r['data']; $now = time();
   $m = $d['metrics'] ?? []; $info = $d['info'] ?? [];
+  $ident = und_api_slow('ident')['data']['info'] ?? [];
   $mem = $m['memory'] ?? null;
   $total = und_api_bigint($mem['total'] ?? 0); $avail = und_api_bigint($mem['available'] ?? 0);
   $memOut = $mem ? ['total' => $total, 'used' => max(0, $total - $avail), 'free' => $avail, 'pct' => $total ? round(100 * ($total - $avail) / $total, 1) : null,
@@ -103,7 +153,7 @@ function und_api_system(array $cfg) {
   foreach ((array)($m['temperature']['sensors'] ?? []) as $sn) if (($sn['type'] ?? '') === 'CPU_PACKAGE') { $temp = (float)$sn['current']['value']; break; }
   if ($temp === null) foreach ((array)($m['temperature']['sensors'] ?? []) as $sn) if (($sn['type'] ?? '') === 'CPU_CORE') $temp = max((float)$temp, (float)$sn['current']['value']);
   // the main interface: Unraid's primary network, else the first bridge / bond / ethernet
-  $nets = (array)($m['network'] ?? []); $want = (string)($info['primaryNetwork']['name'] ?? ''); $net = null;
+  $nets = (array)(und_api_slow('net')['data']['metrics']['network'] ?? []); $want = (string)($ident['primaryNetwork']['name'] ?? ''); $net = null;
   foreach ($nets as $n) if ($n['name'] === $want) $net = $n;
   if (!$net) foreach (['br0', 'bond0', 'eth0'] as $w) foreach ($nets as $n) if (!$net && $n['name'] === $w) $net = $n;
   $cpu = $m['cpu'] ?? null;
@@ -113,10 +163,10 @@ function und_api_system(array $cfg) {
   if ($cpu && (empty($hist) || $now - (int)end($hist)[0] >= 2)) { $hist[] = [$now, round((float)$cpu['percentTotal'], 1), $memOut['used'], $net ? (float)$net['rxSec'] : null, $net ? (float)$net['txSec'] : null]; $hist = array_slice($hist, -150); und_write_json(und_tmp('hist.json'), $hist); }
   $arr = und_api_array($d['array'] ?? []);
   return [
-    'now' => $now, 'name' => (string)($d['vars']['name'] ?? $info['os']['hostname'] ?? ''), 'ip' => (string)($info['primaryNetwork']['ipAddress'] ?? ''),
+    'now' => $now, 'name' => (string)($d['vars']['name'] ?? $info['os']['hostname'] ?? ''), 'ip' => (string)($ident['primaryNetwork']['ipAddress'] ?? ''),
     'os' => (string)($info['versions']['core']['unraid'] ?? ''), 'kernel' => (string)($info['os']['kernel'] ?? ''),
     'cpu' => ['pct' => $cpu ? round((float)$cpu['percentTotal'], 1) : null, 'cores' => $cpu ? array_map(function ($c) { return round((float)$c['percentTotal'], 1); }, (array)$cpu['cpus']) : [],
-              'model' => (string)($info['cpu']['brand'] ?? ''), 'threads' => (int)($info['cpu']['threads'] ?? 0), 'temp' => $temp, 'load' => null],
+              'model' => (string)($ident['cpu']['brand'] ?? ''), 'threads' => (int)($ident['cpu']['threads'] ?? 0), 'temp' => $temp, 'load' => null],
     'mem' => $memOut, 'net' => ['rx' => $net ? (float)$net['rxSec'] : null, 'tx' => $net ? (float)$net['txSec'] : null, 'iface' => $net ? $net['name'] : ''],
     'disk' => null, 'uptime' => $up, 'array' => $arr, 'hist' => $hist,
     'os_update' => ['installed' => (string)($info['versions']['core']['unraid'] ?? ''), 'latest' => '', 'checked' => 0, 'error' => '', 'available' => false, 'staged' => '', 'job' => 'idle'],
