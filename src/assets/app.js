@@ -406,7 +406,7 @@
   }
   function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
-  var TITLES = { overview: 'System', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
+  var TITLES = { overview: 'System', playing: 'Now playing', requests: 'Requests', health: 'Endpoint health', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
   function buildSection(sec) {
     var tools = h('div', { class: 'tools' });
     var count = h('span', { class: 'count' });
@@ -488,6 +488,7 @@
     if (!document.hidden && S.mediaStale) loadMedia();
     if (!document.hidden && S.arrStale) loadArr();
     if (!document.hidden && S.dlStale) loadDl();
+    if (!document.hidden) Object.keys(POLL).forEach(function (k) { if (POLL[k].stale) pollRun(k); });
   });
 
   function paintAll() {
@@ -521,6 +522,7 @@
     // Arr Stack rows and download clients filter by app name; media lists repaint from what they already loaded
     root.querySelectorAll('.aitem[data-name],.card.dl[data-name]').forEach(function (el) { el.style.display = matches(el.getAttribute('data-name')) ? '' : 'none'; });
     if (R.media) Object.keys(R.media.w).forEach(function (k) { var x = R.media.w[k]; if (x.last) paintMedia(k, x.last); });
+    Object.keys(POLL).forEach(function (k) { if (POLL[k].last && R[k]) POLL[k].paint(POLL[k].last); });
   }
 
   /* ================= sections ================= */
@@ -1378,6 +1380,138 @@
     });
   }
 
+  /* ---- sections that load their own data on a timer (paused while the browser tab is hidden) ---- */
+  var POLL = {};
+  function poller(key, action, every, paint, data) {
+    clearTimeout((POLL[key] || {}).t);
+    POLL[key] = { action: action, every: every, paint: paint, data: data || null, stale: false, t: null };
+    pollRun(key, true);
+  }
+  function pollRun(key, first, extra) {
+    var p = POLL[key]; if (!p || !R[key]) return;
+    clearTimeout(p.t);
+    if ((document.hidden || S.paused) && !first) { p.stale = true; return; }
+    p.stale = false;
+    api(p.action, Object.assign({}, p.data || {}, extra || {}), 30000).then(function (j) {
+      if (POLL[key] !== p) return;                              // the section was rebuilt meanwhile
+      p.last = j; p.paint(j);
+      p.t = setTimeout(function () { pollRun(key); }, p.every);
+    });
+  }
+  function pollKick(key, extra) { if (POLL[key]) pollRun(key, true, extra); }
+
+  /* ---- Now playing ---- */
+  var METHOD = { 'direct play': ['Direct play', 'ok'], 'direct stream': ['Direct stream', 'info'], transcode: ['Transcode', 'warn'] };
+  BUILD.playing = function (r) {
+    r.list = h('div', { class: 'plist', role: 'list' }, h('div', { class: 'empty' }, 'Loading…'));
+    r.sum = h('span', { class: 'muted sm' }); r.tools.appendChild(r.sum);
+    r.body.appendChild(r.list);
+    poller('playing', 'playing', 10000, paintPlaying);
+  };
+  function paintPlaying(j) {
+    var r = R.playing; if (!r) return;
+    var sig = JSON.stringify([j, S.q]); if (r.sig === sig) return; r.sig = sig;
+    clear(r.list); clear(r.sum);
+    if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Plex, Emby, Jellyfin or Tautulli in Settings > Apps to see who is watching.')); txt(r.count, ''); return; }
+    var bw = 0, tc = 0;
+    j.streams.forEach(function (x) { if (x.bandwidth) bw += x.bandwidth; if (x.method === 'transcode') tc++; });
+    txt(r.count, j.streams.length ? String(j.streams.length) : '');
+    if (j.streams.length) r.sum.appendChild(document.createTextNode((tc ? tc + ' transcoding · ' : '') + (bw ? rate(bw / 8) : '')));
+    (j.apps || []).filter(function (a) { return a.error; }).forEach(function (a) { r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error)); });
+    var shown = j.streams.filter(function (x) { return matches(x.title + ' ' + x.sub + ' ' + x.user + ' ' + x.app); });
+    if (!j.streams.length) { r.list.appendChild(h('div', { class: 'empty' }, 'Nothing is playing right now.')); return; }
+    if (!shown.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No stream matches the filter.')); return; }
+    shown.forEach(function (x) {
+      var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
+      r.list.appendChild(h('div', { class: 'pl' + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
+        img(iconUrl(x.icon), 'aico', 'play'),
+        h('div', { class: 'pt' },
+          h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null),
+          h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [x.user, x.device, x.app].filter(Boolean).join(' · '))),
+          h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { class: 'acc', style: { width: p + '%' } })),
+          h('div', { class: 'pl3 xs' }, h('span', { class: 'num muted' }, dur(x.pos) + ' / ' + dur(x.dur)),
+            m ? h('span', { class: 'badge ' + m[1] }, m[0]) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
+            x.bandwidth ? h('span', { class: 'num muted' }, rate(x.bandwidth / 8)) : null, x.location === 'wan' ? h('span', { class: 'badge plain', title: 'Streaming outside your network' }, 'remote') : null))));
+    });
+  }
+
+  /* ---- Requests (Overseerr / Jellyseerr) ---- */
+  BUILD.requests = function (r) {
+    r.list = h('div', { class: 'rqlist', role: 'list' }, h('div', { class: 'empty' }, 'Loading…'));
+    r.link = h('span'); r.tools.appendChild(r.link);
+    r.body.appendChild(r.list);
+    poller('requests', 'requests', 60000, paintRequests);
+  };
+  function paintRequests(j) {
+    var r = R.requests; if (!r) return;
+    var sig = JSON.stringify([j, S.q, S.busy]); if (r.sig === sig) return; r.sig = sig;
+    clear(r.list); clear(r.link);
+    if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Overseerr or Jellyseerr in Settings > Apps to see and approve requests here.')); txt(r.count, ''); return; }
+    txt(r.count, j.pending ? j.pending + ' pending' : '');
+    (j.apps || []).forEach(function (a) {
+      if (a.error) r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error));
+      else if (a.href && j.apps.length === 1) r.link.appendChild(h('a', { class: 'btn sm ghost', href: a.href, target: '_blank', rel: 'noopener', title: 'Open ' + a.name }, h('span', { class: 'lbl' }, a.name), ic('web')));
+    });
+    var items = j.items.filter(function (x) { return matches(x.title + ' ' + x.user); });
+    if (!j.items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No requests yet.')); return; }
+    if (!items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No request matches the filter.')); return; }
+    items.forEach(function (x) {
+      var key = 'rq:' + x.app + ':' + x.id, busy = !!S.busy[key];
+      var title = x.title + (x.year ? ' (' + x.year + ')' : '');
+      var what = (x.type === 'tv' ? 'Series' + (x.seasons.length ? ' · season ' + x.seasons.join(', ') : '') : 'Movie') + (x.is4k ? ' · 4K' : '');
+      r.list.appendChild(h('div', { class: 'rq' + (x.status === 'pending' ? ' pend' : ''), role: 'listitem', 'data-name': x.title },
+        h(x.href ? 'a' : 'span', { class: 'rqp', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title },
+          x.poster ? h('img', { src: x.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
+        h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs ell' }, what),
+          h('span', { class: 'muted xs ell' }, (x.user ? x.user + ' · ' : '') + (x.at ? rel(x.at) : ''))),
+        x.status === 'pending' ? h('div', { class: 'rqa' },
+          btn('Approve', function () { reqAct(x, 'approve'); }, 'sm pri', 'check', 'Approve ' + title),
+          btn('', function () { confirmBox('Decline ' + title + '?', (x.user || 'The requester') + ' asked for it ' + (x.at ? rel(x.at) : '') + '. Declining tells them in ' + x.app_name + ' and cannot be undone here.', 'Decline', true).then(function (y) { if (y) reqAct(x, 'decline'); }); }, 'sm danger', 'x', 'Decline ' + title))
+          : h('span', { class: 'badge ' + x.level }, x.status_label)));
+      if (busy) [].forEach.call(r.list.lastChild.querySelectorAll('button'), function (b) { b.disabled = true; });
+    });
+  }
+  function reqAct(x, op) {
+    var key = 'rq:' + x.app + ':' + x.id; if (S.busy[key]) return;
+    S.busy[key] = op; if (POLL.requests && POLL.requests.last) { R.requests.sig = null; paintRequests(POLL.requests.last); }
+    act('request_action', { app: x.app, id: x.id, op: op }, (op === 'approve' ? 'Approved: ' : 'Declined: ') + x.title).then(function () { delete S.busy[key]; pollKick('requests'); });
+  }
+
+  /* ---- Endpoint health ---- */
+  BUILD.health = function (r) {
+    r.sum = h('span', { class: 'muted sm' });
+    r.tools.appendChild(r.sum);
+    r.tools.appendChild(btn('Re-probe', function () { txt(r.sum, 'Probing…'); pollKick('health', { force: '1' }); }, 'ghost sm', 'restart', 'Probe every endpoint again now'));
+    r.table = h('div', { class: 'panel htab', role: 'table', 'aria-label': 'Endpoint health' },
+      h('div', { class: 'hrow hh', role: 'row' }, h('span', { role: 'columnheader' }, 'Service'), h('span', { role: 'columnheader' }, 'Address'), h('span', { role: 'columnheader' }, 'Response'), h('span', { role: 'columnheader', class: 'r' }, 'Latency')),
+      r.rows = h('div', { role: 'rowgroup' }, h('div', { class: 'empty' }, 'Probing…')));
+    r.body.appendChild(r.table);
+    poller('health', 'health', 60000, paintHealth);
+  };
+  function paintHealth(j) {
+    var r = R.health; if (!r) return;
+    if (j.error) { clear(r.rows).appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    var bad = j.total - j.up;
+    clear(r.sum);
+    r.sum.appendChild(h('span', { class: bad ? 'bad-t' : 'ok-t' }, j.up + '/' + j.total + ' reachable'));
+    r.sum.appendChild(document.createTextNode(' · checked ' + rel(j.at)));
+    txt(r.count, j.total ? String(j.total) : '');
+    var sig = JSON.stringify([j.rows, S.q]); if (r.sig === sig) return; r.sig = sig;
+    clear(r.rows);
+    if (!j.rows.length) { r.rows.appendChild(h('div', { class: 'empty' }, 'Nothing to probe yet: add links to your apps (Settings > Apps) or give containers a web UI.')); return; }
+    j.rows.filter(function (x) { return matches(x.name + ' ' + x.hostport); }).forEach(function (x) {
+      r.rows.appendChild(h('div', { class: 'hrow ' + x.level, role: 'row', 'data-name': x.name },
+        h('span', { class: 'hn', role: 'cell' }, h('span', { class: 'sdot ' + x.level, role: 'img', 'aria-label': x.level }), img(iconUrl(x.icon), 'aico', x.kind === 'container' ? 'box' : 'tag'),
+          h('b', { class: 'ell' }, x.name), h('span', { class: 'muted xs ell' }, x.kind === 'container' ? 'container' : x.group)),
+        h('span', { role: 'cell', class: 'ell' }, h('a', { href: x.url, target: '_blank', rel: 'noopener', class: 'num' }, x.hostport)),
+        h('span', { role: 'cell' }, h('span', { class: 'badge ' + x.level }, x.text)),
+        h('span', { role: 'cell', class: 'r num' }, x.ms === null ? '–' : x.ms + ' ms')));
+    });
+    if (!r.rows.childNodes.length) r.rows.appendChild(h('div', { class: 'empty' }, 'No endpoint matches the filter.'));
+  }
+
   /* ---- Arr Stack: one compact row per app, details on demand ---- */
   function zoneApps(zone) { var out = []; S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (s.zone === zone && !s.hidden) out.push(s); }); }); return out; }
   BUILD.arr = function (r) {
@@ -1697,7 +1831,7 @@
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
-  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
+  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', playing: 'Active Plex, Emby, Jellyfin and Tautulli streams', requests: 'Overseerr / Jellyseerr requests, approve or decline', health: 'Every app and container web UI: status and latency', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
     docker: 'Every container, found automatically', vms: 'Every VM, found automatically', apps: 'Plex, Immich, AdGuard, links and other apps' };
   var MET_DESC = { cpu: 'Usage and temperature', memory: 'RAM used and available', storage: 'Array (or pools) capacity', network: 'Download and upload speed', health: 'Array state, disk problems, parity checks',
