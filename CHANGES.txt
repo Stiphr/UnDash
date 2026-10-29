@@ -1,3 +1,7 @@
+###2026.11.01b
+- Containers and VMs: one gear button per item holds every action (open web UI or console, start / stop, restart, pause, update, logs, details, favorites, customize). Click the icon or the name to open the web UI (VNC console for VMs); the separate open buttons are gone.
+- More room in the container grid and the VM list: bigger icons, taller rows, wider gaps.
+
 ###2026.11.01a
 - Themes: Light / Dark / System mode and ten colour themes: Default, AMOLED, Minimal, Zinc Blue, Kanagawa Wave, Kanagawa Dragon, Catppuccin, Nord, Tokyo Night and Fluent Dark (frosted glass with blue accents). Most have light and dark versions. The accent follows the theme unless you pick your own.
 - Smart heights: app cards in a row are the same height, and in the two-column area the shorter column ends level with the taller one (Media shows more items, otherwise the last box stretches).
