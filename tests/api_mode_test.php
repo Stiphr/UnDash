@@ -101,6 +101,8 @@ $ar = und_api_array(['state' => 'STARTED', 'parities' => [['name' => 'parity', '
   'disks' => [['name' => 'disk1', 'status' => 'DISK_OK', 'temp' => 55, 'fsSize' => 100, 'fsFree' => 50, 'numErrors' => 0], ['name' => 'disk2', 'status' => 'DISK_DSBL', 'temp' => null, 'fsSize' => 100, 'fsFree' => 10, 'numErrors' => 3]], 'caches' => []]);
 t('API-mode array names the hot, bad and erroring disks', $ar['hot_disks'] === [['name' => 'disk1', 'temp' => 55]] && $ar['bad_disks'] === ['disk2'] && $ar['error_disks'] === [['name' => 'disk2', 'errors' => 3]] && $ar['bad'] === 1, json_encode($ar));
 t('ignore rules are stored in /config in Docker mode', !empty(und_ignore_add('type', 'os.available', '', 'permanent')['ok']) && is_file(UND_DIR . '/ignores.json'));
+$id = und_server_identity();
+t('in Docker mode the title shows the server (here: the API host, as the system read is not answered), never the container', $id['name'] === 'tower.local' && $id['ip'] === 'tower.local' && $id['name'] !== gethostname(), json_encode($id));
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

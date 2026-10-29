@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Builds undash.plg from src/ (every file is inlined, as Unraid plugins require, so installing needs no extra downloads).
-Usage: python3 build.py [VERSION]      default version = today's date, e.g. 2026.10.29 (add a letter for a second release that day: 2026.10.29a)
+Usage: python3 build.py VERSION      x.y.z, e.g. 0.5.1 (the release tag is vX.Y.Z)
 """
 import sys, pathlib, datetime, hashlib, base64, textwrap
 
