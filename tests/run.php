@@ -511,6 +511,10 @@ t('the check is cached (one request)', count($GLOBALS['SEEN']) === 1);
 unset($GLOBALS['UND_HTTP_MOCK']);
 @unlink(und_tmp('self-update.json'));
 
+// the built plugin must be well-formed XML, or Unraid cannot install it (not present inside the Docker build)
+$plg = dirname(__DIR__) . '/undash.plg';
+if (is_file($plg)) { libxml_use_internal_errors(true); $x = simplexml_load_file($plg); t('undash.plg is well-formed XML with a version', $x !== false && (string)$x['version'] !== '', implode('; ', array_map(function ($e) { return trim($e->message) . ' line ' . $e->line; }, libxml_get_errors()))); }
+
 /* ---------------- Homepage import still works ---------------- */
 group('homepage');
 $yaml = "- Arr:\n    - Radarr:\n        icon: radarr.png\n        href: http://{{HOMEPAGE_VAR_IP}}:7878\n        widget:\n          type: radarr\n          url: http://{{HOMEPAGE_VAR_IP}}:7878\n          key: {{HOMEPAGE_VAR_RADARR_KEY}}\n          fields: [\"wanted\", \"queued\"]\n- System:\n    - CPU:\n        widget:\n          type: glances\n          metric: cpu\n";
