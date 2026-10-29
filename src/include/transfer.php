@@ -20,7 +20,7 @@ function und_export($kind) {
   foreach ($out['config']['groups'] as &$g) foreach ($g['services'] as &$s) {
     $s['url'] = und_redact_url($s['url']); $s['href'] = und_redact_url($s['href']);
     // custom API headers may hold a key written in clear text
-    if (isset($s['options']['headers']) && is_array($s['options']['headers'])) foreach ($s['options']['headers'] as $hk => $hv) {
+    if (is_array($s['options']) && isset($s['options']['headers']) && is_array($s['options']['headers'])) foreach ($s['options']['headers'] as $hk => $hv) {
       if (!preg_match('/^\{\{\s*[A-Za-z0-9_]+\s*\}\}$/', (string)$hv)) $s['options']['headers'][$hk] = '{{REDACTED}}';
     }
   }
@@ -50,17 +50,18 @@ function und_import_parse($raw) {
     if ((int)$j['undash_export'] !== 1) return ['error' => 'This export comes from a newer UnDash; update the plugin first.'];
     if ((int)($j['schema'] ?? 0) > UND_SCHEMA) return ['error' => 'This export uses settings schema ' . (int)$j['schema'] . '; this UnDash understands up to ' . UND_SCHEMA . '. Update the plugin first.'];
     if (!isset($j['config']) || !is_array($j['config']) || !isset($j['config']['groups']) || !is_array($j['config']['groups'])) return ['error' => 'The export has no layout in it.'];
-    $file = ['kind' => $j['kind'] === 'full' ? 'full' : 'redacted', 'config' => $j['config'], 'css' => is_string($j['css'] ?? null) ? $j['css'] : null,
+    $file = ['kind' => ($j['kind'] ?? '') === 'full' ? 'full' : 'redacted', 'config' => $j['config'], 'css' => is_string($j['css'] ?? null) ? $j['css'] : null,
              'vars' => isset($j['vars']) && is_array($j['vars']) ? $j['vars'] : [], 'secrets' => isset($j['secrets']) && is_array($j['secrets']) ? $j['secrets'] : [], 'created' => (int)($j['created'] ?? 0)];
   } elseif (isset($j['groups']) && is_array($j['groups'])) {
     $file = ['kind' => 'layout', 'config' => $j, 'css' => null, 'vars' => [], 'secrets' => [], 'created' => 0];
   } else return ['error' => 'This is not an UnDash settings file.'];
   foreach ($file['vars'] as $k => $v) if (!is_string($k) || !preg_match('/^[A-Za-z][A-Za-z0-9_]{0,63}$/', $k) || !is_scalar($v)) return ['error' => 'The variables in the file are malformed.'];
   foreach ($file['secrets'] as $id => $c) if (!preg_match('/^[a-f0-9]{8}$/', (string)$id) || !is_array($c)) return ['error' => 'The credentials in the file are malformed.'];
+  $rawGroups = $file['config']['groups'];
   $cfg = und_normalize(und_migrate($file['config']));
   $file['config'] = $cfg;
   $n = 0; foreach ($cfg['groups'] as $g) $n += count($g['services']);
-  $dropped = 0; foreach ($j['config']['groups'] as $g) $dropped += is_array($g) ? count((array)($g['services'] ?? [])) : 0;
+  $dropped = 0; foreach ($rawGroups as $g) $dropped += is_array($g) ? count((array)($g['services'] ?? [])) : 0;
   $file['summary'] = ['kind' => $file['kind'], 'created' => $file['created'], 'groups' => count($cfg['groups']), 'widgets' => $n, 'skipped' => max(0, $dropped - $n),
     'theme' => $cfg['appearance']['theme'], 'accent' => $cfg['appearance']['accent'], 'refresh' => $cfg['general']['refresh'], 'css' => $file['css'] !== null ? strlen($file['css']) : null,
     'vars' => count($file['vars']), 'credentials' => count($file['secrets'])];

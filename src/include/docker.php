@@ -70,12 +70,11 @@ function und_docker_details(array $ps, $force = false) {
   return $d;
 }
 
-/** CPU % (of the whole machine) and memory from cgroup v2, measured against the previous call. */
+/** CPU % (100% = one core, like `docker stats` and Unraid's Docker tab) and memory from cgroup v2, measured against the previous call. */
 function und_docker_cgroup(array $ps) {
   $f = und_tmp('cg.json');
   $prev = und_read_json($f, []);
   $now = microtime(true); $cur = []; $out = [];
-  $threads = und_cpu_threads();
   foreach ($ps as $c) {
     if ($c['state'] !== 'running') continue;
     $base = null;
@@ -86,7 +85,7 @@ function und_docker_cgroup(array $ps) {
     $inactive = preg_match('/^inactive_file (\d+)/m', und_read("$base/memory.stat"), $m) ? (float)$m[1] : 0;
     $cur[$c['id']] = $usage;
     $cpu = null;
-    if ($usage !== null && isset($prev['u'][$c['id']]) && $now > ($prev['t'] ?? 0)) $cpu = max(0, round(($usage - $prev['u'][$c['id']]) / (($now - $prev['t']) * 1e6) / $threads * 100, 1));
+    if ($usage !== null && isset($prev['u'][$c['id']]) && $now > ($prev['t'] ?? 0)) $cpu = max(0, round(($usage - $prev['u'][$c['id']]) / (($now - $prev['t']) * 1e6) * 100, 1));
     $out[$c['name']] = ['cpu' => $cpu, 'mem' => max(0, $mem - $inactive)];
   }
   // several browsers polling at once must not shrink the window to nothing: keep the older sample if it is very recent

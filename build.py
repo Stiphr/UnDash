@@ -11,8 +11,9 @@ version = args[0] if args else datetime.date.today().strftime('%Y.%m.%d')
 files = [
     ('UnDash.page', '0644'), ('UnDashMain.page', '0644'),
     ('include/lib.php', '0644'), ('include/config.php', '0644'), ('include/system.php', '0644'), ('include/docker.php', '0644'),
-    ('include/vm.php', '0644'), ('include/services.php', '0644'), ('include/import.php', '0644'), ('include/api.php', '0644'),
-    ('scripts/oscheck.php', '0755'), ('assets/app.css', '0644'), ('assets/app.js', '0644'),
+    ('include/vm.php', '0644'), ('include/services.php', '0644'), ('include/import.php', '0644'), ('include/transfer.php', '0644'),
+    ('include/ops.php', '0644'), ('include/auth.php', '0644'), ('include/api.php', '0644'), ('handoff.php', '0644'), ('standalone/router.php', '0644'),
+    ('scripts/oscheck.php', '0755'), ('scripts/rc.undash', '0755'), ('assets/app.css', '0644'), ('assets/app.js', '0644'),
 ]
 changes = (root / 'CHANGES.txt').read_text().strip()
 
@@ -61,13 +62,18 @@ rm -f /tmp/undash-icon.png
 out.append("""<FILE Run="/bin/bash">
 <INLINE>
 mkdir -p &flash;
-chmod 755 &emhttp;/scripts/oscheck.php
+chmod 755 &emhttp;/scripts/oscheck.php &emhttp;/scripts/rc.undash
 chmod 600 &flash;/secrets.json 2>/dev/null
-rm -rf /tmp/undash
+# first install: the documented defaults (configuration in appdata, standalone port 9099); an existing file is never changed
+[ -f &flash;/undash.cfg ] || printf 'CONFIG_DIR="/mnt/user/appdata/undash"\nPORT="9099"\nBIND="0.0.0.0"\nSTANDALONE="yes"\n' > &flash;/undash.cfg
+# keep sessions and history across a plugin update, drop caches
+rm -f /tmp/undash/inspect.json /tmp/undash/vminfo.json /tmp/undash/rates.json /tmp/undash/cg.json
+&emhttp;/scripts/rc.undash restart
 echo ""
 echo "----------------------------------------------------"
 echo " UnDash &version; installed"
-echo " Open it from the UnDash tab in Unraid's top menu"
+echo " Open it from the UnDash tab in Unraid's top menu,"
+echo " or on its own port (default 9099) when signed in to Unraid"
 echo "----------------------------------------------------"
 echo ""
 </INLINE>
@@ -75,8 +81,10 @@ echo ""
 
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
+if [ -x &emhttp;/scripts/rc.undash ]; then &emhttp;/scripts/rc.undash stop; fi
 rm -rf &emhttp; /tmp/undash
-echo "UnDash removed. Your layout and secrets were kept in &flash; (delete that folder to remove them too)."
+echo "UnDash removed. Your settings were kept in &flash; and in the configuration directory (default /mnt/user/appdata/undash)."
+
 </INLINE>
 </FILE>
 
