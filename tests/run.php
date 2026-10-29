@@ -29,7 +29,7 @@ function reset_store() { global $SANDBOX; rmrf(UND_DIR); rmrf("$SANDBOX/fs/mnt/u
 group('config');
 reset_store();
 $c = und_load_config();
-t('defaults have schema 4', $c['schema'] === 4);
+t('defaults have schema 5', $c['schema'] === 5);
 t('containers show the running ones in a grid by default', $c['docker']['filter'] === 'running' && $c['docker']['layout'] === 'grid');
 t('shortcut links are off by default', $c['apps']['links'] === false);
 t('default refresh is 2 s', $c['general']['refresh'] === 2);
@@ -63,7 +63,7 @@ t('v1 title kept', $m['general']['title'] === 'R1ZE');
 t('v1 midnight becomes default theme', $m['appearance']['theme'] === 'default');
 t('v1 wallpaper moved to appearance', $m['appearance']['background'] === '/bg.jpg');
 t('v1 Glances-style group removed, others kept', count($m['groups']) === 1 && $m['groups'][0]['name'] === 'Arr' && $m['groups'][0]['services'][0]['id'] === 'eeeeeeee');
-t('migration result is schema 4', $m['schema'] === 4);
+t('migration result is schema 5', $m['schema'] === 5);
 $v3 = ['schema' => 3, 'groups' => [], 'docker' => ['layout' => 'list', 'selected' => ['plex', '../bad', 'radarr']], 'dashboard' => ['sections' => [['id' => 'overview'], ['id' => 'arr'], ['id' => 'downloads'], ['id' => 'docker'], ['id' => 'vms'], ['id' => 'apps', 'collapsed' => true]]]];
 $m4 = und_normalize(und_migrate($v3));
 $ids4 = array_column($m4['dashboard']['sections'], 'id');
@@ -99,10 +99,14 @@ t('existing flash settings are copied into it', is_file("$dir/config.json") && i
 file_put_contents("$dir/config.json", json_encode(['groups' => [], 'general' => ['title' => 'appdata copy']]));
 und_migrate_into($dir);
 t('migration never overwrites an existing file', json_decode(file_get_contents("$dir/config.json"), true)['general']['title'] === 'appdata copy');
-$cfg = und_load_config(); $cfg['general']['title'] = 'Saved';
+$cfg = und_load_config();
+t('the old files become config.yaml and .env on first use', $cfg['general']['title'] === 'appdata copy' && is_file("$dir/config.yaml") && is_file("$dir/.env") && !is_file("$dir/config.json") && is_file("$dir/data/legacy/config.json"));
+t('.env is private', (fileperms("$dir/.env") & 0777) === 0600);
+t('variables nothing refers to are dropped', !isset(und_env()['A']));
+$cfg['general']['title'] = 'Saved';
 t('save works', und_save_config($cfg));
-t('save writes the configuration directory', json_decode(file_get_contents("$dir/config.json"), true)['general']['title'] === 'Saved');
-t('save mirrors to the flash drive', json_decode(file_get_contents(UND_DIR . '/config.json'), true)['general']['title'] === 'Saved');
+t('save writes config.yaml in the configuration directory', strpos(file_get_contents("$dir/config.yaml"), 'title: Saved') !== false);
+t('save mirrors to the flash drive', strpos(file_get_contents(UND_DIR . '/config.yaml'), 'title: Saved') !== false);
 t('a backup was taken before saving', count(und_backups()) >= 1);
 t('invalid configuration directory refused', isset(und_save_loc(['CONFIG_DIR' => '/etc/undash'])['error']) && isset(und_save_loc(['CONFIG_DIR' => '/mnt/user/../../etc'])['error']));
 t('invalid port refused', isset(und_save_loc(['PORT' => '80'])['error']) && isset(und_save_loc(['PORT' => '70000'])['error']));
@@ -117,7 +121,7 @@ $cfg['general']['title'] = 'After';
 und_save_config($cfg);
 $b = und_backups();
 t('backups are listed newest first', count($b) >= 2 && $b[0]['created'] >= $b[count($b) - 1]['created']);
-$target = null; foreach (und_backups() as $x) { $j = und_read_json(und_backup_dir() . '/' . $x['id'] . '.json', []); if (($j['config']['general']['title'] ?? '') === 'Before') { $target = $x['id']; break; } }
+$target = null; foreach (und_backups() as $x) { $j = und_read_json(und_backup_dir() . '/' . $x['id'] . '.json', []); if (strpos((string)($j['yaml'] ?? ''), 'title: Before') !== false) { $target = $x['id']; break; } }
 t('the backup holding the earlier state exists', $target !== null);
 t('restore works', isset(und_restore($target)['ok']) && und_load_config()['general']['title'] === 'Before');
 t('restore refuses odd ids', isset(und_restore('../../etc/passwd')['error']));
@@ -141,23 +145,119 @@ t('css reset', und_load_css() === '');
 
 /* ---------------- secrets ---------------- */
 group('secrets');
-$view = und_secrets_view(['vars' => ['SERVER_IP' => '10.0.0.2', 'RADARR_API_KEY' => 'abc123secret'], 'svc' => ['aaaaaaaa' => ['key' => 'k-secret-value', 'username' => 'bob', 'password' => '{{PW}}']]]);
-$vj = json_encode($view);
-t('secret variables never reach the browser', strpos($vj, 'abc123secret') === false);
-t('stored API keys never reach the browser', strpos($vj, 'k-secret-value') === false);
-t('plain variables are shown', strpos($vj, '10.0.0.2') !== false);
-t('variable references are shown', strpos($vj, '{{PW}}') !== false);
-$merged = und_secrets_merge(['vars' => ['RADARR_API_KEY' => 'abc123secret'], 'svc' => ['aaaaaaaa' => ['key' => 'old']]], [['name' => 'RADARR_API_KEY', 'value' => UND_KEEP]], ['aaaaaaaa' => ['key' => UND_KEEP], 'zzzzzzzz' => ['key' => 'x']], ['aaaaaaaa']);
-t('KEEP keeps stored values', $merged['vars']['RADARR_API_KEY'] === 'abc123secret' && $merged['svc']['aaaaaaaa']['key'] === 'old');
-t('credentials of removed widgets are dropped', !isset($merged['svc']['zzzzzzzz']));
-und_save_secrets(['vars' => ['SERVER_IP' => '10.0.0.2', 'RADARR_API_KEY' => 'abc123secret'], 'svc' => []]);
+reset_store();
+$cfg = und_default_config();
+$cfg['groups'][] = ['id' => 'abcdef01', 'name' => 'Apps', 'services' => [
+  ['id' => 'aaaaaaaa', 'name' => 'Radarr', 'type' => 'radarr', 'url' => 'http://{{SERVER_IP}}:7878', 'href' => '', 'fields' => [], 'options' => []],
+  ['id' => 'bbbbbbbb', 'name' => 'qBittorrent Private', 'type' => 'qbittorrent', 'url' => 'http://{{SERVER_IP}}:8080', 'href' => '', 'fields' => [], 'options' => []]]];
+und_save_config($cfg);
+und_save_secrets(['vars' => ['SERVER_IP' => '10.0.0.2']]);
+$old = und_load_config(); $env = und_env();
+$new = und_creds_apply($old, $old, ['aaaaaaaa' => ['key' => 'k-secret-value'], 'bbbbbbbb' => ['username' => 'bob', 'password' => 'pw-secret']], $env);
+t('a new key goes to .env under a readable name, config.yaml only refers to it', $new['groups'][1]['services'][0]['key'] === '{{RADARR_API_KEY}}' && $env['RADARR_API_KEY'] === 'k-secret-value');
+t('names follow the app name', $new['groups'][1]['services'][1]['password'] === '{{QBITTORRENT_PRIVATE_PASSWORD}}' && $env['QBITTORRENT_PRIVATE_USERNAME'] === 'bob');
+und_save_config($new); und_env_write($env);
+$yaml = file_get_contents(und_file('config.yaml'));
+t('config.yaml never holds a credential', strpos($yaml, 'k-secret-value') === false && strpos($yaml, 'pw-secret') === false && strpos($yaml, 'bob') === false);
+t('the app reads its key through the reference', und_service_full(und_load_config(), 'aaaaaaaa')['key'] === 'k-secret-value' && und_service_full(und_load_config(), 'aaaaaaaa')['url'] === 'http://10.0.0.2:7878');
+$view = json_encode(und_creds_view(und_load_config()));
+t('Settings sees that a key is stored, never the key', strpos($view, 'k-secret-value') === false && strpos($view, 'pw-secret') === false && strpos($view, UND_KEEP) !== false && strpos($view, '"bob"') !== false);
+$env = und_env(); $cur = und_load_config();
+$kept = und_creds_apply($cur, $cur, ['aaaaaaaa' => ['key' => UND_KEEP]], $env);
+t('KEEP keeps a stored key', $kept['groups'][1]['services'][0]['key'] === '{{RADARR_API_KEY}}' && $env['RADARR_API_KEY'] === 'k-secret-value');
+$env = und_env(); $cur = und_load_config(); $gone = $cur; array_pop($gone['groups'][1]['services']);
+und_creds_apply($gone, $cur, [], $env);
+t('removing an app drops its credentials from .env', !isset($env['QBITTORRENT_PRIVATE_PASSWORD']) && !isset($env['QBITTORRENT_PRIVATE_USERNAME']) && isset($env['RADARR_API_KEY']) && isset($env['SERVER_IP']));
+$env = und_env(); $cur = und_load_config();
+$cl = und_creds_apply($cur, $cur, ['aaaaaaaa' => ['key' => '']], $env);
+t('clearing a key removes it', $cl['groups'][1]['services'][0]['key'] === '' && !isset($env['RADARR_API_KEY']));
+$hand = und_normalize(['groups' => [['name' => 'G', 'services' => [['type' => 'radarr', 'name' => 'R', 'key' => 'typed-in-clear']]]]]);
+t('a key typed into config.yaml by hand is not kept there', $hand['groups'][0]['services'][0]['key'] === '');
+$sh = json_encode(und_shared_view(und_load_config()));
+t('shared values are listed, app credentials are not', strpos($sh, 'SERVER_IP') !== false && strpos($sh, 'RADARR_API_KEY') === false);
+$env2 = und_shared_apply(und_env(), und_load_config(), und_load_config(), [['name' => 'server_ip', 'value' => '10.0.0.9'], ['name' => 'COMMON_TOKEN', 'value' => 'tok']]);
+t('shared values can be changed and added; credentials stay', $env2['SERVER_IP'] === '10.0.0.9' && $env2['COMMON_TOKEN'] === 'tok' && $env2['RADARR_API_KEY'] === 'k-secret-value');
+// a whole Save: an app added with its key, the shared values sent along (the order api.php uses)
+$old = und_load_config(); $env = und_env(); $form = $old;
+$form['groups'][1]['services'][] = ['id' => 'cccccccc', 'name' => 'qui', 'type' => 'qui', 'url' => 'http://q:7476', 'href' => '', 'fields' => [], 'options' => []];
+$norm = und_creds_apply(und_normalize($form), $old, ['cccccccc' => ['key' => 'new-qui-key']], $env);
+$env = und_shared_apply($env, $old, $norm, json_decode(json_encode(und_shared_view($old)), true));
+t('saving a new app with shared values keeps its new key', ($env['QUI_API_KEY'] ?? '') === 'new-qui-key' && $norm['groups'][1]['services'][2]['key'] === '{{QUI_API_KEY}}' && $env['SERVER_IP'] === '10.0.0.2');
 $lv = und_layout_view(['groups' => [['services' => [['href' => 'http://x/?t={{RADARR_API_KEY}}'], ['href' => 'javascript:alert(1)'], ['href' => 'http://{{SERVER_IP}}:1']]]]]);
 $hs = array_column($lv['groups'][0]['services'], 'href_resolved');
 t('a link carrying a secret variable is not resolved for the browser', $hs[0] === '');
 t('javascript: links are dropped', $hs[1] === '');
 t('plain variables in links are resolved', $hs[2] === 'http://10.0.0.2:1');
+$cy = ['general' => ['title' => "a: b # c"], 'list' => ['x', '12', 12, true, 'true', null, '', "two\nlines"], 'empty' => [], 'obj' => new stdClass(), 'quote' => 'say "hi" \\ there', 'unicode' => 'Café ✓', 'n' => -3.5];
+$back = und_yaml_read(und_yaml_emit($cy));
+t('YAML written by UnDash reads back exactly', $back['general']['title'] === "a: b # c" && $back['list'] === ['x', '12', 12, true, 'true', null, '', "two\nlines"] && $back['empty'] === [] && $back['obj'] === []
+  && $back['quote'] === 'say "hi" \\ there' && $back['unicode'] === 'Café ✓' && $back['n'] === -3.5, json_encode($back));
+$hy = und_yaml_read("a: { x: 1, 'y z': \"q, r\", n: { m: [1, 2, {k: v}] } }\nb: [ {id: cpu, visible: false}, x ]\nc: {{NAME}}\nd: {}\ne: [\"a, b\", c]\nf: { broken: [1, 2 }\n");
+t('hand-written flow maps and lists read like block ones', $hy['a'] === ['x' => 1, 'y z' => 'q, r', 'n' => ['m' => [1, 2, ['k' => 'v']]]] && $hy['b'] === [['id' => 'cpu', 'visible' => false], 'x']
+  && $hy['c'] === '{{NAME}}' && $hy['d'] === [] && $hy['e'] === ['a, b', 'c'] && is_string($hy['f']), json_encode($hy));
+$tpl = und_yaml_read(file_get_contents(dirname(__DIR__) . '/examples/config.yaml'));
+$tcfg = und_normalize(und_migrate(['schema' => $tpl['version']] + $tpl));
+$rt = und_normalize(und_migrate(['schema' => 5] + und_yaml_read(und_yaml_emit(json_decode(json_encode($tcfg), true)))));
+t('a full real-world config survives YAML unchanged', json_encode($rt) === json_encode($tcfg));
+$ev = und_env_read(und_env_text(['A' => 'plain', 'B' => 'with space', 'C' => 'quote"and\\back', 'D' => '', 'E' => "multi\nline"]));
+t('.env written by UnDash reads back exactly', $ev === ['A' => 'plain', 'B' => 'with space', 'C' => 'quote"and\\back', 'D' => '', 'E' => "multi\nline"], json_encode($ev));
 
 /* ---------------- export / import ---------------- */
+group('migration');
+reset_store();
+$dir = und_store_dir();
+@mkdir($dir, 0777, true);
+file_put_contents("$dir/config.json", json_encode(['schema' => 4, 'general' => ['title' => 'Old'], 'groups' => [['name' => 'Media', 'services' => [
+  ['id' => 'aaaaaaaa', 'name' => 'Radarr', 'type' => 'radarr', 'url' => 'http://{{HOMEPAGE_VAR_IP}}:7878', 'href' => ''],
+  ['id' => 'bbbbbbbb', 'name' => 'qBittorrent', 'type' => 'qbittorrent', 'url' => 'http://{{HOMEPAGE_VAR_IP}}:8080', 'href' => '']]]]]));
+file_put_contents("$dir/secrets.json", json_encode(['vars' => ['HOMEPAGE_VAR_IP' => '10.0.0.5', 'HOMEPAGE_VAR_RADARR_KEY' => 'RKEY', 'UNUSED' => 'x'],
+  'svc' => ['aaaaaaaa' => ['key' => '{{HOMEPAGE_VAR_RADARR_KEY}}'], 'bbbbbbbb' => ['username' => 'admin', 'password' => 'QPASS']], 'unraid' => ['url' => 'http://tower/graphql', 'key' => 'UKEY']]));
+file_put_contents("$dir/custom.css", '.x{color:red}');
+file_put_contents("$dir/ignores.json", json_encode([['id' => 'ffffffffffff', 'kind' => 'type', 'category' => 'os.available', 'until' => null, 'created' => time()]]));
+@mkdir("$dir/backups", 0700, true); file_put_contents("$dir/backups/20260101-000000-abcd.json", '{}');
+$m = und_load_config();
+$yaml = (string)file_get_contents("$dir/config.yaml"); $envt = (string)file_get_contents("$dir/.env");
+$apps = $m['groups'][0]['services'];
+t('old settings become config.yaml and .env', $m['general']['title'] === 'Old' && count($apps) === 2);
+t('addresses held in variables are written into the apps', $apps[0]['url'] === 'http://10.0.0.5:7878' && strpos($yaml, 'HOMEPAGE_VAR') === false);
+t('credentials move to readable .env names', $apps[0]['key'] === '{{RADARR_API_KEY}}' && $apps[1]['username'] === '{{QBITTORRENT_USERNAME}}' && $apps[1]['password'] === '{{QBITTORRENT_PASSWORD}}');
+t('.env holds the values, config.yaml none of them', und_env()['RADARR_API_KEY'] === 'RKEY' && und_env()['QBITTORRENT_PASSWORD'] === 'QPASS' && und_env()['UNRAID_API_KEY'] === 'UKEY'
+  && strpos($yaml, 'RKEY') === false && strpos($yaml, 'QPASS') === false && strpos($yaml, 'UKEY') === false && strpos($yaml, 'admin') === false);
+t('unused variables are dropped', !isset(und_env()['UNUSED']) && strpos($envt, 'UNUSED') === false);
+t('Unraid address, custom CSS and ignore rules move into config.yaml', und_doc()['unraid']['url'] === 'http://tower/graphql' && und_load_css() === '.x{color:red}' && count(und_ignores()) === 1);
+t('the old files are kept in data/legacy, never deleted', is_file("$dir/data/legacy/config.json") && is_file("$dir/data/legacy/secrets.json") && is_file("$dir/data/legacy/custom.css") && !is_file("$dir/config.json"));
+t('old backups move to data/backups', is_file("$dir/data/backups/20260101-000000-abcd.json"));
+t('only config.yaml and .env are left at the top', array_values(array_diff(scandir($dir), ['.', '..', 'data'])) === ['.env', 'config.yaml'], implode(',', scandir($dir)));
+$m2 = und_load_config(); t('a second load changes nothing', json_encode($m2['groups']) === json_encode($m['groups']) && file_get_contents("$dir/config.yaml") === $yaml, json_encode($m2['groups']) . ' vs ' . json_encode($m['groups']));
+
+$cv = und_store_convert(und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'G', 'services' => [
+  ['id' => 'c0000001', 'name' => 'Tautulli', 'type' => 'tautulli', 'url' => 'http://t:8181', 'href' => ''],
+  ['id' => 'c0000002', 'name' => 'Recent', 'type' => 'customapi', 'url' => 'http://t:8181/api/v2?apikey={{HOMEPAGE_VAR_TAUTULLI_API_KEY}}&cmd=x', 'href' => ''],
+  ['id' => 'c0000003', 'name' => 'Other', 'type' => 'customapi', 'url' => 'http://o/?token={{HOMEPAGE_VAR_RADARR_API_KEY}}', 'href' => ''],
+  ['id' => 'c0000004', 'name' => 'Radarr', 'type' => 'radarr', 'url' => 'http://r', 'href' => '']]]]]),
+  ['HOMEPAGE_VAR_TAUTULLI_API_KEY' => 'TK', 'HOMEPAGE_VAR_RADARR_API_KEY' => 'OTHER'], ['c0000001' => ['key' => '{{HOMEPAGE_VAR_TAUTULLI_API_KEY}}'], 'c0000004' => ['key' => 'RK']]);
+$cs = $cv['config']['groups'][0]['services'];
+t('a key used in an address and as a credential shares one name', $cs[1]['url'] === 'http://t:8181/api/v2?apikey={{TAUTULLI_API_KEY}}&cmd=x' && $cv['env']['TAUTULLI_API_KEY'] === 'TK' && !isset($cv['env']['HOMEPAGE_VAR_TAUTULLI_API_KEY']));
+t('a different value under a taken name gets its own name', $cv['env']['RADARR_API_KEY'] === 'RK' && $cv['env']['RADARR_API_KEY_2'] === 'OTHER' && strpos($cs[2]['url'], '{{RADARR_API_KEY_2}}') !== false, json_encode($cv['env']));
+t('config.yaml has no schema line next to version', strpos(file_get_contents("$dir/config.yaml"), "\nschema:") === false);
+
+group('backups');
+$before = file_get_contents("$dir/config.yaml"); $envBefore = file_get_contents("$dir/.env");
+$m['general']['title'] = 'Changed';
+und_save_config($m);
+$bk = array_values(array_filter(und_backups(), function ($b) { return $b['schema'] === UND_SCHEMA; }));
+t('a save takes a backup of both files', count($bk) >= 1);
+$raw = json_decode(file_get_contents(und_backup_dir() . '/' . $bk[0]['id'] . '.json'), true);
+t('the backup holds config.yaml and .env as they were', $raw['undash_backup'] === 2 && $raw['yaml'] === $before && $raw['env'] === $envBefore);
+t('backups are private', (fileperms(und_backup_dir() . '/' . $bk[0]['id'] . '.json') & 0777) === 0600);
+und_env_write(['RADARR_API_KEY' => 'CHANGED']);
+t('restore brings both files back', !empty(und_restore($bk[0]['id'])['ok']) && und_load_config()['general']['title'] === 'Old' && und_env()['RADARR_API_KEY'] === 'RKEY');
+t('unknown backup ids are refused', isset(und_restore('../../etc/passwd')['error']) && isset(und_restore('20990101-000000-ffff')['error']));
+file_put_contents(und_backup_dir() . '/20250101-000000-0aaa.json', json_encode(['undash_backup' => 1, 'schema' => 4, 'config' => ['schema' => 4, 'general' => ['title' => 'Legacy'], 'groups' => [['name' => 'G', 'services' => [['id' => 'cccccccc', 'name' => 'Sonarr', 'type' => 'sonarr', 'url' => 'http://s', 'href' => '']]]]],
+  'secrets' => ['vars' => [], 'svc' => ['cccccccc' => ['key' => 'SKEY']]], 'css' => '']));
+t('a backup from before config.yaml is converted on restore', !empty(und_restore('20250101-000000-0aaa')['ok']) && und_load_config()['general']['title'] === 'Legacy'
+  && und_load_config()['groups'][0]['services'][0]['key'] === '{{SONARR_API_KEY}}' && und_env()['SONARR_API_KEY'] === 'SKEY');
+
 group('export');
 reset_store();
 $cfg = und_default_config();
@@ -165,56 +265,54 @@ $cfg['groups'][] = ['id' => 'abcdef01', 'name' => 'Apps', 'columns' => 3, 'heade
   ['id' => 'abcdef02', 'name' => 'Radarr', 'type' => 'radarr', 'url' => 'http://admin:hunter2@10.0.0.2:7878/?apikey=PLAINKEY123&x=1', 'href' => 'http://10.0.0.2:7878', 'fields' => [], 'options' => []],
   ['id' => 'abcdef03', 'name' => 'Custom', 'type' => 'customapi', 'url' => 'http://{{SERVER_IP}}/api?token={{TOKEN_VAR}}', 'href' => '', 'fields' => [], 'options' => ['headers' => ['X-Api-Key' => 'HEADERSECRET', 'X-Ref' => '{{SOME_KEY}}']]]]];
 und_save_config($cfg);
-und_save_secrets(['vars' => ['SERVER_IP' => '10.0.0.2', 'RADARR_API_KEY' => 'VARSECRET1', 'QBIT_PASSWORD' => 'VARSECRET2', 'NPM_USERNAME' => 'LOGINNAME1', 'QBIT_LOGIN' => 'LOGINNAME2', 'CONTACT' => 'someone@example.org'],
-  'svc' => ['abcdef02' => ['key' => 'SVCSECRET', 'username' => 'u', 'password' => 'PWSECRET']]]);
+und_save_secrets(['vars' => ['SERVER_IP' => '10.0.0.2', 'TOKEN_VAR' => 'VARSECRET1'], 'svc' => ['abcdef02' => ['key' => 'SVCSECRET', 'username' => 'u', 'password' => 'PWSECRET']]]);
 und_save_css('.card{color:red}');
-$red = json_encode(und_export('redacted'));
-foreach (['VARSECRET1', 'VARSECRET2', 'SVCSECRET', 'PWSECRET', 'hunter2', 'PLAINKEY123', 'HEADERSECRET', 'LOGINNAME1', 'LOGINNAME2', 'someone@example.org'] as $s) t("redacted export has no $s", strpos($red, $s) === false);
-t('login and e-mail variables are kept by name, only emptied', strpos($red, '"NPM_USERNAME":""') !== false && strpos($red, '"CONTACT":""') !== false);
-t('redacted export keeps layout', strpos($red, '"Radarr"') !== false && strpos($red, '"Apps"') !== false);
-t('redacted export keeps non-secret variables', strpos($red, '10.0.0.2') !== false);
-t('redacted export keeps variable references', strpos($red, '{{TOKEN_VAR}}') !== false && strpos($red, '{{SOME_KEY}}') !== false);
-t('redacted export keeps css', strpos($red, 'color:red') !== false);
-t('redacted export marks its kind', json_decode($red, true)['kind'] === 'redacted');
-$full = json_encode(und_export('full'));
-t('full export has the secrets', strpos($full, 'SVCSECRET') !== false && strpos($full, 'VARSECRET1') !== false);
-t('exports contain nothing but settings', count(array_diff(array_keys(json_decode($full, true)), ['undash_export', 'schema', 'kind', 'created', 'version', 'config', 'css', 'vars', 'secrets', 'unraid'])) === 0);
+$cy = und_export('config');
+foreach (['VARSECRET1', 'SVCSECRET', 'PWSECRET', 'hunter2', 'PLAINKEY123', 'HEADERSECRET'] as $s) t("the config export has no $s", strpos($cy['text'], $s) === false);
+t('the config export is config.yaml with layout, references and css', $cy['name'] === 'undash-config.yaml' && strpos($cy['text'], 'Radarr') !== false && strpos($cy['text'], '{{RADARR_API_KEY}}') !== false
+  && strpos($cy['text'], '{{TOKEN_VAR}}') !== false && strpos($cy['text'], 'color:red') !== false);
+$ex = und_export('env');
+t('the .env export has the secrets', $ex['name'] === 'undash.env' && strpos($ex['text'], 'RADARR_API_KEY=SVCSECRET') !== false && strpos($ex['text'], 'TOKEN_VAR=VARSECRET1') !== false);
+t('the .env export never carries the dashboard password hash', strpos($ex['text'], 'UNDASH_PASSWORD_HASH') === false);
 
 group('import');
 t('empty file refused', isset(und_import_parse('')['error']));
 t('invalid JSON refused', isset(und_import_parse('{nope')['error']));
 t('too large refused', isset(und_import_parse(str_repeat(' ', 2097153))['error']));
 t('random JSON refused', isset(und_import_parse('{"a":1}')['error']));
-t('newer schema refused', isset(und_import_parse(json_encode(['undash_export' => 1, 'schema' => 99, 'config' => ['groups' => []]]))['error']));
+t('random text refused', isset(und_import_parse("hello\nworld: [")['error']));
+t('newer schema refused', isset(und_import_parse(json_encode(['undash_export' => 1, 'schema' => 99, 'config' => ['groups' => []]]))['error']) && isset(und_import_parse("version: 99\ngroups: []\n")['error']));
 t('export without layout refused', isset(und_import_parse(json_encode(['undash_export' => 1, 'schema' => 2, 'config' => ['x' => 1]]))['error']));
 t('malformed variables refused', isset(und_import_parse(json_encode(['undash_export' => 1, 'schema' => 2, 'config' => ['groups' => []], 'vars' => ['bad name' => 'x']]))['error']));
 t('malformed credentials refused', isset(und_import_parse(json_encode(['undash_export' => 1, 'schema' => 2, 'config' => ['groups' => []], 'secrets' => ['../x' => ['key' => 1]]]))['error']));
 t('deeply nested JSON refused', isset(und_import_parse(str_repeat('[', 200) . str_repeat(']', 200))['error']));
 $p = und_import_parse(json_encode(['undash_export' => 1, 'schema' => 2, 'kind' => 'redacted', 'config' => ['groups' => [['name' => 'G', 'services' => [['type' => 'radarr', 'name' => 'R'], ['type' => 'rm -rf', 'name' => 'X']]]]]]));
-t('unknown widget types skipped and counted', $p['summary']['widgets'] === 1 && $p['summary']['skipped'] === 1);
-// redacted import keeps stored credentials of widgets with the same id
-$redArr = json_decode($red, true);
-$redArr['config']['general']['title'] = 'Imported';
-$r = und_import_apply(json_encode($redArr));
-t('redacted import applied', isset($r['ok']) && und_load_config()['general']['title'] === 'Imported');
-t('redacted import kept stored credentials', und_secrets()['svc']['abcdef02']['key'] === 'SVCSECRET');
-t('redacted import kept secret variable values it left empty', und_secrets()['vars']['RADARR_API_KEY'] === 'VARSECRET1');
+t('unknown app types skipped and counted', $p['summary']['widgets'] === 1 && $p['summary']['skipped'] === 1);
+// config.yaml: replaces the layout, keeps .env
+$y = str_replace('title: UnDash', 'title: Imported', und_export('config')['text']);
+$r = und_import_apply($y);
+t('a config.yaml import is applied', isset($r['ok']) && und_load_config()['general']['title'] === 'Imported');
+t('... and keeps every stored secret', und_service_full(und_load_config(), 'abcdef02')['key'] === 'SVCSECRET' && und_env()['TOKEN_VAR'] === 'VARSECRET1');
 t('import took a backup first', (function () { foreach (und_backups() as $b) if ($b['reason'] === 'before import') return true; return false; })());
-$fullArr = json_decode($full, true); $fullArr['secrets']['abcdef02']['key'] = 'NEWKEY';
-und_import_apply(json_encode($fullArr));
-t('full import replaces credentials', und_secrets()['svc']['abcdef02']['key'] === 'NEWKEY');
-// the Unraid API address: a shared (redacted) layout must not redirect a working connection, a restore (full) may
+$r = und_import_apply("# mine\nRADARR_API_KEY=NEWKEY\nEXTRA=1\n");
+t('a .env import adds and replaces values', isset($r['ok']) && und_env()['RADARR_API_KEY'] === 'NEWKEY' && und_env()['EXTRA'] === '1' && und_env()['TOKEN_VAR'] === 'VARSECRET1');
+// an export of an older version (JSON): converted, its credentials go to .env
+$legacy = ['undash_export' => 1, 'schema' => 4, 'kind' => 'full', 'config' => ['groups' => [['id' => 'cccccccc', 'name' => 'G', 'services' => [['id' => 'dddddddd', 'type' => 'sonarr', 'name' => 'Sonarr', 'url' => 'http://{{HOMEPAGE_VAR_IP}}:{{HOMEPAGE_VAR_PORT}}']]]]],
+  'vars' => ['HOMEPAGE_VAR_IP' => '10.5.5.5', 'HOMEPAGE_VAR_PORT' => '8989', 'HOMEPAGE_VAR_SONARR_KEY' => 'SONKEY'], 'secrets' => ['dddddddd' => ['key' => '{{HOMEPAGE_VAR_SONARR_KEY}}']], 'unraid' => ['url' => 'http://10.5.5.5/graphql']];
 $sx = und_secrets(); $sx['unraid'] = ['url' => 'http://10.9.9.9/graphql', 'key' => 'MYKEY']; und_save_secrets($sx);
-$redArr['unraid'] = ['url' => 'http://192.168.1.10/graphql'];
-und_import_apply(json_encode($redArr));
-t('a redacted import keeps the existing Unraid API address and key', und_secrets()['unraid']['url'] === 'http://10.9.9.9/graphql' && und_secrets()['unraid']['key'] === 'MYKEY');
-$sx = und_secrets(); $sx['unraid'] = ['url' => '', 'key' => '']; und_save_secrets($sx);
-und_import_apply(json_encode($redArr));
-t('... and fills it in when none is set', und_secrets()['unraid']['url'] === 'http://192.168.1.10/graphql');
-$fullArr['unraid'] = ['url' => 'http://10.1.1.1/graphql', 'key' => 'RESTOREDKEY'];
-und_import_apply(json_encode($fullArr));
-t('a full import (restore) replaces the address and key', und_secrets()['unraid']['url'] === 'http://10.1.1.1/graphql' && und_secrets()['unraid']['key'] === 'RESTOREDKEY');
+und_import_apply(json_encode($legacy));
+$so = und_load_config()['groups'][0]['services'][0];
+t('an old export is converted: addresses written in, the key as a reference', $so['url'] === 'http://10.5.5.5:8989' && $so['key'] === '{{SONARR_API_KEY}}' && und_env()['SONARR_API_KEY'] === 'SONKEY');
+t('an import keeps the existing Unraid API address and key', und_secrets()['unraid']['url'] === 'http://10.9.9.9/graphql' && und_secrets()['unraid']['key'] === 'MYKEY');
+$sx = und_secrets(); $sx['unraid'] = ['url' => '', 'key' => 'MYKEY']; und_save_secrets($sx);
+und_import_apply(json_encode($legacy));
+t('... and fills the address in when none is set', und_secrets()['unraid']['url'] === 'http://10.5.5.5/graphql');
 t('layout-only (old export) files are accepted', !isset(und_import_parse(json_encode(['groups' => [], 'general' => ['title' => 'x']]))['error']));
+$tx = file_get_contents(dirname(__DIR__) . '/examples/config.yaml');
+t('the example config imports: 31 apps, no secrets, no Homepage names', und_import_parse($tx)['summary']['widgets'] === 31 && strpos($tx, 'HOMEPAGE') === false && !preg_match('/^\s*(key|password|username): "?[^"{\s]/m', $tx));
+reset_store();
+und_import_apply($tx);
+t('names the example uses get an empty entry to fill in', und_env() === ['TAUTULLI_API_KEY' => '', 'WIZARR_API_KEY' => ''] && count(array_filter(und_shared_view(und_load_config()), function ($v) { return $v['used']; })) === 2);
 
 /* ---------------- Docker ---------------- */
 group('docker');
@@ -321,7 +419,7 @@ reset_store();
 t('no rules to start with', und_ignores() === [] && und_ignores_active() === []);
 $a = und_ignore_add('instance', 'disk.hot', 'disk3', 3600, 'disk3 is at 52°C.', 'warn');
 t('instance rule added', !empty($a['ok']) && $a['rule']['key'] === 'disk.hot:disk3' && $a['rule']['until'] > time() + 3500);
-t('rule written to the config dir and the flash mirror', is_file(UND_DIR . '/ignores.json') && is_file(und_store_dir() . '/ignores.json'));
+t('rule written to config.yaml in the config dir and the flash mirror', strpos((string)@file_get_contents(UND_DIR . '/config.yaml'), 'disk.hot') !== false && strpos((string)@file_get_contents(und_store_dir() . '/config.yaml'), 'disk.hot') !== false);
 $p = und_ignore_add('type', 'docker.exited', 'ignored-anyway', 'permanent', 'Container stopped', 'warn');
 t('type rule is permanent and has no resource', $p['rule']['until'] === null && $p['rule']['resource'] === '' && $p['rule']['key'] === 'docker.exited');
 t('both rules active', count(und_ignores_active()) === 2);
@@ -336,21 +434,21 @@ t('too long a duration refused', isset(und_ignore_add('instance', 'disk.hot', 'd
 t('non-numeric duration refused', isset(und_ignore_add('instance', 'disk.hot', 'disk1', 'forever')['error']));
 t('refusals change nothing', count(und_ignores()) === 2);
 // expiry is decided at read time, by the server clock
-$raw = json_decode(file_get_contents(und_ignore_file()), true);
+$raw = und_doc()['ignored_alerts'];
 $raw[] = ['id' => 'aaaaaaaaaaaa', 'kind' => 'instance', 'key' => 'os.available:7.2.0', 'category' => 'os.available', 'resource' => '7.2.0', 'until' => time() - 60, 'created' => time() - 3660, 'title' => 'x', 'severity' => 'info'];
 $raw[] = ['id' => 'bbbbbbbbbbbb', 'kind' => 'instance', 'category' => 'nope', 'resource' => 'x'];
 $raw[] = 'garbage';
 $raw[] = ['id' => 'NOT-AN-ID', 'kind' => 'type', 'category' => 'disk.bad'];
-$raw[] = ['id' => 'cccccccccccc', 'kind' => 'instance', 'category' => 'disk.bad', 'resource' => 'evil;rm', 'until' => null];
-und_store_write('ignores.json', json_encode($raw));
+$raw[] = ['id' => 'cccccccc', 'kind' => 'instance', 'category' => 'disk.bad', 'resource' => 'evil;rm', 'until' => null];
+und_doc_write(['ignored_alerts' => $raw]);
 t('malformed records are dropped, valid ones kept', count(und_ignores()) === 3);
 t('an expired rule is listed but not active', count(und_ignores_active()) === 2 && !in_array('aaaaaaaaaaaa', array_column(und_ignores_active(), 'id'), true));
-file_put_contents(und_ignore_file(), '{not json');
-t('an unreadable file means no rules, not an error', und_ignores() === []);
-und_store_write('ignores.json', json_encode($raw));
+und_doc_write(['ignored_alerts' => 'not a list']);
+t('an unreadable list means no rules, not an error', und_ignores() === []);
+und_doc_write(['ignored_alerts' => $raw]);
 $pe = und_ignore_purge_expired();
 t('delete expired removes only the expired rule', $pe['removed'] === 1 && count(und_ignores()) === 2);
-t('purging also wrote out a clean file', count(json_decode(file_get_contents(und_ignore_file()), true)) === 2);
+t('purging also wrote out a clean file', count(und_yaml_read((string)file_get_contents(und_store_dir() . '/config.yaml'))['ignored_alerts']) === 2);
 $rm = und_ignore_remove(['zzzzzzzzzzzz', 'not valid']);
 t('restoring unknown ids removes nothing', isset($rm['error']) && count(und_ignores()) === 2);
 $rm = und_ignore_remove([$p['rule']['id']]);
@@ -359,15 +457,15 @@ und_ignore_add('instance', 'docker.unhealthy', 'plex', 3600);
 $ra = und_ignore_restore_all();
 t('restore all empties the list', $ra['removed'] === 2 && und_ignores() === []);
 // a rule from a month ago that ran out is cleaned up on the next write
-und_store_write('ignores.json', json_encode([['id' => 'dddddddddddd', 'kind' => 'type', 'category' => 'disk.hot', 'until' => time() - 40 * 86400, 'created' => time() - 50 * 86400]]));
+und_doc_write(['ignored_alerts' => [['id' => 'dddddddddddd', 'kind' => 'type', 'category' => 'disk.hot', 'until' => time() - 40 * 86400, 'created' => time() - 50 * 86400]]]);
 und_ignore_add('instance', 'disk.hot', 'disk1', 3600);
 t('long-expired rules are pruned on write', count(und_ignores()) === 1 && und_ignores()[0]['resource'] === 'disk1');
 // rules survive a lost store directory: the flash mirror still has them (and the reverse on first use)
 reset_store();
 @mkdir(UND_DIR, 0777, true);
-file_put_contents(UND_DIR . '/ignores.json', json_encode([['id' => 'eeeeeeeeeeee', 'kind' => 'type', 'category' => 'os.available', 'until' => null, 'created' => time()]]));
+file_put_contents(UND_DIR . '/config.yaml', und_yaml_emit(['version' => UND_SCHEMA, 'ignored_alerts' => [['id' => 'eeeeeeeeeeee', 'kind' => 'type', 'category' => 'os.available', 'until' => null, 'created' => time()]]]));
 t('rules on the flash drive are picked up', count(und_ignores()) === 1);
-t('ignores.json is copied into a new config dir', is_file(und_store_dir() . '/ignores.json') || und_store_dir() === UND_DIR);
+t('config.yaml is copied into a new config dir', is_file(und_store_dir() . '/config.yaml') || und_store_dir() === UND_DIR);
 reset_store();
 $fl = und_disk_flags([['name' => 'parity', 'health' => 'ok', 'temp' => 41, 'errors' => 0], ['name' => 'disk3', 'health' => 'bad', 'temp' => 52, 'errors' => 4], ['name' => 'cache', 'health' => 'ok', 'temp' => null, 'errors' => 0]]);
 t('disk flags name the disks', $fl['bad_disks'] === ['disk3'] && $fl['hot_disks'] === [['name' => 'disk3', 'temp' => 52]] && $fl['error_disks'] === [['name' => 'disk3', 'errors' => 4]] && $fl['bad'] === 1 && $fl['hot'] === 1 && $fl['errors'] === 4);
@@ -408,6 +506,27 @@ t('an unreadable history starts over instead of failing', und_alerts_track($al, 
 reset_store();
 
 /* ---------------- container web UI addresses ---------------- */
+group('validate');
+reset_store();
+$GLOBALS['UND_TEST_ENV'] = ['RADARR_API_KEY' => 'x', 'SONARR_API_KEY' => ''];
+$iv = array_column(und_validate(und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'G', 'services' => [
+  ['id' => 'd0000001', 'type' => 'radarr', 'name' => 'Radarr', 'url' => 'http://r', 'href' => '', 'key' => '{{RADARR_API_KEY}}'],
+  ['id' => 'd0000002', 'type' => 'sonarr', 'name' => 'Sonarr', 'url' => 'http://s', 'href' => '', 'key' => '{{SONARR_API_KEY}}'],
+  ['id' => 'd0000003', 'type' => 'prowlarr', 'name' => 'Prowlarr', 'url' => '', 'href' => ''],
+  ['id' => 'd0000004', 'type' => 'link', 'name' => 'Link', 'url' => '', 'href' => 'http://l']]]]])), 'msg');
+unset($GLOBALS['UND_TEST_ENV']);
+t('check configuration names apps without an address or a key', count($iv) === 3 && strpos(implode('|', $iv), '"Sonarr" in "G" has no API key') !== false && strpos(implode('|', $iv), '"Prowlarr" in "G" has no address') !== false, json_encode($iv));
+
+group('links');
+$lv = und_layout_view(und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'G', 'services' => [
+  ['id' => 'b0000001', 'type' => 'radarr', 'name' => 'R', 'url' => 'http://10.0.0.5:7878', 'href' => ''],
+  ['id' => 'b0000002', 'type' => 'radarr', 'name' => 'R2', 'url' => 'http://user:pw@10.0.0.5:7878', 'href' => ''],
+  ['id' => 'b0000003', 'type' => 'radarr', 'name' => 'R3', 'url' => 'http://10.0.0.5:7878/?apikey=x', 'href' => ''],
+  ['id' => 'b0000004', 'type' => 'radarr', 'name' => 'R4', 'url' => 'http://10.0.0.5:7878', 'href' => 'https://radarr.example.com']]]]]))['groups'][0]['services'];
+t('an app without a link opens its address', $lv[0]['href_resolved'] === 'http://10.0.0.5:7878');
+t('an address with a login or a query string is never used as the link', $lv[1]['href_resolved'] === '' && $lv[2]['href_resolved'] === '');
+t('a link of its own wins', $lv[3]['href_resolved'] === 'https://radarr.example.com');
+
 group('webui');
 reset_store();
 $GLOBALS['MOCK'] = function ($argv) {
@@ -486,13 +605,49 @@ t('only movies or series, numeric ids, known apps', isset(und_seerr_request($cfg
 unset($GLOBALS['UND_HTTP_MOCK']);
 $tg = und_health_targets($cfgS, ['containers' => [['name' => 'plex', 'state' => 'running', 'webui' => 'http://10.0.0.5:32400/web'], ['name' => 'sonarr', 'state' => 'running', 'webui' => 'http://10.0.0.5:8989/'],
   ['name' => 'stopped', 'state' => 'exited', 'webui' => 'http://10.0.0.5:9000/'], ['name' => 'bad', 'state' => 'running', 'webui' => 'javascript:alert(1)']]]);
-t('health probes app links and running container web UIs, each address once', array_column($tg, 'hostport') === ['10.0.0.5:32400', '10.0.0.5:8096', '10.0.0.5:5055', '10.0.0.5:8989'], json_encode(array_column($tg, 'hostport')));
-$GLOBALS['UND_HEALTH_MOCK'] = function ($t) { $o = []; foreach ($t as $i => $x) $o[$i] = $i === 0 ? ['code' => 0, 'ms' => null, 'err' => 'Connection refused'] : ['code' => [0, 404, 401][$i], 'ms' => 5, 'err' => '']; return $o; };
+t('health probes app links (or their address) and running container web UIs, each address once', array_column($tg, 'hostport') === ['10.0.0.5:32400', 'app.lan:1', '10.0.0.5:8096', '10.0.0.5:5055', '10.0.0.5:8989'], json_encode(array_column($tg, 'hostport')));
+$GLOBALS['UND_HEALTH_MOCK'] = function ($t) { $o = []; foreach ($t as $i => $x) $o[$i] = $i === 0 ? ['code' => 0, 'ms' => null, 'err' => 'Connection refused'] : ['code' => $i === 1 ? 404 : ($i === 2 ? 401 : 200), 'ms' => 5, 'err' => '']; return $o; };
 $hl = und_health($cfgS, true);
 t('health sorts problems first and counts reachable endpoints', $hl['rows'][0]['level'] === 'bad' && $hl['rows'][0]['text'] === 'Connection refused' && $hl['up'] === $hl['total'] - 1);
 t('a login page (401) counts as healthy, a 404 as a warning', (bool)array_filter($hl['rows'], function ($r) { return $r['code'] === 404 && $r['level'] === 'warn'; })
   && (bool)array_filter($hl['rows'], function ($r) { return $r['code'] === 401 && $r['level'] === 'ok' && $r['text'] === '401 Login required'; }));
 unset($GLOBALS['UND_HEALTH_MOCK']);
+reset_store();
+
+/* ---------------- qui ---------------- */
+group('qui');
+reset_store();
+$GLOBALS['UND_TEST_ENV'] = ['QUI_API_KEY' => 'QUIKEY'];
+$cfgQ = und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'Downloads', 'services' => [['id' => 'e0000001', 'type' => 'qui', 'name' => 'qui', 'url' => 'http://qui.lan:7476', 'href' => '', 'key' => '{{QUI_API_KEY}}', 'fields' => [], 'options' => []]]]]]);
+$GLOBALS['SEEN'] = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['SEEN'][] = [$url, $o['headers']['X-API-Key'] ?? ''];
+  $p = parse_url($url, PHP_URL_PATH);
+  $j = function ($d, $c = 200) { return ['code' => $c, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []]; };
+  if ($p === '/api/instances') return $j([['id' => 1, 'name' => 'Main', 'connected' => true], ['id' => 2, 'name' => 'Private', 'connected' => true], ['id' => 3, 'name' => 'Old box', 'connected' => false, 'connectionStatus' => 'connection refused']]);
+  if ($p === '/api/instances/1/torrents') return $j(['stats' => ['total' => 120, 'downloading' => 2, 'seeding' => 100, 'paused' => 3, 'error' => 1, 'checking' => 0, 'totalDownloadSpeed' => 5000000, 'totalUploadSpeed' => 200000],
+    'counts' => ['status' => ['inactive' => 80, 'stalled' => 4, 'unregistered' => 2, 'tracker_down' => 1, 'completed' => 110], 'tags' => ['cross-seed' => 40, 'movies' => 9]],
+    'torrents' => [['name' => 'Big.File', 'state' => 'downloading', 'progress' => 0.5, 'dlspeed' => 4000000, 'eta' => 600, 'size' => 1e9], ['name' => 'Seeded', 'state' => 'uploading', 'progress' => 1, 'dlspeed' => 0]]]);
+  if ($p === '/api/instances/2/torrents') return $j(['stats' => ['total' => 10, 'downloading' => 1, 'seeding' => 9, 'totalDownloadSpeed' => 1000000, 'totalUploadSpeed' => 100000],
+    'counts' => ['status' => ['inactive' => 5], 'tags' => ['cross-seed' => 2]], 'torrents' => [['name' => 'Small', 'state' => 'stalledDL', 'progress' => 0.1, 'dlspeed' => 0, 'eta' => 8640000]]]);
+  return $j(['error' => 'nope'], 404);
+};
+$q = und_dl_status($cfgQ, 'e0000001');
+t('qui is a download client', in_array('qui', und_dl_types(), true) && und_zone(['type' => 'qui']) === 'downloads');
+t('the API key goes in the X-API-Key header, never in the address', $GLOBALS['SEEN'][0][1] === 'QUIKEY' && !array_filter($GLOBALS['SEEN'], function ($x) { return strpos($x[0], 'QUIKEY') !== false; }));
+t('totals add up every connected instance', $q['counts']['downloading'] === 3 && $q['counts']['seeding'] === 109 && $q['counts']['idle'] === 85 && $q['counts']['crossseed'] === 42
+  && $q['counts']['stalled'] === 4 && $q['counts']['tracker'] === 3 && $q['counts']['paused'] === 3 && $q['counts']['error'] === 1, json_encode($q['counts']));
+t('speeds are summed', $q['down'] === 6000000.0 && $q['up'] === 300000.0);
+t('one line per instance; a disconnected one says why', count($q['instances']) === 3 && $q['instances'][1]['name'] === 'Private' && !$q['instances'][2]['online'] && $q['instances'][2]['error'] === 'connection refused');
+t('only downloading torrents are listed, fastest first', array_column($q['items'], 'name') === ['Big.File', 'Small'] && $q['items'][1]['state'] === 'stalled' && $q['items'][1]['eta'] === null);
+t('a note says how many instances are down', strpos($q['note'], '1 of 3') === 0 && $q['state'] === 'downloading');
+t('qui is read only: no pause button, pause refused', $q['can_pause'] === false && isset(und_dl_action($cfgQ, 'e0000001', 'pause')['error']));
+$w = und_fetch_service($cfgQ, 'e0000001');
+t('the qui app card shows seeding, idle and cross-seed', array_column($w['blocks'], 'key') === ['downloading', 'seeding', 'idle', 'crossseed', 'download', 'upload', 'instances'] && $w['blocks'][3]['value'] === 42);
+$GLOBALS['UND_HTTP_MOCK'] = function () { return ['code' => 401, 'body' => '', 'json' => null, 'err' => '', 'headers' => []]; };
+@unlink(und_tmp('api-dl-e0000001.json'));
+t('a wrong key is reported without the key', strpos(und_dl_status($cfgQ, 'e0000001')['error'] ?? '', 'Not authorised') !== false);
+unset($GLOBALS['UND_HTTP_MOCK'], $GLOBALS['UND_TEST_ENV']);
 reset_store();
 
 /* ---------------- media columns ---------------- */

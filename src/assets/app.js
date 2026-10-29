@@ -126,6 +126,12 @@
 
   /* ---------- API ---------- */
   function api(action, data, timeoutMs) {
+    if (S.drawer && S.drawer.previewing) {
+      if (action === 'prefs') return Promise.resolve({ error: 'This is a preview. Go back to Settings or save first.' });
+      // an app added in the preview has nothing on the server yet
+      var known = function (id) { return S.drawer.saved.groups.some(function (g) { return g.services.some(function (x) { return x.id === id; }); }); };
+      if (/^(dl|arr|service)$/.test(action) && data && data.id && !known(data.id)) return Promise.resolve({ error: 'Loads once you save.', preview: true, unconfigured: true, online: false });
+    }
     var fd = new URLSearchParams(); fd.append('action', action);   // urlencoded: multipart POSTs hang on Unraid's web server
     fd.append('csrf_token', window.UND_CSRF || '');
     for (var k in (data || {})) fd.append(k, typeof data[k] === 'object' ? JSON.stringify(data[k]) : data[k]);
@@ -206,7 +212,7 @@
   function lum(c) { var a = c.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2]; }
   /* Colour themes. Each has a dark and (most) a light palette; the mode setting picks one (system = follow the OS).
      Palettes come from the themes' public, MIT-licensed definitions (Kanagawa, Catppuccin, Nord, Tokyo Night) and the
-     shadcn neutral / zinc scales; Fluent Dark is the frosted-glass look from Homepage's custom.css.
+     shadcn neutral / zinc scales; Fluent Dark is a frosted-glass look.
      keys: bg panel p2 (inner panel) bar (strip / hover) field line l2 (strong line) text muted faint title accent
            [ok warn bad info] (status colours; when missing, the standard ones for dark or light are used) */
   var THEMES = {
@@ -1654,12 +1660,12 @@
     var state = !j.online ? (j.unconfigured ? 'na' : 'bad') : issues ? (bad ? 'bad' : 'warn') : 'ok';
     x.dot.className = 'sdot ' + state; x.dot.setAttribute('aria-label', !j.online ? (j.unconfigured ? 'not configured' : 'offline') : issues ? issues + ' issues' : 'online');
     clear(x.info); clear(x.extra);
-    if (!j.online) x.info.appendChild(h('span', { class: j.unconfigured ? 'muted' : 't-bad' }, j.unconfigured ? 'Not configured' : 'Offline'));
+    if (!j.online) x.info.appendChild(h('span', { class: j.unconfigured ? 'muted' : 't-bad' }, j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline'));
     else (j.blocks || []).slice(0, 4).forEach(function (b) { x.info.appendChild(h('span', { class: 'st' }, h('b', null, fmt(b.value, b.fmt)), ' ' + b.label.toLowerCase())); });
     if (issues) x.extra.appendChild(h('span', { class: 'badge ' + (bad ? 'bad' : 'warn') }, issues + (issues === 1 ? ' issue' : ' issues')));
     else if (j.version) x.extra.appendChild(h('span', { class: 'muted xs' }, 'v' + j.version));
     clear(x.det);
-    if (j.error) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
+    if (j.error && !j.preview) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
     if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(blk)));
     (j.health || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, (z.source ? z.source + ': ' : '') + z.msg))); });
     (j.issues || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, h('b', null, z.title), ' · ' + z.msg))); });
@@ -1670,7 +1676,7 @@
   BUILD.downloads = function (r) {
     var apps = zoneApps('downloads');
     r.list = h('div', { class: 'dls' }); r.c = {};
-    if (!apps.length) r.list.appendChild(h('div', { class: 'card empty' }, 'No download clients yet. Add qBittorrent or SABnzbd in Settings > Apps.'));
+    if (!apps.length) r.list.appendChild(h('div', { class: 'card empty' }, 'No download clients yet. Add qBittorrent, qui or SABnzbd in Settings > Apps.'));
     apps.forEach(function (s) {
       var x = { s: s, head: h('div', { class: 'dlh' }), body: h('div', { class: 'dlb' }, h('div', { class: 'muted sm' }, 'Loading…')) };
       x.el = h('div', { class: 'card dl', 'data-name': s.name }, x.head, x.body);
@@ -1693,22 +1699,29 @@
     var x = R.downloads && R.downloads.c[id]; if (!x) return;
     var busy = S.busy['dl:' + id] || '';
     var sig = JSON.stringify([j, busy, S.L.downloads.items]); if (x.sig === sig) return; x.sig = sig;
-    var s = x.s, st = j.error ? ['Unreachable', 'bad'] : (DLSTATE[j.state] || [j.state, 'off']);
+    var s = x.s, st = j.preview ? ['Not saved yet', 'off'] : j.error ? ['Unreachable', 'bad'] : (DLSTATE[j.state] || [j.state, 'off']);
     clear(x.head); clear(x.body);
     var paused = j.state === 'paused' || j.paused;
     x.head.appendChild(img(iconUrl(s.icon), 'aico', 'download'));
     x.head.appendChild(h('span', { class: 'an' }, s.name));
-    x.head.appendChild(h('span', { class: 'badge ' + st[1] }, busy || (j.unconfigured ? 'Not configured' : st[0])));
+    x.head.appendChild(h('span', { class: 'badge ' + st[1] }, busy || (j.unconfigured && !j.preview ? 'Not configured' : st[0])));
     x.head.appendChild(h('span', { class: 'grow' }));
     if (j.online && j.can_pause) x.head.appendChild(btn('', function () { dlAct(s, id, paused ? 'resume' : 'pause'); }, 'sm' + (paused ? ' okc' : ''), paused ? 'play' : 'pause', (paused ? 'Resume all in ' : 'Pause all in ') + s.name));
     if (s.href_resolved) x.head.appendChild(h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('web')));
     if (busy) x.head.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
-    if (j.error) { x.body.appendChild(h('div', { class: 'sm t-bad' }, j.error)); return; }
+    if (j.error) { x.body.appendChild(h('div', { class: j.preview ? 'sm muted' : 'sm t-bad' }, j.error)); return; }
     var c = j.counts || {};
     x.body.appendChild(h('div', { class: 'dlspeed' }, h('span', null, h('b', null, rate(j.down)), ' ↓'), j.up !== null && j.up !== undefined ? h('span', null, h('b', null, rate(j.up)), ' ↑') : null, j.eta && j.eta !== '0:00:00' ? h('span', { class: 'muted' }, j.eta + ' left') : null));
-    var chips = [['downloading', 'active', ''], ['stalled', 'stalled', 'warn'], ['queued', 'queued', ''], ['paused', 'paused', 'off'], ['seeding', 'seeding', ''], ['completed', 'done', ''], ['error', 'errors', 'bad']];
+    var chips = [['downloading', 'active', ''], ['stalled', 'stalled', 'warn'], ['queued', 'queued', ''], ['paused', 'paused', 'off'], ['seeding', 'seeding', ''], ['idle', 'idle', 'off'], ['crossseed', 'cross-seed', ''],
+      ['checking', 'checking', ''], ['completed', 'done', ''], ['tracker', 'tracker issues', 'warn'], ['error', 'errors', 'bad']];
+    if (j.type === 'qui') chips = chips.filter(function (z) { return z[0] !== 'completed'; });   // in qui nearly everything is complete: seeding says more
     x.body.appendChild(h('div', { class: 'chips' }, chips.filter(function (z) { return c[z[0]]; }).map(function (z) { return h('span', { class: 'badge plain ' + z[2] }, c[z[0]].toLocaleString() + ' ' + z[1]); })));
     if (j.note) x.body.appendChild(h('div', { class: 'xs t-warn' }, j.note));
+    // qui: one line per qBittorrent instance
+    if ((j.instances || []).length) x.body.appendChild(h('div', { class: 'dl-inst' }, j.instances.map(function (i) {
+      return h('div', null, h('span', { class: 'sdot ' + (i.online ? 'ok' : 'bad'), role: 'img', 'aria-label': i.online ? 'connected' : 'not connected' }), h('span', { class: 'ell' }, i.name),
+        i.online ? h('span', { class: 'muted num' }, rate(i.down) + ' ↓ · ' + rate(i.up) + ' ↑ · ' + (i.counts.seeding || 0).toLocaleString() + ' seeding') : h('span', { class: 't-bad xs ell' }, i.error || 'not connected'));
+    })));
     (j.items || []).slice(0, S.L.downloads.items).forEach(function (it) {
       x.body.appendChild(h('div', { class: 'dli', title: it.name },
         h('div', { class: 'dln' }, h('span', { class: 'ell' }, it.name), h('span', { class: 'muted xs num' }, it.progress.toFixed(it.progress < 10 ? 1 : 0) + '%' + (it.eta ? ' · ' + dur(it.eta) : '') + (it.speed ? ' · ' + rate(it.speed) : '') + (it.state !== 'downloading' ? ' · ' + it.state : ''))),
@@ -1795,7 +1808,7 @@
     if (dot) { dot.className = 'sdot ' + (r.error ? (r.unconfigured ? 'na' : 'bad') : 'ok'); dot.setAttribute('aria-label', r.error ? (r.unconfigured ? 'not configured' : 'error') : 'online'); }
     var cb = clear(c.querySelector('.cb'));
     if (r.error) {
-      var e = h('button', { type: 'button', class: 'err' + (r.unconfigured ? ' cfg' : ''), 'aria-expanded': 'false', onclick: function () { e.classList.toggle('open'); e.setAttribute('aria-expanded', e.classList.contains('open') ? 'true' : 'false'); } }, r.unconfigured ? 'Not configured' : r.offline ? 'Unreachable' : 'API error', h('div', { class: 'x' }, r.error));
+      var e = h('button', { type: 'button', class: 'err' + (r.unconfigured ? ' cfg' : ''), 'aria-expanded': 'false', onclick: function () { e.classList.toggle('open'); e.setAttribute('aria-expanded', e.classList.contains('open') ? 'true' : 'false'); } }, r.preview ? 'Loads once you save' : r.unconfigured ? 'Not configured' : r.offline ? 'Unreachable' : 'API error', h('div', { class: 'x' }, r.error));
       cb.appendChild(e); return;
     }
     if (r.blocks && r.blocks.length) cb.appendChild(blocks(r.blocks));
@@ -1930,7 +1943,7 @@
   var FIELDS = {
     radarr: 'wanted, missing, queued, movies', sonarr: 'wanted, queued, series', lidarr: 'wanted, queued, artists', readarr: 'wanted, queued, books',
     bazarr: 'missingEpisodes, missingMovies', prowlarr: 'numberOfGrabs, numberOfQueries, numberOfFailGrabs, numberOfFailQueries', overseerr: 'pending, approved, processing, completed, available',
-    autobrr: 'approvedPushes, rejectedPushes, filters, indexers', wizarr: 'users, invites, pending, expired', qbittorrent: 'leech, download, seed, upload', sabnzbd: 'rate, queue, timeleft',
+    autobrr: 'approvedPushes, rejectedPushes, filters, indexers', wizarr: 'users, invites, pending, expired', qbittorrent: 'leech, download, seed, upload', qui: 'downloading, seeding, idle, crossseed, download, upload, instances', sabnzbd: 'rate, queue, timeleft',
     emby: 'movies, series, episodes, songs', jellyfin: 'movies, series, episodes, songs', plex: 'streams, albums, movies, tv', adguard: 'queries, blocked, filtered, latency',
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
@@ -1944,13 +1957,14 @@
   var MEDIA_DESC = { upcoming_movies: 'Radarr calendar', upcoming_episodes: 'Sonarr calendar', recent_movies: 'Radarr imports', recent_episodes: 'Sonarr imports' };
 
   function openSettings(tab) {
-    if (S.drawer) return;
+    if (S.drawer) { if (S.drawer.previewing) S.drawer.back(); return; }
     closeMenu(true);
     var D = { tab: SET_ALIAS[tab] || (SET_PAGES[tab] ? tab : 'layout'), dirty: false };
     S.drawer = D;
     var last = document.activeElement;
     var bodyEl = h('div', { class: 'db', role: 'tabpanel' });
     var saveB = btn('Save', save, 'pri'); saveB.disabled = true;
+    var prevB = btn('Preview', preview, '', 'eye', 'See the dashboard with these settings, without saving'); prevB.disabled = true;
     var status = h('span', { class: 'muted sm grow', role: 'status' }, 'Loading…');
     var tabs = h('nav', { class: 'dt', role: 'tablist', 'aria-label': 'Settings', 'aria-orientation': 'vertical' });
     SET_NAV.forEach(function (g) {
@@ -1963,11 +1977,12 @@
     var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
       h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), h('span', { class: 'grow' }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')),
       h('div', { class: 'dmain' }, tabs, bodyEl),
-      h('div', { class: 'df' }, saveB, btn('Discard', function () { if (!D.dirty) close(true); else confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }), status));
+      h('div', { class: 'df' }, saveB, prevB, btn('Discard', function () { if (!D.dirty) close(true); else confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }), status));
     var bg = h('div', { class: 'drawer-bg', onclick: function () { close(); } });
     root.appendChild(bg); root.appendChild(drawer);
     function key(e) {
       if (root.querySelector('.modal-bg')) return;
+      if (D.previewing) { if (e.key === 'Escape') back(); return; }
       if (e.key === 'Escape') close();
       if (e.key === 'Tab') {
         var f = drawer.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select,textarea');
@@ -1979,21 +1994,48 @@
     document.addEventListener('keydown', key);
     function paintTabs() { [].forEach.call(tabs.querySelectorAll('button'), function (b) { var on = b.getAttribute('data-t') === D.tab; b.className = on ? 'on' : ''; b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
     function dirty() { D.dirty = true; saveB.disabled = false; status.textContent = 'Unsaved changes'; }
+    /* Preview: the dashboard drawn from the unsaved settings, with a bar to go back, save or discard */
+    var pbar = null;
+    function preview() {
+      prevB.disabled = true;
+      api('preview', { config: D.cfg }).then(function (j) {
+        prevB.disabled = false;
+        if (j.error) { toast(j.error, true); return; }
+        if (!D.saved) D.saved = S.L;
+        D.previewing = true; S.L = j.layout;
+        shell();                     // this takes the drawer off the page; back() puts it back as it was
+        applyCss(D.cfg.appearance.css_enabled ? D.css : '');
+        pbar = h('div', { class: 'pv-bar', role: 'region', 'aria-label': 'Preview of unsaved settings' }, ic('eye'),
+          h('span', { class: 'grow' }, h('b', null, 'Preview'), h('span', { class: 'muted sm' }, ' · not saved yet. New apps load their data once saved.')),
+          btn('Back to settings', back, 'sm'), btn('Discard', function () { confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }, 'sm ghost'), btn('Save', save, 'pri sm'));
+        root.appendChild(pbar);
+        refreshNow();
+        setTimeout(function () { var f = pbar && pbar.querySelector('.btn'); if (f) f.focus(); }, 0);
+      });
+    }
+    function back() {
+      if (!D.previewing) return;
+      D.previewing = false; if (pbar) pbar.remove(); pbar = null;
+      root.appendChild(bg); root.appendChild(drawer);
+      setTimeout(function () { prevB.focus(); }, 0);
+    }
+    D.back = back;
     function close(force) {
       if (force !== true && D.dirty) { confirmBox('Close without saving?', 'Your changes in Settings are not saved yet.', 'Close without saving', true).then(function (y) { if (y) close(true); }); return; }
       document.removeEventListener('keydown', key);
-      bg.remove(); drawer.remove(); S.drawer = null;
+      bg.remove(); drawer.remove(); if (pbar) pbar.remove(); S.drawer = null;
+      if (D.saved) { S.L = D.saved; D.saved = null; D.previewing = false; shell(); refreshNow(); }
       if (D.dirty) { applyLook(); applyCss(S.boot.css); }
       if (last && last.focus && document.body.contains(last)) try { last.focus(); } catch (e) { /* gone */ }
     }
     D.close = close;
     function save() {
       saveB.disabled = true; status.textContent = 'Saving…';
-      var data = { config: D.cfg, vars: D.vars.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }), svc: D.svc };
+      var data = { config: D.cfg, creds: D.creds, shared: sharedOut(D) };
       if (D.cssChanged) data.css = D.css;
       api('save', data).then(function (j) {
         if (j.error) { saveB.disabled = false; status.textContent = j.error; toast(j.error, true); return; }
-        D.dirty = false; toast('Settings saved');
+        D.dirty = false; D.saved = null; toast('Settings saved');
         close(true); reload();
       });
     }
@@ -2008,7 +2050,7 @@
     paintTabs(); render();
     api('settings').then(function (j) {
       if (j.error) { status.textContent = j.error; return; }
-      D.cfg = j.config; D.vars = j.secrets.vars; D.svc = Array.isArray(j.secrets.svc) ? {} : j.secrets.svc; D.types = j.types; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
+      D.cfg = j.config; D.creds = Array.isArray(j.creds) ? {} : j.creds; D.shared = j.shared || []; D.zones = j.zones || {}; D.types = j.types; prevB.disabled = false; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
       ['docker', 'vms'].forEach(function (k) { if (Array.isArray(D.cfg[k].items)) D.cfg[k].items = {}; });
       status.textContent = 'Changes apply after saving.';
       render();
@@ -2035,7 +2077,7 @@
     layout: ['Layout', 'grid', pick(tabDashboard, ['Sections', 'System overview'])],
     media: ['Media & downloads', 'play', pick(tabDashboard, ['Media', 'Downloads'])],
     containers: ['Containers & VMs', 'box', pick(tabDashboard, ['Containers', 'Virtual machines', 'Favorites, names and visibility'])],
-    services: ['Apps', 'web', function (b, D, dirty) { pick(tabDashboard, ['Apps'])(b, D, dirty); tabServices(b, D, dirty); }],
+    services: ['Apps', 'web', function (b, D, dirty) { tabServices(b, D, dirty); pick(tabDashboard, ['How apps are shown'])(b, D, dirty); }],
     appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Spacing', 'Wallpaper'])],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['Refresh & display', 'clock', tabSystem],
@@ -2115,7 +2157,7 @@
           btn('Clear', function () { D2.selected = []; txt(selCount, '0 selected'); drawPick(); dirty(); }, 'sm ghost')),
         pick, h('div', { class: 'hint' }, 'Also from the dashboard: gear > Show in "Selected".'))));
     var A2 = c.apps;
-    b.appendChild(set('Apps', 'Plex, Emby, Immich, AdGuard and your other apps, below Arr Stack and Downloads.', h('div', { class: 'grid2' },
+    b.appendChild(set('How apps are shown', 'The Apps section: Plex, Immich, AdGuard and the other apps that are not in Arr Stack or Downloads.', h('div', { class: 'grid2' },
       F('Columns', sIn(A2, 'columns', dirty, [[0, 'Automatic'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']]))),
       cIn(A2, 'headers', dirty, 'Show group titles (Streaming, Other …)'), cIn(A2, 'links', dirty, 'Show shortcut links (the old Services links) as small buttons')));
     b.appendChild(set('Virtual machines', 'VMs are found automatically through libvirt.', h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])))));
@@ -2277,144 +2319,230 @@
     check();
   }
 
+  /* ---- Apps: every app is added, changed, hidden and removed here. Addresses go to config.yaml, keys and passwords to .env (server side) ---- */
+  var APP_CATS = [['Arr Stack', ['radarr', 'sonarr', 'lidarr', 'readarr', 'prowlarr', 'bazarr', 'autobrr', 'overseerr', 'wizarr']],
+    ['Downloads', ['qbittorrent', 'qui', 'sabnzbd']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar']],
+    ['Network and tools', ['adguard', 'pihole', 'npm', 'immich', 'peanut']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Other', ['customapi', 'link']]];
+  var APP_PORT = { radarr: 7878, sonarr: 8989, lidarr: 8686, readarr: 8787, prowlarr: 9696, bazarr: 6767, autobrr: 7474, overseerr: 5055, wizarr: 5690, qbittorrent: 8080, qui: 7476, sabnzbd: 8080,
+    plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80 };
+  var APP_ICON = { adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
+  var KEY_WHERE = { radarr: 'Radarr: Settings > General', sonarr: 'Sonarr: Settings > General', lidarr: 'Lidarr: Settings > General', readarr: 'Readarr: Settings > General', prowlarr: 'Prowlarr: Settings > General',
+    bazarr: 'Bazarr: Settings > General', overseerr: 'Overseerr / Jellyseerr: Settings > General', sabnzbd: 'SABnzbd: Config > General', qui: 'qui: Settings > API Keys', autobrr: 'autobrr: Settings > API Keys',
+    tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys' };
+  var ZONE_NAME = { arr: 'Arr Stack', downloads: 'Downloads', media: 'Media', overview: 'System overview', apps: 'Apps' };
+  function appIcon(t) { var n = APP_ICON[t] !== undefined ? APP_ICON[t] : t; return n ? 'sh-' + n : ''; }
+  function appZone(D, s) { return s.type === 'customapi' && /get_recently_added/.test(s.url || '') ? 'media' : (D.zones || {})[s.type] || 'apps'; }
+  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : 'API key', username: 'Username', password: 'Password' }[k]; }
+
   function tabServices(b, D, dirty) {
-    var vt = h('div', { class: 'olist' });
-    var drawVars = function () {
-      clear(vt);
-      D.vars.forEach(function (v, i) {
-        if (v.value === D.keep) v.stored = true;
-        vt.appendChild(h('div', { class: 'oi' },
-          h('input', { type: 'text', value: v.name, placeholder: 'NAME', 'aria-label': 'Variable name', style: { flex: '1 1 160px' }, oninput: function (e) { v.name = e.target.value.toUpperCase(); v.secret = /KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i.test(v.name); dirty(); } }),
-          h('input', { type: v.secret ? 'password' : 'text', value: v.value === D.keep ? '' : v.value, placeholder: v.stored ? 'stored (leave empty to keep)' : 'value', autocomplete: 'off', 'aria-label': 'Value of ' + (v.name || 'variable'), style: { flex: '2 1 200px' },
-            oninput: function (e) { v.value = e.target.value === '' && v.stored ? D.keep : e.target.value; dirty(); } }),
-          btn('', function () { D.vars.splice(i, 1); dirty(); drawVars(); }, 'sm ghost danger', 'trash', 'Remove variable ' + v.name)));
+    var q = '', box = h('div');
+    var filter = h('input', { type: 'search', placeholder: 'Find an app…', 'aria-label': 'Find an app', oninput: function () { q = filter.value.toLowerCase(); draw(); } });
+    var redraw = function () { draw(); };
+    b.appendChild(set('Your apps', 'Each app goes to its section on its own: Radarr and Sonarr to Arr Stack, download clients to Downloads, everything else to Apps. API keys and passwords are kept in .env on the server, never in the settings file or the browser.',
+      h('div', { class: 'ae-bar' }, filter, h('span', { class: 'grow' }),
+        btn('Add group', function () { D.cfg.groups.push({ id: rid(), name: 'New group', columns: 4, header: true, services: [] }); dirty(); draw(); }, 'sm', 'plus'),
+        btn('Add app', function () { addApp(D, null, null, redraw, dirty); }, 'pri sm', 'plus')), box));
+    function entries() { var out = []; D.cfg.groups.forEach(function (g) { g.services.forEach(function (s) { out.push({ s: s, g: g }); }); }); return out; }
+    function swap(a, c) { var ia = a.g.services.indexOf(a.s), ic2 = c.g.services.indexOf(c.s); a.g.services[ia] = c.s; c.g.services[ic2] = a.s; dirty(); draw(); }
+    function row(x, list) {
+      var s = x.s, T = D.types[s.type] || [s.type, [], false], c = D.creds[s.id] || {}, i = list.indexOf(x);
+      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && s.type !== 'peanut' && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
+      var edit = function () { editService(D, s, x.g, false, redraw, dirty); };
+      return h('div', { class: 'oi ae-row' + (s.hidden ? ' off' : '') },
+        img(iconUrl(s.icon), '', 'web'),
+        h('button', { type: 'button', class: 't ae-name', onclick: edit, title: 'Edit ' + s.name }, h('b', null, s.name || T[0]), h('span', { class: 'muted sm' }, ' · ' + T[0] + (s.hidden ? ' · hidden' : ''))),
+        warn ? h('span', { class: 'badge warn' }, warn) : null,
+        btn('', function () { if (i > 0) swap(x, list[i - 1]); }, 'sm ghost', 'upar', 'Move ' + s.name + ' up'),
+        btn('', function () { if (i < list.length - 1) swap(x, list[i + 1]); }, 'sm ghost', 'dnar', 'Move ' + s.name + ' down'),
+        btn('', function () { s.hidden = !s.hidden; dirty(); draw(); }, 'sm ghost', s.hidden ? 'eyeoff' : 'eye', (s.hidden ? 'Show ' : 'Hide ') + s.name),
+        btn('', edit, 'sm', 'edit', 'Edit ' + s.name),
+        btn('', function () {
+          confirmBox('Remove ' + s.name + '?', 'It leaves the dashboard when you save. Its stored key and password are deleted with it.', 'Remove', true).then(function (y) {
+            if (!y) return;
+            x.g.services.splice(x.g.services.indexOf(s), 1); delete D.creds[s.id]; dirty(); draw();
+          });
+        }, 'sm ghost danger', 'trash', 'Remove ' + s.name));
+    }
+    function draw() {
+      clear(box);
+      var all = entries(), hit = function (x) { return !q || [x.s.name, (D.types[x.s.type] || [''])[0], x.g.name].join(' ').toLowerCase().indexOf(q) >= 0; }, any = false;
+      ['arr', 'downloads', 'media', 'overview'].forEach(function (z) {
+        var list = all.filter(function (x) { return appZone(D, x.s) === z; }), shown = list.filter(hit);
+        if (!shown.length) return;
+        any = true;
+        box.appendChild(h('div', { class: 'ae-sec' }, h('div', { class: 'ae-h' }, h('b', null, ZONE_NAME[z]), h('span', { class: 'muted sm' }, String(list.length)), h('span', { class: 'grow' }),
+          btn('Add', function () { addApp(D, z, null, redraw, dirty); }, 'sm ghost', 'plus', 'Add an app to ' + ZONE_NAME[z])),
+          h('div', { class: 'olist' }, shown.map(function (x) { return row(x, list); }))));
       });
-      if (!D.vars.length) vt.appendChild(h('div', { class: 'empty' }, 'No variables.'));
-    };
-    drawVars();
-    b.appendChild(set('Variables', 'Use {{NAME}} in any URL, link, key or password, like Homepage\'s HOMEPAGE_VAR_… variables. Names containing KEY, TOKEN, PASS or SECRET are secrets: never shown again and left out of redacted exports. {{UNRAID_IP}} is built in.',
-      vt, h('div', { style: { 'margin-top': '8px' } }, btn('Add variable', function () { D.vars.push({ name: '', value: '', secret: false }); dirty(); drawVars(); }, 'sm', 'plus'))));
-    var lay = h('div');
-    var drawLayout = function () {
-      clear(lay);
-      D.cfg.groups.forEach(function (gr, gi) {
-        var box = h('div', { class: 'lg' });
-        box.appendChild(h('div', { class: 'lh' }, h('input', { type: 'text', value: gr.name, 'aria-label': 'Group name', oninput: function (e) { gr.name = e.target.value; dirty(); } }),
-          h('label', { class: 'inl sm muted' }, 'Columns', h('input', { type: 'number', min: 1, max: 8, value: gr.columns, oninput: function (e) { gr.columns = +e.target.value; dirty(); } })),
-          h('label', { class: 'switch sm' }, h('input', { type: 'checkbox', checked: gr.header, onchange: function (e) { gr.header = e.target.checked; dirty(); } }), 'Title'),
-          btn('', function () { if (move(D.cfg.groups, gi, -1)) { dirty(); drawLayout(); } }, 'sm ghost', 'upar', 'Move group ' + gr.name + ' up'),
-          btn('', function () { if (move(D.cfg.groups, gi, 1)) { dirty(); drawLayout(); } }, 'sm ghost', 'dnar', 'Move group ' + gr.name + ' down'),
-          btn('Add widget', function () { editService(D, { id: rid(), name: '', type: 'radarr', icon: '', href: '', url: '', description: '', hidden: false, favorite: false, span: 1, fields: [], options: {} }, gr, true, drawLayout, dirty); }, 'sm', 'plus'),
-          btn('', function () { confirmBox('Delete group "' + gr.name + '"?', 'The group and its ' + gr.services.length + ' widgets are removed when you save.', 'Delete', true).then(function (y) { if (y) { D.cfg.groups.splice(gi, 1); dirty(); drawLayout(); } }); }, 'sm ghost danger', 'trash', 'Delete group ' + gr.name)));
-        gr.services.forEach(function (s, si) {
-          box.appendChild(h('div', { class: 'ls' }, img(iconUrl(s.icon), ''), h('span', { class: 't' }, h('b', null, s.name), h('span', { class: 'muted sm' }, ' · ' + ((D.types[s.type] || [s.type])[0]) + (s.hidden ? ' · hidden' : '') + (s.favorite ? ' · favorite' : ''))),
-            btn('', function () { if (move(gr.services, si, -1)) { dirty(); drawLayout(); } }, 'sm ghost', 'upar', 'Move ' + s.name + ' up'),
-            btn('', function () { if (move(gr.services, si, 1)) { dirty(); drawLayout(); } }, 'sm ghost', 'dnar', 'Move ' + s.name + ' down'),
-            D.cfg.groups.length > 1 ? btn('', function () { var to = D.cfg.groups[gi - 1] || D.cfg.groups[gi + 1]; gr.services.splice(si, 1); to.services.push(s); dirty(); drawLayout(); }, 'sm ghost', 'swap', 'Move ' + s.name + ' to the ' + (gi ? 'previous' : 'next') + ' group') : null,
-            btn('', function () { s.hidden = !s.hidden; dirty(); drawLayout(); }, 'sm ghost', s.hidden ? 'eye' : 'eyeoff', (s.hidden ? 'Show ' : 'Hide ') + s.name),
-            btn('', function () { editService(D, s, gr, false, drawLayout, dirty); }, 'sm', 'edit', 'Edit ' + s.name),
-            btn('', function () { gr.services.splice(si, 1); delete D.svc[s.id]; dirty(); drawLayout(); }, 'sm ghost danger', 'trash', 'Remove ' + s.name)));
-        });
-        if (!gr.services.length) box.appendChild(h('div', { class: 'ls muted sm' }, 'No widgets in this group.'));
-        lay.appendChild(box);
-      });
-    };
-    drawLayout();
-    b.appendChild(set('Widgets', 'App widgets shown in the Services section. Credentials are stored on the server and never shown again.', lay,
-      btn('Add group', function () { D.cfg.groups.push({ id: rid(), name: 'New group', columns: 4, header: true, services: [] }); dirty(); drawLayout(); }, 'sm', 'plus')));
-    var ta = function (ph, lab) { return h('textarea', { rows: 6, placeholder: ph, spellcheck: 'false', 'aria-label': lab }); };
-    var ySvc = ta('Paste services.yaml here', 'services.yaml'), ySet = ta('Optional: settings.yaml (columns and group titles)', 'settings.yaml'), yEnv = ta('Optional: HOMEPAGE_VAR_… values from your .env (KEY=value per line)', '.env values');
-    var prev = h('div', { style: { 'margin-top': '10px' } });
-    b.appendChild(set('Import from Homepage', 'Brings over groups, widgets, icons, links and {{HOMEPAGE_VAR_…}} variables from a gethomepage/homepage config. Only the widgets are replaced; a backup is taken first.',
-      h('div', { class: 'grid2' }, ySvc, h('div', null, ySet, h('div', { style: { height: '8px' } }), yEnv)),
-      h('div', { style: { 'margin-top': '8px' } }, btn('Preview', function () {
-        if (D.dirty) { toast('Save or discard your other changes first.', true); return; }
-        api('import_preview', { services: ySvc.value, settings: ySet.value, env: yEnv.value }).then(function (j) {
-          clear(prev);
-          if (j.error) { prev.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
-          var missing = j.vars.filter(function (v) { return !v.set && !v.stored; });
-          prev.appendChild(h('div', { class: 'banner ok' }, j.groups + ' groups and ' + j.services + ' widgets found.'));
-          j.warnings.forEach(function (w) { prev.appendChild(h('div', { class: 'banner' }, w)); });
-          if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' variables have no value yet (fill them in under Variables afterwards): ' + missing.map(function (v) { return v.name; }).join(', ')));
-          prev.appendChild(h('div', { class: 'kv2 sm' }, j.layout.map(function (g) { return [h('span', null, g.name), h('span', null, g.services.join(', '))]; })));
-          prev.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Import and replace the widgets', function () {
-            confirmBox('Replace the widgets?', 'Your current groups and widgets are replaced. Appearance, container and VM preferences and stored variable values are kept. A backup is taken first.', 'Import', true).then(function (y) {
-              if (y) act('import_apply', { services: ySvc.value, settings: ySet.value, env: yEnv.value }, 'Imported').then(function (k) { if (!k.error) { D.close(true); reload().then(function () { openSettings('services'); }); } });
+      D.cfg.groups.forEach(function (g, gi) {
+        var list = all.filter(function (x) { return x.g === g && appZone(D, x.s) === 'apps'; }), shown = list.filter(hit);
+        if (q && !shown.length) return;
+        any = true;
+        var others = g.services.filter(function (s) { return appZone(D, s) !== 'apps'; });
+        box.appendChild(h('div', { class: 'ae-sec' }, h('div', { class: 'ae-h' }, h('b', null, 'Apps'), h('span', { class: 'muted' }, '·'),
+          h('input', { type: 'text', value: g.name, 'aria-label': 'Group name', oninput: function (e) { g.name = e.target.value; dirty(); } }),
+          h('label', { class: 'switch sm', title: 'Show the group title on the dashboard' }, h('input', { type: 'checkbox', checked: g.header, onchange: function (e) { g.header = e.target.checked; dirty(); } }), 'Title'),
+          h('span', { class: 'grow' }),
+          btn('', function () { if (move(D.cfg.groups, gi, -1)) { dirty(); draw(); } }, 'sm ghost', 'upar', 'Move group ' + g.name + ' up'),
+          btn('', function () { if (move(D.cfg.groups, gi, 1)) { dirty(); draw(); } }, 'sm ghost', 'dnar', 'Move group ' + g.name + ' down'),
+          btn('Add', function () { addApp(D, 'apps', g, redraw, dirty); }, 'sm ghost', 'plus', 'Add an app to ' + g.name),
+          D.cfg.groups.length > 1 ? btn('', function () {
+            var n = g.services.length - others.length;
+            confirmBox('Delete the group "' + g.name + '"?', n ? 'Its ' + n + ' app' + (n > 1 ? 's are' : ' is') + ' removed too when you save.' : 'It has no apps.', 'Delete', true).then(function (y) {
+              if (!y) return;
+              var to = D.cfg.groups[gi ? 0 : 1];
+              others.forEach(function (s) { to.services.push(s); });          // Arr and download apps kept in this group stay
+              g.services.forEach(function (s) { if (others.indexOf(s) < 0) delete D.creds[s.id]; });
+              D.cfg.groups.splice(gi, 1); dirty(); draw();
             });
-          }, 'pri')));
-        });
-      }, '', 'check')), prev));
+          }, 'sm ghost danger', 'trash', 'Delete group ' + g.name) : null),
+          h('div', { class: 'olist' }, shown.length ? shown.map(function (x) { return row(x, list); }) : h('div', { class: 'empty' }, others.length
+            ? 'Nothing for the Apps section; its ' + others.length + ' other app' + (others.length > 1 ? 's are' : ' is') + ' listed above (' + others.map(function (o) { return o.name; }).join(', ') + ').' : 'No apps in this group yet.'))));
+      });
+      if (!any) box.appendChild(h('div', { class: 'empty' }, q ? 'No app matches "' + q + '".' : 'No apps yet. Use Add app to add Radarr, qBittorrent, Plex and the others.'));
+    }
+    draw();
+    sharedValues(b, D, dirty);
+  }
+
+  /* pick a type, then fill in the details */
+  function addApp(D, zone, group, after, dirty) {
+    var qq = '', grid = h('div');
+    var find = h('input', { type: 'search', placeholder: 'Search apps…', 'aria-label': 'Search app types', oninput: function () { qq = find.value.toLowerCase(); paint(); } });
+    var order = APP_CATS.slice().sort(function (a, c) { var za = appZone(D, { type: a[1][0] }) === zone, zc = appZone(D, { type: c[1][0] }) === zone; return za === zc ? 0 : za ? -1 : 1; });
+    var m;
+    function paint() {
+      clear(grid);
+      order.forEach(function (cat) {
+        var ts = cat[1].filter(function (t) { return D.types[t] && (!qq || (D.types[t][0] + ' ' + t).toLowerCase().indexOf(qq) >= 0); });
+        if (!ts.length) return;
+        grid.appendChild(h('div', { class: 'tp-h' }, cat[0]));
+        grid.appendChild(h('div', { class: 'tpick' }, ts.map(function (t) {
+          return h('button', { type: 'button', title: D.types[t][0], onclick: function () { m.close(); pickType(t); } }, img(iconUrl(appIcon(t)), '', 'web'), h('span', { class: 'ell' }, D.types[t][0].replace(/ \(.*\)$/, '')));
+        })));
+      });
+      if (!grid.childNodes.length) grid.appendChild(h('div', { class: 'empty' }, 'No app type matches. Custom API (JSON) can read most apps, Link only just opens a page.'));
+    }
+    function pickType(t) {
+      var g = group || D.cfg.groups[0];
+      if (!g) { g = { id: rid(), name: 'Apps', columns: 4, header: true, services: [] }; D.cfg.groups.push(g); }
+      editService(D, { id: rid(), name: D.types[t][0].replace(/ \(.*\)$/, ''), type: t, icon: appIcon(t), href: '', url: '', description: '', hidden: false, favorite: false, span: 1, fields: [], options: {} }, g, true, after, dirty);
+    }
+    paint();
+    m = modal('Add an app', h('div', null, h('div', { style: { 'margin-bottom': '10px' } }, find), grid), [btn('Cancel', function () { m.close(); })], true);
   }
 
   function editService(D, orig, group, isNew, after, dirtyOuter) {
-    var s = JSON.parse(JSON.stringify(orig)), sec = JSON.parse(JSON.stringify(D.svc[s.id] || {}));
+    var s = JSON.parse(JSON.stringify(orig)), c0 = D.creds[s.id] || {};
+    var cr = { key: c0.key || '', username: c0.username || '', password: c0.password || '' }, stored = { key: c0.key === D.keep, password: c0.password === D.keep, username: false };
     if (!s.options || Array.isArray(s.options)) s.options = {};
-    var form = h('div'), noop = function () {};
+    var gid = group.id, form = h('div', { class: 'ae-form' }), noop = function () {};
     var draw = function () {
       clear(form);
-      var T = D.types[s.type] || ['', [], false];
-      var typeSel = h('select', { onchange: function (e) { s.type = e.target.value; s.fields = []; s.options = {}; draw(); } }, Object.keys(D.types).map(function (k) { return h('option', { value: k, selected: k === s.type }, D.types[k][0]); }));
-      form.appendChild(h('div', { class: 'grid2' }, F('Name', tIn(s, 'name', noop, T[0])), F('Type', typeSel),
-        F('Icon', tIn(s, 'icon', noop, 'sh-radarr, radarr.png or https://…'), 'sh-NAME = selfh.st icons, NAME.png = dashboard-icons, or any URL.'),
-        F('Link (opens on click)', tIn(s, 'href', noop, 'http://{{SERVER_IP}}:7878')),
-        F('Description', tIn(s, 'description', noop, 'Optional')), F('Width', sIn(s, 'span', noop, [[1, 'Normal'], [2, 'Double']]))));
+      var T = D.types[s.type] || ['', [], false], z = appZone(D, s), port = APP_PORT[s.type] || 80;
+      var typeSel = h('select', { onchange: function (e) { var was = s.type; s.type = e.target.value; s.fields = []; s.options = {}; if (!s.icon || s.icon === appIcon(was)) s.icon = appIcon(s.type); draw(); } },
+        Object.keys(D.types).map(function (k) { return h('option', { value: k, selected: k === s.type }, D.types[k][0]); }));
+      var icoPrev = h('span', { class: 'ae-ico' }, img(iconUrl(s.icon), '', 'web'));
+      form.appendChild(h('div', { class: 'grid2' }, F('Name', tIn(s, 'name', noop, T[0])), F('Type', typeSel, 'Shows in ' + (z === 'apps' ? 'Apps' : ZONE_NAME[z]) + '.')));
+      if (T[2]) form.appendChild(F('Address', tIn(s, 'url', noop, 'http://192.168.1.10:' + port), 'Where UnDash reaches ' + T[0].replace(/ \(.*\)$/, '') + ', from the server: the IP or host name and the port, e.g. http://192.168.1.10:' + port + '.'));
+      if ((T[1] || []).length) {
+        var creds = h('div', { class: 'grid2' });
+        T[1].forEach(function (k) {
+          var inp = h('input', { type: k === 'username' ? 'text' : 'password', autocomplete: k === 'username' ? 'off' : 'new-password', value: stored[k] ? '' : cr[k], spellcheck: 'false',
+            placeholder: stored[k] ? 'Saved. Type to replace it' : (k === 'key' ? 'Paste the ' + credLabel(s.type, k).replace(/^[A-Z][a-z]/, function (x) { return x.toLowerCase(); }) : ''),
+            oninput: function (e) { cr[k] = e.target.value === '' && stored[k] ? D.keep : e.target.value; } });
+          var ref = c0[k + '_ref'];
+          creds.appendChild(F(credLabel(s.type, k), h('div', { class: 'sec-in' }, inp, stored[k] ? btn('Remove', function () { cr[k] = ''; stored[k] = false; draw(); }, 'sm', null, 'Remove the saved ' + credLabel(s.type, k).toLowerCase()) : null),
+            ref ? 'Kept in .env as ' + ref + '.' : (k === 'key' ? (KEY_WHERE[s.type] ? 'In ' + KEY_WHERE[s.type] + '. ' : '') + 'Kept in .env on the server.' : null)));
+        });
+        form.appendChild(h('div', { class: 'ae-sub' }, 'Login'));
+        form.appendChild(creds);
+      }
+      form.appendChild(h('div', { class: 'ae-sub' }, 'On the dashboard'));
+      form.appendChild(h('div', { class: 'grid2' },
+        F('Link (opens on click)', tIn(s, 'href', noop, T[2] ? 'Same as the address' : 'https://…'), T[2] ? 'Leave empty to open the address. Use it for a public or HTTPS address.' : null),
+        F('Icon', h('div', { class: 'sec-in' }, icoPrev, tIn(s, 'icon', function () { clear(icoPrev).appendChild(img(iconUrl(s.icon), '', 'web')); }, 'sh-radarr')), 'sh-NAME (selfh.st icons), NAME.png (dashboard-icons) or an image URL.'),
+        z === 'apps' && D.cfg.groups.length > 1 ? F('Group', h('select', { onchange: function (e) { gid = e.target.value; } }, D.cfg.groups.map(function (g) { return h('option', { value: g.id, selected: g.id === gid }, g.name); }))) : null,
+        z === 'apps' ? F('Description', tIn(s, 'description', noop, 'Optional')) : null,
+        z === 'apps' ? F('Card width', sIn(s, 'span', noop, [[1, 'Normal'], [2, 'Double']])) : null));
       form.appendChild(h('div', { class: 'inl' }, cIn(s, 'favorite', noop, 'Favorite'), cIn(s, 'hidden', noop, 'Hidden')));
-      if (T[2] || s.type === 'customapi') form.appendChild(F('API URL', tIn(s, 'url', noop, 'http://{{SERVER_IP}}:7878'), 'The address UnDash calls from the server. {{VARIABLES}} work here.'));
-      var creds = h('div', { class: 'grid2' });
-      (T[1] || []).forEach(function (k) {
-        var stored = sec[k] === D.keep;
-        var inp = h('input', { type: k === 'username' ? 'text' : 'password', autocomplete: 'off', value: stored ? '' : (sec[k] || ''), placeholder: stored ? 'stored (leave empty to keep)' : (k === 'key' ? 'API key or {{VARIABLE}}' : ''),
-          oninput: function (e) { sec[k] = e.target.value === '' && stored ? D.keep : e.target.value; } });
-        creds.appendChild(F({ key: s.type === 'plex' ? 'Plex token' : s.type === 'peanut' ? 'Device key' : s.type === 'pihole' ? 'Password / app password' : 'API key', username: 'Username', password: 'Password' }[k],
-          h('div', { class: 'sec-in' }, inp, stored ? btn('Clear', function () { sec[k] = ''; stored = false; inp.placeholder = ''; }, 'sm') : null)));
-      });
-      if (creds.childNodes.length) form.appendChild(creds);
-      if (FIELDS[s.type]) form.appendChild(F('Fields to show', h('input', { type: 'text', value: (s.fields || []).join(', '), placeholder: 'all', oninput: function (e) { s.fields = e.target.value.split(/[\s,]+/).filter(Boolean); } }), 'Available: ' + FIELDS[s.type] + '. Empty shows all.'));
+      var adv = h('div');
+      if (FIELDS[s.type]) adv.appendChild(F('Numbers to show', h('input', { type: 'text', value: (s.fields || []).join(', '), placeholder: 'all', oninput: function (e) { s.fields = e.target.value.split(/[\s,]+/).filter(Boolean); } }), 'Available: ' + FIELDS[s.type] + '. Empty shows all.'));
       if (s.type === 'calendar') {
         s.options.integrations = s.options.integrations || [];
-        var box = h('div');
+        var cbox = h('div');
         D.cfg.groups.forEach(function (g) { g.services.forEach(function (x) {
           if (x.type !== 'radarr' && x.type !== 'sonarr') return;
           var on = s.options.integrations.filter(function (i) { return i.service === x.id; })[0];
-          box.appendChild(h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!on, onchange: function (e) {
+          cbox.appendChild(h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!on, onchange: function (e) {
             s.options.integrations = s.options.integrations.filter(function (i) { return i.service !== x.id; });
             if (e.target.checked) s.options.integrations.push({ service: x.id, unmonitored: true });
-          } }), x.name + ' (' + g.name + ')'));
+          } }), x.name));
         }); });
-        if (!box.childNodes.length) box.appendChild(h('div', { class: 'muted sm' }, 'Add a Radarr or Sonarr widget first.'));
-        form.appendChild(F('Sources', box));
+        if (!cbox.childNodes.length) cbox.appendChild(h('div', { class: 'muted sm' }, 'Add Radarr or Sonarr first.'));
+        form.appendChild(F('Sources', cbox));
         form.appendChild(h('div', { class: 'grid2' }, F('Max events', tIn(s.options, 'max_events', noop, '8')), F('Days ahead', tIn(s.options, 'days_ahead', noop, '30')), F('Days back', tIn(s.options, 'previous_days', noop, '0'))));
       }
-      if (s.type === 'tautulli_recent') form.appendChild(h('div', { class: 'grid2' }, F('Media type', tIn(s.options, 'media_type', noop, 'movie, episode, track…')), F('Library section id', tIn(s.options, 'section_id', noop, 'optional')), F('Count', tIn(s.options, 'count', noop, '6'))));
+      if (s.type === 'tautulli_recent') adv.appendChild(h('div', { class: 'grid2' }, F('Media type', tIn(s.options, 'media_type', noop, 'movie, episode, track…')), F('Library section id', tIn(s.options, 'section_id', noop, 'optional')), F('Count', tIn(s.options, 'count', noop, '6'))));
       if (s.type === 'ups') form.appendChild(F('UPS name', tIn(s.options, 'ups', noop, D.cfg.general.ups_name)));
-      if (s.type === 'emby' || s.type === 'jellyfin') form.appendChild(cIn(s.options, 'hide_blocks', noop, 'Only show the streams (hide the library counts)'));
+      if (s.type === 'emby' || s.type === 'jellyfin') adv.appendChild(cIn(s.options, 'hide_blocks', noop, 'Only show the streams (hide the library counts)'));
       if (s.type === 'customapi') {
         var js = function (k, def, lab) { var t = h('textarea', { rows: 6, spellcheck: 'false', 'aria-label': lab, oninput: function (e) { try { s.options[k] = JSON.parse(e.target.value || def); e.target.style.borderColor = ''; } catch (x) { e.target.style.borderColor = 'var(--bad)'; } } }); t.value = JSON.stringify(s.options[k] || JSON.parse(def), null, 2); return t; };
         form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Blocks'], ['list', 'List']])), F('Method', tIn(s.options, 'method', noop, 'GET'))));
         form.appendChild(F('Headers (JSON)', js('headers', '{}', 'Headers'), '{{KEY}} is replaced by the API key above, e.g. {"X-Api-Key": "{{KEY}}"}.'));
         form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}]. Formats: number, text, bytes, rate, percent; lists can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
       }
+      if (adv.childNodes.length) form.appendChild(h('details', { class: 'ae-adv' }, h('summary', null, 'More options'), adv));
       var res = h('div', { role: 'status' });
-      if (T[2] || s.type === 'calendar' || s.type === 'customapi' || s.type === 'ups') form.appendChild(h('div', { class: 'inl' }, btn('Test', function () {
+      if (T[2] || s.type === 'calendar' || s.type === 'customapi' || s.type === 'ups') form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
         clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
-        var cfg = JSON.parse(JSON.stringify(D.cfg)), svc = JSON.parse(JSON.stringify(D.svc));
-        var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0];
-        if (gg) { var k = gg.services.map(function (x) { return x.id; }).indexOf(s.id); if (k < 0) gg.services.push(s); else gg.services[k] = s; }
-        svc[s.id] = sec;
-        api('test', { config: cfg, vars: D.vars.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }), svc: svc, id: s.id }).then(function (r) {
+        var cfg = JSON.parse(JSON.stringify(D.cfg)), creds = JSON.parse(JSON.stringify(D.creds));
+        var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0] || cfg.groups[0];
+        var k = gg.services.map(function (x) { return x.id; }).indexOf(s.id); if (k < 0) gg.services.push(s); else gg.services[k] = s;
+        creds[s.id] = cr;
+        api('test', { config: cfg, creds: creds, shared: sharedOut(D), id: s.id }).then(function (r) {
           clear(res);
           if (r.error) res.appendChild(h('div', { class: 'banner bad' }, r.error));
           else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' items' : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
         });
-      }, '', 'check'), res));
+      }, '', 'check'), h('span', { class: 'muted sm' }, 'Tries it with what is filled in here; nothing is saved.')));
+      form.appendChild(res);
     };
     draw();
-    var m = modal(isNew ? 'Add widget to ' + group.name : 'Edit ' + orig.name, form, [btn('Cancel', function () { m.close(); }), btn(isNew ? 'Add' : 'Apply', function () {
-      if (!s.name) s.name = (D.types[s.type] || [''])[0];
+    var m = modal(isNew ? 'Add ' + (D.types[s.type] || [''])[0].replace(/ \(.*\)$/, '') : 'Edit ' + orig.name, form, [btn('Cancel', function () { m.close(); }), btn(isNew ? 'Add app' : 'Apply', function () {
+      if (!String(s.name).trim()) s.name = (D.types[s.type] || [''])[0].replace(/ \(.*\)$/, '');
       s.span = +s.span === 2 ? 2 : 1;
-      if (isNew) group.services.push(s); else for (var k in s) orig[k] = s[k];
-      D.svc[s.id] = sec; m.close(); dirtyOuter(); after();
+      var to = D.cfg.groups.filter(function (g) { return g.id === gid; })[0] || group;
+      if (isNew) to.services.push(s);
+      else {
+        for (var k in s) orig[k] = s[k];
+        if (to !== group) { group.services.splice(group.services.indexOf(orig), 1); to.services.push(orig); }
+      }
+      D.creds[s.id] = Object.assign({}, c0, cr); m.close(); dirtyOuter(); after();
     }, 'pri')], true);
+  }
+
+  /* values several apps share ({{NAME}}): advanced, most setups have none */
+  function sharedOut(D) { return D.shared.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }); }
+  function sharedValues(b, D, dirty) {
+    var list = h('div', { class: 'olist' });
+    var draw = function () {
+      clear(list);
+      D.shared.forEach(function (v, i) {
+        var keep = v.value === D.keep;
+        list.appendChild(h('div', { class: 'oi' },
+          h('input', { type: 'text', value: v.name, placeholder: 'NAME', 'aria-label': 'Name', spellcheck: 'false', style: { flex: '1 1 150px' }, oninput: function (e) { v.name = e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'); v.secret = /KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/.test(v.name); dirty(); } }),
+          h('input', { type: v.secret ? 'password' : 'text', value: keep ? '' : v.value, placeholder: keep ? 'Saved. Type to replace it' : 'value', autocomplete: 'new-password', 'aria-label': 'Value of ' + (v.name || 'the shared value'), style: { flex: '2 1 200px' },
+            oninput: function (e) { v.value = e.target.value === '' && keep ? D.keep : e.target.value; dirty(); } }),
+          h('span', { class: 'badge ' + (v.used ? 'plain' : 'off') }, v.used ? 'in use' : 'unused'),
+          btn('', function () { D.shared.splice(i, 1); dirty(); draw(); }, 'sm ghost danger', 'trash', 'Remove ' + (v.name || 'this value'))));
+      });
+      if (!D.shared.length) list.appendChild(h('div', { class: 'empty' }, 'None. You only need these to reuse one value in several apps.'));
+    };
+    draw();
+    b.appendChild(h('details', { class: 'set adv' }, h('summary', null, h('b', null, 'Shared values'), h('span', { class: 'muted sm' }, ' · advanced' + (D.shared.length ? ', ' + D.shared.length : ''))),
+      h('p', { class: 'hint' }, 'A value used by several apps, such as one server address. Type {{NAME}} in an address, link or key field to use it. Kept in .env with the keys; names with KEY, TOKEN, PASS or SECRET are hidden once saved. {{UNRAID_IP}} is built in.'),
+      list, h('div', { style: { 'margin-top': '8px' } }, btn('Add shared value', function () { D.shared.push({ name: '', value: '', secret: false, used: false }); dirty(); draw(); }, 'sm', 'plus'))));
   }
 
   /* Docker version: where the Unraid API is and its key (the key is never shown again once saved) */
@@ -2494,55 +2622,58 @@
     var dl = function (kind) {
       api('export', { kind: kind }).then(function (j) {
         if (j.error) { toast(j.error, true); return; }
-        var a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(j, null, 2)], { type: 'application/json' })), download: 'undash-' + kind + '-' + new Date().toISOString().slice(0, 10) + '.json' });
+        var a = h('a', { href: URL.createObjectURL(new Blob([j.text], { type: 'text/plain' })), download: j.name });
         root.appendChild(a); a.click(); root.removeChild(a);
       });
     };
-    b.appendChild(set('Export', null,
-      h('div', { class: 'kv2 sm', style: { 'margin-bottom': '10px' } },
-        h('span', null, 'Redacted'), h('span', null, 'Layout, sections, metrics, container and VM preferences, theme, accent, refresh settings, custom CSS and non-secret variables. API keys, passwords, tokens and secret variables are removed, and so are passwords or tokens written into URLs. Safe to share.'),
-        h('span', null, 'Full'), h('span', null, 'Everything above plus every variable, API key and password: a complete backup. Keep it private.')),
-      h('div', { class: 'inl' }, btn('Export redacted', function () { dl('redacted'); }, '', 'download'), btn('Export full', function () {
-        confirmBox('Export with secrets?', 'The file contains your API keys and passwords in plain text. Store it somewhere private.', 'Export full').then(function (y) { if (y) dl('full'); });
-      }, '', 'download'))));
+    b.appendChild(set('Export', 'UnDash keeps two files in its configuration folder: config.yaml with everything you set here, and .env with the keys and passwords.',
+      h('div', { class: 'exp' },
+        h('div', { class: 'exp-row' }, h('div', { class: 't' }, h('b', null, 'config.yaml'), h('div', { class: 'muted sm' }, 'Apps, layout, theme and preferences. No keys, passwords or logins in it, so it is safe to share.')),
+          btn('Download', function () { dl('config'); }, '', 'download', 'Download config.yaml')),
+        h('div', { class: 'exp-row' }, h('div', { class: 't' }, h('b', null, '.env'), h('div', { class: 'muted sm' }, 'API keys, user names and passwords, and the Unraid API key. Keep it private.')),
+          btn('Download', function () {
+            confirmBox('Download your keys and passwords?', 'The file has every API key and password in plain text. Keep it somewhere private.', 'Download').then(function (y) { if (y) dl('env'); });
+          }, '', 'download', 'Download .env')))));
     var info = h('div', { style: { 'margin-top': '10px' } });
-    var file = h('input', { type: 'file', accept: '.json,application/json', 'aria-label': 'Settings file to import', onchange: function () {
+    var file = h('input', { type: 'file', 'aria-label': 'Settings file to import', onchange: function () {
       var f = file.files[0]; clear(info); if (!f) return;
-      if (f.size > 2097152) { info.appendChild(h('div', { class: 'banner bad' }, 'That file is larger than 2 MB, so it is not an UnDash export.')); return; }
+      if (f.size > 2097152) { info.appendChild(h('div', { class: 'banner bad' }, 'That file is larger than 2 MB, so it is not an UnDash settings file.')); return; }
       var rd = new FileReader();
       rd.onload = function () {
         var raw = String(rd.result);
         api('import_check', { file: raw }).then(function (j) {
           clear(info);
           if (j.error) { info.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
-          var s = j.summary;
-          info.appendChild(h('div', { class: 'kv2 sm' },
-            h('span', null, 'Kind'), h('span', null, s.kind === 'full' ? 'Full export (includes secrets)' : s.kind === 'redacted' ? 'Redacted export (your stored secrets are kept)' : 'Layout file (your stored secrets are kept)'),
-            h('span', null, 'Created'), h('span', null, s.created ? new Date(s.created * 1000).toLocaleString() : 'unknown'),
-            h('span', null, 'Widgets'), h('span', null, s.groups + ' groups, ' + s.widgets + ' widgets' + (s.skipped ? ' (' + s.skipped + ' of an unknown type skipped)' : '')),
-            h('span', null, 'Appearance'), h('span', null, s.theme + ' theme, accent ' + (s.accent || 'from the theme') + ', refresh ' + s.refresh + ' s'),
-            h('span', null, 'Custom CSS'), h('span', null, s.css === null ? 'not included (current CSS kept)' : s.css + ' characters'),
-            h('span', null, 'Variables'), h('span', null, s.vars + (s.credentials ? ', credentials for ' + s.credentials + ' widgets' : ''))));
-          info.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Apply this file', function () {
-            confirmBox('Replace your settings?', 'The settings above replace the current ones. A backup is taken first; you can restore it below.', 'Apply', true).then(function (y) {
-              if (y) act('import_file', { file: raw }, 'Settings imported').then(function (k) { if (!k.error) location.reload(); });
+          var s = j.summary, env = s.kind === 'env';
+          info.appendChild(env ? h('div', { class: 'kv2 sm' }, h('span', null, 'File'), h('span', null, '.env (keys and passwords)'), h('span', null, 'Values'), h('span', null, s.values + (s.names.length ? ': ' + s.names.join(', ') : '')))
+            : h('div', { class: 'kv2 sm' },
+              h('span', null, 'File'), h('span', null, s.legacy ? 'Settings export of an older UnDash (converted)' : 'config.yaml'),
+              h('span', null, 'Apps'), h('span', null, s.widgets + ' in ' + s.groups + ' group' + (s.groups === 1 ? '' : 's') + (s.skipped ? ' (' + s.skipped + ' of an unknown type skipped)' : '')),
+              h('span', null, 'Look'), h('span', null, s.theme + ' theme, refresh every ' + s.refresh + ' s'),
+              h('span', null, 'Custom CSS'), h('span', null, s.css === null ? 'not in the file (yours is kept)' : s.css + ' characters'),
+              h('span', null, 'Keys and passwords'), h('span', null, s.values ? s.values + ' in the file, added to .env' : 'none in the file; the ones you saved are kept')));
+          info.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn(env ? 'Add these values' : 'Replace my settings', function () {
+            confirmBox(env ? 'Add these keys and passwords?' : 'Replace your settings?', env ? 'They are added to .env; a value with the same name replaces the saved one. A backup is taken first.'
+              : 'Apps, layout and look are replaced by the file. Your saved keys and passwords stay. A backup is taken first, so you can go back below.', env ? 'Add' : 'Replace', !env).then(function (y) {
+              if (y) act('import_file', { file: raw }, 'Imported').then(function (k) { if (!k.error) location.reload(); });
             });
           }, 'pri')));
         });
       };
       rd.readAsText(f);
     } });
-    b.appendChild(set('Import', 'Load an UnDash export. You see what it contains before anything changes.', file, info));
+    b.appendChild(set('Import', 'Choose a config.yaml or .env exported from UnDash (exports of older versions work too). You see what is in it before anything changes.', file, info));
+    hpImport(b, D);
     var vbox = h('div', { role: 'status' });
     var bbox = h('div', { class: 'olist' }, h('div', { class: 'empty' }, 'Loading…'));
-    b.appendChild(set('Check configuration', 'Looks for widgets without a URL, undefined variables and calendar sources that were removed.',
-      btn('Validate', function () {
+    b.appendChild(set('Check configuration', 'Looks for apps without an address, unknown {{NAMES}} and calendar sources that were removed.',
+      btn('Check', function () {
         clear(vbox).appendChild(h('div', { class: 'progress' }, h('i')));
         api('validate').then(function (j) { clear(vbox); if (j.error) { vbox.appendChild(h('div', { class: 'banner bad' }, j.error)); return; } if (!j.issues.length) vbox.appendChild(h('div', { class: 'banner ok', style: { 'margin-top': '10px' } }, 'No problems found.')); j.issues.forEach(function (x) { vbox.appendChild(h('div', { class: 'banner ' + (x.level === 'bad' ? 'bad' : ''), style: { 'margin-top': '8px' } }, x.msg)); }); });
       }, '', 'check'), vbox));
-    b.appendChild(set('Backups', 'Taken automatically before every save, import, restore and reset (the newest 15 are kept in backups/ of the configuration directory).', bbox,
+    b.appendChild(set('Backups', 'Both files are backed up before every save, import, restore and reset. The newest 15 are kept in data/backups of the configuration folder.', bbox,
       h('div', { style: { 'margin-top': '10px' } }, btn('Reset to defaults…', function () {
-        confirmBox('Reset the dashboard?', 'Widgets, sections and preferences go back to the defaults. Variables and credentials are kept, and a backup is taken first.', 'Reset', true).then(function (y) { if (y) act('reset', {}, 'Reset').then(function (j) { if (!j.error) location.reload(); }); });
+        confirmBox('Reset the dashboard?', 'Apps, sections and preferences go back to the defaults. Your keys and passwords stay in .env, and a backup is taken first.', 'Reset', true).then(function (y) { if (y) act('reset', {}, 'Reset').then(function (j) { if (!j.error) location.reload(); }); });
       }, 'danger', 'trash'))));
     api('backups').then(function (j) {
       clear(bbox);
@@ -2550,9 +2681,36 @@
       j.backups.forEach(function (x) {
         var when = new Date(x.created * 1000).toLocaleString();
         bbox.appendChild(h('div', { class: 'oi' }, h('span', { class: 't' }, h('b', null, when), h('span', { class: 'muted sm' }, ' · ' + (x.reason || ''))),
-          btn('Restore', function () { confirmBox('Restore this backup?', 'Settings, secrets and custom CSS go back to ' + when + '. The current state is backed up first.', 'Restore', true).then(function (y) { if (y) act('restore', { id: x.id }, 'Restored').then(function (k) { if (!k.error) location.reload(); }); }); }, 'sm', null, 'Restore the backup from ' + when)));
+          btn('Restore', function () { confirmBox('Restore this backup?', 'config.yaml and .env go back to how they were on ' + when + '. The current state is backed up first.', 'Restore', true).then(function (y) { if (y) act('restore', { id: x.id }, 'Restored').then(function (k) { if (!k.error) location.reload(); }); }); }, 'sm', null, 'Restore the backup from ' + when)));
       });
     });
+  }
+  /* the one place that talks about Homepage: its config files are converted into UnDash's own */
+  function hpImport(b, D) {
+    var ta = function (ph, lab) { return h('textarea', { rows: 6, placeholder: ph, spellcheck: 'false', 'aria-label': lab }); };
+    var ySvc = ta('Paste services.yaml here', 'services.yaml'), ySet = ta('Optional: settings.yaml (columns and group titles)', 'settings.yaml'), yEnv = ta('Optional: the .env with your HOMEPAGE_VAR_… values', '.env values');
+    var prev = h('div', { style: { 'margin-top': '10px' } });
+    var data = function () { return { services: ySvc.value, settings: ySet.value, env: yEnv.value }; };
+    b.appendChild(h('details', { class: 'set adv' }, h('summary', null, h('b', null, 'Coming from Homepage?')),
+      h('p', { class: 'hint' }, 'You can import your Homepage dashboard configs too. Paste services.yaml (and optionally settings.yaml and .env): UnDash turns the groups, apps, icons and links into its own settings, and moves the keys into .env. Only your apps are replaced; a backup is taken first.'),
+      h('div', { class: 'grid2' }, ySvc, h('div', null, ySet, h('div', { style: { height: '8px' } }), yEnv)),
+      h('div', { style: { 'margin-top': '8px' } }, btn('Preview', function () {
+        if (D.dirty) { toast('Save or discard your other changes first.', true); return; }
+        api('import_preview', data()).then(function (j) {
+          clear(prev);
+          if (j.error) { prev.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
+          var missing = j.vars.filter(function (v) { return !v.set && !v.stored; });
+          prev.appendChild(h('div', { class: 'banner ok' }, j.groups + ' groups and ' + j.services + ' apps found.'));
+          j.warnings.forEach(function (w) { prev.appendChild(h('div', { class: 'banner' }, w)); });
+          if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' value' + (missing.length > 1 ? 's are' : ' is') + ' not in the pasted .env: ' + missing.map(function (v) { return v.name; }).join(', ') + '. Paste the .env too, or fill in those addresses and keys in Settings > Apps afterwards.'));
+          prev.appendChild(h('div', { class: 'kv2 sm' }, j.layout.map(function (g) { return [h('span', null, g.name), h('span', null, g.services.join(', '))]; })));
+          prev.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Import and replace my apps', function () {
+            confirmBox('Replace your apps?', 'Your current apps and groups are replaced. Theme, sections, container and VM preferences and saved keys stay. A backup is taken first.', 'Import', true).then(function (y) {
+              if (y) act('import_apply', data(), 'Imported').then(function (k) { if (!k.error) { D.close(true); reload().then(function () { openSettings('services'); }); } });
+            });
+          }, 'pri')));
+        });
+      }, '', 'check')), prev));
   }
 
   function reload() {

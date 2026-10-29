@@ -46,7 +46,7 @@ function und_alerts(array $cfg, $sys, $dk) {
 
 const UND_ALERT_LOG_MAX = 300;
 
-function und_alert_file() { return und_store_dir() . '/alert-history.json'; }
+function und_alert_file() { return und_data_dir() . '/alert-history.json'; }
 
 /**
  * Records starts and ends. $scopes says which categories this snapshot actually checked ('system', 'docker'): an

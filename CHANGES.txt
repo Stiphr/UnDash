@@ -1,3 +1,12 @@
+###0.6.0
+- Settings in two files: config.yaml holds everything you set (apps, layout, theme, preferences, ignored alerts, custom CSS) and never a key or password; .env holds the API keys, user names and passwords. Your current settings are converted on first start, with a backup; the old files are kept in data/legacy.
+- Settings > Apps rebuilt: Add app (pick a type, enter the address and key, Test), and edit, hide, reorder or remove any app from one list grouped by where it shows (Arr Stack, Downloads, Media, Apps). Apps still missing an address or key are marked. Keys go to .env on their own; the old Variables list is gone (an optional "Shared values" box remains for values several apps use).
+- Preview next to Save: see the dashboard with your unsaved changes, then save, go back or discard.
+- qui (autobrr/qui) as a download client: totals of every qBittorrent instance in qui (downloading, seeding, idle, cross-seed, stalled, paused, checking, tracker issues, errors), speeds, one line per instance and the active downloads. Needs a qui API key.
+- Backup & import: download config.yaml (safe to share) and .env (private); import either one, or a settings export of an older version. Moving from another dashboard: "Coming from Homepage?" converts its services.yaml.
+- An app without its own link opens its address when clicked. config.yaml can be edited by hand, including { inline } maps. Check configuration also lists apps without a key.
+- The example setup is now examples/config.yaml.
+
 ###0.5.2
 - Redacted exports now also leave out user names, logins and e-mail addresses (they were kept before), so they are safe to share.
 - Importing a redacted export (a shared layout) no longer replaces your Unraid API address; a full export (a restore) still does.

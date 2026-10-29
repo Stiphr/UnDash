@@ -161,6 +161,15 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
     case $p === '/api/filters': return $j(array_fill(0, 7, []));
     case $p === '/api/release/indexers': return $j(array_fill(0, 7, 'x'));
     case $p === '/api/status': return $j(['users' => 14, 'invites' => 2, 'pending' => 0, 'expired' => 2]);
+    /* qui: two qBittorrent instances, one of them offline */
+    case $p === '/api/instances': return $j([['id' => 1, 'name' => 'Main', 'connected' => true], ['id' => 2, 'name' => 'Private trackers', 'connected' => true], ['id' => 3, 'name' => 'Seedbox', 'connected' => false, 'connectionStatus' => 'connection refused']]);
+    case preg_match('#^/api/instances/(\d+)/torrents$#', $p, $qm) === 1:
+      $big = $qm[1] === '1';
+      return $j(['stats' => ['total' => $big ? 1812 : 240, 'downloading' => $big ? 2 : 1, 'seeding' => $big ? 1790 : 236, 'paused' => $big ? 6 : 0, 'error' => $big ? 1 : 0, 'checking' => 0,
+        'totalDownloadSpeed' => $big ? 7340032 : 1048576, 'totalUploadSpeed' => $big ? 921600 : 3145728],
+        'counts' => ['status' => ['inactive' => $big ? 1650 : 120, 'stalled' => $big ? 3 : 0, 'unregistered' => $big ? 2 : 0, 'tracker_down' => 0, 'completed' => $big ? 1796 : 236], 'tags' => ['cross-seed' => $big ? 412 : 58]],
+        'torrents' => $big ? [['name' => 'Linux.Distro.ISO.Collection', 'state' => 'downloading', 'progress' => 0.42, 'dlspeed' => 5242880, 'eta' => 1260, 'size' => 9e9], ['name' => 'Some.Old.Torrent', 'state' => 'stalledDL', 'progress' => 0.87, 'dlspeed' => 0, 'eta' => 8640000, 'size' => 2e9]]
+          : [['name' => 'Private.Release.2160p', 'state' => 'downloading', 'progress' => 0.12, 'dlspeed' => 1048576, 'eta' => 5400, 'size' => 4e10]]]);
     case $p === '/api/v2/auth/login': return ['code' => 200, 'body' => 'Ok.', 'json' => null, 'err' => '', 'headers' => ['set-cookie' => ['SID=dev; path=/']]];
     case $p === '/api/v2/torrents/info':
       $t = []; for ($i = 0; $i < 1808; $i++) $t[] = ['name' => 'Seed ' . $i, 'state' => $i < 3 ? 'uploading' : 'stalledUP', 'progress' => 1, 'dlspeed' => 0, 'upspeed' => $i < 3 ? 143200 : 0];
@@ -267,7 +276,7 @@ function dev_graphql($req, $key) {
 }
 
 /* first run: import a real Homepage layout when UNDASH_HOMEPAGE_DIR points at its config folder, so the preview looks like your dashboard */
-if (!is_file(UND_DIR . '/config.json')) {
+if (!is_file(UND_DIR . '/config.yaml') && !is_file(UND_DIR . '/config.json')) {
   require_once $repo . '/src/include/lib.php';
   $svc = rtrim((string)getenv('UNDASH_HOMEPAGE_DIR'), '/') . '/services.yaml';
   if (getenv('UNDASH_HOMEPAGE_DIR') && is_file($svc)) {

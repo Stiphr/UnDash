@@ -7,14 +7,13 @@
  *   Every save is mirrored to the flash drive, so UnDash keeps working while the array (and with it /mnt/user) is stopped.
  *   Reads prefer the configuration directory and fall back to the flash copy.
  *
- * Files in the configuration directory
- *   config.json   layout, preferences, appearance (no secrets)
- *   secrets.json  variables and per-widget credentials (never sent to the browser in clear text)
- *   custom.css    the user's custom CSS
- *   backups/      a snapshot of the three files before every save, import and restore (newest 15 kept)
+ * Files in the configuration directory (see include/store.php)
+ *   config.yaml   everything you set up; credentials only as references like {{RADARR_API_KEY}}
+ *   .env          the values of those references, the Unraid API key (never sent to the browser in clear text)
+ *   data/         backups (both files, before every save, import and restore; newest 15) and the alert history
  */
 
-define('UND_SCHEMA', 4);
+define('UND_SCHEMA', 5);
 
 /** Every widget type: [label, credential fields it uses, needs url]. */
 function und_types() {
@@ -26,7 +25,7 @@ function und_types() {
     'radarr' => ['Radarr', ['key'], true], 'sonarr' => ['Sonarr', ['key'], true], 'lidarr' => ['Lidarr', ['key'], true],
     'readarr' => ['Readarr', ['key'], true], 'bazarr' => ['Bazarr', ['key'], true], 'prowlarr' => ['Prowlarr', ['key'], true],
     'overseerr' => ['Overseerr / Jellyseerr', ['key'], true], 'autobrr' => ['Autobrr', ['key'], true], 'wizarr' => ['Wizarr', ['key'], true],
-    'qbittorrent' => ['qBittorrent', ['username', 'password'], true], 'sabnzbd' => ['SABnzbd', ['key'], true],
+    'qbittorrent' => ['qBittorrent', ['username', 'password'], true], 'sabnzbd' => ['SABnzbd', ['key'], true], 'qui' => ['qui (qBittorrent manager)', ['key'], true],
     'emby' => ['Emby', ['key'], true], 'jellyfin' => ['Jellyfin', ['key'], true], 'plex' => ['Plex', ['key'], true], 'tautulli' => ['Tautulli', ['key'], true],
     'adguard' => ['AdGuard Home', ['username', 'password'], true], 'pihole' => ['Pi-hole', ['key'], true], 'npm' => ['Nginx Proxy Manager', ['username', 'password'], true],
     'immich' => ['Immich', ['key'], true], 'peanut' => ['PeaNUT', ['key', 'username', 'password'], true],
@@ -138,8 +137,10 @@ function und_array_mounted($dir) {
 /** First use of a configuration directory: copy the flash files into it, never over existing ones. */
 function und_migrate_into($dir) {
   if ($dir === UND_DIR) return;
-  foreach (['config.json', 'secrets.json', 'custom.css', 'ignores.json'] as $f) {
-    if (!is_file("$dir/$f") && is_file(UND_DIR . "/$f")) { @copy(UND_DIR . "/$f", "$dir/$f"); if ($f === 'secrets.json') @chmod("$dir/$f", 0600); }
+  // files of older versions only where there are no new ones yet (they are converted on first use)
+  $old = is_file("$dir/config.yaml") || is_file(UND_DIR . '/config.yaml') ? [] : ['config.json', 'secrets.json', 'custom.css', 'ignores.json'];
+  foreach (array_merge(['config.yaml', '.env'], $old) as $f) {
+    if (!is_file("$dir/$f") && is_file(UND_DIR . "/$f")) { @copy(UND_DIR . "/$f", "$dir/$f"); if ($f === 'secrets.json' || $f === '.env') @chmod("$dir/$f", 0600); }
   }
 }
 
@@ -168,16 +169,16 @@ function und_store_write($name, $content, $private = false) {
 
 /* ---------- backups ---------- */
 
-function und_backup_dir() { return und_store_dir() . '/backups'; }
+function und_backup_dir() { return und_data_dir() . '/backups'; }
 
-/** Snapshot config, secrets and CSS before they change. Returns the backup id. */
+/** Snapshot both settings files before they change. Returns the backup id. */
 function und_backup($reason) {
   $dir = und_backup_dir();
   @mkdir($dir, 0700, true);
   $id = date('Ymd-His') . '-' . substr(und_id(), 0, 4);
-  $snap = ['undash_backup' => 1, 'schema' => UND_SCHEMA, 'created' => time(), 'reason' => und_clip((string)$reason, 80),
-           'config' => und_read_json(und_file('config.json'), null), 'secrets' => und_read_json(und_file('secrets.json'), null), 'css' => (string)@file_get_contents(und_file('custom.css'))];
-  if ($snap['config'] === null && $snap['secrets'] === null && $snap['css'] === '') return null;
+  $y = (string)@file_get_contents(und_file('config.yaml')); $e = (string)@file_get_contents(und_file('.env'));
+  if ($y === '' && $e === '') return null;
+  $snap = ['undash_backup' => 2, 'schema' => UND_SCHEMA, 'created' => time(), 'reason' => und_clip((string)$reason, 80), 'yaml' => $y, 'env' => $e];
   @file_put_contents("$dir/$id.json", json_encode($snap, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
   @chmod("$dir/$id.json", 0600);
   $all = glob("$dir/*.json") ?: [];
@@ -201,8 +202,17 @@ function und_restore($id) {
   $j = und_read_json($f, null);
   if (!is_array($j) || empty($j['undash_backup'])) return ['error' => 'That backup cannot be read.'];
   und_backup('before restoring ' . $id);
-  if (is_array($j['config'])) und_save_config($j['config'], false);
-  if (is_array($j['secrets'])) und_save_secrets($j['secrets']);
+  if ((int)$j['undash_backup'] >= 2) {
+    // both files exactly as they were
+    if (is_string($j['yaml'] ?? null) && $j['yaml'] !== '') und_store_write('config.yaml', $j['yaml']);
+    if (is_string($j['env'] ?? null)) und_store_write('.env', $j['env'], true);
+    und_store_reset();
+    return ['ok' => true];
+  }
+  // a backup from before config.yaml: convert it like the old files
+  $conv = und_store_convert(und_normalize(und_migrate(is_array($j['config'] ?? null) ? $j['config'] : und_default_config())), (array)($j['secrets']['vars'] ?? []), (array)($j['secrets']['svc'] ?? []));
+  und_save_config($conv['config'], false);
+  $env = und_env(); foreach ($conv['env'] as $k => $v) $env[$k] = $v; und_env_write($env);
   und_save_css((string)($j['css'] ?? ''), false);
   return ['ok' => true];
 }
@@ -210,8 +220,9 @@ function und_restore($id) {
 /* ---------- load / save ---------- */
 
 function und_load_config() {
-  $c = und_read_json(und_file('config.json'), null);
-  if (!is_array($c) || !isset($c['groups'])) return und_normalize(und_default_config());
+  $c = und_doc();
+  if (!isset($c['groups'])) return und_normalize(und_default_config());
+  $c['schema'] = (int)($c['version'] ?? UND_SCHEMA);
   return und_normalize(und_migrate($c));
 }
 
@@ -383,7 +394,9 @@ function und_normalize(array $c) {
         'type' => $s['type'], 'icon' => und_clip((string)($s['icon'] ?? ''), 300), 'href' => und_clip((string)($s['href'] ?? ''), 500), 'url' => und_clip((string)($s['url'] ?? ''), 500),
         'description' => und_clip(trim((string)($s['description'] ?? '')), 200), 'hidden' => !empty($s['hidden']), 'favorite' => !empty($s['favorite']), 'span' => (int)($s['span'] ?? 1) === 2 ? 2 : 1,
         'fields' => array_values(array_filter(array_map('strval', (array)($s['fields'] ?? [])), function ($f) { return preg_match('/^[A-Za-z0-9_]{1,40}$/', $f); })),
-        'options' => $opt ? $opt : new stdClass()];
+        'options' => $opt ? $opt : new stdClass()]
+        // credentials only ever as a reference to .env; a value typed into the file by hand is not kept here
+        + array_map(function ($f) use ($s) { $r = und_ref_name($s[$f] ?? ''); return $r ? '{{' . $r . '}}' : ''; }, array_combine(array_keys(UND_CRED_FIELDS), array_keys(UND_CRED_FIELDS)));
     }
     $groups[] = $out;
   }
@@ -393,6 +406,9 @@ function und_normalize(array $c) {
 
 /** Serialises read-change-write of config.json (two quick dashboard clicks must not lose one). Released when the request ends. */
 function und_config_lock() {
+  // reentrant within one request: taking it twice would wait for ourselves
+  static $fp = null;
+  if (is_resource($fp)) return $fp;
   @mkdir(und_tmp('locks'), 0755, true);
   $fp = @fopen(und_tmp('locks/config.lock'), 'c');
   if ($fp) flock($fp, LOCK_EX);
@@ -401,7 +417,8 @@ function und_config_lock() {
 
 function und_save_config(array $c, $backup = true) {
   if ($backup) und_backup('settings saved');
-  return und_store_write('config.json', json_encode(und_normalize($c), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR));
+  $n = und_normalize($c); unset($n['schema']);
+  return und_doc_write(['version' => UND_SCHEMA] + json_decode(json_encode($n), true));
 }
 
 /** Every widget id in a config (used to drop credentials of widgets that were removed). */
@@ -426,25 +443,50 @@ function und_sanitize_css($css) {
   return $css;
 }
 
-function und_load_css() { return und_sanitize_css((string)@file_get_contents(und_file('custom.css'))); }
+function und_load_css() { return und_sanitize_css((string)(und_doc()['custom_css'] ?? '')); }
 
 function und_save_css($css, $backup = true) {
   if ($backup) und_backup('custom CSS saved');
-  return und_store_write('custom.css', und_sanitize_css($css));
+  $css = und_sanitize_css($css);
+  return und_doc_write(['custom_css' => trim($css) === '' ? null : $css]);
 }
 
 /* ---------- secrets ---------- */
 
+/**
+ * The secrets as the rest of UnDash sees them: vars = every .env value (except UnDash's own entries), unraid = the API
+ * address (config.yaml) and key (.env). Credentials of apps are vars too, referenced from config.yaml.
+ */
 function und_secrets() {
-  $s = isset($GLOBALS['UND_TEST_SECRETS']) ? $GLOBALS['UND_TEST_SECRETS'] : und_read_json(und_file('secrets.json'), []);
-  return ['vars' => isset($s['vars']) && is_array($s['vars']) ? $s['vars'] : [], 'svc' => isset($s['svc']) && is_array($s['svc']) ? $s['svc'] : [],
-          'unraid' => isset($s['unraid']) && is_array($s['unraid']) ? $s['unraid'] : []];
+  if (isset($GLOBALS['UND_TEST_SECRETS'])) { $s = $GLOBALS['UND_TEST_SECRETS']; return ['vars' => (array)($s['vars'] ?? []), 'svc' => (array)($s['svc'] ?? []), 'unraid' => (array)($s['unraid'] ?? [])]; }
+  $env = und_env();
+  $vars = array_diff_key($env, array_flip(UND_ENV_RESERVED));
+  return ['vars' => $vars, 'svc' => [], 'unraid' => ['url' => (string)(und_doc()['unraid']['url'] ?? ''), 'key' => (string)($env['UNRAID_API_KEY'] ?? '')]];
 }
+/** vars replace the .env values (UnDash's own entries are kept); unraid sets the address and key; svc (old per-widget credentials) become references. */
 function und_save_secrets(array $s) {
-  // the Unraid API connection is kept unless the caller sets it explicitly
-  $unraid = isset($s['unraid']) && is_array($s['unraid']) ? $s['unraid'] : und_read_json(und_file('secrets.json'), [])['unraid'] ?? [];
-  $s = ['vars' => isset($s['vars']) && is_array($s['vars']) ? $s['vars'] : [], 'svc' => isset($s['svc']) && is_array($s['svc']) ? $s['svc'] : [], 'unraid' => is_array($unraid) ? $unraid : []];
-  return und_store_write('secrets.json', json_encode($s, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), true);
+  $env = und_env();
+  $keep = array_intersect_key($env, array_flip(UND_ENV_RESERVED));
+  $new = isset($s['vars']) && is_array($s['vars']) ? array_change_key_case($s['vars'], CASE_UPPER) : array_diff_key($env, $keep);
+  $new = array_diff_key($new, array_flip(UND_ENV_RESERVED)) + $keep;
+  if (isset($s['unraid']) && is_array($s['unraid'])) {
+    if (array_key_exists('key', $s['unraid'])) { if ((string)$s['unraid']['key'] === '') unset($new['UNRAID_API_KEY']); else $new['UNRAID_API_KEY'] = (string)$s['unraid']['key']; }
+    if (array_key_exists('url', $s['unraid'])) und_doc_write(['unraid' => (string)$s['unraid']['url'] === '' ? null : ['url' => (string)$s['unraid']['url']]]);
+  }
+  if (!empty($s['svc']) && is_array($s['svc'])) {
+    // credentials from an old export or backup: into .env under readable names, referenced from the config
+    $cfg = und_load_config();
+    foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$sv) foreach (array_keys(UND_CRED_FIELDS) as $f) {
+      $v = (string)($s['svc'][$sv['id']][$f] ?? '');
+      if ($v === '') continue;
+      if ($r = und_ref_name($v)) { $sv[$f] = '{{' . $r . '}}'; continue; }
+      $name = und_ref_name($sv[$f] ?? '') ?: und_cred_name($sv['name'], $f, $new + und_cfg_refs($cfg));
+      $new[$name] = $v; $sv[$f] = '{{' . $name . '}}';
+    }
+    unset($g, $sv);
+    und_save_config($cfg, false);
+  }
+  return und_env_write($new);
 }
 
 function und_var_is_secret($name) { return preg_match('/KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i', $name) === 1; }
@@ -503,7 +545,8 @@ function und_service_full(array $cfg, $id) {
   foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) {
     if ($s['id'] !== $id) continue;
     $c = $sec['svc'][$id] ?? [];
-    foreach (['key', 'password', 'username'] as $f) $s[$f] = und_resolve((string)($c[$f] ?? ''), $sec['vars']);
+    // credentials: a reference in config.yaml ({{RADARR_API_KEY}}) to a value in .env
+    foreach (['key', 'password', 'username'] as $f) { $v = (string)($s[$f] ?? '') !== '' ? (string)$s[$f] : (string)($c[$f] ?? ''); $s[$f] = und_resolve($v, $sec['vars']); if (und_ref_name($s[$f])) $s[$f] = ''; }
     foreach (['url', 'href'] as $f) $s[$f] = und_resolve($s[$f], $sec['vars']);
     $s['options'] = json_decode(und_resolve(json_encode($s['options']), array_map(function ($v) { return trim(json_encode((string)$v), '"'); }, $sec['vars'])), true) ?: [];
     $s['_group'] = $g['name'];
@@ -540,9 +583,11 @@ function und_layout_view(array $cfg) {
   $vars = und_secrets()['vars'];
   foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) {
     $s['zone'] = und_zone($s);
-    $h = und_resolve($s['href'], $vars);
+    // no link of its own: the app's address, when it is a plain one (no login or token in it)
+    $src = trim($s['href']) !== '' ? $s['href'] : (preg_match('#^https?://[^/@?\s]+(/[^?@\s]*)?$#i', trim($s['url'])) ? trim($s['url']) : '');
+    $h = und_resolve($src, $vars);
     // a link that would carry a secret variable is not resolved for the browser
-    if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s['href'], $m)) foreach ($m[1] as $n) if (und_var_is_secret($n)) $h = '';
+    if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $src, $m)) foreach ($m[1] as $n) if (und_var_is_secret($n)) $h = '';
     $s['href_resolved'] = preg_match('#^(https?://|/)#i', $h) ? $h : '';
   }
   return $cfg;
@@ -555,7 +600,9 @@ function und_validate(array $cfg) {
   $issues = []; $vars = und_secrets()['vars']; $types = und_types(); $ids = array_flip(und_service_ids($cfg));
   foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) {
     $where = '"' . $s['name'] . '" in "' . $g['name'] . '"';
-    if (!empty($types[$s['type']][2]) && trim($s['url']) === '') $issues[] = ['level' => 'warn', 'msg' => "$where has no API URL."];
+    if (!empty($types[$s['type']][2]) && trim($s['url']) === '') $issues[] = ['level' => 'warn', 'msg' => "$where has no address."];
+    $kr = und_ref_name($s['key'] ?? '');
+    if (in_array('key', $types[$s['type']][1] ?? [], true) && $s['type'] !== 'peanut' && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Apps)."];
     foreach (['url', 'href'] as $f) if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s[$f], $m)) foreach ($m[1] as $n) {
       $n = strtoupper($n);
       if (!isset($vars[$n]) && $n !== 'UNRAID_IP') $issues[] = ['level' => 'bad', 'msg' => "$where uses {{" . $n . '}}, which is not defined.'];

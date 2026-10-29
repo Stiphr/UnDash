@@ -7,7 +7,7 @@
  *   ['calendar' => [['ts','title','sub','done'], ...]]
  *   ['streams' => [['title','user','state','pos','dur'], ...]]   (can be combined with blocks)
  *   ['error' => 'message']
- * The endpoints and the numbers they produce follow gethomepage/homepage's widgets, so the cards show what Homepage showed.
+ * Each app's numbers come from its own documented API.
  */
 
 /* ---------- HTTP ---------- */
@@ -198,6 +198,14 @@ function und_w_qbittorrent($s) {
   return ['blocks' => [und_b('leech', 'Leech', $leech), und_b('download', 'Download', $dl, 'rate'), und_b('seed', 'Seed', $seed), und_b('upload', 'Upload', $ul, 'rate')]];
 }
 
+function und_w_qui($s) {
+  $q = und_qui_status($s, 0);
+  $c = $q['counts'];
+  return ['blocks' => [und_b('downloading', 'Downloading', $c['downloading']), und_b('seeding', 'Seeding', $c['seeding']), und_b('idle', 'Idle', $c['idle']),
+    und_b('crossseed', 'Cross-seed', $c['crossseed']), und_b('download', 'Download', $q['down'], 'rate'), und_b('upload', 'Upload', $q['up'], 'rate'),
+    und_b('instances', 'Instances', count($q['instances']))]];
+}
+
 function und_w_sabnzbd($s) {
   $j = und_get(und_u($s['url'], '/api?output=json&mode=queue&apikey=' . rawurlencode($s['key'])));
   if (isset($j['error'])) throw new Exception('SABnzbd: ' . $j['error']);
@@ -236,7 +244,7 @@ function und_w_plex($s) {
   foreach ((array)($secs['MediaContainer']['Directory'] ?? []) as $d) {
     $type = (string)($d['type'] ?? '');
     if (!isset($count[$type])) continue;
-    $q = $type === 'artist' ? '?type=9&' : '?';     // albums for music libraries, like Homepage
+    $q = $type === 'artist' ? '?type=9&' : '?';     // albums for music libraries
     $r = und_get(und_u($s['url'], '/library/sections/' . rawurlencode((string)$d['key']) . '/all' . $q . 'X-Plex-Container-Start=0&X-Plex-Container-Size=0'), $h);
     $count[$type] += (int)($r['MediaContainer']['totalSize'] ?? $r['MediaContainer']['size'] ?? 0);
   }

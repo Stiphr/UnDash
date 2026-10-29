@@ -150,16 +150,27 @@ switch ($action) {
   /* ---- settings ---- */
   case 'settings': {
     $cfg = und_load_config(); $loc = und_loc();
-    out(['config' => $cfg, 'secrets' => und_secrets_view(und_secrets()), 'types' => und_types(), 'keep' => UND_KEEP, 'css' => und_load_css(),
-         'loc' => $loc, 'store' => und_store_dir(), 'flash' => UND_DIR, 'metrics' => und_metric_ids(), 'sections' => und_section_ids()]);
+    out(['config' => $cfg, 'creds' => und_creds_view($cfg), 'shared' => und_shared_view($cfg), 'types' => und_types(), 'keep' => UND_KEEP, 'css' => und_load_css(),
+         'loc' => $loc, 'store' => und_store_dir(), 'flash' => UND_DIR, 'metrics' => und_metric_ids(), 'sections' => und_section_ids(),
+         'zones' => array_map(function ($t) { return und_zone(['type' => $t]); }, array_combine(array_keys(und_types()), array_keys(und_types())))]);
+  }
+  /* the dashboard as it would look with unsaved settings: nothing is written, credentials are not involved */
+  case 'preview': {
+    $cfg = $J('config');
+    if (!$cfg || !isset($cfg['groups'])) fail('Nothing to preview.');
+    $norm = und_normalize($cfg);
+    $norm['schema'] = UND_SCHEMA;
+    out(['layout' => und_layout_view($norm)]);
   }
   case 'save': {
     $lk = und_config_lock();
     $cfg = $J('config');
     if (!$cfg || !isset($cfg['groups'])) fail('Nothing to save.');
-    $norm = und_normalize($cfg);
+    $old = und_load_config(); $env = und_env();
+    $norm = und_creds_apply(und_normalize($cfg), $old, $J('creds') ?: [], $env);
+    if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
     if (!und_save_config($norm)) fail('Could not write the configuration directory. Check that ' . und_store_dir() . ' is writable.', 500);
-    if (isset($_POST['vars']) || isset($_POST['svc'])) und_save_secrets(und_secrets_merge(und_secrets(), $J('vars') ?: [], $J('svc') ?: [], und_service_ids($norm)));
+    if (!und_env_write($env)) fail('Could not write the .env file in ' . und_store_dir() . '.', 500);
     if (isset($_POST['css'])) und_save_css($P('css'), false);
     out(['ok' => true]);
   }
@@ -187,11 +198,13 @@ switch ($action) {
     out(['ok' => true, 'layout' => und_layout_view(und_load_config())]);
   }
   case 'test': {
-    // try one widget with the settings shown in the form, before they are saved
+    // try one app with what the form shows, before it is saved (nothing is written)
     $cfg = $J('config'); $id = $P('id');
     if (!$cfg || !preg_match('/^[a-f0-9]{8}$/', $id)) fail('Nothing to test.');
-    $norm = und_normalize($cfg);
-    $GLOBALS['UND_TEST_SECRETS'] = und_secrets_merge(und_secrets(), $J('vars') ?: [], $J('svc') ?: [], und_service_ids($norm));
+    $env = und_env(); $old = und_load_config();
+    $norm = und_creds_apply(und_normalize($cfg), $old, $J('creds') ?: [], $env);
+    if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
+    $GLOBALS['UND_TEST_SECRETS'] = ['vars' => array_diff_key($env, array_flip(UND_ENV_RESERVED)), 'svc' => [], 'unraid' => []];
     out(und_fetch_service($norm, $id));
   }
   case 'validate': out(['issues' => und_validate(und_load_config())]);
@@ -240,7 +253,7 @@ switch ($action) {
   }
 
   /* ---- import / export / backups ---- */
-  case 'export':        out(und_export($P('kind') === 'full' ? 'full' : 'redacted'));
+  case 'export':        out(und_export($P('kind') === 'env' ? 'env' : 'config'));
   case 'import_check':  { $r = und_import_parse($P('file')); if (isset($r['error'])) fail($r['error']); out(['summary' => $r['summary']]); }
   case 'import_file':   { $r = und_import_apply($P('file')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'backups':       out(['backups' => und_backups()]);
@@ -256,7 +269,7 @@ switch ($action) {
   case 'import_apply': {
     $c = und_hp_convert($P('services'), $P('settings'), $P('env'));
     if (isset($c['error'])) fail($c['error']);
-    und_backup('before Homepage import');
+    und_backup('before importing services.yaml');
     out(und_hp_apply($c));
   }
   case 'reset': {

@@ -1,10 +1,56 @@
 <?php
 /*
- * UnDash - download clients (qBittorrent, SABnzbd): connection, speeds, counts by state, the active items with progress
- * and ETA, and pause / resume of the whole client through the client's own API. Cached for 3 seconds.
+ * UnDash - download clients (qBittorrent, SABnzbd, qui): connection, speeds, counts by state, the active items with
+ * progress and ETA, and pause / resume of the whole client through the client's own API. Cached for 3 seconds.
+ * qui (github.com/autobrr/qui) manages several qBittorrent instances; UnDash reads its API with an API key (X-API-Key)
+ * and shows the totals plus one line per instance. qui is read only here.
  */
 
-function und_dl_types() { return ['qbittorrent', 'sabnzbd']; }
+function und_dl_types() { return ['qbittorrent', 'sabnzbd', 'qui']; }
+
+/** A qui API call (GET, JSON). */
+function und_qui_get(array $s, $path) {
+  return und_get(und_u($s['url'], $path), ['headers' => ['X-API-Key' => $s['key'], 'Accept' => 'application/json'], 'timeout' => 15]);
+}
+
+/** Counts, speeds and the active torrents of every qBittorrent instance in qui. */
+function und_qui_status(array $s, $items = 8) {
+  $inst = und_qui_get($s, '/api/instances');
+  if (!is_array($inst)) throw new Exception('qui did not answer with a list of instances.');
+  $keys = ['downloading', 'seeding', 'idle', 'crossseed', 'stalled', 'paused', 'checking', 'error', 'tracker', 'completed'];
+  $tot = array_fill_keys($keys, 0); $down = 0.0; $up = 0.0; $list = []; $active = [];
+  foreach ($inst as $i) {
+    if (!is_array($i) || !isset($i['id'])) continue;
+    $row = ['name' => und_clip((string)($i['name'] ?? ('Instance ' . $i['id'])), 80), 'online' => !empty($i['connected']), 'down' => 0, 'up' => 0, 'counts' => array_fill_keys($keys, 0), 'total' => 0];
+    if ($row['online']) {
+      try {
+        $j = und_qui_get($s, '/api/instances/' . rawurlencode((string)$i['id']) . '/torrents?page=0&limit=' . max(1, (int)$items) . '&sort=dlspeed&order=desc');
+        $st = (array)($j['stats'] ?? []); $cs = (array)($j['counts']['status'] ?? []); $tags = (array)($j['counts']['tags'] ?? []);
+        $n = function ($k) use ($cs) { return (int)($cs[$k] ?? 0); };
+        $row['counts'] = ['downloading' => (int)($st['downloading'] ?? $n('downloading')), 'seeding' => (int)($st['seeding'] ?? $n('seeding')), 'idle' => $n('inactive'),
+          'crossseed' => (int)($tags['cross-seed'] ?? 0), 'stalled' => $n('stalled'), 'paused' => (int)($st['paused'] ?? ($n('paused') ?: $n('stopped'))),
+          'checking' => (int)($st['checking'] ?? $n('checking')), 'error' => (int)($st['error'] ?? $n('errored')),
+          'tracker' => $n('unregistered') + $n('tracker_down') + $n('tracker_error'), 'completed' => $n('completed')];
+        $row['total'] = (int)($st['total'] ?? 0);
+        $row['down'] = (float)($st['totalDownloadSpeed'] ?? 0); $row['up'] = (float)($st['totalUploadSpeed'] ?? 0);
+        foreach ((array)($j['torrents'] ?? []) as $t) {
+          $ts = (string)($t['state'] ?? '');
+          if (!in_array($ts, ['downloading', 'forcedDL', 'metaDL', 'forcedMetaDL', 'stalledDL', 'checkingDL', 'allocating'], true)) continue;
+          $eta = (int)($t['eta'] ?? 0);
+          $active[] = ['name' => und_clip((string)($t['name'] ?? ''), 140), 'progress' => round(100 * (float)($t['progress'] ?? 0), 1), 'speed' => (float)($t['dlspeed'] ?? 0),
+                       'eta' => $eta > 0 && $eta < 8640000 ? $eta : null, 'state' => $ts === 'stalledDL' ? 'stalled' : 'downloading', 'size' => (float)($t['size'] ?? 0)];
+        }
+      } catch (Throwable $e) {
+        $row['online'] = false; $row['error'] = und_redact($e->getMessage(), [$s['key']]);
+      }
+    } else $row['error'] = und_clip((string)($i['connectionStatus'] ?? 'not connected'), 120);
+    foreach ($keys as $k) $tot[$k] += $row['counts'][$k];
+    $down += $row['down']; $up += $row['up'];
+    $list[] = $row;
+  }
+  usort($active, function ($a, $b) { return $b['speed'] <=> $a['speed'] ?: $b['progress'] <=> $a['progress']; });
+  return ['counts' => $tot, 'down' => $down, 'up' => $up, 'instances' => $list, 'items' => array_slice($active, 0, $items)];
+}
 
 function und_dl_service(array $cfg, $id) {
   foreach ($cfg['groups'] as $g) foreach ($g['services'] as $x) if ($x['id'] === $id && in_array($x['type'], und_dl_types(), true)) return und_service_full($cfg, $id);
@@ -66,6 +112,15 @@ function und_dl_status(array $cfg, $id) {
         $out = array_merge($out, ['online' => true, 'down' => (float)($tr['dl_info_speed'] ?? 0), 'up' => (float)($tr['up_info_speed'] ?? 0), 'counts' => $c,
           'state' => $conn === 'disconnected' ? 'disconnected' : ($c['downloading'] ? 'downloading' : ($c['stalled'] ? 'stalled' : ($c['paused'] && !$c['seeding'] && !$c['queued'] ? 'paused' : 'idle'))),
           'note' => $conn === 'firewalled' ? 'Firewalled: incoming connections are blocked.' : '', 'can_pause' => true]);
+      } elseif ($s['type'] === 'qui') {
+        $q = und_qui_status($s);
+        $on = array_filter($q['instances'], function ($i) { return $i['online']; });
+        if (!$q['instances']) throw new Exception('qui has no qBittorrent instances yet.');
+        $c = $q['counts'];
+        $out = array_merge($out, ['online' => true, 'down' => $q['down'], 'up' => $q['up'], 'counts' => $c, 'items' => $q['items'],
+          'instances' => count($q['instances']) > 1 || !$on ? $q['instances'] : [],
+          'state' => !$on ? 'disconnected' : ($c['downloading'] ? 'downloading' : ($c['stalled'] ? 'stalled' : 'idle')),
+          'note' => count($on) < count($q['instances']) ? (count($q['instances']) - count($on)) . ' of ' . count($q['instances']) . ' instances are not connected.' : '', 'can_pause' => false]);
       } else {
         $q = und_get(und_u($s['url'], '/api?output=json&mode=queue&limit=8&apikey=' . rawurlencode($s['key'])));
         if (isset($q['error'])) throw new Exception('SABnzbd: ' . $q['error']);
@@ -97,6 +152,7 @@ function und_dl_action(array $cfg, $id, $op) {
   if (!in_array($op, ['pause', 'resume'], true)) return ['error' => 'Unknown action.'];
   $s = und_dl_service($cfg, $id);
   if (!$s) return ['error' => 'Unknown download client.'];
+  if ($s['type'] === 'qui') return ['error' => 'Pause and resume torrents in qui itself.'];
   $lock = und_lock('dl:' . $id);
   if (!$lock) return ['error' => 'Another action on ' . $s['name'] . ' is still running.'];
   try {
