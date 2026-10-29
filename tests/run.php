@@ -69,12 +69,9 @@ $m3 = und_normalize(und_migrate($v2));
 $ids = array_column($m3['dashboard']['sections'], 'id');
 t('v2 metrics and storage sections are folded into the overview', !in_array('metrics', $ids, true) && !in_array('storage', $ids, true));
 t('v2 services becomes apps and keeps its state', $m3['dashboard']['sections'][array_search('apps', $ids)]['collapsed'] === true);
-t('media, arr and downloads follow favorites', array_slice($ids, 0, 6) === ['overview', 'launcher', 'favorites', 'media', 'arr', 'downloads']);
-$sv = und_normalize(['groups' => [], 'dashboard' => ['sections' => [['id' => 'alerts', 'visible' => true], ['id' => 'overview', 'visible' => true], ['id' => 'vms', 'visible' => false]]]])['dashboard']['sections'];
-t('the new launcher goes right after the overview in an existing layout', array_slice(array_column($sv, 'id'), 0, 3) === ['alerts', 'overview', 'launcher'] && $sv[2]['visible'] === true);
-$sv = und_normalize(['groups' => [], 'dashboard' => ['sections' => [['id' => 'launcher', 'visible' => false], ['id' => 'overview', 'visible' => true]]]])['dashboard']['sections'];
-t('a saved launcher position and visibility are kept', array_slice(array_column($sv, 'id'), 0, 2) === ['launcher', 'overview'] && $sv[0]['visible'] === false);
-t('default layout starts with overview then launcher', array_slice(array_column(und_load_config()['dashboard']['sections'], 'id'), 0, 2) === ['overview', 'launcher']);
+t('media, arr and downloads follow favorites', array_slice($ids, 0, 5) === ['overview', 'favorites', 'media', 'arr', 'downloads']);
+$sv = und_normalize(['groups' => [], 'dashboard' => ['sections' => [['id' => 'launcher', 'visible' => true], ['id' => 'overview', 'visible' => true]]]])['dashboard']['sections'];
+t('a saved launcher section (2026.10.31c-e) is dropped', !in_array('launcher', array_column($sv, 'id'), true) && $sv[0]['id'] === 'overview');
 t('v2 hidden sections stay hidden', $m3['dashboard']['sections'][array_search('docker', $ids)]['visible'] === false);
 t('density accepts expanded', und_normalize(['groups' => [], 'appearance' => ['density' => 'expanded']])['appearance']['density'] === 'expanded');
 
