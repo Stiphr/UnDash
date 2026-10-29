@@ -35,7 +35,7 @@ function und_types() {
 }
 
 /** Dashboard sections, in their default order. */
-function und_section_ids() { return ['overview', 'launcher', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'apps', 'docker', 'vms']; }
+function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'apps', 'docker', 'vms']; }
 
 /** System metrics the overview can show, in their default order. */
 function und_metric_ids() { return ['cpu', 'memory', 'storage', 'network', 'health', 'disks', 'uptime', 'ups', 'cores', 'swap', 'load', 'path', 'docker', 'vms']; }
@@ -312,13 +312,6 @@ function und_normalize(array $c) {
     return $out;
   };
   $sections = $order($db['sections'] ?? [], und_section_ids(), $d['dashboard']['sections'], ['visible' => 'bool', 'width' => ['full', 'half'], 'collapsed' => 'bool']);
-  // a section added in a later version goes where it belongs by default, not at the bottom
-  $had = array_column(array_filter((array)($db['sections'] ?? []), 'is_array'), 'id');
-  if ($had && !in_array('launcher', $had, true)) {
-    $l = null; foreach ($sections as $i => $x) if ($x['id'] === 'launcher') { $l = $x; array_splice($sections, $i, 1); break; }
-    $at = 0; foreach ($sections as $i => $x) if ($x['id'] === 'overview') $at = $i + 1;
-    array_splice($sections, $at, 0, [$l]);
-  }
   $metrics = $order($db['metrics'] ?? [], und_metric_ids(), $d['dashboard']['metrics'], ['visible' => 'bool']);
 
   $items = function ($list, $extra = []) {
