@@ -12,7 +12,7 @@
  * What the API does not offer (so the Docker image does not either): server restart / shutdown, Unraid OS updates,
  * per-container CPU and memory over plain HTTP (only as a WebSocket subscription), VM hibernate, VM vCPU / memory details.
  *
- * Connection settings: UNRAID_API_URL and UNRAID_API_KEY in the environment, or Settings > Unraid connection
+ * Connection settings: UNRAID_API_URL and UNRAID_API_KEY in the environment, or Settings > Connection
  * (stored in secrets.json). The environment wins when both are set.
  */
 
@@ -28,7 +28,7 @@ function und_api_conf() {
 /** Run one GraphQL operation. Returns ['data' => ...] or ['error' => readable message, 'auth' => bool]. */
 function und_gql($query, array $vars = [], $timeout = 10) {
   $c = und_api_conf();
-  if ($c['url'] === '' || $c['key'] === '') return ['error' => 'The Unraid API is not configured (Settings > Unraid connection).', 'auth' => true];
+  if ($c['url'] === '' || $c['key'] === '') return ['error' => 'The Unraid API is not configured (Settings > Connection).', 'auth' => true];
   if (!preg_match('#^https?://#i', $c['url'])) return ['error' => 'The Unraid API address must start with http:// or https://.'];
   $r = und_http('POST', $c['url'], ['body' => json_encode(['query' => $query, 'variables' => (object)$vars]), 'timeout' => $timeout,
     'headers' => ['Content-Type' => 'application/json', 'Accept' => 'application/json', 'x-api-key' => $c['key']]]);

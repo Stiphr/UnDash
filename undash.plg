@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "2026.11.02d">
+<!ENTITY version "0.5.1">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,14 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.5.1
+- Version numbers are now x.y.z (this is 0.5.1); releases are the vX.Y.Z tags. Plugin users coming from a 2026.x.x date version: reinstall the plugin once, as Unraid compares the old and new numbers as text.
+- Title bar: the UnDash logo and name, your server, its Unraid version and the UnDash version, each with an "available" badge when a newer one exists (UnDash checks its GitHub releases at most every 6 hours). The Docker version now shows the server's name and address instead of the container's.
+- The same safe margin in every theme (other themes used to get less room than Default on the full-window page); set your own side and top/bottom margins in Settings &gt; Theme &gt; Spacing.
+- Search: while filtering, sections and media columns with nothing that matches are hidden instead of showing empty boxes; one line says when nothing matches at all.
+- Settings reorganized into grouped pages with a side menu: Layout, Media &amp; downloads, Containers &amp; VMs, Apps, Theme, Custom CSS, Refresh &amp; display, Ignored alerts, Connection, Backup &amp; import. Checkboxes, sliders, dropdown lists and confirmation dialogs now follow the theme.
+- Fixes: Fluent's background gradient was lost on the full-window page; the settings group headings lost their style when switching pages.
+
 ###2026.11.02d
 - Themes: every theme now has a light and a dark version (AMOLED is pure white in light mode, Fluent Dark becomes Fluent Light), so Light / Dark / System always applies.
 - Wallpaper: brightness 0-100%, and the blur can cover the whole wallpaper or only what is behind the cards (frosted glass, the picture stays sharp). Text on the wallpaper gets a frosted backing so it stays readable.
@@ -17,7 +25,7 @@
 - Docker version: the "no dashboard password" alert is red, highlighted and always first.
 
 ###2026.11.02c
-- Docker version: the first-start page can be skipped ("Continue without a password", no setup code needed); a password is still recommended. Add, change or remove it any time in Settings > Configuration > Dashboard password. While there is none, an alert says so (it can be ignored like any other).
+- Docker version: the first-start page can be skipped ("Continue without a password", no setup code needed); a password is still recommended. Add, change or remove it any time in Settings &gt; Configuration &gt; Dashboard password. While there is none, an alert says so (it can be ignored like any other).
 - Setting or changing the password signs out every other browser, including ones that came in while there was no password.
 
 ###2026.11.02b
@@ -26,7 +34,7 @@
 
 ###2026.11.02a
 - New sections: Now playing (Plex, Emby, Jellyfin, Tautulli streams with progress, direct play or transcode, quality and bandwidth), Requests (Overseerr / Jellyseerr, approve or decline pending requests) and Endpoint health (status and latency of every app and container web UI, with Re-probe).
-- Alert history: when each problem started and ended, checked once a minute in the background (also when no dashboard is open), kept for 30 days. Alerts > History.
+- Alert history: when each problem started and ended, checked once a minute in the background (also when no dashboard is open), kept for 30 days. Alerts &gt; History.
 - Keyboard shortcuts: / filter, r refresh, p pause, comma settings, ? list, g + letter to jump to a section.
 - The Inter typeface is now bundled, so the dashboard looks the same on every computer.
 - Fixes: web UI links of containers on a user-defined Docker network with published ports now use the server's address and host port (they pointed at the container's internal address); the filter box now filters Media, Arr Stack and Downloads immediately; quick preference clicks can no longer overwrite each other; scrolled media lists keep their place while columns rebalance; error messages are red again; stale "⋯ menu" hints now say gear.
@@ -48,17 +56,17 @@
 
 ###2026.10.31e
 - System tiles are separate cards with bigger numbers; CPU, memory, network and disk temperature show their recent history as a small chart under the value.
-- New Launcher section (right after System): one-click icons for every app with a link, with a status dot taken from the container of the same name. Hide or move it in Settings > Dashboard.
+- New Launcher section (right after System): one-click icons for every app with a link, with a status dot taken from the container of the same name. Hide or move it in Settings &gt; Dashboard.
 - App cards: large numbers are shortened (16.9K, exact value on hover), latency is rounded, and labels no longer break mid-word.
 
 ###2026.10.31b
-- Media: four equal columns (upcoming movies, upcoming episodes, recently added movies, recently added episodes) as compact lists that scroll on their own; 4, 2 or 1 columns depending on the space. Each column has its own item count (Settings > Dashboard > Media).
+- Media: four equal columns (upcoming movies, upcoming episodes, recently added movies, recently added episodes) as compact lists that scroll on their own; 4, 2 or 1 columns depending on the space. Each column has its own item count (Settings &gt; Dashboard &gt; Media).
 - Alerts: Ignore on each alert, for 1 hour, 24 hours, 7 days, a custom time or permanently, or for every alert of that type (with a confirmation). Undo right after ignoring. Disk alerts are now per disk.
-- Settings > Ignored alerts: temporarily ignored, permanently ignored and ignored alert types, with filter, Restore, Restore all and Delete expired.
+- Settings &gt; Ignored alerts: temporarily ignored, permanently ignored and ignored alert types, with filter, Restore, Restore all and Delete expired.
 - Ignoring only hides an alert; monitoring continues, and an alert comes back when its rule is restored or runs out while the problem is still there. Rules are kept in ignores.json in the configuration folder.
 
 ###2026.10.31a
-- Apps (Plex, Emby, Tautulli, AdGuard, Immich …) now sit right below Arr Stack and Downloads as one grid of compact cards; group titles and the old Services shortcut links are off by default (Settings > Dashboard > Apps).
+- Apps (Plex, Emby, Tautulli, AdGuard, Immich …) now sit right below Arr Stack and Downloads as one grid of compact cards; group titles and the old Services shortcut links are off by default (Settings &gt; Dashboard &gt; Apps).
 - Containers: a compact multi-column grid instead of a full-width table, showing the running containers by default. Pick your own set with "Selected" (⋯ menu or Settings), choose the columns and which details each container shows. Table and card layouts are still there.
 - Settings schema 4; existing settings are migrated.
 
@@ -138,7 +146,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '2026.11.02d');
+define('UND_VERSION', '0.5.1');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -288,6 +296,17 @@ function und_os_version() {
   return is_array($v) && !empty($v['version']) ? (string)$v['version'] : '';
 }
 
+/** Name, address and Unraid version of the server for the title bar. In a container the local host name and address are the
+ *  container's own, so they come from the Unraid API there (its system read is cached, so this costs nothing extra). */
+function und_server_identity() {
+  if (und_api_mode()) {
+    $s = und_api_system(und_load_config());
+    $host = (string)parse_url(und_api_conf()['url'], PHP_URL_HOST);
+    return ['name' => (string)($s['name'] ?? '') ?: $host, 'ip' => (string)($s['ip'] ?? '') ?: $host, 'os' => (string)($s['os'] ?? '')];
+  }
+  return ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip(), 'os' => function_exists('und_os_version') ? und_os_version() : ''];
+}
+
 function und_server_ip() {
   $n = @parse_ini_string(und_read('/var/local/emhttp/network.ini'), true);
   if (is_array($n)) foreach ($n as $sec) if (is_array($sec) && !empty($sec['IPADDR:0'])) return (string)$sec['IPADDR:0'];
@@ -307,7 +326,7 @@ foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>0f2e128916433194818908b7e1acc34e119dd155ca9f2f5d128259150101c7cd</SHA256>
+<SHA256>a4fe5581344e31837596441819777a91c771b5140792f30c970e11173a9ff843</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -369,7 +388,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo',
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'css_enabled' => true],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
@@ -613,6 +632,8 @@ function und_normalize(array $c) {
   $a['density'] = in_array($a['density'], ['compact', 'comfortable', 'expanded'], true) ? $a['density'] : 'comfortable';
   $a['background'] = preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(0, min(100, (int)$a['brightness']));
+  // the margin around the dashboard in px; -1 = automatic
+  foreach (['safe_x', 'safe_y'] as $k) $a[$k] = (int)$a[$k] < 0 ? -1 : min(200, (int)$a[$k]);
   $a['blur_target'] = in_array($a['blur_target'], ['wallpaper', 'cards'], true) ? $a['blur_target'] : 'wallpaper';   // blur the whole picture, or only what is behind the cards
   $a['css_enabled'] = !empty($a['css_enabled']);
 
@@ -873,7 +894,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>7f8956804420663be958d45e19b35d2162609bbe14b08e5d1fa799c7fb72f78c</SHA256>
+<SHA256>919bf1ed1f7fbc57b2c1e0953bd956e7ef8d6393eb41930a72cfe6c639ab9447</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -2326,8 +2347,34 @@ function und_log_syslog($msg) {
   if (isset($GLOBALS['UND_EXEC_MOCK'])) return;
   und_run([und_bin('logger'), '-t', 'undash', '--', $msg], 5);
 }
+
+/* ---------- is there a newer UnDash? ---------- */
+
+/**
+ * The newest release tag (vX.Y.Z) of the UnDash repository, checked at most every 6 hours (a failed check is retried
+ * after an hour). Nothing is sent but the request itself.
+ */
+function und_self_update() {
+  $f = und_tmp('self-update.json');
+  $c = und_read_json($f, null);
+  $fresh = is_array($c) && time() - (int)($c['at'] ?? 0) < (!empty($c['error']) ? 3600 : 21600);
+  if (!$fresh) {
+    $c = ['at' => time(), 'latest' => '', 'error' => ''];
+    $r = und_http('GET', 'https://api.github.com/repos/Stiphr/UnDash/tags?per_page=30', ['timeout' => 6, 'headers' => ['Accept' => 'application/vnd.github+json']]);
+    if ($r['code'] !== 200 || !is_array($r['json'])) $c['error'] = $r['err'] ?: 'GitHub answered HTTP ' . $r['code'];
+    else foreach ($r['json'] as $t) {
+      $v = preg_match('/^v?(\d+\.\d+\.\d+)$/', (string)($t['name'] ?? ''), $m) ? $m[1] : '';
+      if ($v !== '' && ($c['latest'] === '' || version_compare($v, $c['latest'], '>'))) $c['latest'] = $v;
+    }
+    und_write_json($f, $c);
+  }
+  $cur = UND_VERSION;
+  $semver = preg_match('/^\d+\.\d+\.\d+$/', $cur) === 1;
+  return ['current' => $cur, 'latest' => $c['latest'], 'newer' => $semver && $c['latest'] !== '' && version_compare($c['latest'], $cur, '>'),
+          'checked' => (int)$c['at'], 'error' => $c['error'], 'url' => 'https://github.com/Stiphr/UnDash/releases'];
+}
 ]]></INLINE>
-<SHA256>9c055b82bf955cd6e35761fb3fa09dd43a74ea26420b59a6c027d3d656b0b7d5</SHA256>
+<SHA256>d5313587bc9ece05b79f0b5275a6cb211ccda8af3e5adb4f6b857b5e4bef6f39</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/auth.php" Mode="0644">
@@ -2501,7 +2548,7 @@ function und_login_failed($ip) {
  * What the API does not offer (so the Docker image does not either): server restart / shutdown, Unraid OS updates,
  * per-container CPU and memory over plain HTTP (only as a WebSocket subscription), VM hibernate, VM vCPU / memory details.
  *
- * Connection settings: UNRAID_API_URL and UNRAID_API_KEY in the environment, or Settings > Unraid connection
+ * Connection settings: UNRAID_API_URL and UNRAID_API_KEY in the environment, or Settings > Connection
  * (stored in secrets.json). The environment wins when both are set.
  */
 
@@ -2517,7 +2564,7 @@ function und_api_conf() {
 /** Run one GraphQL operation. Returns ['data' => ...] or ['error' => readable message, 'auth' => bool]. */
 function und_gql($query, array $vars = [], $timeout = 10) {
   $c = und_api_conf();
-  if ($c['url'] === '' || $c['key'] === '') return ['error' => 'The Unraid API is not configured (Settings > Unraid connection).', 'auth' => true];
+  if ($c['url'] === '' || $c['key'] === '') return ['error' => 'The Unraid API is not configured (Settings > Connection).', 'auth' => true];
   if (!preg_match('#^https?://#i', $c['url'])) return ['error' => 'The Unraid API address must start with http:// or https://.'];
   $r = und_http('POST', $c['url'], ['body' => json_encode(['query' => $query, 'variables' => (object)$vars]), 'timeout' => $timeout,
     'headers' => ['Content-Type' => 'application/json', 'Accept' => 'application/json', 'x-api-key' => $c['key']]]);
@@ -2795,7 +2842,7 @@ function und_api_vm_action($name, $op) {
   return $ok ? ['ok' => true] : ['error' => $err];
 }
 ]]></INLINE>
-<SHA256>84dd8b0896a7d0bc6216fa7aebca2bced6282b13982a282f89d4bdc3f72a611c</SHA256>
+<SHA256>062853bb817cc1085d5ce95b348bc5b11ce2332800a4b53385cf8345d9c1b682</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/media.php" Mode="0644">
@@ -3230,7 +3277,7 @@ function und_alerts(array $cfg, $sys, $dk) {
   $out = [];
   $add = function ($lv, $msg, $cat, $res, $act = '') use (&$out) { $out[] = ['lv' => $lv, 'msg' => $msg, 'cat' => $cat, 'res' => (string)$res, 'act' => $act]; };
   if (is_array($sys) && isset($sys['error'])) {
-    $add('bad', $sys['error'] . (!empty($sys['auth']) ? ' Check Settings > Configuration.' : ''), 'api.error', 'unraid', 'settings');
+    $add('bad', $sys['error'] . (!empty($sys['auth']) ? ' Check Settings > Connection.' : ''), 'api.error', 'unraid', 'settings');
   } elseif (is_array($sys)) {
     $a = $sys['array'] ?? [];
     $st = (string)($a['state'] ?? '');
@@ -3324,7 +3371,7 @@ function und_alerts_check() {
   return count($alerts);
 }
 ]]></INLINE>
-<SHA256>7654fe61ea02f2b829a5f22c2003047ad485b91f9d5b772344911a86319786c2</SHA256>
+<SHA256>cc6bf742dd366c2b65f1e662e7c7f8f0568f811db00871c512b01dbd5ffdbc0d</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/health.php" Mode="0644">
@@ -3699,7 +3746,7 @@ function und_seerr_request(array $cfg, $app, $type, $tmdb) {
  * On the standalone port, standalone/router.php checks the Unraid login (or UnDash's own session) and its CSRF token first.
  */
 require_once __DIR__ . '/lib.php';
-require_once __DIR__ . '/auth.php';      // the Docker version's password (Settings > Configuration)
+require_once __DIR__ . '/auth.php';      // the Docker version's password (Settings > Connection)
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -3728,7 +3775,7 @@ switch ($action) {
   case 'boot': {
     $cfg = und_load_config(); $loc = und_loc();
     out(['version' => UND_VERSION, 'layout' => und_layout_view($cfg), 'types' => und_types(), 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
-         'server' => ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip()],
+         'server' => und_server_identity(),
          'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes' && !und_api_mode(), 'caps' => und_caps(),
          'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null,
          'auth' => und_api_mode() ? und_auth_kind() : 'unraid']);
@@ -3819,6 +3866,7 @@ switch ($action) {
   case 'power_prepare': { $r = und_power_prepare($P('op')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'power':         { $r = und_power($P('op'), $P('nonce'), $P('confirm')); if (isset($r['error'])) fail($r['error'], 409); out($r); }
   case 'history':       out(['history' => und_history()]);
+  case 'self_update':   out(und_self_update());
   case 'alert_history': out(und_alert_history());
 
   /* ignored alerts: hiding only, monitoring goes on */
@@ -3965,7 +4013,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>297cbf91d2ae323e6a0f30d7a60cee5e91fcd7d06944be56c5d72e769ea9e961</SHA256>
+<SHA256>6df56974c7445671539aa543529282b94d8bbd65e978c957c6e9f14171968652</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -4265,18 +4313,22 @@ esac
 .und{
   --bg:#1d1b1b;--panel:#232121;--panel-2:#1b1919;--bar:#2a2828;--field:#181616;--line:#343131;--line-2:#454141;
   --text:#ece9e9;--muted:#a19c9c;--faint:#7f7977;--title:#fff;
+  --safe-x:0px;--safe-y:4px;      /* the margin around the dashboard; Settings > Theme can set its own */
   --accent:#f15a2c;--accent-btn:#d4431a;--accent-ink:#fff;--accent-soft:rgba(241,90,44,.14);--accent-text:#ff7a50;
   --ok:#4ec38b;--warn:#e8b33c;--bad:#ff6b5e;--info:#79a0ee;--off:#8a8484;
   --ok-soft:rgba(78,195,139,.13);--warn-soft:rgba(232,179,60,.14);--bad-soft:rgba(255,107,94,.13);
   --shadow:0 1px 2px rgba(0,0,0,.25);--radius:10px;--gap:12px;--pad:14px;
   --font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  color:var(--text);font:14px/1.45 var(--font);margin:0;padding:4px 0 28px;text-align:left;position:relative;isolation:isolate;-webkit-text-size-adjust:100%}
-.und[data-mode=light],.und[data-theme]:not([data-theme=default]),.und.has-bg{background:var(--bg);padding:14px;border-radius:var(--radius)}
+  color:var(--text);font:14px/1.45 var(--font);margin:0;padding:var(--safe-y) var(--safe-x) calc(var(--safe-y) + 24px);text-align:left;position:relative;isolation:isolate;-webkit-text-size-adjust:100%}
+/* inside Unraid's page a theme with its own background gets a little inner margin; the full-window page always has its own */
+.und[data-mode=light],.und[data-theme]:not([data-theme=default]),.und.has-bg{background:var(--bg);--safe-x:14px;--safe-y:14px;border-radius:var(--radius)}
 .und[data-density=compact]{--gap:8px;--pad:10px;font-size:13.5px}
 .und[data-density=expanded]{--gap:16px;--pad:18px;font-size:14.5px}
 .und *,.und *::before,.und *::after{box-sizing:border-box}
 body.und-page{margin:0;background:#1d1b1b;min-height:100vh}
-body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;border-radius:0;background:var(--bg)}
+body.und-page .und{min-height:100vh}
+:where(body.und-page) .und{background:var(--bg)}      /* low specificity, so a theme's own background (Fluent's gradient) wins */
+body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],body.und-page .und.has-bg{--safe-x:clamp(12px,2.5vw,32px);--safe-y:16px;border-radius:0}
 .und-loading{padding:48px;text-align:center;color:#a19c9c;font:14px system-ui,sans-serif}
 .und a{color:var(--accent-text);text-decoration:none}.und a:hover{text-decoration:underline}
 .und .muted{color:var(--muted)}.und .faint{color:var(--faint)}.und .sm{font-size:12.5px}.und .xs{font-size:11.5px}.und b{font-weight:600}
@@ -4287,7 +4339,9 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 
 /* wallpaper and focus mode */
 .und .und-bg{position:absolute;inset:0;z-index:-1;border-radius:inherit;background-size:cover;background-position:center;overflow:hidden}
-.und.full{position:fixed;inset:0;z-index:9000;overflow:auto;padding:16px clamp(12px,2.5vw,32px) 40px;border-radius:0;background:var(--bg)}
+.und.full{position:fixed;inset:0;z-index:9000;overflow:auto;border-radius:0}
+:where(.und.full){background:var(--bg)}
+.und.full,.und.full[data-mode],.und.full[data-theme]{--safe-x:clamp(12px,2.5vw,32px);--safe-y:16px;border-radius:0}
 .und.full .und-bg{position:fixed}
 
 /* ---------- header ---------- */
@@ -4295,7 +4349,11 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .brand{display:flex;align-items:center;gap:12px;min-width:0;flex:0 1 auto}
 .und .logo{width:40px;height:40px;border-radius:10px;flex:none;display:block}
 .und .und-name{font:600 20px/1.2 Poppins,"Segoe UI",system-ui,sans-serif;color:var(--title);margin:0;padding:0;border:0;background:none;text-shadow:none;letter-spacing:0}
-.und .und-sub{font-size:12.5px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.und .und-sub{font-size:12.5px;color:var(--muted);display:flex;gap:6px 8px;flex-wrap:wrap;align-items:center;margin-top:2px}
+.und .und-sub .vchip{display:inline-flex;align-items:center;gap:6px;padding:1px 3px 1px 8px;border:1px solid var(--line-2);border-radius:999px;line-height:18px;white-space:nowrap;color:var(--text);font-size:11.5px}
+.und .und-sub .vchip:not(:has(.upd)){padding-right:8px}
+.und .und-sub .upd{all:unset;display:inline-flex;align-items:center;gap:3px;cursor:pointer;background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:0 7px;font-size:11px;font-weight:600;line-height:16px}
+.und .und-sub .upd svg{width:11px;height:11px}.und .und-sub .upd:hover{filter:brightness(1.1)}.und .und-sub .upd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .und .top .search{flex:1 1 220px;max-width:440px;margin-left:auto;position:relative}
 .und .top .search input{width:100%;padding-left:32px!important}
 .und .sbox{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:9000;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);box-shadow:0 12px 32px rgba(0,0,0,.35);max-height:min(70vh,560px);overflow:auto;padding:6px;min-width:min(420px,calc(100vw - 24px))}
@@ -4513,9 +4571,16 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .drawer{position:fixed;top:0;right:0;bottom:0;width:min(880px,100vw);z-index:9501;background:var(--bg);color:var(--text);border-left:1px solid var(--line-2);display:flex;flex-direction:column;box-shadow:-12px 0 40px rgba(0,0,0,.3)}
 .und .drawer .dh{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
 .und .drawer .dh h2{margin:0;font:600 17px/1.3 var(--font);color:var(--title);border:0;padding:0;background:none;text-transform:none;letter-spacing:0}
-.und .drawer .dt{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:none}
-.und .drawer .dt button{background:none!important;border:0!important;border-bottom:2px solid transparent!important;color:var(--muted)!important;padding:10px 12px!important;margin:0!important;font:inherit!important;font-size:13.5px!important;cursor:pointer;white-space:nowrap;border-radius:0!important;min-height:0!important}
-.und .drawer .dt button.on{color:var(--text)!important;border-bottom-color:var(--accent)!important}
+.und .drawer .dmain{flex:1;display:flex;min-height:0}
+.und .drawer .dt{display:flex;flex-direction:column;gap:1px;padding:10px 8px;border-right:1px solid var(--line);overflow-y:auto;scrollbar-width:none;flex:0 0 200px;background:var(--panel-2)}
+.und .drawer .dt .dg{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);padding:12px 10px 4px}.und .drawer .dt .dg:first-child{padding-top:4px}
+.und .drawer .dt button svg{width:15px;height:15px;flex:none;opacity:.85}
+.und .drawer .dtitle{font:600 18px/1.3 var(--font);color:var(--title);margin:0 0 14px;padding:0;border:0;background:none;text-transform:none;letter-spacing:0}
+.und .drawer .dt button{display:flex!important;align-items:center;gap:9px;text-align:left;border-radius:7px!important;background:none!important;border:0!important;border-bottom:2px solid transparent!important;color:var(--muted)!important;padding:8px 10px!important;margin:0!important;font:inherit!important;font-size:13.5px!important;cursor:pointer;white-space:nowrap;border-radius:0!important;min-height:0!important}
+.und .drawer .dt button:hover{background:var(--bar)!important;color:var(--text)!important}
+.und .drawer .dt button.on{color:var(--title)!important;background:var(--accent-soft)!important;border-bottom-color:transparent!important;box-shadow:inset 3px 0 0 var(--accent)}
+.und input[type=checkbox],.und input[type=radio],.und input[type=range]{accent-color:var(--accent)}
+.und select option{background:var(--panel);color:var(--text)}
 .und .drawer .db{flex:1;overflow:auto;padding:16px 18px 24px;-webkit-overflow-scrolling:touch}
 .und .drawer .df{display:flex;gap:8px;align-items:center;padding:12px 18px;border-top:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
 .und .set{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
@@ -4598,6 +4663,10 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   .und .modal-bg{align-items:flex-end;padding:0}.und .modal{border-radius:14px 14px 0 0;max-height:92vh;padding:16px}
   .und .modal .foot .btn{flex:1}
   .und .drawer{width:100vw;border-left:0}
+  .und .drawer .dmain{flex-direction:column}
+  .und .drawer .dt{flex-direction:row;flex:none;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;padding:4px 8px;background:none}
+  .und .drawer .dt .dg{display:none}
+  .und .drawer .dt button{white-space:nowrap;flex:none}.und .drawer .dt button.on{box-shadow:inset 0 -2px 0 var(--accent)}
   .und .toasts{left:12px;right:12px;bottom:12px;align-items:stretch}.und .toast{max-width:none}
   .und .tiles,.und .favs{grid-template-columns:1fr}
   .und .sec-h .tools{margin-left:0;width:100%}
@@ -4652,6 +4721,8 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und kbd{font:600 11.5px/1 var(--mono);padding:4px 7px;border-radius:5px;border:1px solid var(--line-2);border-bottom-width:2px;background:var(--panel-2);color:var(--title)}
 
 /* status text */
+.und .sec.nomatch,.und .mw.nomatch-col{display:none}
+.und .nomatch-note{margin:0 0 14px;padding:10px 14px;border:1px dashed var(--line-2);border-radius:var(--radius);color:var(--muted);font-size:13px;background:color-mix(in srgb,var(--panel) 70%,transparent)}
 .und .err-t,.und .bad-t{color:var(--bad)}.und .ok-t{color:var(--ok)}.und .warn-t{color:var(--warn)}
 .und .badge.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
 
@@ -4870,7 +4941,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und[data-theme=fluent][data-mode=light] .modal,.und[data-theme=fluent][data-mode=light] .menu,.und[data-theme=fluent][data-mode=light] .toast{background:rgba(255,255,255,.97);border-color:rgba(15,23,42,.12)}
 .und[data-theme=fluent][data-mode=light] *{scrollbar-color:rgba(15,23,42,.2) transparent}
 ]]></INLINE>
-<SHA256>91e24a896707038e7943e69fc7d1aec875e5c0606d6faa85364a9ef027e84726</SHA256>
+<SHA256>58fe1df5fdc2372f877cb6f51ea45244ded4454949d514a6d7305a42f8a91822</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -5122,6 +5193,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var t = THEMES[a.theme] || THEMES.default, mode = lookMode(a), p = t[mode] || t.dark, st = STATUS[mode], light = mode === 'light';
     root.setAttribute('data-theme', THEMES[a.theme] ? a.theme : 'default');
     root.setAttribute('data-mode', mode);
+    root.style.colorScheme = mode;          // native controls, dropdown lists and scrollbars follow the theme
     root.setAttribute('data-density', a.density);
     var set = function (k, v) { root.style.setProperty(k, v); };
     [['--bg', 'bg'], ['--panel', 'panel'], ['--panel-2', 'p2'], ['--bar', 'bar'], ['--field', 'field'], ['--line', 'line'], ['--line-2', 'l2'], ['--text', 'text'], ['--muted', 'muted'], ['--faint', 'faint'], ['--title', 'title']]
@@ -5141,6 +5213,8 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     if (window.UND_STANDALONE) document.body.style.background = p.bg;
     root.classList.toggle('has-bg', !!a.background);
     // wallpaper blur: the whole picture, or only what shows through the (then see-through) cards
+    // the margin around the dashboard: automatic, or what Settings > Theme says
+    ['x', 'y'].forEach(function (k) { var v = a['safe_' + k]; if (v === undefined || v < 0) root.style.removeProperty('--safe-' + k); else root.style.setProperty('--safe-' + k, v + 'px'); });
     var glass = !!a.background && a.blur_target === 'cards';
     root.classList.toggle('glass', glass);
     set('--glass-blur', (glass ? a.blur : 0) + 'px');
@@ -5198,14 +5272,34 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     R.srvBtn.setAttribute('aria-haspopup', 'menu');
     root.appendChild(h('header', { class: 'top' },
       h('div', { class: 'brand' }, logo(), h('div', { class: 'ell' }, h('h1', { class: 'und-name' }, g.title || 'UnDash'),
-        R.sub = h('div', { class: 'und-sub' }, S.boot.server.name + ' · ' + S.boot.server.ip + ' · UnDash ' + S.boot.version))),
+        R.sub = h('div', { class: 'und-sub' }))),
       h('div', { class: 'search' }, ic('search'), R.search, R.sbox = h('div', { class: 'sbox', id: 'und-sbox', hidden: true, role: 'region', 'aria-label': 'Results to request' })), acts));
-    R.sections = h('main', { class: 'sections' });
+    R.sections = h('main', { class: 'sections' }); R.noMatch = null;
     root.appendChild(R.sections);
     S.L.dashboard.sections.forEach(function (sec) { if (sec.visible) buildSection(sec); });
-    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Dashboard.'));
+    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Layout.'));
     packHalves();
-    paintAll(); paintLive();
+    paintAll(); paintLive(); paintIdent();
+    if (!S.selfT) { S.selfT = 1; checkSelf(); }
+  }
+
+  /* ---- title bar: server, Unraid version and UnDash version, each with a badge when a newer one exists ---- */
+  function checkSelf() { api('self_update').then(function (j) { if (!j.error || j.latest) { S.self = j; paintIdent(); } setTimeout(checkSelf, 6 * 3600 * 1000); }); }
+  function paintIdent() {
+    if (!R.sub) return;
+    var y = S.live || {}, s = y.system && !y.system.error ? y.system : null, b = S.boot.server || {};
+    var name = (s && s.name) || b.name || '', ip = (s && s.ip) || b.ip || '', os = (s && s.os) || b.os || '', ou = (s && s.os_update) || {};
+    var me = S.self || {};
+    var sig = JSON.stringify([name, ip, os, ou.available, ou.latest, ou.staged, me.newer, me.latest]);
+    if (R.sub._sig === sig) return; R.sub._sig = sig;
+    clear(R.sub);
+    R.sub.appendChild(h('span', { class: 'ell', title: ip }, name + (ip && ip !== name ? ' · ' + ip : '')));
+    if (os) {
+      var osUp = ou.staged ? ['restart for ' + ou.staged, 'Unraid ' + ou.staged + ' is installed; it becomes active after a restart'] : ou.available ? [ou.latest + ' available', 'Unraid ' + ou.latest + ' is available'] : null;
+      R.sub.appendChild(h('span', { class: 'vchip' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { if (S.boot.caps.os_update) osDialog(); else window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
+    }
+    R.sub.appendChild(h('span', { class: 'vchip' }, 'UnDash ' + S.boot.version, me.newer ? h('a', { class: 'upd', href: me.url, target: '_blank', rel: 'noopener',
+      title: 'UnDash ' + me.latest + ' is available. ' + (S.boot.caps.mode === 'api' ? 'Update the UnDash container in Unraid\'s Docker tab.' : 'Update it under Plugins in Unraid.') }, ic('up'), me.latest + ' available') : null));
   }
 
   /* Half-width sections next to each other go into two columns, each section into the shorter one (in order), so a short
@@ -5243,10 +5337,11 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
     p.w.classList.toggle('one', !!one);
     unlevel(p);                                           // measure the natural heights, not the stretched ones
-    p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
     var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
+    // sections hidden by the filter take no room and stay where they are
+    p.items.forEach(function (el, i) { var h0 = el.offsetHeight; if (!h0) { want.push(now[i]); return; } var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += h0 + gap; });
     var move = want.join() !== now.join();
-    if (move && !one) {
+    if (move && !one && !S.q.trim()) {
       // only move when it clearly helps, so sections do not jump back and forth
       var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
       if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
@@ -5383,7 +5478,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
         S.connErr = r.error;
         if (R.alerts) paintAlerts(S.live || {});
       } else {
-        S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r;
+        S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r; paintIdent();
         if (r.power && !S.power) powerOverlay(r.power);
         paintAll();
       }
@@ -5429,6 +5524,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     if (R.docker && open('docker')) paintDocker(y);
     if (R.vms && open('vms')) paintVms(y);
     paintCounts(y);
+    if (S.q) matchVisibility();
     // ResizeObserver does not run in a background tab; the live refresh catches up instead
     if (R.packs && R.packs.length) balanceHalves();
   }
@@ -5453,6 +5549,28 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     root.querySelectorAll('.aitem[data-name],.card.dl[data-name]').forEach(function (el) { el.style.display = matches(el.getAttribute('data-name')) ? '' : 'none'; });
     if (R.media) Object.keys(R.media.w).forEach(function (k) { var x = R.media.w[k]; if (x.last) paintMedia(k, x.last); });
     Object.keys(POLL).forEach(function (k) { if (POLL[k].last && R[k]) POLL[k].paint(POLL[k].last); });
+    matchVisibility();
+  }
+
+  /* While the filter box is in use, sections (and media columns) with nothing that matches step aside instead of showing
+     empty boxes; the overview and alerts stay. If nothing at all matches, one line says so. */
+  var MATCH_ITEMS = '.mi,.aitem,.card.dl,.pl,.rq,.agrid>.w,.alinks>.alink,.ci,.rowi,.tile,.hrow:not(.hh),.fav';
+  function matchVisibility() {
+    if (!R.sections) return;
+    var q = S.q.trim(), any = false;
+    [].forEach.call(R.sections.querySelectorAll('section.sec[data-sec]'), function (el) {
+      var id = el.getAttribute('data-sec');
+      if (!q || id === 'overview' || id === 'alerts') { el.classList.remove('nomatch'); [].forEach.call(el.querySelectorAll('.nomatch-col'), function (c) { c.classList.remove('nomatch-col'); }); return; }
+      var shown = function (x) { return x.style.display !== 'none' && !x.closest('[hidden]'); };
+      [].forEach.call(el.querySelectorAll('.mw'), function (c) { c.classList.toggle('nomatch-col', ![].some.call(c.querySelectorAll('.mi'), shown)); });
+      var n = [].filter.call(el.querySelectorAll(MATCH_ITEMS), function (x) { return shown(x) && !x.closest('.nomatch-col'); }).length;
+      el.classList.toggle('nomatch', n === 0);
+      if (n) any = true;
+    });
+    if (!R.noMatch) { R.noMatch = h('div', { class: 'nomatch-note', role: 'status' }); R.sections.parentNode.insertBefore(R.noMatch, R.sections); }
+    R.noMatch.hidden = !q || any;
+    if (R.packs && R.packs.length) balanceHalves();
+    if (q && !any) txt(R.noMatch, 'Nothing on the dashboard matches "' + q + '".' + (hasSeerr() ? ' Movies and series to request are in the list under the search box.' : ''));
   }
 
   /* ================= sections ================= */
@@ -5476,7 +5594,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     r.detail = h('div', { class: 'detail', hidden: true });
     r.stale = h('div', { class: 'stale', hidden: true, role: 'status' });
     r.body.appendChild(r.stale); r.body.appendChild(r.bar); r.body.appendChild(r.detail);
-    if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Dashboard).'));
+    if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Layout).'));
     r.open = LS.get('detail', '');
   };
   function toggleDetail(id) {
@@ -5891,7 +6009,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var D = S.L.docker, i = D.selected.indexOf(name), first = !D.selected.length;
     if (i >= 0) D.selected.splice(i, 1); else D.selected.push(name);
     api('prefs', { kind: 'docker_view', value: { selected: D.selected } }).then(function (j) { if (j.error) toast(j.error, true); });
-    toast(i >= 0 ? name + ' removed from "Selected"' : name + ' added to "Selected"' + (first ? '. Pick "Selected" as the default view in Settings > Dashboard.' : ''));
+    toast(i >= 0 ? name + ' removed from "Selected"' : name + ' added to "Selected"' + (first ? '. Pick "Selected" as the default view in Settings > Containers & VMs.' : ''));
     shell();
   }
   function setLayout(kind, l) { S.L[kind].layout = l; api('prefs', { kind: kind + '_view', value: { layout: l } }); shell(); }
@@ -6271,7 +6389,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
       x.el = h('div', { class: 'mw card' }, h('div', { class: 'mh' }, h('h3', null, MEDIA[id][0]), x.count, h('span', { class: 'grow' }), x.link), x.row);
       r.w[id] = x; r.grid.appendChild(x.el);
     });
-    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Dashboard).'));
+    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Media & downloads).'));
     r.body.classList.add('mbody');
     r.body.appendChild(r.grid);
     clearTimeout(S.mediaTimer); loadMedia(true);
@@ -6327,7 +6445,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     p.stale = false;
     api(p.action, Object.assign({}, p.data || {}, extra || {}), 30000).then(function (j) {
       if (POLL[key] !== p) return;                              // the section was rebuilt meanwhile
-      p.last = j; p.paint(j);
+      p.last = j; p.paint(j); if (S.q) matchVisibility();
       p.t = setTimeout(function () { pollRun(key); }, p.every);
     });
   }
@@ -6775,19 +6893,24 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   function openSettings(tab) {
     if (S.drawer) return;
     closeMenu(true);
-    var D = { tab: typeof tab === 'string' ? tab : 'dashboard', dirty: false };
+    var D = { tab: SET_ALIAS[tab] || (SET_PAGES[tab] ? tab : 'layout'), dirty: false };
     S.drawer = D;
     var last = document.activeElement;
     var bodyEl = h('div', { class: 'db', role: 'tabpanel' });
     var saveB = btn('Save', save, 'pri'); saveB.disabled = true;
     var status = h('span', { class: 'muted sm grow', role: 'status' }, 'Loading…');
-    var tabs = h('div', { class: 'dt', role: 'tablist', 'aria-label': 'Settings sections' });
-    [['dashboard', 'Dashboard'], ['system', 'System'], ['appearance', 'Appearance'], ['services', 'Apps'], ['ignored', 'Ignored alerts'], ['config', 'Configuration']].forEach(function (t) {
-      tabs.appendChild(h('button', { type: 'button', role: 'tab', 'data-t': t[0], onclick: function () { D.tab = t[0]; paintTabs(); render(); } }, t[1]));
+    var tabs = h('nav', { class: 'dt', role: 'tablist', 'aria-label': 'Settings', 'aria-orientation': 'vertical' });
+    SET_NAV.forEach(function (g) {
+      tabs.appendChild(h('div', { class: 'dg' }, g[0]));
+      g[1].forEach(function (id) {
+        var pg = SET_PAGES[id];
+        tabs.appendChild(h('button', { type: 'button', role: 'tab', 'data-t': id, onclick: function () { D.tab = id; paintTabs(); render(); } }, ic(pg[1]), pg[0]));
+      });
     });
     var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
-      h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), h('span', { class: 'grow' }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')), tabs, bodyEl,
-      h('div', { class: 'df' }, saveB, btn('Discard', function () { if (!D.dirty || window.confirm('Discard your changes?')) close(true); }), status));
+      h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), h('span', { class: 'grow' }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')),
+      h('div', { class: 'dmain' }, tabs, bodyEl),
+      h('div', { class: 'df' }, saveB, btn('Discard', function () { if (!D.dirty) close(true); else confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }), status));
     var bg = h('div', { class: 'drawer-bg', onclick: function () { close(); } });
     root.appendChild(bg); root.appendChild(drawer);
     function key(e) {
@@ -6801,10 +6924,10 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
       }
     }
     document.addEventListener('keydown', key);
-    function paintTabs() { [].forEach.call(tabs.childNodes, function (b) { var on = b.getAttribute('data-t') === D.tab; b.className = on ? 'on' : ''; b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
+    function paintTabs() { [].forEach.call(tabs.querySelectorAll('button'), function (b) { var on = b.getAttribute('data-t') === D.tab; b.className = on ? 'on' : ''; b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
     function dirty() { D.dirty = true; saveB.disabled = false; status.textContent = 'Unsaved changes'; }
     function close(force) {
-      if (force !== true && D.dirty && !window.confirm('Close settings without saving your changes?')) return;
+      if (force !== true && D.dirty) { confirmBox('Close without saving?', 'Your changes in Settings are not saved yet.', 'Close without saving', true).then(function (y) { if (y) close(true); }); return; }
       document.removeEventListener('keydown', key);
       bg.remove(); drawer.remove(); S.drawer = null;
       if (D.dirty) { applyLook(); applyCss(S.boot.css); }
@@ -6824,7 +6947,8 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     function render() {
       clear(bodyEl);
       if (!D.cfg) { bodyEl.appendChild(h('div', { class: 'progress' }, h('i'))); return; }
-      ({ dashboard: tabDashboard, system: tabSystem, appearance: tabAppearance, services: tabServices, ignored: tabIgnored, config: tabConfig })[D.tab](bodyEl, D, dirty);
+      bodyEl.appendChild(h('h2', { class: 'dtitle' }, SET_PAGES[D.tab][0]));
+      SET_PAGES[D.tab][2](bodyEl, D, dirty);
       bodyEl.scrollTop = 0;
     }
     D.render = render;
@@ -6845,6 +6969,29 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   function sIn(o, k, dirty, opts, onch) { return h('select', { onchange: function (e) { o[k] = e.target.value; dirty(); if (onch) onch(); } }, opts.map(function (x) { return h('option', { value: x[0], selected: String(o[k]) === String(x[0]) }, x[1]); })); }
   function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return false; var x = arr[i]; arr[i] = arr[j]; arr[j] = x; return true; }
   function rid() { var a = new Uint8Array(4); window.crypto.getRandomValues(a); return [].map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  /* Settings pages: [title, icon, builder]. Builders that share an older all-in-one tab take their blocks by title. */
+  function pick(build, titles) {
+    return function (b, D, dirty) {
+      var tmp = h('div'); build(tmp, D, dirty);
+      [].slice.call(tmp.children).forEach(function (el) {
+        var t = el.querySelector('h3'); if (t && titles.indexOf(t.textContent) >= 0) b.appendChild(el);
+      });
+    };
+  }
+  var SET_PAGES = {
+    layout: ['Layout', 'grid', pick(tabDashboard, ['Sections', 'System overview'])],
+    media: ['Media & downloads', 'play', pick(tabDashboard, ['Media', 'Downloads'])],
+    containers: ['Containers & VMs', 'box', pick(tabDashboard, ['Containers', 'Virtual machines', 'Favorites, names and visibility'])],
+    services: ['Apps', 'web', function (b, D, dirty) { pick(tabDashboard, ['Apps'])(b, D, dirty); tabServices(b, D, dirty); }],
+    appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Spacing', 'Wallpaper'])],
+    css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
+    system: ['Refresh & display', 'clock', tabSystem],
+    ignored: ['Ignored alerts', 'mute', tabIgnored],
+    config: ['Connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }],
+    backup: ['Backup & import', 'download', configCommon]
+  };
+  var SET_NAV = [['Dashboard', ['layout', 'media', 'containers', 'services']], ['Look', ['appearance', 'css']], ['Behaviour', ['system', 'ignored']], ['Server', ['config', 'backup']]];
+  var SET_ALIAS = { dashboard: 'layout' };
   function set(title, hint) { var b = h('section', { class: 'set' }, h('h3', null, title), hint ? h('p', { class: 'hint' }, hint) : null); for (var i = 2; i < arguments.length; i++) add(b, arguments[i]); return b; }
   /* reorderable list: drag the handle (mouse) or use the arrow buttons (keyboard, touch) */
   function orderList(arr, row, dirty, redraw) {
@@ -7026,11 +7173,21 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var col, hex, cur = a.accent || themeAccent(a);
     hex = h('input', { type: 'text', value: cur, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
     col = h('input', { type: 'color', value: cur, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
-    b.appendChild(set('Theme', 'Pick a colour theme and whether it is light, dark or follows your system; every theme has both. Status colours (green, amber, red) stay readable in every theme.',
+    b.appendChild(set('Colours', 'Pick a colour theme and whether it is light, dark or follows your system; every theme has both. Status colours (green, amber, red) stay readable in every theme.',
       h('div', { class: 'inl', style: { 'margin-bottom': '12px' } }, h('span', { class: 'muted sm' }, 'Mode'), modeSeg), tw,
       h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex,
         btn(a.accent ? 'Use the theme accent' : 'Theme accent in use', function () { a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); }, 'sm ghost')),
-      h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)))));
+      null));
+    var margin = function (k, lab) {
+      var auto = a[k] < 0, out = h('span', { class: 'num muted sm', style: { 'min-width': '48px', 'text-align': 'right' } }, auto ? 'auto' : a[k] + ' px');
+      var r = h('input', { type: 'range', min: 0, max: 120, value: auto ? (k === 'safe_x' ? 32 : 16) : a[k], disabled: auto, 'aria-label': lab, style: { flex: '1' },
+        oninput: function (e) { a[k] = +e.target.value; txt(out, a[k] + ' px'); dirty(); preview(); } });
+      return F(lab, h('div', { class: 'inl' }, h('label', { class: 'switch', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: auto, onchange: function (e) {
+        a[k] = e.target.checked ? -1 : +r.value; r.disabled = e.target.checked; txt(out, e.target.checked ? 'auto' : a[k] + ' px'); dirty(); preview(); } }), 'Auto'), r, out));
+    };
+    b.appendChild(set('Spacing', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
+      F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)), h('span'),
+      margin('safe_x', 'Side margin'), margin('safe_y', 'Top and bottom margin'))));
     var pd = function () { dirty(); preview(); };
     var rng = function (k, lo, hi, unit, lab) {
       var out = h('span', { class: 'num muted sm', style: { 'min-width': '44px', 'text-align': 'right' } }, a[k] + unit);
@@ -7207,10 +7364,6 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     }, 'pri')], true);
   }
 
-  function tabConfig(b, D) {
-    if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D);
-    configCommon(b, D);
-  }
   /* Docker version: where the Unraid API is and its key (the key is never shown again once saved) */
   /* Docker version: the dashboard's own password (it can be skipped at setup and added here later) */
   function dashPass(b) {
@@ -7357,7 +7510,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   // g then a letter jumps to a section (it opens a collapsed one); ? lists everything
   var GOTO = { o: 'overview', a: 'alerts', f: 'favorites', m: 'media', s: 'arr', d: 'downloads', n: 'playing', q: 'requests', p: 'apps', c: 'docker', v: 'vms', h: 'health' };
   function jumpTo(id) {
-    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Dashboard).', true); return; }
+    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Layout).', true); return; }
     if (r.sec.collapsed) r.el.querySelector('.sec-h h2 button').click();
     r.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     var b = r.el.querySelector('.sec-h h2 button'); if (b) try { b.focus({ preventScroll: true }); } catch (x) { b.focus(); }
@@ -7407,7 +7560,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   });
 })();
 ]]></INLINE>
-<SHA256>af01c1f642c3859d1c0632dce80c8fe4c2662d51c2c51b2b166f9d56712064b5</SHA256>
+<SHA256>ee0de512dd4b2d65aba69f8e5e5c19078e0ca7ba89bd0a1528abf62a50bb48fd</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">

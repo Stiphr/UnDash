@@ -48,7 +48,7 @@ Plus: live refresh every **2 seconds** (configurable, pause / resume, reconnects
 
 ## Themes
 
-Settings > Appearance. Pick **Light**, **Dark** or **System** (follows your OS, live), then a theme:
+Settings > Theme. Pick **Light**, **Dark** or **System** (follows your OS, live), then a theme:
 
 | Theme | Modes | Look |
 |---|---|---|
@@ -82,10 +82,10 @@ and press **Install**. Requires Unraid 6.12 or later. UnDash is then available i
 
 | Setting | Default | Where |
 |---|---|---|
-| Configuration directory | `/mnt/user/appdata/undash` | Settings > Configuration |
-| Standalone port | `9099` | Settings > Configuration |
-| Listen address | `0.0.0.0` (all interfaces) | Settings > Configuration |
-| Refresh interval | 2 s | Settings > System |
+| Configuration directory | `/mnt/user/appdata/undash` | Settings > Connection |
+| Standalone port | `9099` | Settings > Connection |
+| Listen address | `0.0.0.0` (all interfaces) | Settings > Connection |
+| Refresh interval | 2 s | Settings > Refresh & display |
 
 These three location settings live in `/boot/config/plugins/undash/undash.cfg`:
 
@@ -117,7 +117,7 @@ See [docs/DOCKER.md](docs/DOCKER.md): the Unraid template is in `templates/undas
 
 ## Export and import
 
-Settings > Configuration:
+Settings > Backup & import:
 
 * **Export redacted**: layout, sections, metrics, container and VM preferences, theme, accent, refresh settings, custom CSS and non-secret variables. API keys, passwords, tokens, secret variables (names containing KEY, TOKEN, PASS, SECRET, AUTH, COOKIE, SESSION, CREDENTIAL), passwords in URLs (`user:pass@`) and token-like URL parameters are removed. Safe to share.
 * **Export full**: everything above plus every variable and credential. A private backup.

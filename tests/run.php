@@ -375,7 +375,7 @@ t('each disk and container problem is its own alert', $keys === ['disk.bad:disk2
 t('labels are used in messages, ids stay container names', $al[4]['msg'] === 'Plex Media is unhealthy.' && $al[4]['act'] === 'logs');
 t('hidden containers and manual stops raise nothing', !in_array('docker.unhealthy:secret-thing', $keys, true) && !in_array('docker.exited:manual', $keys, true));
 $ae = und_alerts($cfgA, ['error' => 'API key rejected', 'auth' => true], null);
-t('an API problem is one alert with a Settings button', count($ae) === 1 && $ae[0]['cat'] === 'api.error' && $ae[0]['act'] === 'settings' && strpos($ae[0]['msg'], 'Settings > Configuration') !== false);
+t('an API problem is one alert with a Settings button', count($ae) === 1 && $ae[0]['cat'] === 'api.error' && $ae[0]['act'] === 'settings' && strpos($ae[0]['msg'], 'Settings > Connection') !== false);
 t('every alert category can be ignored', !array_diff(array_column($al, 'cat'), array_keys(und_alert_categories())));
 // history
 $t0 = 1800000000;
@@ -494,6 +494,26 @@ $ap = und_normalize(['groups' => [], 'appearance' => ['brightness' => 0, 'blur_t
 t('wallpaper brightness goes down to 0 and the blur can sit behind the cards only', $ap['brightness'] === 0 && $ap['blur_target'] === 'cards'
   && und_normalize(['groups' => [], 'appearance' => ['brightness' => 150, 'blur_target' => 'everything']])['appearance']['brightness'] === 100
   && und_normalize(['groups' => [], 'appearance' => ['blur_target' => 'everything']])['appearance']['blur_target'] === 'wallpaper');
+
+/* ---------------- spacing and the update check ---------------- */
+group('version');
+$sa = und_normalize(['groups' => [], 'appearance' => ['safe_x' => 40, 'safe_y' => 500]])['appearance'];
+t('custom margins are kept and capped; default is automatic', $sa['safe_x'] === 40 && $sa['safe_y'] === 200 && und_load_config()['appearance']['safe_x'] === -1
+  && und_normalize(['groups' => [], 'appearance' => ['safe_x' => -7]])['appearance']['safe_x'] === -1);
+@unlink(und_tmp('self-update.json'));
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url) { $GLOBALS['SEEN'][] = $url; $d = [['name' => 'v2026.11.02d'], ['name' => 'v0.5.1'], ['name' => 'v0.10.0'], ['name' => 'v0.9.3'], ['name' => 'nightly']];
+  return ['code' => 200, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []]; };
+$GLOBALS['SEEN'] = [];
+$su = und_self_update();
+t('the newest x.y.z release tag wins (0.10.0 over 0.9.3; date tags ignored)', $su['latest'] === '0.10.0' && strpos($GLOBALS['SEEN'][0], 'api.github.com/repos/Stiphr/UnDash/tags') !== false);
+und_self_update();
+t('the check is cached (one request)', count($GLOBALS['SEEN']) === 1);
+unset($GLOBALS['UND_HTTP_MOCK']);
+@unlink(und_tmp('self-update.json'));
+
+// the built plugin must be well-formed XML, or Unraid cannot install it (not present inside the Docker build)
+$plg = dirname(__DIR__) . '/undash.plg';
+if (is_file($plg)) { libxml_use_internal_errors(true); $x = simplexml_load_file($plg); t('undash.plg is well-formed XML with a version', $x !== false && (string)$x['version'] !== '', implode('; ', array_map(function ($e) { return trim($e->message) . ' line ' . $e->line; }, libxml_get_errors()))); }
 
 /* ---------------- Homepage import still works ---------------- */
 group('homepage');

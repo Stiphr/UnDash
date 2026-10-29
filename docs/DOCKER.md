@@ -75,7 +75,7 @@ Environment variables:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `UNRAID_API_URL`, `UNRAID_API_KEY` | | the Unraid API; can instead be set in Settings > Configuration (stored in `/config/secrets.json`) |
+| `UNRAID_API_URL`, `UNRAID_API_KEY` | | the Unraid API; can instead be set in Settings > Connection (stored in `/config/secrets.json`) |
 | `UNDASH_PASSWORD` | | dashboard password; when set, it replaces the one chosen in the browser |
 | `UNDASH_PORT` | 9099 | the port inside the container (normally leave it and change the host port) |
 | `PHP_CLI_SERVER_WORKERS` | 4 | parallel requests |
@@ -85,8 +85,8 @@ Environment variables:
 The container log (Docker tab > UnDash > Logs) shows a one-time setup code. Open `http://SERVER:9099`,
 enter the code and choose a password (10+ characters). Or press **Continue without a password** (no code needed):
 not recommended, because anyone who can reach the port can then see and control your containers and VMs, but you can
-add a password any time in Settings > Configuration > **Dashboard password** (where it can also be changed or removed).
-Then Settings > Configuration > **Test connection** shows which parts of the API the key can read.
+add a password any time in Settings > Connection > **Dashboard password** (where it can also be changed or removed).
+Then Settings > Connection > **Test connection** shows which parts of the API the key can read.
 
 ## Networking
 
@@ -101,11 +101,11 @@ with the error (connection refused, timeout, wrong key …).
 They do not share anything: the plugin keeps its settings in `/mnt/user/appdata/undash` and the flash drive,
 the container in its own `/config`. Two things to watch:
 
-* **Port**: both default to 9099. Turn the plugin's port off (plugin Settings > Configuration) or give the
+* **Port**: both default to 9099. Turn the plugin's port off (plugin Settings > Connection) or give the
   container another host port.
 * **Settings**: map the plugin's folder to `/import` (read-only) once to start the container with the same
   layout, apps and secrets. Nothing in `/config` is ever overwritten; remove the mapping afterwards.
-  Or use plugin Settings > Configuration > Export full, then Import in the container.
+  Or use plugin Settings > Backup & import > Export full, then Import in the container.
 
 Nothing is removed from the plugin. Keep it if you need server power, OS updates, hibernate or container CPU/memory.
 

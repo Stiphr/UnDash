@@ -8,18 +8,22 @@
 .und{
   --bg:#1d1b1b;--panel:#232121;--panel-2:#1b1919;--bar:#2a2828;--field:#181616;--line:#343131;--line-2:#454141;
   --text:#ece9e9;--muted:#a19c9c;--faint:#7f7977;--title:#fff;
+  --safe-x:0px;--safe-y:4px;      /* the margin around the dashboard; Settings > Theme can set its own */
   --accent:#f15a2c;--accent-btn:#d4431a;--accent-ink:#fff;--accent-soft:rgba(241,90,44,.14);--accent-text:#ff7a50;
   --ok:#4ec38b;--warn:#e8b33c;--bad:#ff6b5e;--info:#79a0ee;--off:#8a8484;
   --ok-soft:rgba(78,195,139,.13);--warn-soft:rgba(232,179,60,.14);--bad-soft:rgba(255,107,94,.13);
   --shadow:0 1px 2px rgba(0,0,0,.25);--radius:10px;--gap:12px;--pad:14px;
   --font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  color:var(--text);font:14px/1.45 var(--font);margin:0;padding:4px 0 28px;text-align:left;position:relative;isolation:isolate;-webkit-text-size-adjust:100%}
-.und[data-mode=light],.und[data-theme]:not([data-theme=default]),.und.has-bg{background:var(--bg);padding:14px;border-radius:var(--radius)}
+  color:var(--text);font:14px/1.45 var(--font);margin:0;padding:var(--safe-y) var(--safe-x) calc(var(--safe-y) + 24px);text-align:left;position:relative;isolation:isolate;-webkit-text-size-adjust:100%}
+/* inside Unraid's page a theme with its own background gets a little inner margin; the full-window page always has its own */
+.und[data-mode=light],.und[data-theme]:not([data-theme=default]),.und.has-bg{background:var(--bg);--safe-x:14px;--safe-y:14px;border-radius:var(--radius)}
 .und[data-density=compact]{--gap:8px;--pad:10px;font-size:13.5px}
 .und[data-density=expanded]{--gap:16px;--pad:18px;font-size:14.5px}
 .und *,.und *::before,.und *::after{box-sizing:border-box}
 body.und-page{margin:0;background:#1d1b1b;min-height:100vh}
-body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;border-radius:0;background:var(--bg)}
+body.und-page .und{min-height:100vh}
+:where(body.und-page) .und{background:var(--bg)}      /* low specificity, so a theme's own background (Fluent's gradient) wins */
+body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],body.und-page .und.has-bg{--safe-x:clamp(12px,2.5vw,32px);--safe-y:16px;border-radius:0}
 .und-loading{padding:48px;text-align:center;color:#a19c9c;font:14px system-ui,sans-serif}
 .und a{color:var(--accent-text);text-decoration:none}.und a:hover{text-decoration:underline}
 .und .muted{color:var(--muted)}.und .faint{color:var(--faint)}.und .sm{font-size:12.5px}.und .xs{font-size:11.5px}.und b{font-weight:600}
@@ -30,7 +34,9 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 
 /* wallpaper and focus mode */
 .und .und-bg{position:absolute;inset:0;z-index:-1;border-radius:inherit;background-size:cover;background-position:center;overflow:hidden}
-.und.full{position:fixed;inset:0;z-index:9000;overflow:auto;padding:16px clamp(12px,2.5vw,32px) 40px;border-radius:0;background:var(--bg)}
+.und.full{position:fixed;inset:0;z-index:9000;overflow:auto;border-radius:0}
+:where(.und.full){background:var(--bg)}
+.und.full,.und.full[data-mode],.und.full[data-theme]{--safe-x:clamp(12px,2.5vw,32px);--safe-y:16px;border-radius:0}
 .und.full .und-bg{position:fixed}
 
 /* ---------- header ---------- */
@@ -38,7 +44,11 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .brand{display:flex;align-items:center;gap:12px;min-width:0;flex:0 1 auto}
 .und .logo{width:40px;height:40px;border-radius:10px;flex:none;display:block}
 .und .und-name{font:600 20px/1.2 Poppins,"Segoe UI",system-ui,sans-serif;color:var(--title);margin:0;padding:0;border:0;background:none;text-shadow:none;letter-spacing:0}
-.und .und-sub{font-size:12.5px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.und .und-sub{font-size:12.5px;color:var(--muted);display:flex;gap:6px 8px;flex-wrap:wrap;align-items:center;margin-top:2px}
+.und .und-sub .vchip{display:inline-flex;align-items:center;gap:6px;padding:1px 3px 1px 8px;border:1px solid var(--line-2);border-radius:999px;line-height:18px;white-space:nowrap;color:var(--text);font-size:11.5px}
+.und .und-sub .vchip:not(:has(.upd)){padding-right:8px}
+.und .und-sub .upd{all:unset;display:inline-flex;align-items:center;gap:3px;cursor:pointer;background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:0 7px;font-size:11px;font-weight:600;line-height:16px}
+.und .und-sub .upd svg{width:11px;height:11px}.und .und-sub .upd:hover{filter:brightness(1.1)}.und .und-sub .upd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .und .top .search{flex:1 1 220px;max-width:440px;margin-left:auto;position:relative}
 .und .top .search input{width:100%;padding-left:32px!important}
 .und .sbox{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:9000;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);box-shadow:0 12px 32px rgba(0,0,0,.35);max-height:min(70vh,560px);overflow:auto;padding:6px;min-width:min(420px,calc(100vw - 24px))}
@@ -256,9 +266,16 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .drawer{position:fixed;top:0;right:0;bottom:0;width:min(880px,100vw);z-index:9501;background:var(--bg);color:var(--text);border-left:1px solid var(--line-2);display:flex;flex-direction:column;box-shadow:-12px 0 40px rgba(0,0,0,.3)}
 .und .drawer .dh{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
 .und .drawer .dh h2{margin:0;font:600 17px/1.3 var(--font);color:var(--title);border:0;padding:0;background:none;text-transform:none;letter-spacing:0}
-.und .drawer .dt{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:none}
-.und .drawer .dt button{background:none!important;border:0!important;border-bottom:2px solid transparent!important;color:var(--muted)!important;padding:10px 12px!important;margin:0!important;font:inherit!important;font-size:13.5px!important;cursor:pointer;white-space:nowrap;border-radius:0!important;min-height:0!important}
-.und .drawer .dt button.on{color:var(--text)!important;border-bottom-color:var(--accent)!important}
+.und .drawer .dmain{flex:1;display:flex;min-height:0}
+.und .drawer .dt{display:flex;flex-direction:column;gap:1px;padding:10px 8px;border-right:1px solid var(--line);overflow-y:auto;scrollbar-width:none;flex:0 0 200px;background:var(--panel-2)}
+.und .drawer .dt .dg{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);padding:12px 10px 4px}.und .drawer .dt .dg:first-child{padding-top:4px}
+.und .drawer .dt button svg{width:15px;height:15px;flex:none;opacity:.85}
+.und .drawer .dtitle{font:600 18px/1.3 var(--font);color:var(--title);margin:0 0 14px;padding:0;border:0;background:none;text-transform:none;letter-spacing:0}
+.und .drawer .dt button{display:flex!important;align-items:center;gap:9px;text-align:left;border-radius:7px!important;background:none!important;border:0!important;border-bottom:2px solid transparent!important;color:var(--muted)!important;padding:8px 10px!important;margin:0!important;font:inherit!important;font-size:13.5px!important;cursor:pointer;white-space:nowrap;border-radius:0!important;min-height:0!important}
+.und .drawer .dt button:hover{background:var(--bar)!important;color:var(--text)!important}
+.und .drawer .dt button.on{color:var(--title)!important;background:var(--accent-soft)!important;border-bottom-color:transparent!important;box-shadow:inset 3px 0 0 var(--accent)}
+.und input[type=checkbox],.und input[type=radio],.und input[type=range]{accent-color:var(--accent)}
+.und select option{background:var(--panel);color:var(--text)}
 .und .drawer .db{flex:1;overflow:auto;padding:16px 18px 24px;-webkit-overflow-scrolling:touch}
 .und .drawer .df{display:flex;gap:8px;align-items:center;padding:12px 18px;border-top:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
 .und .set{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
@@ -341,6 +358,10 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   .und .modal-bg{align-items:flex-end;padding:0}.und .modal{border-radius:14px 14px 0 0;max-height:92vh;padding:16px}
   .und .modal .foot .btn{flex:1}
   .und .drawer{width:100vw;border-left:0}
+  .und .drawer .dmain{flex-direction:column}
+  .und .drawer .dt{flex-direction:row;flex:none;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;padding:4px 8px;background:none}
+  .und .drawer .dt .dg{display:none}
+  .und .drawer .dt button{white-space:nowrap;flex:none}.und .drawer .dt button.on{box-shadow:inset 0 -2px 0 var(--accent)}
   .und .toasts{left:12px;right:12px;bottom:12px;align-items:stretch}.und .toast{max-width:none}
   .und .tiles,.und .favs{grid-template-columns:1fr}
   .und .sec-h .tools{margin-left:0;width:100%}
@@ -395,6 +416,8 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und kbd{font:600 11.5px/1 var(--mono);padding:4px 7px;border-radius:5px;border:1px solid var(--line-2);border-bottom-width:2px;background:var(--panel-2);color:var(--title)}
 
 /* status text */
+.und .sec.nomatch,.und .mw.nomatch-col{display:none}
+.und .nomatch-note{margin:0 0 14px;padding:10px 14px;border:1px dashed var(--line-2);border-radius:var(--radius);color:var(--muted);font-size:13px;background:color-mix(in srgb,var(--panel) 70%,transparent)}
 .und .err-t,.und .bad-t{color:var(--bad)}.und .ok-t{color:var(--ok)}.und .warn-t{color:var(--warn)}
 .und .badge.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
 
