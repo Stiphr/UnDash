@@ -37,7 +37,7 @@ The Default theme keeps the look of [Unraid Swiss Manager](https://github.com/St
 | **Endpoint health** | Every app link and container web UI probed in parallel: HTTP status (200 OK, 302 Redirect, 404, connection refused …) and latency, problems first, with Re-probe. Only addresses UnDash already knows are probed. |
 | **Virtual machines** | One row per VM; the icon or name opens its VNC console, and the gear button holds the actions that fit the VM's state. |
 | **Now playing** | Every stream on Plex, Emby, Jellyfin and Tautulli: who is watching what on which device, progress, direct play / direct stream / transcode, quality, bandwidth, remote viewers. With Tautulli set up, Plex is read through it, so nothing is listed twice. |
-| **Requests** | Overseerr / Jellyseerr: pending requests first with **Approve** and **Decline** (decline asks first), then the latest others with their status, poster, requester and seasons. |
+| **Requests** | Overseerr / Jellyseerr: pending requests first with **Approve** and **Decline** (decline asks first), then the latest others with their status, poster, requester and seasons. Typing in the search box also finds movies and series in Seerr, with **Request** right there (series: every season). |
 | **Apps** | Everything else you configured (Plex, Emby, Immich, AdGuard, links …). Nothing is shown twice: Arr apps, download clients, calendars and system cards live in their own sections. |
 
 Plus: live refresh every **2 seconds** (configurable, pause / resume, reconnects on its own); a filter box for the whole page (`/`); sections and tiles you can show, hide and drag into order; half-width sections stack in two balanced columns whose bottoms line up, and cards in a row share one height; compact / comfortable / expanded density; ten themes with light / dark / system mode and a custom accent; custom CSS; import / export; phones, tablets and desktops; keyboard accessible.
@@ -53,7 +53,7 @@ Settings > Appearance. Pick **Light**, **Dark** or **System** (follows your OS, 
 | Theme | Modes | Look |
 |---|---|---|
 | Default | light, dark | Unraid Swiss Manager: dark grey panels, orange accent |
-| AMOLED | dark | pure black |
+| AMOLED | light, dark | pure black, or pure white in light mode |
 | Minimal | light, dark | neutral greys, monochrome accent |
 | Zinc Blue | light, dark | zinc greys with a blue accent (the autobrr / qui look) |
 | Kanagawa Wave | light, dark | Kanagawa ink blues; light mode is Kanagawa Lotus |
@@ -61,9 +61,9 @@ Settings > Appearance. Pick **Light**, **Dark** or **System** (follows your OS, 
 | Catppuccin | light, dark | Mocha (dark) and Latte (light) |
 | Nord | light, dark | Polar Night and Snow Storm |
 | Tokyo Night | light, dark | Tokyo Night and Tokyo Night Day |
-| Fluent Dark | dark | frosted-glass cards with blue accents and glow; best with a wallpaper |
+| Fluent Dark / Light | light, dark | frosted-glass cards with blue accents and glow; best with a wallpaper |
 
-The accent follows the theme unless you choose your own colour. Status colours (green, amber, red) stay readable in every theme. Custom CSS still applies on top of any theme.
+The accent follows the theme unless you choose your own colour. A wallpaper can be blurred as a whole or only behind the cards (frosted glass), with brightness from 0 to 100%. Status colours (green, amber, red) stay readable in every theme. Custom CSS still applies on top of any theme.
 
 ## Install the plugin
 

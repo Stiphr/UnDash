@@ -19,7 +19,7 @@ clamped when the file is read, so a hand edit can never break the dashboard. Old
   },
   "appearance": {
     "theme": "default",           // default amoled minimal zinc wave dragon catppuccin nord tokyo fluent ("light" = default in light mode)
-    "mode": "dark",               // dark | light | system (amoled and fluent are dark only)
+    "mode": "dark",               // dark | light | system (every theme has both)
     "accent": "",                 // #rrggbb, or empty for the theme's own accent
     "density": "comfortable",     // compact | comfortable | expanded
     "background": "",             // https://... or /path, optional wallpaper

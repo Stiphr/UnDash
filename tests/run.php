@@ -450,6 +450,26 @@ t('approve posts to Seerr', !empty(und_request_action($cfgS, 'a0000004', '5', 'a
 t('a vanished request says so', strpos(und_request_action($cfgS, 'a0000004', '404', 'decline')['error'] ?? '', 'no longer exists') !== false);
 t('only approve or decline, only known apps, only numeric ids', isset(und_request_action($cfgS, 'a0000004', '5', 'delete')['error']) && isset(und_request_action($cfgS, 'a0000001', '5', 'approve')['error'])
   && isset(und_request_action($cfgS, 'a0000004', '5/../../x', 'approve')['error']));
+$GLOBALS['UND_HTTP_MOCK2'] = $GLOBALS['UND_HTTP_MOCK'];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['SEEN'][] = $m . ' ' . $url . (isset($o['body']) ? ' ' . $o['body'] : '');
+  $p = parse_url($url, PHP_URL_PATH);
+  $j = function ($d, $c = 200) { return ['code' => $c, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []]; };
+  if ($p === '/api/v1/search') return $j(['results' => [['id' => 1, 'mediaType' => 'person', 'name' => 'Someone'], ['id' => 27205, 'mediaType' => 'movie', 'title' => 'Inception', 'releaseDate' => '2010-07-15', 'posterPath' => '/i.jpg'],
+    ['id' => 1399, 'mediaType' => 'tv', 'name' => 'Game of Thrones', 'firstAirDate' => '2011-04-17', 'mediaInfo' => ['status' => 5]]]]);
+  if ($p === '/api/v1/request' && $m === 'POST') return strpos($o['body'], '"mediaId":1399') !== false ? $j(['message' => 'dup'], 409) : $j(['id' => 7], 201);
+  return call_user_func($GLOBALS['UND_HTTP_MOCK2'], $m, $url, $o);
+};
+$GLOBALS['SEEN'] = [];
+$se = und_seerr_search($cfgS, 'the "best" & more');
+t('search asks Seerr with %20, not +', (bool)array_filter($GLOBALS['SEEN'], function ($u) { return strpos($u, '/api/v1/search?query=the%20%22best%22%20%26%20more&') !== false; }));
+t('search lists movies and series, not people, with their status', array_column($se['items'], 'title') === ['Inception', 'Game of Thrones'] && $se['items'][0]['status'] === 'none' && $se['items'][1]['status'] === 'available' && $se['app']['id'] === 'a0000004');
+t('search needs 2 to 100 characters', isset(und_seerr_search($cfgS, 'x')['error']) && isset(und_seerr_search($cfgS, str_repeat('x', 101))['error']));
+t('a movie is requested as itself', !empty(und_seerr_request($cfgS, 'a0000004', 'movie', '27205')['ok']) && (bool)array_filter($GLOBALS['SEEN'], function ($u) { return strpos($u, '{"mediaType":"movie","mediaId":27205}') !== false; }));
+t('a series is requested with every season, a duplicate says so', strpos(und_seerr_request($cfgS, 'a0000004', 'tv', '1399')['error'] ?? '', 'already requested') !== false
+  && (bool)array_filter($GLOBALS['SEEN'], function ($u) { return strpos($u, '"seasons":"all"') !== false; }));
+t('only movies or series, numeric ids, known apps', isset(und_seerr_request($cfgS, 'a0000004', 'person', '1')['error']) && isset(und_seerr_request($cfgS, 'a0000004', 'movie', '1;2')['error'])
+  && isset(und_seerr_request($cfgS, 'a0000001', 'movie', '1')['error']));
 unset($GLOBALS['UND_HTTP_MOCK']);
 $tg = und_health_targets($cfgS, ['containers' => [['name' => 'plex', 'state' => 'running', 'webui' => 'http://10.0.0.5:32400/web'], ['name' => 'sonarr', 'state' => 'running', 'webui' => 'http://10.0.0.5:8989/'],
   ['name' => 'stopped', 'state' => 'exited', 'webui' => 'http://10.0.0.5:9000/'], ['name' => 'bad', 'state' => 'running', 'webui' => 'javascript:alert(1)']]]);
@@ -470,6 +490,10 @@ t('per-column count kept and clamped', $m['widgets'][3]['count'] === 7 && $m['wi
 t('older configs fall back to the shared count', $m['widgets'][1]['count'] === 12);
 t('visibility kept', $m['widgets'][3]['visible'] === false && $m['widgets'][0]['visible'] === true);
 t('default count is 15', und_load_config()['media']['widgets'][2]['count'] === 15);
+$ap = und_normalize(['groups' => [], 'appearance' => ['brightness' => 0, 'blur_target' => 'cards']])['appearance'];
+t('wallpaper brightness goes down to 0 and the blur can sit behind the cards only', $ap['brightness'] === 0 && $ap['blur_target'] === 'cards'
+  && und_normalize(['groups' => [], 'appearance' => ['brightness' => 150, 'blur_target' => 'everything']])['appearance']['brightness'] === 100
+  && und_normalize(['groups' => [], 'appearance' => ['blur_target' => 'everything']])['appearance']['blur_target'] === 'wallpaper');
 
 /* ---------------- Homepage import still works ---------------- */
 group('homepage');
