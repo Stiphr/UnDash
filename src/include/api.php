@@ -47,6 +47,14 @@ switch ($action) {
     if (isset($want['docker'])) $r['docker'] = und_docker_live();
     if (isset($want['vms'])) $r['vms'] = und_vm_live();
     if (isset($want['ups'])) $r['ups'] = und_ups($cfg['general']['ups_name']);
+    // alerts are worked out here (one source for the page and the history); only the parts this request loaded are tracked
+    if (isset($r['system'])) {
+      $dk = $r['docker'] ?? null;
+      $r['alerts'] = und_alerts($cfg, $r['system'], $dk);
+      $scopes = isset($r['system']['error']) ? [] : ['system'];
+      if (is_array($dk) && !isset($dk['error'])) $scopes[] = 'docker';
+      und_alerts_track($dk === null ? array_values(array_filter($r['alerts'], function ($a) { return strpos($a['cat'], 'docker.') !== 0; })) : $r['alerts'], $scopes);
+    }
     // the rules in force now, by the server's clock, so every open tab hides the same alerts
     $r['ignores'] = array_map(function ($x) { return ['id' => $x['id'], 'kind' => $x['kind'], 'key' => $x['key'], 'until' => $x['until']]; }, und_ignores_active($r['at']));
     $r['power'] = is_file(und_tmp('power-started')) ? trim((string)@file_get_contents(und_tmp('power-started'))) : '';
@@ -101,6 +109,7 @@ switch ($action) {
   case 'power_prepare': { $r = und_power_prepare($P('op')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'power':         { $r = und_power($P('op'), $P('nonce'), $P('confirm')); if (isset($r['error'])) fail($r['error'], 409); out($r); }
   case 'history':       out(['history' => und_history()]);
+  case 'alert_history': out(und_alert_history());
 
   /* ignored alerts: hiding only, monitoring goes on */
   case 'ignores_list':  out(['now' => time(), 'rules' => und_ignores(), 'categories' => und_alert_categories()]);

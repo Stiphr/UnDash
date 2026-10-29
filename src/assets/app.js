@@ -706,6 +706,7 @@
     r.list = h('div', { class: 'alerts' }); r.body.appendChild(r.list);
     r.ign = h('button', { type: 'button', class: 'btn ghost sm', hidden: true, onclick: function () { openSettings('ignored'); } });
     r.tools.appendChild(r.ign);
+    r.tools.appendChild(btn('History', alertHistory, 'ghost sm', 'clock', 'When each problem started and ended'));
   };
   /* Alert ids are "<category>:<resource>" (see include/ignores.php); an alert without a category cannot be ignored. */
   var ALERT_CAT = {
@@ -728,42 +729,46 @@
     var now = y.at || Date.now() / 1000, key = cat + ':' + res;
     return ignRules(y).filter(function (g) { return (g.until === null || g.until > now) && (g.kind === 'type' ? g.key === cat : g.key === key); })[0] || null;
   }
+  /* the alerts come from the server (include/alerts.php); only the connection ones are the browser's own */
+  var ALERT_ACT = {
+    settings: function () { return ['Settings', function () { openSettings('config'); }]; },
+    restart: function () { return ['Restart…', function () { powerDialog('reboot'); }]; },
+    os: function () { return ['Details', osDialog]; },
+    logs: function (res) { return ['Logs', function () { logs(res); }]; }
+  };
   function alertList(y) {
-    var s = y.system, out = [];
-    function add(lv, msg, b, cat, res) { out.push({ lv: lv, msg: msg, btn: b || null, cat: cat || '', res: res === undefined ? '' : String(res) }); }
-    if (S.conn === 'down') add('bad', 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.');
-    if (S.conn === 'auth') add('bad', 'Your session ended. Reload the page to sign in again.');
-    if (s && s.error) { add('bad', s.error + (s.auth ? ' Check Settings > Configuration.' : ''), ['Settings', function () { openSettings('config'); }], s.auth ? '' : 'api.error', 'unraid'); s = null; }
-    if (s) {
-      var a = s.array || {};
-      if (a.state && a.state !== 'STARTED') add('warn', 'The array is ' + a.state.toLowerCase() + '. Shares, containers and VMs on it are unavailable.', null, 'array.state', a.state);
-      if (a.resync) add('info', (a.resync_action || 'A parity operation') + ' is running' + (a.resync_pct !== null ? ' (' + a.resync_pct + '%)' : '') + '.', null, 'array.resync', 'array');
-      if (a.bad_disks) a.bad_disks.forEach(function (n) { add('bad', n + ' is disabled, missing or emulated. Check Main in Unraid.', null, 'disk.bad', n); });
-      else if (a.bad) add('bad', a.bad + ' disk' + (a.bad > 1 ? 's are' : ' is') + ' disabled, missing or emulated. Check Main in Unraid.', null, 'disk.bad', 'array');
-      if (a.error_disks) a.error_disks.forEach(function (d) { add('bad', d.name + ' reported ' + d.errors + ' read/write error' + (d.errors > 1 ? 's' : '') + '.', null, 'disk.errors', d.name); });
-      else if (a.errors) add('bad', 'Disks reported ' + a.errors + ' read/write error' + (a.errors > 1 ? 's' : '') + '.', null, 'disk.errors', 'array');
-      if (a.hot_disks) a.hot_disks.forEach(function (d) { add('warn', d.name + ' is at ' + d.temp + '°C.', null, 'disk.hot', d.name); });
-      else if (a.hot) add('warn', a.hot + ' disk' + (a.hot > 1 ? 's are' : ' is') + ' at 50°C or more.', null, 'disk.hot', 'array');
-      var o = s.os_update || {};
-      if (o.staged) add('info', 'Unraid ' + o.staged + ' is installed and becomes active after a restart.', ['Restart…', function () { powerDialog('reboot'); }], 'os.staged', o.staged);
-      else if (o.available) add('info', 'Unraid ' + o.latest + ' is available (running ' + o.installed + ').', ['Details', osDialog], 'os.available', o.latest);
-      if (o.error && !o.available) add('warn', 'The Unraid update check failed: ' + o.error, null, 'os.check_failed', 'server');
-    }
-    var d = y.docker && y.docker.containers;
-    if (d) d.forEach(function (c) {
-      if (pref('docker', c.name).hidden) return;
-      var nm = label('docker', c.name), lg = ['Logs', function () { logs(c.name); }];
-      if (c.health === 'unhealthy') add('bad', nm + ' is unhealthy.', lg, 'docker.unhealthy', c.name);
-      else if (c.state === 'restarting') add('bad', nm + ' keeps restarting' + (c.restarts ? ' (' + c.restarts + ' restarts)' : '') + '.', lg, 'docker.restarting', c.name);
-      else if (c.state === 'exited' && c.exit && c.autostart) add('warn', nm + ' stopped with exit code ' + c.exit + '.', lg, 'docker.exited', c.name);
-      if (c.job === 'update_failed') add('bad', 'The update of ' + nm + ' failed.', lg, 'docker.update_failed', c.name);
-    });
+    var out = [];
+    if (S.conn === 'down') out.push({ lv: 'bad', msg: 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.', btn: null, cat: '', res: '' });
+    if (S.conn === 'auth') out.push({ lv: 'bad', msg: 'Your session ended. Reload the page to sign in again.', btn: null, cat: '', res: '' });
+    (y.alerts || []).forEach(function (a) { out.push({ lv: a.lv, msg: a.msg, btn: ALERT_ACT[a.act] ? ALERT_ACT[a.act](a.res) : null, cat: a.cat, res: a.res }); });
     return out;
+  }
+  function alertHistory() {
+    var box = h('div', { class: 'ahist' }, h('div', { class: 'progress' }, h('i')));
+    modal('Alert history', box, null, true);
+    api('alert_history').then(function (j) {
+      clear(box);
+      if (j.error) { box.appendChild(h('div', { class: 'empty' }, j.error)); return; }
+      var dur = function (sec) { sec = Math.max(0, sec); return sec < 90 ? Math.round(sec) + ' s' : sec < 5400 ? Math.round(sec / 60) + ' min' : sec < 172800 ? (sec / 3600).toFixed(1).replace(/\.0$/, '') + ' h' : Math.round(sec / 86400) + ' days'; };
+      var when = function (t) { return new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
+      var row = function (e, open) {
+        return h('div', { class: 'ah ' + e.lv }, h('span', { class: 'sdot ' + (e.lv === 'bad' ? 'bad' : e.lv === 'warn' ? 'warn' : 'ok'), role: 'img', 'aria-label': e.lv }),
+          h('span', { class: 'grow' }, h('span', { class: 'am' }, e.msg), h('span', { class: 'muted xs' }, (ALERT_CAT[e.cat] || e.cat) + ' · ' + when(e.start) + (open ? '' : ' → ' + when(e.end)))),
+          h('span', { class: 'badge ' + (open ? (e.lv === 'bad' ? 'bad' : 'warn') : 'plain') }, open ? 'ongoing · ' + dur(j.now - e.start) : dur(e.end - e.start)));
+      };
+      box.appendChild(h('p', { class: 'muted sm' }, 'Checked once a minute in the background, and on every refresh while the dashboard is open. Ignored alerts are still recorded. Kept for 30 days.'));
+      box.appendChild(h('h4', { class: 'ign-h' }, 'Ongoing (' + j.active.length + ')'));
+      if (!j.active.length) box.appendChild(h('div', { class: 'empty' }, 'Nothing is wrong right now.'));
+      j.active.forEach(function (e) { box.appendChild(row(e, true)); });
+      box.appendChild(h('h4', { class: 'ign-h' }, 'Ended (' + j.log.length + ')'));
+      if (!j.log.length) box.appendChild(h('div', { class: 'empty' }, 'No ended alerts in the last 30 days.'));
+      j.log.forEach(function (e) { box.appendChild(row(e, false)); });
+    });
   }
   function paintAlerts(y) {
     var r = R.alerts, all = alertList(y), hidden = 0;
     var out = all.filter(function (x) { if (x.cat && ignoredBy(y, x.cat, x.res)) { hidden++; return false; } return true; });
-    var sig = JSON.stringify([!!y.system, hidden, out.map(function (x) { return [x.lv, x.msg, x.cat, x.res]; })]);
+    var sig = JSON.stringify([!!y.system, hidden, out.map(function (x) { return [x.lv, x.msg, x.cat, x.res, !!x.btn]; })]);
     if (r.sig === sig) return; r.sig = sig;
     clear(r.list);
     txt(r.count, out.length ? String(out.length) : '');
