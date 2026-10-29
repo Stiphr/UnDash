@@ -41,6 +41,11 @@ function sa_ip() { return (string)($_SERVER['REMOTE_ADDR'] ?? ''); }
 
 /* ---- health check (Docker HEALTHCHECK): says nothing about the server ---- */
 if ($uri === '/health') { header('Content-Type: text/plain'); header('Cache-Control: no-store'); echo "ok\n"; exit; }
+if ($uri === '/assets/inter.woff2') {
+  // the bundled Inter font (SIL Open Font License); public, needed by the sign-in page too
+  header('Content-Type: font/woff2'); header('Cache-Control: public, max-age=31536000, immutable');
+  readfile(UND_ROOT . '/assets/inter.woff2'); exit;
+}
 if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
   // needed by the sign-in page too; nothing secret in either
   header('Content-Type: ' . ($uri === '/favicon.png' ? 'image/png' : 'text/css; charset=utf-8'));

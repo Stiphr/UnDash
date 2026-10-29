@@ -46,19 +46,22 @@ for rel, mode in files:
     sha = hashlib.sha256(written.encode()).hexdigest()
     out.append('<FILE Name="&emhttp;/%s" Mode="%s">\n<INLINE><![CDATA[%s]]></INLINE>\n<SHA256>%s</SHA256>\n</FILE>\n' % (rel, mode, text, sha))
 
-# The icon is binary, so it travels as base64 and is unpacked by a script (re-run at every boot, so it is always there).
-icon = (root / 'assets' / 'icon.png').read_bytes()
-icon_b64 = '\n'.join(textwrap.wrap(base64.b64encode(icon).decode(), 76))
-icon_sha = hashlib.sha256(icon).hexdigest()
-out.append("""<FILE Run="/bin/bash">
+# Binary files (the icon, the Inter font) travel as base64 and are unpacked by a script (re-run at every boot, so they are always there).
+def binary(data, dest, what):
+    b64 = '\n'.join(textwrap.wrap(base64.b64encode(data).decode(), 76))
+    sha = hashlib.sha256(data).hexdigest()
+    tmp = '/tmp/undash-' + what
+    return """<FILE Run="/bin/bash">
 <INLINE>
-mkdir -p &emhttp;/images
-echo '""" + icon_b64 + """' | base64 -d > /tmp/undash-icon.png 2>/dev/null
-if [ "$(sha256sum /tmp/undash-icon.png | cut -d' ' -f1)" = \"""" + icon_sha + """\" ]; then mv -f /tmp/undash-icon.png &emhttp;/images/undash.png; chmod 644 &emhttp;/images/undash.png; else echo "icon check failed, skipped"; fi
-rm -f /tmp/undash-icon.png
+mkdir -p $(dirname """ + dest + """)
+echo '""" + b64 + """' | base64 -d > """ + tmp + """ 2>/dev/null
+if [ "$(sha256sum """ + tmp + """ | cut -d' ' -f1)" = \"""" + sha + """\" ]; then mv -f """ + tmp + """ """ + dest + """; chmod 644 """ + dest + """; else echo \"""" + what + """ check failed, skipped\"; fi
+rm -f """ + tmp + """
 </INLINE>
 </FILE>
-""")
+"""
+out.append(binary((root / 'assets' / 'icon.png').read_bytes(), '&emhttp;/images/undash.png', 'icon'))
+out.append(binary((src / 'assets' / 'inter.woff2').read_bytes(), '&emhttp;/assets/inter.woff2', 'font'))
 
 out.append("""<FILE Run="/bin/bash">
 <INLINE>

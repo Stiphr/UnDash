@@ -19,7 +19,7 @@ if ($uri === '/' || $uri === '/index.html') {
 if (strpos($uri, '/assets/') === 0) {
   $f = $repo . '/src' . $uri;
   if (!is_file($f)) { http_response_code(404); return true; }
-  header('Content-Type: ' . (substr($f, -3) === 'css' ? 'text/css' : 'application/javascript'));
+  header('Content-Type: ' . (substr($f, -5) === 'woff2' ? 'font/woff2' : (substr($f, -3) === 'css' ? 'text/css' : 'application/javascript')));
   readfile($f); return true;
 }
 if ($uri !== '/api') { http_response_code(404); return true; }
