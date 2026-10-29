@@ -21,23 +21,42 @@ It comes two ways:
 
 Both use the same code and the same settings format. See [docs/DOCKER.md](docs/DOCKER.md) for the Docker image.
 
-The Default theme keeps the look of [Unraid Swiss Manager](https://github.com/Stiphr/Unraid-Swiss-Manager) (dark grey panels, orange accent); Light and AMOLED are the alternatives.
+The Default theme keeps the look of [Unraid Swiss Manager](https://github.com/Stiphr/Unraid-Swiss-Manager) (dark grey panels, orange accent). Nine more themes are built in, most with light and dark versions; see [Themes](#themes).
 
 ## What is on the page
 
 | Section | What you get |
 |---|---|
-| **System** | One compact bar: CPU (usage and temperature), memory, storage (array, or pools on pool-only servers), network, array health, hottest disk, uptime, UPS; optionally per-core load, swap, load, a disk path, container and VM totals. Click a tile for its details (history graph, every core, every disk with health and temperature). Anything the server cannot measure says so; stale data is marked. |
-| **Alerts** | Problems only: unhealthy or restart-looping containers, crashed autostart containers, failed updates, disk problems, hot disks, array not started, parity checks, Unraid updates waiting, the API or server not answering. |
+| **System** | A row of tiles across the full width: CPU (usage and temperature), memory, storage (array, or pools on pool-only servers), network, array health, hottest disk, uptime, UPS; optionally per-core load, swap, load, a disk path, container and VM totals. CPU, memory, network and disk temperature draw their recent history under the value. Click a tile for its details (history graph, every core, every disk with health and temperature). Anything the server cannot measure says so; stale data is marked. |
+| **Alerts** | Problems only: unhealthy or restart-looping containers, crashed autostart containers, failed updates, each disabled, erroring or hot disk, array not started, parity checks, Unraid updates waiting, the API or server not answering. **Ignore** any of them for 1 hour, 24 hours, 7 days, a custom time or permanently, or every alert of that type, with Undo. Ignoring only hides the alert: monitoring goes on, and it comes back if the problem is still there when the rule ends. Manage the rules in Settings > Ignored alerts. |
 | **Favorites** | Starred containers, VMs and apps. |
-| **Media** | Upcoming movies (with cinema / digital / physical release), upcoming episodes (season, episode, air time), recently added movies and episodes, as poster rows from Radarr and Sonarr. |
+| **Media** | Four columns from Radarr and Sonarr: upcoming movies (with cinema / digital / physical release), upcoming episodes (season, episode, air time), recently added movies, recently added episodes. Each is a compact list with small posters that scrolls on its own; 4, 2 or 1 columns depending on the space, and the number of items per column is up to you. |
 | **Arr Stack** | One row per Radarr, Sonarr, Lidarr, Readarr, Prowlarr, Bazarr, Overseerr / Jellyseerr, Autobrr: online state, key numbers, health warnings and stuck or failed imports; click for details. Several instances work. |
 | **Downloads** | qBittorrent and SABnzbd: speeds, active / stalled / queued / paused / done counts, active items with progress and ETA, pause and resume all. |
-| **Containers** | Compact rows (icon, name, state, CPU, memory, update badge only when there is one, actions); an expanded view adds image, uptime and restarts. Filters, sorting, bulk update with progress, logs, details. |
-| **Virtual machines** | Compact rows with only the actions that fit each VM's state. |
+| **Containers** | A grid of cards (or a table or large cards): icon, name, state, CPU, memory, and an update badge only when there is one. Click the icon or name to open the container's web UI; one gear button holds every action (start / stop, restart, pause, update, logs, details, favorite, hide, customize). Shows the running containers by default, or your own selection; filters, sorting, bulk update with progress. |
+| **Virtual machines** | One row per VM; the icon or name opens its VNC console, and the gear button holds the actions that fit the VM's state. |
 | **Apps** | Everything else you configured (Plex, Emby, Immich, AdGuard, links …). Nothing is shown twice: Arr apps, download clients, calendars and system cards live in their own sections. |
 
-Plus: live refresh every **2 seconds** (configurable, pause / resume, reconnects on its own); a filter box for the whole page (`/`); sections, tiles and media widgets you can show, hide and drag into order; compact / comfortable / expanded density; three themes with a custom accent colour; custom CSS; import / export; phones, tablets and desktops; keyboard accessible.
+Plus: live refresh every **2 seconds** (configurable, pause / resume, reconnects on its own); a filter box for the whole page (`/`); sections and tiles you can show, hide and drag into order; half-width sections stack in two balanced columns whose bottoms line up, and cards in a row share one height; compact / comfortable / expanded density; ten themes with light / dark / system mode and a custom accent; custom CSS; import / export; phones, tablets and desktops; keyboard accessible.
+
+## Themes
+
+Settings > Appearance. Pick **Light**, **Dark** or **System** (follows your OS, live), then a theme:
+
+| Theme | Modes | Look |
+|---|---|---|
+| Default | light, dark | Unraid Swiss Manager: dark grey panels, orange accent |
+| AMOLED | dark | pure black |
+| Minimal | light, dark | neutral greys, monochrome accent |
+| Zinc Blue | light, dark | zinc greys with a blue accent (the autobrr / qui look) |
+| Kanagawa Wave | light, dark | Kanagawa ink blues; light mode is Kanagawa Lotus |
+| Kanagawa Dragon | light, dark | Kanagawa's darker, earthier variant |
+| Catppuccin | light, dark | Mocha (dark) and Latte (light) |
+| Nord | light, dark | Polar Night and Snow Storm |
+| Tokyo Night | light, dark | Tokyo Night and Tokyo Night Day |
+| Fluent Dark | dark | frosted-glass cards with blue accents and glow; best with a wallpaper |
+
+The accent follows the theme unless you choose your own colour. Status colours (green, amber, red) stay readable in every theme. Custom CSS still applies on top of any theme.
 
 ## Install the plugin
 
@@ -79,6 +98,7 @@ The configuration directory holds:
 | `config.json` | Layout, sections, metrics, container / VM preferences, appearance (no secrets). Schema in [docs/CONFIG.md](docs/CONFIG.md). |
 | `secrets.json` | Variables and widget credentials (mode 600). |
 | `custom.css` | Your custom CSS. |
+| `ignores.json` | Ignored-alert rules (Settings > Ignored alerts). |
 | `backups/` | A snapshot before every save, import, restore and reset (newest 15). |
 
 Every save is mirrored to `/boot/config/plugins/undash/`, so UnDash keeps working while the array (and `/mnt/user`) is stopped. The first time the directory is available, existing settings are copied in; existing files are never overwritten. Settings from version 2026.10.29 are migrated automatically.
@@ -100,7 +120,7 @@ Neither export contains anything but UnDash's own settings.
 
 ## Move over from Homepage
 
-1. Open **Settings > Services > Import from Homepage**.
+1. Open **Settings > Apps > Import from Homepage**.
 2. Paste `services.yaml` (and optionally `settings.yaml` and the `HOMEPAGE_VAR_…` lines of your `.env`).
 3. Press **Preview**, then **Import**. Only the widgets are replaced.
 4. Fill in any variables the preview listed as empty, press **Save**.
@@ -152,3 +172,5 @@ python3 build.py
 ## License
 
 Apache 2.0. UnDash is an independent project inspired by gethomepage/homepage; it does not contain Homepage's code.
+
+Theme palettes are UnDash's own, built from these MIT-licensed colour schemes: [Kanagawa](https://github.com/rebelot/kanagawa.nvim), [Catppuccin](https://github.com/catppuccin/catppuccin), [Nord](https://www.nordtheme.com) and [Tokyo Night](https://github.com/folke/tokyonight.nvim), plus the [shadcn/ui](https://ui.shadcn.com) neutral and zinc scales.
