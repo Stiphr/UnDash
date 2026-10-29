@@ -1,3 +1,7 @@
+###2026.11.02c
+- Docker version: the first-start page can be skipped ("Continue without a password", no setup code needed); a password is still recommended. Add, change or remove it any time in Settings > Configuration > Dashboard password. While there is none, an alert says so (it can be ignored like any other).
+- Setting or changing the password signs out every other browser, including ones that came in while there was no password.
+
 ###2026.11.02b
 - Docker version: a container stuck in a restart loop is now flagged (the Unraid API reports it as exited with a "Restarting" status). Checked against a real server: Docker mode now reports the same containers, updates, VMs, pools and alerts as the plugin.
 - Docker docs: the UPS tile needs apcupsd in Docker mode; a NUT-only UPS is read by the plugin only.

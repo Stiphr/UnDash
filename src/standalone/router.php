@@ -23,7 +23,7 @@ function sa_deny($code, $msg) { http_response_code($code); header('Content-Type:
 function sa_unraid_base() { $h = und_req_host(); return $h === '' ? '' : 'http://' . $h; }
 
 /** The login / setup page (Docker version). Plain HTML, no script, so the strict CSP still applies. */
-function sa_form_page($title, $intro, $fields, $error = '') {
+function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
   $pre = bin2hex(random_bytes(16));
   setcookie('undash_pre', $pre, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
   $e = function ($x) { return htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8'); };
@@ -33,7 +33,14 @@ function sa_form_page($title, $intro, $fields, $error = '') {
        '<div class="brand"><img src="/favicon.png" alt="" width="40" height="40"><h1 class="und-name">', $e($title), '</h1></div><p class="muted">', $e($intro), '</p>';
   if ($error !== '') echo '<div class="banner bad" role="alert">', $e($error), '</div>';
   foreach ($fields as $f) echo '<div class="fld"><label for="', $f[0], '">', $e($f[1]), '</label><input id="', $f[0], '" name="', $f[0], '" type="', $f[2], '" autocomplete="', $f[3], '" required', $f[0] === $fields[0][0] ? ' autofocus' : '', '></div>';
-  echo '<input type="hidden" name="pre" value="', $pre, '"><button class="btn pri" type="submit">Continue</button></form></div></body></html>';
+  echo '<input type="hidden" name="pre" value="', $pre, '"><button class="btn pri" type="submit">Set password and continue</button>';
+  if ($skip) {
+    // a second form, so skipping never needs the code or the password fields
+    echo '</form><form class="login card skip" method="post"><input type="hidden" name="pre" value="', $pre, '"><input type="hidden" name="skip" value="1">',
+         '<p class="muted"><b>Recommended:</b> set a password. Without one, anyone who can open this address can see and control your containers and VMs. ',
+         'You can add a password later in Settings &gt; Configuration.</p><button class="btn" type="submit">Continue without a password</button>';
+  }
+  echo '</form></div></body></html>';
   exit;
 }
 function sa_pre_ok() { $c = (string)($_COOKIE['undash_pre'] ?? ''); return $c !== '' && hash_equals($c, (string)($_POST['pre'] ?? '')); }
@@ -60,7 +67,11 @@ if (!$sess && und_api_mode()) {
   if ($kind === 'none') {
     if ($uri !== '/setup') { if ($method === 'GET' && $uri === '/') { header('Location: /setup', true, 303); exit; } sa_deny(401, 'Not signed in.'); }
     $err = '';
-    if ($method === 'POST') {
+    if ($method === 'POST' && ($_POST['skip'] ?? '') === '1') {
+      // going without a password cannot lock anybody out (a password can be set later), so it needs no setup code
+      if (!sa_pre_ok()) $err = 'The form expired. Try again.';
+      else { $r = und_auth_open(); if (isset($r['error'])) $err = $r['error']; else { error_log('undash: dashboard password skipped from ' . sa_ip()); und_sess_new('open'); header('Location: /', true, 303); exit; } }
+    } elseif ($method === 'POST') {
       $code = trim((string)@file_get_contents(und_setup_file()));
       if (!sa_pre_ok()) $err = 'The form expired. Try again.';
       elseif (und_login_throttled(sa_ip())) $err = 'Too many attempts. Wait 15 minutes.';
@@ -69,8 +80,10 @@ if (!$sess && und_api_mode()) {
       else { $r = und_password_set((string)$_POST['password']); if (isset($r['error'])) $err = $r['error']; else { und_sess_new('setup'); header('Location: /', true, 303); exit; } }
     }
     sa_form_page('Set up UnDash', 'Choose the password for this dashboard. The setup code is printed in the container log (Docker tab > UnDash > Logs).',
-      [['code', 'Setup code', 'text', 'one-time-code'], ['password', 'New password (10+ characters)', 'password', 'new-password'], ['password2', 'Repeat the password', 'password', 'new-password']], $err);
+      [['code', 'Setup code', 'text', 'one-time-code'], ['password', 'New password (10+ characters)', 'password', 'new-password'], ['password2', 'Repeat the password', 'password', 'new-password']], $err, true);
   }
+  if ($kind === 'open') { $sess = und_sess_new('open'); }   // no password chosen: everyone who reaches the port is signed in
+  else {
   if ($uri === '/login' || ($method === 'GET' && $uri === '/')) {
     $err = '';
     if ($method === 'POST' && $uri === '/login') {
@@ -82,6 +95,7 @@ if (!$sess && und_api_mode()) {
     sa_form_page('UnDash', 'Sign in to the dashboard.', [['password', 'Password', 'password', 'current-password']], $err);
   }
   sa_deny(401, 'Not signed in.');
+  }
 }
 if (!$sess && $method === 'GET' && isset($_GET['t'])) {
   if (und_handoff_use((string)$_GET['t'])) { und_sess_new('handoff'); header('Location: /', true, 303); exit; }
@@ -100,6 +114,7 @@ if (!$sess) {
 }
 
 /* ---- routes ---- */
+if ($sess && $method === 'GET' && ($uri === '/setup' || $uri === '/login')) { header('Location: /', true, 303); exit; }
 if ($uri === '/logout') { und_sess_end(); header('Location: ' . (und_api_mode() ? '/login' : sa_unraid_base() . '/'), true, 303); exit; }
 
 if ($uri === '/api') {
