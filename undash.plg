@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.5.1">
+<!ENTITY version "0.5.2">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.5.2
+- Redacted exports now also leave out user names, logins and e-mail addresses (they were kept before), so they are safe to share.
+- Importing a redacted export (a shared layout) no longer replaces your Unraid API address; a full export (a restore) still does.
+- README rewritten: what UnDash is, how to install and set it up (Docker and plugin), and a ready-made template (examples/undash-template.json) to start from.
+
 ###0.5.1
 - Version numbers are now x.y.z (this is 0.5.1); releases are the vX.Y.Z tags. Plugin users coming from a 2026.x.x date version: reinstall the plugin once, as Unraid compares the old and new numbers as text.
 - Title bar: the UnDash logo and name, your server, its Unraid version and the UnDash version, each with an "available" badge when a newer one exists (UnDash checks its GitHub releases at most every 6 hours). The Docker version now shows the server's name and address instead of the container's.
@@ -146,7 +151,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.5.1');
+define('UND_VERSION', '0.5.2');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -326,7 +331,7 @@ foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>a4fe5581344e31837596441819777a91c771b5140792f30c970e11173a9ff843</SHA256>
+<SHA256>30d183470d4fc84f5a3c71159e69fdc4f7657aa244e139357c57b5185470b92b</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -781,6 +786,11 @@ function und_save_secrets(array $s) {
 
 function und_var_is_secret($name) { return preg_match('/KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i', $name) === 1; }
 
+/** Stricter, for redacted exports that may be shared: login names and e-mail addresses go too (half a credential, and personal). */
+function und_var_is_private($name, $value) {
+  return und_var_is_secret($name) || preg_match('/USER|LOGIN|EMAIL|MAIL|ACCOUNT/i', $name) === 1 || preg_match('/[^\s@]+@[^\s@]+\.[a-z]{2,}/i', (string)$value) === 1;
+}
+
 /** What the browser may see: secret variables and stored credentials are replaced by UND_KEEP. */
 function und_secrets_view(array $s) {
   $vars = [];
@@ -894,7 +904,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>919bf1ed1f7fbc57b2c1e0953bd956e7ef8d6393eb41930a72cfe6c639ab9447</SHA256>
+<SHA256>226cf6ef96f217a5b9d78200401312757114a7c4b1eb0d0b68f6754342b46a69</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -2171,7 +2181,7 @@ function und_hp_apply(array $conv) {
  *
  * Export file: {"undash_export": 1, "schema": 2, "kind": "full"|"redacted", "created": unix time, "config": {...}, "css": "...", "vars": {...}, "secrets": {...}}
  *   full      layout, preferences, appearance, custom CSS, every variable and every widget credential (a complete backup; keep it private)
- *   redacted  the same without anything secret: credentials are dropped, secret-looking variables are emptied, and passwords or
+ *   redacted  the same without anything secret: credentials are dropped, secret-looking and login/e-mail variables are emptied, and passwords or
  *             tokens written straight into URLs (user:pass@host, ?apikey=...) are replaced by {{REDACTED}}
  * Neither contains anything but UnDash's own settings.
  */
@@ -2183,7 +2193,7 @@ function und_export($kind) {
   if ($out['kind'] === 'full') { $out['vars'] = (object)$sec['vars']; $out['secrets'] = (object)$sec['svc']; $out['unraid'] = (object)$sec['unraid']; return $out; }
   if (!empty($sec['unraid']['url'])) $out['unraid'] = ['url' => und_redact_url((string)$sec['unraid']['url'])];
   $vars = [];
-  foreach ($sec['vars'] as $k => $v) $vars[$k] = und_var_is_secret($k) ? '' : und_redact_url((string)$v);
+  foreach ($sec['vars'] as $k => $v) $vars[$k] = und_var_is_private($k, $v) ? '' : und_redact_url((string)$v);
   $out['vars'] = (object)$vars;
   foreach ($out['config']['groups'] as &$g) foreach ($g['services'] as &$s) {
     $s['url'] = und_redact_url($s['url']); $s['href'] = und_redact_url($s['href']);
@@ -2258,7 +2268,8 @@ function und_import_apply($raw) {
   if (!und_save_config($f['config'], false)) return ['error' => 'Could not write the configuration directory.'];
   $unraid = $old['unraid'];
   if (isset($j_unraid) && is_array($j_unraid)) {
-    if (!empty($j_unraid['url']) && is_string($j_unraid['url']) && preg_match('#^https?://#i', $j_unraid['url'])) $unraid['url'] = und_clip($j_unraid['url'], 300);
+    // a full export is a restore and replaces the address; a redacted one (a shared layout) only fills it in when none is set
+    if (!empty($j_unraid['url']) && is_string($j_unraid['url']) && preg_match('#^https?://#i', $j_unraid['url']) && ($f['kind'] === 'full' || (string)($unraid['url'] ?? '') === '')) $unraid['url'] = und_clip($j_unraid['url'], 300);
     if ($f['kind'] === 'full' && !empty($j_unraid['key']) && is_string($j_unraid['key'])) $unraid['key'] = und_clip($j_unraid['key'], 300);
   }
   und_save_secrets(['vars' => $vars, 'svc' => $svc, 'unraid' => $unraid]);
@@ -2266,7 +2277,7 @@ function und_import_apply($raw) {
   return ['ok' => true, 'backup' => $bk];
 }
 ]]></INLINE>
-<SHA256>92cba8a91108d7a7212551de9fc9437d680fd1177cf29b697c13b095cd4ca506</SHA256>
+<SHA256>97379af8a61abcc3fde337b8ed29742726a0ed1b9404c4623572a3bc5d8fbcbd</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/ops.php" Mode="0644">

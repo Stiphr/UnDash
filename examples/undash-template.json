@@ -1,0 +1,981 @@
+{
+  "undash_export": 1,
+  "schema": 4,
+  "kind": "redacted",
+  "created": 0,
+  "version": "0.5.1",
+  "config": {
+    "schema": 4,
+    "general": {
+      "title": "UnDash",
+      "refresh_services": 15,
+      "disk_path": "/mnt/user",
+      "search": "duckduckgo",
+      "show_search": true,
+      "show_date": true,
+      "os_check_hours": 6,
+      "ups_name": "ups",
+      "refresh": 2,
+      "background_poll": "slow"
+    },
+    "appearance": {
+      "theme": "default",
+      "background": "",
+      "blur": 15,
+      "brightness": 35,
+      "accent": "",
+      "density": "comfortable",
+      "css_enabled": true,
+      "mode": "dark",
+      "blur_target": "cards",
+      "safe_x": -1,
+      "safe_y": -1
+    },
+    "dashboard": {
+      "sections": [
+        {
+          "id": "overview",
+          "visible": true,
+          "width": "full",
+          "collapsed": false
+        },
+        {
+          "id": "alerts",
+          "visible": true,
+          "width": "full",
+          "collapsed": false
+        },
+        {
+          "id": "favorites",
+          "visible": false,
+          "width": "full",
+          "collapsed": false
+        },
+        {
+          "id": "media",
+          "visible": true,
+          "width": "half",
+          "collapsed": false
+        },
+        {
+          "id": "arr",
+          "visible": true,
+          "width": "half",
+          "collapsed": false
+        },
+        {
+          "id": "downloads",
+          "visible": true,
+          "width": "half",
+          "collapsed": false
+        },
+        {
+          "id": "playing",
+          "visible": true,
+          "width": "half",
+          "collapsed": false
+        },
+        {
+          "id": "requests",
+          "visible": true,
+          "width": "half",
+          "collapsed": true
+        },
+        {
+          "id": "apps",
+          "visible": true,
+          "width": "full",
+          "collapsed": false
+        },
+        {
+          "id": "docker",
+          "visible": true,
+          "width": "full",
+          "collapsed": false
+        },
+        {
+          "id": "vms",
+          "visible": true,
+          "width": "full",
+          "collapsed": false
+        },
+        {
+          "id": "health",
+          "visible": true,
+          "width": "full",
+          "collapsed": true
+        }
+      ],
+      "metrics": [
+        {
+          "id": "cpu",
+          "visible": true
+        },
+        {
+          "id": "memory",
+          "visible": true
+        },
+        {
+          "id": "storage",
+          "visible": true
+        },
+        {
+          "id": "network",
+          "visible": true
+        },
+        {
+          "id": "health",
+          "visible": true
+        },
+        {
+          "id": "disks",
+          "visible": true
+        },
+        {
+          "id": "uptime",
+          "visible": true
+        },
+        {
+          "id": "ups",
+          "visible": true
+        },
+        {
+          "id": "cores",
+          "visible": false
+        },
+        {
+          "id": "swap",
+          "visible": false
+        },
+        {
+          "id": "load",
+          "visible": false
+        },
+        {
+          "id": "path",
+          "visible": false
+        },
+        {
+          "id": "docker",
+          "visible": false
+        },
+        {
+          "id": "vms",
+          "visible": false
+        }
+      ]
+    },
+    "media": {
+      "radarr": "",
+      "sonarr": "",
+      "count": 10,
+      "days_ahead": 30,
+      "widgets": [
+        {
+          "id": "upcoming_movies",
+          "visible": true,
+          "count": 10
+        },
+        {
+          "id": "upcoming_episodes",
+          "visible": true,
+          "count": 10
+        },
+        {
+          "id": "recent_movies",
+          "visible": true,
+          "count": 10
+        },
+        {
+          "id": "recent_episodes",
+          "visible": true,
+          "count": 10
+        }
+      ]
+    },
+    "downloads": {
+      "items": 4
+    },
+    "apps": {
+      "columns": 0,
+      "links": false,
+      "headers": false
+    },
+    "docker": {
+      "layout": "grid",
+      "view": "compact",
+      "filter": "running",
+      "selected": [],
+      "columns": 0,
+      "sort": "name",
+      "show": [
+        "cpu",
+        "memory",
+        "update"
+      ],
+      "hide_stopped": false,
+      "items": {}
+    },
+    "vms": {
+      "layout": "list",
+      "show": [
+        "status",
+        "cpus",
+        "memory"
+      ],
+      "items": {}
+    },
+    "groups": [
+      {
+        "id": "7a3062f0",
+        "name": "System",
+        "columns": 4,
+        "header": true,
+        "services": [
+          {
+            "id": "4a847e82",
+            "name": "UPS",
+            "type": "peanut",
+            "icon": "",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_UPS}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_UPS}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [
+              "battery_charge",
+              "ups_load",
+              "ups_status"
+            ],
+            "options": {}
+          }
+        ]
+      },
+      {
+        "id": "5aee964f",
+        "name": "Media Info",
+        "columns": 4,
+        "header": true,
+        "services": [
+          {
+            "id": "2e77c848",
+            "name": "Upcoming Movies",
+            "type": "calendar",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/radarr-light.svg",
+            "href": "",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {
+              "max_events": 8,
+              "previous_days": 0,
+              "days_ahead": 30,
+              "integrations": [
+                {
+                  "service": "2a38b660",
+                  "unmonitored": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "a7c8819e",
+            "name": "Upcoming Shows",
+            "type": "calendar",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/sonarr-light.svg",
+            "href": "",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {
+              "max_events": 8,
+              "previous_days": 0,
+              "days_ahead": 30,
+              "integrations": [
+                {
+                  "service": "5a7417a9",
+                  "unmonitored": true
+                }
+              ]
+            }
+          },
+          {
+            "id": "c67db270",
+            "name": "Recently Added Shows",
+            "type": "customapi",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/plex-light.svg",
+            "href": "",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_TAUTULLI}}/api/v2?apikey={{HOMEPAGE_VAR_TAUTULLI_API_KEY}}&cmd=get_recently_added&count=6&media_type=episode&section_id=2",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {
+              "display": "list",
+              "method": "GET",
+              "headers": [],
+              "mappings": [
+                {
+                  "field": "response.data.recently_added.0.grandparent_title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.0.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.1.grandparent_title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.1.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.2.grandparent_title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.2.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.3.grandparent_title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.3.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.4.grandparent_title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.4.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.5.grandparent_title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.5.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "41cf50c2",
+            "name": "Recently Added Movies",
+            "type": "customapi",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/plex-light.svg",
+            "href": "",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_TAUTULLI}}/api/v2?apikey={{HOMEPAGE_VAR_TAUTULLI_API_KEY}}&cmd=get_recently_added&count=6&media_type=movie",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {
+              "display": "list",
+              "method": "GET",
+              "headers": [],
+              "mappings": [
+                {
+                  "field": "response.data.recently_added.0.title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.0.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.1.title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.1.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.2.title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.2.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.3.title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.3.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.4.title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.4.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                },
+                {
+                  "field": "response.data.recently_added.5.title",
+                  "label": "",
+                  "format": "text",
+                  "additional": {
+                    "field": "response.data.recently_added.5.added_at",
+                    "format": "relativeDate",
+                    "scale": 1000
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "728ed103",
+        "name": "Arr Automation",
+        "columns": 4,
+        "header": true,
+        "services": [
+          {
+            "id": "2a38b660",
+            "name": "Radarr",
+            "type": "radarr",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/radarr-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_RADARR}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_RADARR}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [
+              "wanted",
+              "queued"
+            ],
+            "options": {}
+          },
+          {
+            "id": "5a7417a9",
+            "name": "Sonarr",
+            "type": "sonarr",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/sonarr-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_SONARR}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_SONARR}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [
+              "wanted",
+              "queued"
+            ],
+            "options": {}
+          },
+          {
+            "id": "5328a8ba",
+            "name": "Lidarr",
+            "type": "lidarr",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/lidarr-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_LIDARR}}/",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_LIDARR}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "7cecbc77",
+            "name": "Bazarr",
+            "type": "bazarr",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/bazarr-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_BAZARR}}/",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_BAZARR}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [
+              "missingEpisodes",
+              "missingMovies"
+            ],
+            "options": {}
+          },
+          {
+            "id": "4adb2d10",
+            "name": "Prowlarr",
+            "type": "prowlarr",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/prowlarr-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_PROWLARR}}/",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_PROWLARR}}/",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "3aa565fd",
+            "name": "Overseerr",
+            "type": "overseerr",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/overseerr-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_OVERSEERR}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_OVERSEERR}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "7d55c1a0",
+            "name": "Autobrr",
+            "type": "autobrr",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/autobrr-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_AUTOBRR}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_AUTOBRR}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "77295045",
+            "name": "Wizarr",
+            "type": "customapi",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/invio-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_WIZARR}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_WIZARR}}/api/status",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {
+              "display": "block",
+              "method": "GET",
+              "headers": {
+                "X-API-Key": "{{HOMEPAGE_VAR_WIZARR_API_KEY}}"
+              },
+              "mappings": [
+                {
+                  "field": "users",
+                  "label": "Users",
+                  "format": "text"
+                },
+                {
+                  "field": "invites",
+                  "label": "Invites",
+                  "format": "text"
+                },
+                {
+                  "field": "pending",
+                  "label": "Pending",
+                  "format": "text"
+                },
+                {
+                  "field": "expired",
+                  "label": "Expired",
+                  "format": "text"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "a50492aa",
+        "name": "Downloaders",
+        "columns": 4,
+        "header": true,
+        "services": [
+          {
+            "id": "27181202",
+            "name": "qBittorrent Private",
+            "type": "qbittorrent",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/qbittorrent-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_QBIT_PRIV}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_QBIT_PRIV}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "64265f16",
+            "name": "qBittorrent Public",
+            "type": "qbittorrent",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/qbittorrent-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_QBIT_PUB}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_QBIT_PUB}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "1053d2b7",
+            "name": "SABnzbd",
+            "type": "sabnzbd",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/sabnzbd-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_SABNZBD}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_SABNZBD}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          }
+        ]
+      },
+      {
+        "id": "c6dace2f",
+        "name": "Streaming Status",
+        "columns": 4,
+        "header": true,
+        "services": [
+          {
+            "id": "3509b159",
+            "name": "Emby",
+            "type": "emby",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/emby-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_EMBY}}/",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_EMBY}}/",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "8893ac7c",
+            "name": "Plex",
+            "type": "plex",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/plex-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_PLEX}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_PLEX}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [
+              "streams",
+              "movies",
+              "tv"
+            ],
+            "options": {}
+          },
+          {
+            "id": "9f1c8077",
+            "name": "Tautulli",
+            "type": "tautulli",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/tautulli-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_TAUTULLI}}",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_TAUTULLI}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          }
+        ]
+      },
+      {
+        "id": "6926dc5a",
+        "name": "Other",
+        "columns": 4,
+        "header": true,
+        "services": [
+          {
+            "id": "5b51953c",
+            "name": "Adguard",
+            "type": "adguard",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/adguard-home-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_ADGUARD_IP}}",
+            "url": "http://{{HOMEPAGE_VAR_ADGUARD_IP}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [
+              "queries",
+              "blocked",
+              "filtered",
+              "latency"
+            ],
+            "options": {}
+          },
+          {
+            "id": "1745ac44",
+            "name": "Nginx Proxy Manager",
+            "type": "npm",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/nginx-proxy-manager-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_NPM}}/",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_NPM}}/",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [
+              "enabled",
+              "disabled",
+              "total"
+            ],
+            "options": {}
+          },
+          {
+            "id": "a0e21fc7",
+            "name": "Immich",
+            "type": "immich",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/immich-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_IMMICH}}/photos",
+            "url": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_IMMICH}}",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [
+              "photos",
+              "videos",
+              "storage"
+            ],
+            "options": {}
+          }
+        ]
+      },
+      {
+        "id": "c7e60bc1",
+        "name": "Services",
+        "columns": 4,
+        "header": true,
+        "services": [
+          {
+            "id": "1953e344",
+            "name": "Unraid",
+            "type": "link",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/unraid-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}/Dashboard",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "e0c98f5f",
+            "name": "Windows VM",
+            "type": "link",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/microsoft-windows-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}/plugins/dynamix.vm.manager/vnc.html?v=1729196260&resize=scale&autoconnect=true&host={{HOMEPAGE_VAR_SERVER_IP}}&port=&path=/wsproxy/5700/",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "ab598fe3",
+            "name": "ArchiSteamFarm",
+            "type": "link",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/steam-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_ASF}}/",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "a82322a3",
+            "name": "Pinvin Share",
+            "type": "link",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/pingvin-share-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_PINVIN}}/",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "fe9245e0",
+            "name": "Twitch Drops",
+            "type": "link",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/twitch-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_TWITCH}}/",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "25575594",
+            "name": "File Browser",
+            "type": "link",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/filebrowser-quantum-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_FILEBROWSER}}/",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "d3dc9a3c",
+            "name": "QUI",
+            "type": "link",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/qui-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_QUI}}/instances",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "3cfb1190",
+            "name": "Requesterr",
+            "type": "link",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/requestrr-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_REQUESTRR}}/",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          },
+          {
+            "id": "60b526e0",
+            "name": "Profilarr",
+            "type": "link",
+            "icon": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/profilarr-light.svg",
+            "href": "http://{{HOMEPAGE_VAR_SERVER_IP}}:{{HOMEPAGE_VAR_PORT_PROFILARR}}/",
+            "url": "",
+            "description": "",
+            "hidden": false,
+            "favorite": false,
+            "span": 1,
+            "fields": [],
+            "options": {}
+          }
+        ]
+      }
+    ]
+  },
+  "css": "",
+  "vars": {
+    "HOMEPAGE_VAR_SERVER_IP": "192.168.1.10",
+    "HOMEPAGE_VAR_PORT_UPS": "8288",
+    "HOMEPAGE_VAR_PORT_TAUTULLI": "8181",
+    "HOMEPAGE_VAR_TAUTULLI_API_KEY": "",
+    "HOMEPAGE_VAR_PORT_RADARR": "7878",
+    "HOMEPAGE_VAR_PORT_SONARR": "8989",
+    "HOMEPAGE_VAR_PORT_LIDARR": "8687",
+    "HOMEPAGE_VAR_PORT_BAZARR": "6767",
+    "HOMEPAGE_VAR_PORT_PROWLARR": "9696",
+    "HOMEPAGE_VAR_PORT_OVERSEERR": "5055",
+    "HOMEPAGE_VAR_PORT_AUTOBRR": "7474",
+    "HOMEPAGE_VAR_PORT_WIZARR": "5690",
+    "HOMEPAGE_VAR_WIZARR_API_KEY": "",
+    "HOMEPAGE_VAR_PORT_QBIT_PRIV": "8080",
+    "HOMEPAGE_VAR_PORT_QBIT_PUB": "8081",
+    "HOMEPAGE_VAR_PORT_SABNZBD": "8686",
+    "HOMEPAGE_VAR_PORT_EMBY": "8096",
+    "HOMEPAGE_VAR_PORT_PLEX": "37668",
+    "HOMEPAGE_VAR_ADGUARD_IP": "192.168.1.20",
+    "HOMEPAGE_VAR_PORT_NPM": "7818",
+    "HOMEPAGE_VAR_PORT_IMMICH": "8883",
+    "HOMEPAGE_VAR_PORT_ASF": "1242",
+    "HOMEPAGE_VAR_PORT_PINVIN": "4004",
+    "HOMEPAGE_VAR_PORT_TWITCH": "5800",
+    "HOMEPAGE_VAR_PORT_FILEBROWSER": "8861",
+    "HOMEPAGE_VAR_PORT_QUI": "7476",
+    "HOMEPAGE_VAR_PORT_REQUESTRR": "7676",
+    "HOMEPAGE_VAR_PORT_PROFILARR": "6868",
+    "HOMEPAGE_VAR_UPS_USERNAME": "",
+    "HOMEPAGE_VAR_UPS_PASSWORD": "",
+    "HOMEPAGE_VAR_RADARR_API_KEY": "",
+    "HOMEPAGE_VAR_SONARR_API_KEY": "",
+    "HOMEPAGE_VAR_LIDARR_API_KEY": "",
+    "HOMEPAGE_VAR_BAZARR_API_KEY": "",
+    "HOMEPAGE_VAR_PROWLARR_API_KEY": "",
+    "HOMEPAGE_VAR_OVERSEERR_API_KEY": "",
+    "HOMEPAGE_VAR_AUTOBRR_API_KEY": "",
+    "HOMEPAGE_VAR_QBITTORRENT_USERNAME": "",
+    "HOMEPAGE_VAR_QBITTORRENT_PASSWORD": "",
+    "HOMEPAGE_VAR_SABNZBD_API_KEY": "",
+    "HOMEPAGE_VAR_EMBY_API_KEY": "",
+    "HOMEPAGE_VAR_PLEX_TOKEN": "",
+    "HOMEPAGE_VAR_ADGUARD_USERNAME": "",
+    "HOMEPAGE_VAR_ADGUARD_PASSWORD": "",
+    "HOMEPAGE_VAR_NPM_USERNAME": "",
+    "HOMEPAGE_VAR_NPM_PASSWORD": "",
+    "HOMEPAGE_VAR_IMMICH_API_KEY": ""
+  }
+}
