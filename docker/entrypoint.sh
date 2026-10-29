@@ -13,6 +13,9 @@ rm -f /config/.write-test
 # copies plugin settings on the very first start (if mounted), creates the setup code, prints what to do next
 php -d auto_prepend_file= /usr/local/bin/firstrun.php
 
+# the alert history: one check a minute in the background
+( while true; do php -d auto_prepend_file= -d display_errors=0 -d log_errors=1 -d error_log=/dev/stderr /app/scripts/alertcheck.php; sleep 60; done ) &
+
 echo "UnDash listening on port $PORT (inside the container)"
 # PHP's built-in server prints every connection; only errors and UnDash's own messages are kept
 php -d auto_prepend_file= -d expose_php=0 -d display_errors=0 -d log_errors=1 -d error_log=/dev/stderr \

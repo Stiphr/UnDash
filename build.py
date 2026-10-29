@@ -13,8 +13,8 @@ files = [
     ('include/lib.php', '0644'), ('include/config.php', '0644'), ('include/system.php', '0644'), ('include/docker.php', '0644'),
     ('include/vm.php', '0644'), ('include/services.php', '0644'), ('include/import.php', '0644'), ('include/transfer.php', '0644'),
     ('include/ops.php', '0644'), ('include/auth.php', '0644'), ('include/unraid_api.php', '0644'), ('include/media.php', '0644'), ('include/arr.php', '0644'),
-    ('include/downloads.php', '0644'), ('include/ignores.php', '0644'), ('include/api.php', '0644'), ('handoff.php', '0644'), ('standalone/router.php', '0644'),
-    ('scripts/oscheck.php', '0755'), ('scripts/rc.undash', '0755'), ('assets/app.css', '0644'), ('assets/app.js', '0644'),
+    ('include/downloads.php', '0644'), ('include/ignores.php', '0644'), ('include/alerts.php', '0644'), ('include/health.php', '0644'), ('include/playing.php', '0644'), ('include/requests.php', '0644'), ('include/api.php', '0644'), ('handoff.php', '0644'), ('standalone/router.php', '0644'),
+    ('scripts/oscheck.php', '0755'), ('scripts/alertcheck.php', '0755'), ('scripts/rc.undash', '0755'), ('assets/app.css', '0644'), ('assets/app.js', '0644'),
 ]
 changes = (root / 'CHANGES.txt').read_text().strip()
 
@@ -46,19 +46,22 @@ for rel, mode in files:
     sha = hashlib.sha256(written.encode()).hexdigest()
     out.append('<FILE Name="&emhttp;/%s" Mode="%s">\n<INLINE><![CDATA[%s]]></INLINE>\n<SHA256>%s</SHA256>\n</FILE>\n' % (rel, mode, text, sha))
 
-# The icon is binary, so it travels as base64 and is unpacked by a script (re-run at every boot, so it is always there).
-icon = (root / 'assets' / 'icon.png').read_bytes()
-icon_b64 = '\n'.join(textwrap.wrap(base64.b64encode(icon).decode(), 76))
-icon_sha = hashlib.sha256(icon).hexdigest()
-out.append("""<FILE Run="/bin/bash">
+# Binary files (the icon, the Inter font) travel as base64 and are unpacked by a script (re-run at every boot, so they are always there).
+def binary(data, dest, what):
+    b64 = '\n'.join(textwrap.wrap(base64.b64encode(data).decode(), 76))
+    sha = hashlib.sha256(data).hexdigest()
+    tmp = '/tmp/undash-' + what
+    return """<FILE Run="/bin/bash">
 <INLINE>
-mkdir -p &emhttp;/images
-echo '""" + icon_b64 + """' | base64 -d > /tmp/undash-icon.png 2>/dev/null
-if [ "$(sha256sum /tmp/undash-icon.png | cut -d' ' -f1)" = \"""" + icon_sha + """\" ]; then mv -f /tmp/undash-icon.png &emhttp;/images/undash.png; chmod 644 &emhttp;/images/undash.png; else echo "icon check failed, skipped"; fi
-rm -f /tmp/undash-icon.png
+mkdir -p $(dirname """ + dest + """)
+echo '""" + b64 + """' | base64 -d > """ + tmp + """ 2>/dev/null
+if [ "$(sha256sum """ + tmp + """ | cut -d' ' -f1)" = \"""" + sha + """\" ]; then mv -f """ + tmp + """ """ + dest + """; chmod 644 """ + dest + """; else echo \"""" + what + """ check failed, skipped\"; fi
+rm -f """ + tmp + """
 </INLINE>
 </FILE>
-""")
+"""
+out.append(binary((root / 'assets' / 'icon.png').read_bytes(), '&emhttp;/images/undash.png', 'icon'))
+out.append(binary((src / 'assets' / 'inter.woff2').read_bytes(), '&emhttp;/assets/inter.woff2', 'font'))
 
 out.append("""<FILE Run="/bin/bash">
 <INLINE>

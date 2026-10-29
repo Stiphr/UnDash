@@ -2,6 +2,9 @@
    Colour themes are palettes in app.js (THEMES), applied as the custom properties below; these values are the Default
    dark palette (the Unraid Swiss Manager look: dark grey panels, orange accent) and only show before the script runs.
    The accent (--accent) only colours interactive and selected things; status colours (--ok, --warn, --bad) never follow it. */
+/* Inter, bundled (SIL Open Font License 1.1, see docs/licenses/Inter-OFL.txt): latin subset, variable weight 400-700 */
+@font-face{font-family:Inter;font-style:normal;font-weight:400 700;font-display:swap;src:url(inter.woff2) format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 .und{
   --bg:#1d1b1b;--panel:#232121;--panel-2:#1b1919;--bar:#2a2828;--field:#181616;--line:#343131;--line-2:#454141;
   --text:#ece9e9;--muted:#a19c9c;--faint:#7f7977;--title:#fff;
@@ -9,7 +12,7 @@
   --ok:#4ec38b;--warn:#e8b33c;--bad:#ff6b5e;--info:#79a0ee;--off:#8a8484;
   --ok-soft:rgba(78,195,139,.13);--warn-soft:rgba(232,179,60,.14);--bad-soft:rgba(255,107,94,.13);
   --shadow:0 1px 2px rgba(0,0,0,.25);--radius:10px;--gap:12px;--pad:14px;
-  --font:Inter,"Inter Variable",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   color:var(--text);font:14px/1.45 var(--font);margin:0;padding:4px 0 28px;text-align:left;position:relative;isolation:isolate;-webkit-text-size-adjust:100%}
 .und[data-mode=light],.und[data-theme]:not([data-theme=default]),.und.has-bg{background:var(--bg);padding:14px;border-radius:var(--radius)}
 .und[data-density=compact]{--gap:8px;--pad:10px;font-size:13.5px}
@@ -116,7 +119,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 
 /* alerts */
 .und .alerts{display:flex;flex-direction:column;gap:6px}
-.und .alert{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-left:3px solid var(--warn);background:var(--panel);border-radius:6px;padding:8px 12px;font-size:13px;flex-wrap:wrap}
+.und .alert{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-left:3px solid var(--warn);background:var(--panel);border-radius:var(--radius);padding:8px 12px;font-size:13px;flex-wrap:wrap}
 .und .alert.bad{border-left-color:var(--bad)}.und .alert.info{border-left-color:var(--accent)}.und .alert.ok{border-left-color:var(--ok)}
 .und .alert .grow{min-width:0}.und .alert>svg{color:var(--ok)}
 
@@ -248,7 +251,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0 18px}
 .und .switch{display:flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0;font-size:13.5px}
 .und .inl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.und .olist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.und .olist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 .und .olist .oi{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-bottom:1px solid var(--line);background:var(--panel);min-height:42px;flex-wrap:wrap}
 .und .olist .oi:last-child{border-bottom:0}.und .olist .oi .t{flex:1;min-width:120px}
 .und .olist .oi img{width:22px;height:22px;object-fit:contain;flex:none}
@@ -277,9 +280,13 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .toast.bad{border-left-color:var(--bad)}
 .und .toast.act{display:flex;align-items:center;gap:12px}.und .toast.act>span{flex:1;min-width:0}
 .und .ign-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.und .ign-bar input{flex:1 1 220px;min-width:0}
-.und .olist.ign-list{border:0;border-radius:0}.und .ign-list .oi.ign{border:1px solid var(--line);border-radius:6px;margin-bottom:6px}
+.und .olist.ign-list{border:0;border-radius:0}.und .ign-list .oi.ign{border:1px solid var(--line);border-radius:var(--radius);margin-bottom:6px}
 .und .ign-h{margin:14px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .und .oi.ign{align-items:center;gap:10px}.und .oi.ign .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.und .oi.ign.expired{opacity:.6}
+.und .ahist{display:flex;flex-direction:column;gap:6px;max-height:65vh;overflow:auto}
+.und .ah{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel-2)}
+.und .ah .grow{display:flex;flex-direction:column;gap:2px;min-width:0}.und .ah .am{font-size:13px;color:var(--text)}
+.und .ah .badge{flex:none}
 .und .ign-dur{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px}
 .und .overlay{position:fixed;inset:0;z-index:10004;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;color:#fff;text-align:center}
 .und .overlay .box{max-width:440px}.und .overlay h2{font:600 22px/1.3 var(--font);margin:0 0 8px;color:#fff;border:0;background:none;padding:0}
@@ -363,6 +370,53 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .spark2 path.a{fill:var(--accent);fill-opacity:.14}.und .spark2 path.l{fill:none;stroke:var(--accent);stroke-width:1.5}
 .und .detail .cores{height:60px;margin:0;grid-auto-columns:minmax(4px,1fr)}
 .und .stale{font-size:12px;color:var(--warn);margin:0 0 6px}
+
+/* keyboard shortcuts */
+.und .keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 24px}
+.und .kh{display:flex;align-items:center;gap:12px;padding:4px 0;font-size:13px}.und .kh>span:first-child{display:flex;gap:4px;min-width:58px}
+.und kbd{font:600 11.5px/1 var(--mono);padding:4px 7px;border-radius:5px;border:1px solid var(--line-2);border-bottom-width:2px;background:var(--panel-2);color:var(--title)}
+
+/* status text */
+.und .err-t,.und .bad-t{color:var(--bad)}.und .ok-t{color:var(--ok)}.und .warn-t{color:var(--warn)}
+.und .badge.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
+
+/* now playing */
+.und .plist,.und .rqlist{display:flex;flex-direction:column;gap:8px}
+.und .pl{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;min-width:0}
+.und .pl.paused{opacity:.75}
+.und .pl>.aico,.und .pl>.ph{width:28px;height:28px;flex:none;border-radius:6px;object-fit:contain;margin-top:2px}
+.und .pl .pt{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.und .pl .pl1{display:flex;flex-direction:column;min-width:0}.und .pl .pl1 b{color:var(--title);font-size:13.5px}
+.und .pl .pl2{display:flex;align-items:center;gap:6px;min-width:0}.und .pl .pl2 svg{width:12px;height:12px;flex:none}
+.und .pl .pl3{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.und .pl .meter{height:4px}
+
+/* requests */
+.und .rq{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;min-width:0}
+.und .rq.pend{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.und .rqp{flex:none;width:38px;height:57px;border-radius:5px;background:var(--panel-2);overflow:hidden;border:1px solid var(--line);display:block}
+.und .rqp img{width:100%;height:100%;object-fit:cover;display:block}
+.und .rqt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.und .rqt b{color:var(--title);font-size:13.5px}
+.und .rqa{display:flex;gap:6px;flex:none}
+.und .rq>.badge{flex:none}
+
+/* endpoint health */
+.und .htab .hrow{display:grid;grid-template-columns:minmax(180px,2.2fr) minmax(130px,1.2fr) minmax(130px,1fr) 80px;gap:12px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);min-width:0}
+.und .htab .hrow:last-child{border-bottom:0}
+.und .htab .hh{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--panel-2);padding-top:7px;padding-bottom:7px}
+.und .htab .hn{display:flex;align-items:center;gap:8px;min-width:0}.und .htab .hn .aico,.und .htab .hn .ph{width:20px;height:20px;flex:none;border-radius:4px;object-fit:contain}
+.und .htab .hn b{color:var(--title);font-weight:600;font-size:13.5px}
+.und .htab .r{text-align:right}
+.und .htab .hrow>span{min-width:0}
+.und .htab>[role=rowgroup]>.empty{padding:14px}
+@media (max-width:640px){
+  .und .htab .hrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+  .und .htab .hh{display:none}
+  .und .htab .hrow>:nth-child(1){flex:1 1 0;order:1}.und .htab .hrow>:nth-child(4){flex:none;order:2}
+  .und .htab .hrow>:nth-child(2){flex:1 1 0;order:3;font-size:12px}.und .htab .hrow>:nth-child(3){flex:none;order:4}
+  .und .htab .hrow::after{content:'';order:2;flex-basis:100%;height:0}
+  .und .rq{flex-wrap:wrap}.und .rqa{width:100%;justify-content:flex-end}
+}
 
 /* media: four equal columns, by the section's own width (a half-width section gets 2 or 1) */
 .und .mbody{container-type:inline-size}
@@ -510,7 +564,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   .und .cgrid,.und .agrid{grid-template-columns:1fr}
   .und .ci .acts .btn.ic.sm{width:34px;min-width:34px!important;min-height:34px!important}
 }
-.und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--panel-2)}
+.und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);padding:6px 10px;background:var(--panel-2)}
 .und .switch.pk{margin:3px 0;font-size:13px;min-width:0}
 
 /* ---------- Fluent Dark: frosted glass with blue accents (from Homepage custom.css) ---------- */

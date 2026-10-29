@@ -67,7 +67,13 @@ t('migration result is schema 4', $m['schema'] === 4);
 $v3 = ['schema' => 3, 'groups' => [], 'docker' => ['layout' => 'list', 'selected' => ['plex', '../bad', 'radarr']], 'dashboard' => ['sections' => [['id' => 'overview'], ['id' => 'arr'], ['id' => 'downloads'], ['id' => 'docker'], ['id' => 'vms'], ['id' => 'apps', 'collapsed' => true]]]];
 $m4 = und_normalize(und_migrate($v3));
 $ids4 = array_column($m4['dashboard']['sections'], 'id');
-t('v3: apps move right below downloads', array_search('apps', $ids4) === array_search('downloads', $ids4) + 1 && array_search('apps', $ids4) < array_search('docker', $ids4));
+t('v3: apps move right below downloads (after the newer Now playing and Requests)', array_slice($ids4, array_search('downloads', $ids4), 4) === ['downloads', 'playing', 'requests', 'apps'] && array_search('apps', $ids4) < array_search('docker', $ids4));
+$old = und_normalize(['groups' => [], 'dashboard' => ['sections' => [['id' => 'overview'], ['id' => 'downloads'], ['id' => 'docker'], ['id' => 'vms'], ['id' => 'apps']]]])['dashboard']['sections'];
+$oi = array_column($old, 'id');
+t('new sections land after their neighbours in an older layout', array_slice($oi, 0, 6) === ['overview', 'downloads', 'playing', 'requests', 'docker', 'vms'] && $oi[6] === 'health');
+t('Now playing and Requests are half width, Endpoint health full', $old[2]['width'] === 'half' && $old[3]['width'] === 'half' && $old[6]['width'] === 'full');
+$kept = und_normalize(['groups' => [], 'dashboard' => ['sections' => [['id' => 'health', 'visible' => false], ['id' => 'overview']]]])['dashboard']['sections'];
+t('a saved position of a new section is kept', $kept[0]['id'] === 'health' && $kept[0]['visible'] === false);
 t('v3: apps keep their collapsed state', $m4['dashboard']['sections'][array_search('apps', $ids4)]['collapsed'] === true);
 t('v3: containers become a compact grid of running ones', $m4['docker']['layout'] === 'grid' && $m4['docker']['filter'] === 'running' && $m4['docker']['show'] === ['cpu', 'memory', 'update']);
 t('selected container names are validated', $m4['docker']['selected'] === ['plex', 'radarr']);
@@ -352,6 +358,109 @@ t('ignores.json is copied into a new config dir', is_file(und_store_dir() . '/ig
 reset_store();
 $fl = und_disk_flags([['name' => 'parity', 'health' => 'ok', 'temp' => 41, 'errors' => 0], ['name' => 'disk3', 'health' => 'bad', 'temp' => 52, 'errors' => 4], ['name' => 'cache', 'health' => 'ok', 'temp' => null, 'errors' => 0]]);
 t('disk flags name the disks', $fl['bad_disks'] === ['disk3'] && $fl['hot_disks'] === [['name' => 'disk3', 'temp' => 52]] && $fl['error_disks'] === [['name' => 'disk3', 'errors' => 4]] && $fl['bad'] === 1 && $fl['hot'] === 1 && $fl['errors'] === 4);
+
+/* ---------------- alerts and their history ---------------- */
+group('alerts');
+reset_store();
+$cfgA = und_load_config();
+$cfgA['docker']['items'] = ['secret-thing' => ['hidden' => true], 'plex' => ['label' => 'Plex Media']];
+$sysA = ['array' => ['state' => 'STARTED', 'resync' => 0, 'bad_disks' => ['disk2'], 'error_disks' => [['name' => 'disk2', 'errors' => 3]], 'hot_disks' => [['name' => 'disk1', 'temp' => 52]]],
+         'os_update' => ['staged' => '', 'available' => true, 'latest' => '7.4.0', 'installed' => '7.3.4', 'error' => '']];
+$dkA = ['containers' => [['name' => 'plex', 'health' => 'unhealthy', 'state' => 'running'], ['name' => 'gluetun', 'state' => 'restarting', 'restarts' => 12],
+         ['name' => 'handbrake', 'state' => 'exited', 'exit' => 128, 'autostart' => true], ['name' => 'manual', 'state' => 'exited', 'exit' => 1, 'autostart' => false],
+         ['name' => 'secret-thing', 'health' => 'unhealthy', 'state' => 'running'], ['name' => 'radarr', 'state' => 'running', 'job' => 'update_failed']]];
+$al = und_alerts($cfgA, $sysA, $dkA);
+$keys = array_map(function ($a) { return $a['cat'] . ':' . $a['res']; }, $al);
+t('each disk and container problem is its own alert', $keys === ['disk.bad:disk2', 'disk.errors:disk2', 'disk.hot:disk1', 'os.available:7.4.0', 'docker.unhealthy:plex', 'docker.restarting:gluetun', 'docker.exited:handbrake', 'docker.update_failed:radarr'], implode(',', $keys));
+t('labels are used in messages, ids stay container names', $al[4]['msg'] === 'Plex Media is unhealthy.' && $al[4]['act'] === 'logs');
+t('hidden containers and manual stops raise nothing', !in_array('docker.unhealthy:secret-thing', $keys, true) && !in_array('docker.exited:manual', $keys, true));
+$ae = und_alerts($cfgA, ['error' => 'API key rejected', 'auth' => true], null);
+t('an API problem is one alert with a Settings button', count($ae) === 1 && $ae[0]['cat'] === 'api.error' && $ae[0]['act'] === 'settings' && strpos($ae[0]['msg'], 'Settings > Configuration') !== false);
+t('every alert category can be ignored', !array_diff(array_column($al, 'cat'), array_keys(und_alert_categories())));
+// history
+$t0 = 1800000000;
+t('first sight starts alerts and writes the file', und_alerts_track($al, ['system', 'docker'], $t0) === true && count(und_alert_history()['active']) === 8);
+t('the same alerts again write nothing', und_alerts_track($al, ['system', 'docker'], $t0 + 2) === false);
+$less = array_values(array_filter($al, function ($a) { return $a['cat'] !== 'disk.hot'; }));
+und_alerts_track($less, ['system', 'docker'], $t0 + 600);
+$hh = und_alert_history();
+t('a cleared alert moves to the log with its start and end', count($hh['active']) === 7 && $hh['log'][0]['cat'] === 'disk.hot' && $hh['log'][0]['start'] === $t0 && $hh['log'][0]['end'] === $t0 + 600);
+$sysOnly = array_values(array_filter($less, function ($a) { return strpos($a['cat'], 'docker.') !== 0; }));
+und_alerts_track($sysOnly, ['system'], $t0 + 700);
+t('container alerts stay open when Docker was not checked', count(und_alert_history()['active']) === 7);
+und_alerts_track($sysOnly, ['system', 'docker'], $t0 + 800);
+t('and end once Docker answers without them', count(und_alert_history()['active']) === 3 && count(und_alert_history()['log']) === 5);
+file_put_contents(und_alert_file(), '{broken');
+t('an unreadable history starts over instead of failing', und_alerts_track($al, ['system', 'docker'], $t0 + 900) === true && count(und_alert_history()['active']) === 8);
+reset_store();
+
+/* ---------------- container web UI addresses ---------------- */
+group('webui');
+reset_store();
+$GLOBALS['MOCK'] = function ($argv) {
+  if ($argv[1] !== 'inspect') return ['code' => 1];
+  $c = function ($n, $net, $ip, $ports, $label) { return ['Name' => '/' . $n, 'Config' => ['Labels' => ['net.unraid.docker.webui' => $label]], 'HostConfig' => ['NetworkMode' => $net, 'PortBindings' => $ports],
+    'NetworkSettings' => ['Networks' => [$net => ['IPAddress' => $ip]]], 'State' => []]; };
+  return ['out' => json_encode([
+    $c('lidarr', 'r1ze', '172.18.0.4', ['8686/tcp' => [['HostPort' => '8687']]], 'http://[IP]:[PORT:8687]'),
+    $c('dashbrr', 'r1ze', '172.18.0.18', ['8080/tcp' => [['HostPort' => '5456']]], 'http://[IP]:[PORT:8080]/'),
+    $c('adguard', 'br0', '192.168.50.10', [], 'http://[IP]:[PORT:3000]/'),
+    $c('radarr', 'bridge', '172.17.0.5', ['7878/tcp' => [['HostPort' => '7979']]], 'http://[IP]:[PORT:7878]/')])];
+};
+file_put_contents("$SANDBOX/fs/var/local/emhttp/network.ini", "[eth0]\nIPADDR:0=\"192.168.50.50\"\n");
+$det = und_docker_details(['lidarr' => ['id' => 'a1', 'state' => 'running'], 'dashbrr' => ['id' => 'a2', 'state' => 'running'], 'adguard' => ['id' => 'a3', 'state' => 'running'], 'radarr' => ['id' => 'a4', 'state' => 'running']], true);
+$sip = und_server_ip();
+t('user-defined bridge with published ports: server address and the port as written', $det['lidarr']['webui'] === "http://$sip:8687", $det['lidarr']['webui']);
+t('user-defined bridge: [PORT:container port] becomes the host port', $det['dashbrr']['webui'] === "http://$sip:5456/", $det['dashbrr']['webui']);
+t('br0 / macvlan without published ports: the container\'s own LAN address', $det['adguard']['webui'] === 'http://192.168.50.10:3000/', $det['adguard']['webui']);
+t('default bridge: server address and host port', $det['radarr']['webui'] === "http://$sip:7979/", $det['radarr']['webui']);
+unset($GLOBALS['MOCK']);
+reset_store();
+
+/* ---------------- now playing, requests, endpoint health ---------------- */
+group('sections');
+reset_store();
+$mk = function ($id, $type, $name, $href = '') { return ['id' => $id, 'type' => $type, 'name' => $name, 'url' => 'http://app.lan:1', 'href' => $href, 'fields' => [], 'options' => []]; };
+$cfgS = und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'Media', 'services' => [$mk('a0000001', 'plex', 'Plex', 'http://10.0.0.5:32400'), $mk('a0000002', 'tautulli', 'Tautulli'),
+  $mk('a0000003', 'jellyfin', 'Jellyfin', 'http://10.0.0.5:8096'), $mk('a0000004', 'overseerr', 'Seerr', 'http://10.0.0.5:5055')]]]]);
+$GLOBALS['SEEN'] = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['SEEN'][] = $m . ' ' . $url;
+  $p = parse_url($url, PHP_URL_PATH); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+  $j = function ($d, $c = 200) { return ['code' => $c, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []]; };
+  if ($p === '/api/v2') return $j(['response' => ['result' => 'success', 'data' => ['sessions' => [['media_type' => 'movie', 'title' => 'Heat', 'year' => 1995, 'friendly_name' => 'Al', 'player' => 'TV', 'state' => 'paused',
+    'view_offset' => 60000, 'duration' => 600000, 'transcode_decision' => 'transcode', 'bandwidth' => '8000', 'location' => 'wan']]]]]);
+  if ($p === '/Sessions') return $j([['UserName' => 'Bo', 'DeviceName' => 'Phone', 'PlayState' => ['PositionTicks' => 600000000, 'PlayMethod' => 'DirectPlay'], 'NowPlayingItem' => ['SeriesName' => 'Dark', 'ParentIndexNumber' => 1, 'IndexNumber' => 2, 'Name' => 'Lies', 'RunTimeTicks' => 36000000000, 'Width' => 1920]], ['UserName' => 'idle']]);
+  if ($p === '/api/v1/request') return $j(['results' => ($q['filter'] ?? '') === 'pending' ? [['id' => 5, 'status' => 1, 'type' => 'movie', 'media' => ['tmdbId' => 77, 'status' => 2], 'requestedBy' => ['displayName' => 'Cy'], 'createdAt' => '2026-10-01T00:00:00Z']]
+    : [['id' => 5, 'status' => 1, 'type' => 'movie', 'media' => ['tmdbId' => 77, 'status' => 2]], ['id' => 4, 'status' => 2, 'type' => 'tv', 'media' => ['tmdbId' => 88, 'status' => 5], 'seasons' => [['seasonNumber' => 1]]]]]);
+  if ($p === '/api/v1/movie/77') return $j(['title' => 'Memento', 'releaseDate' => '2000-09-05', 'posterPath' => '/m.jpg']);
+  if ($p === '/api/v1/tv/88') return $j(['name' => 'Dark', 'firstAirDate' => '2017-12-01', 'posterPath' => '"><script>.jpg']);
+  if (preg_match('#^/api/v1/request/(\d+)/(approve|decline)$#', $p, $mm)) return $mm[1] === '404' ? $j(['message' => 'gone'], 404) : $j(['id' => (int)$mm[1]]);
+  return $j(['error' => 'nope'], 404);
+};
+$pl = und_playing($cfgS);
+t('Tautulli covers Plex, so Plex is not asked', !array_filter($GLOBALS['SEEN'], function ($u) { return strpos($u, ':1/status/sessions') !== false; }) && count($pl['streams']) === 2);
+t('streams carry who, what and how', $pl['streams'][0]['user'] === 'Bo' && $pl['streams'][0]['title'] === 'Dark' && $pl['streams'][0]['sub'] === 'S01E02 · Lies' && $pl['streams'][0]['method'] === 'direct play' && $pl['streams'][0]['quality'] === '1080p');
+t('playing comes before paused; transcodes and remote streams are marked', $pl['streams'][1]['state'] === 'paused' && $pl['streams'][1]['method'] === 'transcode' && $pl['streams'][1]['location'] === 'wan' && $pl['streams'][1]['bandwidth'] === 8000000);
+t('no media server means a hint, not an error', !empty(und_playing(und_normalize(['groups' => []]))['unconfigured']));
+$rq = und_requests($cfgS);
+t('pending requests first, titles looked up', $rq['pending'] === 1 && $rq['items'][0]['title'] === 'Memento' && $rq['items'][0]['status'] === 'pending' && $rq['items'][1]['status'] === 'available' && $rq['items'][1]['seasons'] === [1]);
+t('poster paths that are not plain file names are dropped', $rq['items'][0]['poster'] === 'https://image.tmdb.org/t/p/w92/m.jpg' && $rq['items'][1]['poster'] === '');
+t('approve posts to Seerr', !empty(und_request_action($cfgS, 'a0000004', '5', 'approve')['ok']) && in_array('POST http://app.lan:1/api/v1/request/5/approve', $GLOBALS['SEEN'], true));
+t('a vanished request says so', strpos(und_request_action($cfgS, 'a0000004', '404', 'decline')['error'] ?? '', 'no longer exists') !== false);
+t('only approve or decline, only known apps, only numeric ids', isset(und_request_action($cfgS, 'a0000004', '5', 'delete')['error']) && isset(und_request_action($cfgS, 'a0000001', '5', 'approve')['error'])
+  && isset(und_request_action($cfgS, 'a0000004', '5/../../x', 'approve')['error']));
+unset($GLOBALS['UND_HTTP_MOCK']);
+$tg = und_health_targets($cfgS, ['containers' => [['name' => 'plex', 'state' => 'running', 'webui' => 'http://10.0.0.5:32400/web'], ['name' => 'sonarr', 'state' => 'running', 'webui' => 'http://10.0.0.5:8989/'],
+  ['name' => 'stopped', 'state' => 'exited', 'webui' => 'http://10.0.0.5:9000/'], ['name' => 'bad', 'state' => 'running', 'webui' => 'javascript:alert(1)']]]);
+t('health probes app links and running container web UIs, each address once', array_column($tg, 'hostport') === ['10.0.0.5:32400', '10.0.0.5:8096', '10.0.0.5:5055', '10.0.0.5:8989'], json_encode(array_column($tg, 'hostport')));
+$GLOBALS['UND_HEALTH_MOCK'] = function ($t) { $o = []; foreach ($t as $i => $x) $o[$i] = $i === 0 ? ['code' => 0, 'ms' => null, 'err' => 'Connection refused'] : ['code' => [0, 404, 401][$i], 'ms' => 5, 'err' => '']; return $o; };
+$hl = und_health($cfgS, true);
+t('health sorts problems first and counts reachable endpoints', $hl['rows'][0]['level'] === 'bad' && $hl['rows'][0]['text'] === 'Connection refused' && $hl['up'] === $hl['total'] - 1);
+t('a login page (401) counts as healthy, a 404 as a warning', (bool)array_filter($hl['rows'], function ($r) { return $r['code'] === 404 && $r['level'] === 'warn'; })
+  && (bool)array_filter($hl['rows'], function ($r) { return $r['code'] === 401 && $r['level'] === 'ok' && $r['text'] === '401 Login required'; }));
+unset($GLOBALS['UND_HEALTH_MOCK']);
+reset_store();
 
 /* ---------------- media columns ---------------- */
 group('media');

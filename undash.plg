@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "2026.11.01b">
+<!ENTITY version "2026.11.02a">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,13 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###2026.11.02a
+- New sections: Now playing (Plex, Emby, Jellyfin, Tautulli streams with progress, direct play or transcode, quality and bandwidth), Requests (Overseerr / Jellyseerr, approve or decline pending requests) and Endpoint health (status and latency of every app and container web UI, with Re-probe).
+- Alert history: when each problem started and ended, checked once a minute in the background (also when no dashboard is open), kept for 30 days. Alerts > History.
+- Keyboard shortcuts: / filter, r refresh, p pause, comma settings, ? list, g + letter to jump to a section.
+- The Inter typeface is now bundled, so the dashboard looks the same on every computer.
+- Fixes: web UI links of containers on a user-defined Docker network with published ports now use the server's address and host port (they pointed at the container's internal address); the filter box now filters Media, Arr Stack and Downloads immediately; quick preference clicks can no longer overwrite each other; scrolled media lists keep their place while columns rebalance; error messages are red again; stale "⋯ menu" hints now say gear.
+
 ###2026.11.01b
 - Containers and VMs: one gear button per item holds every action (open web UI or console, start / stop, restart, pause, update, logs, details, favorites, customize). Click the icon or the name to open the web UI (VNC console for VMs); the separate open buttons are gone.
 - More room in the container grid and the VM list: bigger icons, taller rows, wider gaps.
@@ -117,7 +124,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '2026.11.01b');
+define('UND_VERSION', '2026.11.02a');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -280,13 +287,13 @@ unset($__ident);
 
 } // UND_LIB_LOADED
 
-foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores'] as $__m) {
+foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'health', 'playing', 'requests'] as $__m) {
   $__f = __DIR__ . '/' . $__m . '.php';
   if (is_file($__f)) require_once $__f;
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>776a06da859176671d20fd04ac564f779b4a87c1cf6dc9bf75985a5c65f34220</SHA256>
+<SHA256>a61ade0dacfb99a6f05c79ae72f2752786a81f9c8ab95b1dc5d42dde3a667e15</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -327,7 +334,10 @@ function und_types() {
 }
 
 /** Dashboard sections, in their default order. */
-function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'apps', 'docker', 'vms']; }
+function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'playing', 'requests', 'apps', 'docker', 'vms', 'health']; }
+
+/** Sections added after the first release, and the section each goes after in a layout saved before it existed. */
+function und_section_since() { return ['playing' => 'downloads', 'requests' => 'playing', 'health' => 'vms']; }
 
 /** System metrics the overview can show, in their default order. */
 function und_metric_ids() { return ['cpu', 'memory', 'storage', 'network', 'health', 'disks', 'uptime', 'ups', 'cores', 'swap', 'load', 'path', 'docker', 'vms']; }
@@ -338,7 +348,7 @@ function und_media_ids() { return ['upcoming_movies', 'upcoming_episodes', 'rece
 function und_default_config() {
   $svc = function ($name, $type, $icon = '') { return ['id' => und_id(), 'name' => $name, 'type' => $type, 'icon' => $icon, 'href' => '', 'url' => '', 'fields' => [], 'options' => new stdClass()]; };
   $sections = [];
-  foreach (und_section_ids() as $id) $sections[] = ['id' => $id, 'visible' => $id !== 'favorites', 'width' => in_array($id, ['arr', 'downloads'], true) ? 'half' : 'full', 'collapsed' => false];
+  foreach (und_section_ids() as $id) $sections[] = ['id' => $id, 'visible' => $id !== 'favorites', 'width' => in_array($id, ['arr', 'downloads', 'playing', 'requests'], true) ? 'half' : 'full', 'collapsed' => false];
   $metrics = [];
   foreach (und_metric_ids() as $id) $metrics[] = ['id' => $id, 'visible' => !in_array($id, ['cores', 'swap', 'load', 'path', 'docker', 'vms'], true)];
   return [
@@ -610,6 +620,15 @@ function und_normalize(array $c) {
     return $out;
   };
   $sections = $order($db['sections'] ?? [], und_section_ids(), $d['dashboard']['sections'], ['visible' => 'bool', 'width' => ['full', 'half'], 'collapsed' => 'bool']);
+  // a section added in a later version goes where it belongs, not at the bottom of an older layout
+  $had = array_column(array_filter((array)($db['sections'] ?? []), 'is_array'), 'id');
+  if ($had) foreach (und_section_since() as $new => $after) {
+    if (in_array($new, $had, true)) continue;
+    $ids = array_column($sections, 'id'); $i = array_search($new, $ids, true); $row = $sections[$i];
+    array_splice($sections, $i, 1);
+    $ids = array_column($sections, 'id'); $j = array_search($after, $ids, true);
+    array_splice($sections, $j === false ? count($sections) : $j + 1, 0, [$row]);
+  }
   $metrics = $order($db['metrics'] ?? [], und_metric_ids(), $d['dashboard']['metrics'], ['visible' => 'bool']);
 
   $items = function ($list, $extra = []) {
@@ -666,6 +685,14 @@ function und_normalize(array $c) {
   }
   return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics], 'media' => $media, 'downloads' => $downloads, 'apps' => $apps,
           'docker' => $docker, 'vms' => $vms, 'groups' => $groups];
+}
+
+/** Serialises read-change-write of config.json (two quick dashboard clicks must not lose one). Released when the request ends. */
+function und_config_lock() {
+  @mkdir(und_tmp('locks'), 0755, true);
+  $fp = @fopen(und_tmp('locks/config.lock'), 'c');
+  if ($fp) flock($fp, LOCK_EX);
+  return $fp;
 }
 
 function und_save_config(array $c, $backup = true) {
@@ -831,7 +858,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>dc698bc6d3efb2b00d3c94beca42003abdc4068fa8b49e4ad96d62497f77e705</SHA256>
+<SHA256>fd4d8d61ee15692927b50c9561d18600d0d27b19334b7f9b8daab02812f0fcc1</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -1153,7 +1180,9 @@ function und_docker_details(array $ps, $force = false) {
       foreach ((array)($x['NetworkSettings']['Networks'] ?? []) as $n) if (!empty($n['IPAddress'])) { $cip = $n['IPAddress']; break; }
       $webui = (string)($labels['net.unraid.docker.webui'] ?? '');
       if ($webui !== '') {
-        $own = !in_array($net, ['bridge', 'host', 'default', ''], true) && strpos($net, 'container:') !== 0 && $cip !== '';
+        // the container's own address only when it has one on the LAN (br0 / macvlan style) and publishes nothing on the host;
+        // on a user-defined bridge with published ports the web UI is reached through the server's address and the host port
+        $own = !$ports && !in_array($net, ['bridge', 'host', 'default', ''], true) && strpos($net, 'container:') !== 0 && $cip !== '';
         $webui = str_replace('[IP]', $own ? $cip : $ip, $webui);
         $webui = preg_replace_callback('/\[PORT:(\d+)\]/', function ($m) use ($ports, $own) {
           foreach ($ports as $cp => $hp) if ((int)$cp === (int)$m[1]) return (string)($own ? $m[1] : $hp);
@@ -1348,7 +1377,7 @@ function und_docker_summary() {
   return $s;
 }
 ]]></INLINE>
-<SHA256>730ed0b9f7b4e46dbaf2a846171469ec681eed5738b7828de7baaa6e8f15839d</SHA256>
+<SHA256>555c568e743a33e967b2b085742fe645febb16b63f61cf577d7c20707c86c2d7</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/vm.php" Mode="0644">
@@ -3154,6 +3183,422 @@ function und_ignore_purge_expired() {
 <SHA256>21d8488a50eeed03c7297e9f8d3e8890e0907bb7acd0e7ef12bbbcb6aef55bc9</SHA256>
 </FILE>
 
+<FILE Name="&emhttp;/include/alerts.php" Mode="0644">
+<INLINE><![CDATA[<?php
+/*
+ * UnDash - alerts: what is wrong right now, worked out on the server from the same data the dashboard shows, plus a
+ * history of when each problem started and ended. The live refresh evaluates them for the page; scripts/alertcheck.php
+ * does it once a minute in the background, so the history is complete even when no dashboard is open.
+ *
+ * Each alert: lv (bad | warn | info), msg, cat (an id from und_alert_categories()), res (the disk, container, version …)
+ * and act (the button the page shows: logs | settings | restart | os, or '').
+ */
+
+/** The alerts for one snapshot. $sys = und_system(), $dk = und_docker_live() (either may be null when not loaded). */
+function und_alerts(array $cfg, $sys, $dk) {
+  $out = [];
+  $add = function ($lv, $msg, $cat, $res, $act = '') use (&$out) { $out[] = ['lv' => $lv, 'msg' => $msg, 'cat' => $cat, 'res' => (string)$res, 'act' => $act]; };
+  if (is_array($sys) && isset($sys['error'])) {
+    $add('bad', $sys['error'] . (!empty($sys['auth']) ? ' Check Settings > Configuration.' : ''), 'api.error', 'unraid', 'settings');
+  } elseif (is_array($sys)) {
+    $a = $sys['array'] ?? [];
+    $st = (string)($a['state'] ?? '');
+    if ($st !== '' && $st !== 'STARTED') $add('warn', 'The array is ' . strtolower($st) . '. Shares, containers and VMs on it are unavailable.', 'array.state', $st);
+    if (!empty($a['resync'])) $add('info', ($a['resync_action'] ?: 'A parity operation') . ' is running' . (isset($a['resync_pct']) && $a['resync_pct'] !== null ? ' (' . $a['resync_pct'] . '%)' : '') . '.', 'array.resync', 'array');
+    foreach ((array)($a['bad_disks'] ?? []) as $n) $add('bad', $n . ' is disabled, missing or emulated. Check Main in Unraid.', 'disk.bad', $n);
+    foreach ((array)($a['error_disks'] ?? []) as $d) $add('bad', $d['name'] . ' reported ' . $d['errors'] . ' read/write error' . ($d['errors'] > 1 ? 's' : '') . '.', 'disk.errors', $d['name']);
+    foreach ((array)($a['hot_disks'] ?? []) as $d) $add('warn', $d['name'] . ' is at ' . $d['temp'] . '°C.', 'disk.hot', $d['name']);
+    $o = $sys['os_update'] ?? [];
+    if (!empty($o['staged'])) $add('info', 'Unraid ' . $o['staged'] . ' is installed and becomes active after a restart.', 'os.staged', $o['staged'], 'restart');
+    elseif (!empty($o['available'])) $add('info', 'Unraid ' . $o['latest'] . ' is available (running ' . $o['installed'] . ').', 'os.available', $o['latest'], 'os');
+    if (!empty($o['error']) && empty($o['available'])) $add('warn', 'The Unraid update check failed: ' . $o['error'], 'os.check_failed', 'server');
+  }
+  if (is_array($dk) && !isset($dk['error'])) {
+    $items = (array)($cfg['docker']['items'] ?? []);
+    foreach ((array)($dk['containers'] ?? []) as $c) {
+      $p = (array)($items[$c['name']] ?? []);
+      if (!empty($p['hidden'])) continue;
+      $nm = ($p['label'] ?? '') !== '' ? $p['label'] : $c['name'];
+      if (($c['health'] ?? '') === 'unhealthy') $add('bad', $nm . ' is unhealthy.', 'docker.unhealthy', $c['name'], 'logs');
+      elseif (($c['state'] ?? '') === 'restarting') $add('bad', $nm . ' keeps restarting' . (!empty($c['restarts']) ? ' (' . $c['restarts'] . ' restarts)' : '') . '.', 'docker.restarting', $c['name'], 'logs');
+      elseif (($c['state'] ?? '') === 'exited' && !empty($c['exit']) && !empty($c['autostart'])) $add('warn', $nm . ' stopped with exit code ' . $c['exit'] . '.', 'docker.exited', $c['name'], 'logs');
+      if (($c['job'] ?? '') === 'update_failed') $add('bad', 'The update of ' . $nm . ' failed.', 'docker.update_failed', $c['name'], 'logs');
+    }
+  }
+  return $out;
+}
+
+/* ---------- history ---------- */
+
+const UND_ALERT_LOG_MAX = 300;
+
+function und_alert_file() { return und_store_dir() . '/alert-history.json'; }
+
+/**
+ * Records starts and ends. $scopes says which categories this snapshot actually checked ('system', 'docker'): an
+ * alert of a category that was not checked (for example containers, when Docker did not answer) stays open.
+ * The file is only written when something starts or ends, so the 2-second refresh does not wear the disk.
+ */
+function und_alerts_track(array $alerts, array $scopes, $now = null) {
+  $now = $now ?? time();
+  @mkdir(und_tmp('locks'), 0755, true);
+  $fp = @fopen(und_tmp('locks/alert-history.lock'), 'c');
+  if ($fp) flock($fp, LOCK_EX);
+  $h = und_read_json(und_alert_file(), []);
+  $act = is_array($h['active'] ?? null) ? $h['active'] : [];
+  $log = is_array($h['log'] ?? null) ? $h['log'] : [];
+  $changed = false; $seen = [];
+  foreach ($alerts as $a) {
+    $k = $a['cat'] . ':' . $a['res'];
+    $seen[$k] = 1;
+    if (!isset($act[$k])) { $act[$k] = ['cat' => $a['cat'], 'res' => $a['res'], 'lv' => $a['lv'], 'msg' => und_clip($a['msg'], 300), 'start' => $now]; $changed = true; }
+  }
+  foreach ($act as $k => $a) {
+    if (isset($seen[$k])) continue;
+    $scope = strpos((string)$a['cat'], 'docker.') === 0 ? 'docker' : 'system';
+    if (!in_array($scope, $scopes, true)) continue;
+    $log[] = $a + ['end' => $now];
+    unset($act[$k]); $changed = true;
+  }
+  if ($changed) {
+    $old = $now - 30 * 86400;
+    $log = array_values(array_filter($log, function ($e) use ($old) { return (int)($e['end'] ?? 0) >= $old; }));
+    $log = array_slice($log, -UND_ALERT_LOG_MAX);
+    @mkdir(dirname(und_alert_file()), 0755, true);
+    und_write_json(und_alert_file(), ['active' => $act, 'log' => $log]);
+  }
+  if ($fp) { flock($fp, LOCK_UN); fclose($fp); }
+  return $changed;
+}
+
+/** For the page: open problems first, then ended ones, newest first. */
+function und_alert_history() {
+  $h = und_read_json(und_alert_file(), []);
+  $act = array_values(array_filter((array)($h['active'] ?? []), 'is_array'));
+  usort($act, function ($a, $b) { return (int)$b['start'] - (int)$a['start']; });
+  $log = array_reverse(array_values(array_filter((array)($h['log'] ?? []), 'is_array')));
+  return ['now' => time(), 'active' => $act, 'log' => array_slice($log, 0, 200)];
+}
+
+/** One background check (scripts/alertcheck.php): the full system and container state, then the history. */
+function und_alerts_check() {
+  $cfg = und_load_config();
+  $sys = und_system($cfg);
+  $dk = und_docker_live();
+  $scopes = isset($sys['error']) ? [] : ['system'];
+  if (is_array($dk) && !isset($dk['error'])) $scopes[] = 'docker';
+  $alerts = und_alerts($cfg, $sys, $dk);
+  und_alerts_track($alerts, $scopes);
+  @file_put_contents(und_tmp('alertcheck.at'), (string)time());
+  return count($alerts);
+}
+]]></INLINE>
+<SHA256>7654fe61ea02f2b829a5f22c2003047ad485b91f9d5b772344911a86319786c2</SHA256>
+</FILE>
+
+<FILE Name="&emhttp;/include/health.php" Mode="0644">
+<INLINE><![CDATA[<?php
+/*
+ * UnDash - endpoint health: is every app and container web UI answering, with which HTTP status, how fast.
+ * Only addresses UnDash already knows are probed: the links of the apps in Settings > Apps and the web UI labels of
+ * running containers. Nothing the browser sends becomes a URL. All probes run in parallel; results are cached 60 s.
+ */
+
+/** host:port of a URL, without user info, path or query (what the page shows). */
+function und_health_hostport($u) {
+  $p = parse_url($u);
+  if (!$p || empty($p['host'])) return '';
+  $port = $p['port'] ?? (strtolower($p['scheme'] ?? 'http') === 'https' ? 443 : 80);
+  return $p['host'] . ':' . $port;
+}
+
+/** The list to probe: apps first (they have names you chose), then container web UIs that no app already covers. */
+function und_health_targets(array $cfg, $docker = null) {
+  $out = []; $seen = [];
+  $view = und_layout_view($cfg);
+  foreach ($view['groups'] as $g) foreach ($g['services'] as $s) {
+    if (!empty($s['hidden'])) continue;
+    $u = (string)($s['href_resolved'] ?? '');
+    if (!preg_match('#^https?://#i', $u)) continue;
+    $hp = und_health_hostport($u);
+    if ($hp === '' || isset($seen[$hp])) continue;
+    $seen[$hp] = 1;
+    $out[] = ['name' => $s['name'], 'kind' => 'app', 'group' => $g['name'] ?? '', 'url' => $u, 'hostport' => $hp, 'icon' => $s['icon'] ?? ''];
+  }
+  $items = (array)($cfg['docker']['items'] ?? []);
+  foreach ((array)($docker['containers'] ?? []) as $c) {
+    if (($c['state'] ?? '') !== 'running' || !preg_match('#^https?://#i', (string)($c['webui'] ?? ''))) continue;
+    $p = (array)($items[$c['name']] ?? []);
+    if (!empty($p['hidden'])) continue;
+    $hp = und_health_hostport($c['webui']);
+    if ($hp === '' || isset($seen[$hp])) continue;
+    $seen[$hp] = 1;
+    $out[] = ['name' => ($p['label'] ?? '') !== '' ? $p['label'] : $c['name'], 'kind' => 'container', 'group' => 'container', 'url' => $c['webui'], 'hostport' => $hp, 'icon' => $p['icon'] ?? $c['icon'] ?? ''];
+  }
+  return array_slice($out, 0, 120);
+}
+
+function und_health_reason($code) {
+  $r = [200 => 'OK', 201 => 'Created', 204 => 'No content', 301 => 'Redirect', 302 => 'Redirect', 303 => 'Redirect', 307 => 'Redirect', 308 => 'Redirect',
+        400 => 'Bad request', 401 => 'Login required', 403 => 'Forbidden', 404 => 'Not found', 405 => 'Method not allowed', 500 => 'Server error',
+        502 => 'Bad gateway', 503 => 'Unavailable', 504 => 'Gateway timeout'];
+  return $r[$code] ?? ($code >= 500 ? 'Server error' : ($code >= 400 ? 'Client error' : ($code >= 300 ? 'Redirect' : 'OK')));
+}
+
+/** Probes in parallel. A GET without following redirects; the body is not downloaded (the transfer stops at the first byte). */
+function und_health_probe(array $targets) {
+  if (isset($GLOBALS['UND_HEALTH_MOCK'])) return call_user_func($GLOBALS['UND_HEALTH_MOCK'], $targets);
+  $mh = curl_multi_init(); $hs = [];
+  foreach ($targets as $i => $t) {
+    $ch = curl_init($t['url']);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 5,
+      CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => 0, CURLOPT_USERAGENT => 'UnDash/' . UND_VERSION . ' (health check)', CURLOPT_NOSIGNAL => true,
+      CURLOPT_WRITEFUNCTION => function ($c, $data) { return 0; }]);      // stop after the headers: the status is all we need
+    curl_multi_add_handle($mh, $ch); $hs[$i] = $ch;
+  }
+  do { $st = curl_multi_exec($mh, $running); if ($running) curl_multi_select($mh, 0.5); } while ($running && $st === CURLM_OK);
+  $res = [];
+  foreach ($hs as $i => $ch) {
+    $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $ms = (int)round(1000 * (float)curl_getinfo($ch, CURLINFO_TOTAL_TIME));
+    $errno = curl_errno($ch);
+    // aborting the body on purpose shows up as a write error; anything else with no status is a real failure
+    $err = $code > 0 ? '' : ($errno === 28 ? 'No answer (timed out)' : ($errno === 7 ? 'Connection refused' : (curl_error($ch) ?: 'No answer')));
+    $res[$i] = ['code' => $code, 'ms' => $code > 0 ? $ms : null, 'err' => $err];
+    curl_multi_remove_handle($mh, $ch); curl_close($ch);
+  }
+  curl_multi_close($mh);
+  return $res;
+}
+
+/** The section's data. $force probes again now (at most every 10 seconds). */
+function und_health(array $cfg, $force = false) {
+  $f = und_tmp('health.json');
+  $c = und_read_json($f, null);
+  $age = is_array($c) ? time() - (int)($c['at'] ?? 0) : PHP_INT_MAX;
+  if (is_array($c) && ($age < 60 && !$force || $age < 10)) return $c;
+  $lock = und_lock('health');
+  if (!$lock) return is_array($c) ? $c : ['at' => time(), 'rows' => [], 'busy' => true];
+  $targets = und_health_targets($cfg, und_docker_live());
+  $probe = und_health_probe($targets);
+  $rows = [];
+  foreach ($targets as $i => $t) {
+    $p = $probe[$i] ?? ['code' => 0, 'ms' => null, 'err' => 'No answer'];
+    $code = (int)$p['code'];
+    $rows[] = ['name' => $t['name'], 'kind' => $t['kind'], 'group' => $t['group'], 'url' => $t['url'], 'hostport' => $t['hostport'], 'icon' => $t['icon'],
+               'code' => $code, 'text' => $code ? $code . ' ' . und_health_reason($code) : $p['err'], 'ms' => $p['ms'],
+               'level' => !$code ? 'bad' : ($code >= 500 ? 'bad' : ($code >= 400 && !in_array($code, [401, 403], true) ? 'warn' : 'ok'))];
+  }
+  // problems first, then by name
+  $rank = ['bad' => 0, 'warn' => 1, 'ok' => 2];
+  usort($rows, function ($a, $b) use ($rank) { return $rank[$a['level']] - $rank[$b['level']] ?: strcasecmp($a['name'], $b['name']); });
+  $out = ['at' => time(), 'rows' => $rows, 'up' => count(array_filter($rows, function ($r) { return $r['code'] > 0; })), 'total' => count($rows)];
+  und_write_json($f, $out);
+  und_unlock($lock);
+  return $out;
+}
+]]></INLINE>
+<SHA256>507ce9bafa38ed08d878ce86dbe0c81259d149b56d8e198674826576811d6582</SHA256>
+</FILE>
+
+<FILE Name="&emhttp;/include/playing.php" Mode="0644">
+<INLINE><![CDATA[<?php
+/*
+ * UnDash - now playing: every active stream on the configured Plex, Emby, Jellyfin and Tautulli apps, with who is
+ * watching on what, progress, and whether it is direct play or a transcode. When Tautulli is set up it reports Plex
+ * (with more detail), so Plex itself is not asked as well and nothing is listed twice. Cached for 5 seconds.
+ */
+
+function und_playing_sources(array $cfg) {
+  $list = [];
+  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) if (in_array($s['type'], ['plex', 'emby', 'jellyfin', 'tautulli'], true)) $list[] = $s;
+  $haveTautulli = (bool)array_filter($list, function ($s) { return $s['type'] === 'tautulli'; });
+  return array_values(array_filter($list, function ($s) use ($haveTautulli) { return !($haveTautulli && $s['type'] === 'plex'); }));
+}
+
+function und_playing_method($m) {
+  $m = strtolower((string)$m);
+  if ($m === 'transcode') return 'transcode';
+  if ($m === 'copy' || $m === 'directstream' || $m === 'direct stream') return 'direct stream';
+  return $m === '' ? '' : 'direct play';
+}
+
+function und_playing_ep($series, $season, $ep, $name) { return [$series, 'S' . sprintf('%02d', (int)$season) . 'E' . sprintf('%02d', (int)$ep) . ($name !== '' ? ' · ' . $name : '')]; }
+
+function und_playing_one(array $cfg, $id) {
+  $s = und_service_full($cfg, $id);
+  if (trim($s['url']) === '' || und_has($s['url'], '{{')) return ['error' => $s['name'] . ' has no API URL yet.'];
+  $out = [];
+  if ($s['type'] === 'tautulli') {
+    foreach ((array)(und_tautulli($s, ['cmd' => 'get_activity'])['sessions'] ?? []) as $x) {
+      $ep = ($x['media_type'] ?? '') === 'episode';
+      [$t, $sub] = $ep ? und_playing_ep($x['grandparent_title'] ?? '', $x['parent_media_index'] ?? 0, $x['media_index'] ?? 0, (string)($x['title'] ?? ''))
+                       : [(string)($x['title'] ?? $x['full_title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
+      $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['friendly_name'] ?? $x['user'] ?? ''), 'device' => trim(($x['player'] ?? '') . (isset($x['product']) && $x['product'] !== ($x['player'] ?? '') ? ' · ' . $x['product'] : '')),
+        'state' => (string)($x['state'] ?? 'playing'), 'pos' => (int)((int)($x['view_offset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
+        'method' => und_playing_method($x['transcode_decision'] ?? ''), 'quality' => (string)($x['quality_profile'] ?? $x['stream_video_full_resolution'] ?? ''),
+        'bandwidth' => isset($x['bandwidth']) && $x['bandwidth'] !== '' ? (int)$x['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['location'] ?? ''))];
+    }
+  } elseif ($s['type'] === 'plex') {
+    $j = und_get(und_u($s['url'], '/status/sessions'), ['headers' => ['X-Plex-Token' => $s['key'], 'Accept' => 'application/json']]);
+    foreach ((array)($j['MediaContainer']['Metadata'] ?? []) as $x) {
+      $ep = ($x['type'] ?? '') === 'episode';
+      [$t, $sub] = $ep ? und_playing_ep($x['grandparentTitle'] ?? '', $x['parentIndex'] ?? 0, $x['index'] ?? 0, (string)($x['title'] ?? ''))
+                       : [(string)($x['title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
+      $ts = $x['TranscodeSession'] ?? null;
+      $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['User']['title'] ?? ''), 'device' => trim(($x['Player']['title'] ?? '') . (!empty($x['Player']['product']) ? ' · ' . $x['Player']['product'] : '')),
+        'state' => (string)($x['Player']['state'] ?? 'playing'), 'pos' => (int)((int)($x['viewOffset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
+        'method' => $ts ? und_playing_method($ts['videoDecision'] ?? 'transcode') : 'direct play', 'quality' => (string)($x['Media'][0]['videoResolution'] ?? ''),
+        'bandwidth' => isset($x['Session']['bandwidth']) ? (int)$x['Session']['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['Session']['location'] ?? ''))];
+    }
+  } else {
+    $base = rtrim($s['url'], '/'); $pre = $s['type'] === 'emby' && !und_ends($base, '/emby') ? '/emby' : '';
+    $j = und_get($base . $pre . '/Sessions', ['headers' => ['X-Emby-Token' => $s['key'], 'Accept' => 'application/json']]);
+    foreach ((array)$j as $x) {
+      if (empty($x['NowPlayingItem'])) continue;
+      $n = $x['NowPlayingItem'];
+      [$t, $sub] = !empty($n['SeriesName']) ? und_playing_ep($n['SeriesName'], $n['ParentIndexNumber'] ?? 0, $n['IndexNumber'] ?? 0, (string)($n['Name'] ?? ''))
+                                           : [(string)($n['Name'] ?? ''), !empty($n['ProductionYear']) ? (string)$n['ProductionYear'] : ''];
+      $w = (int)($n['Width'] ?? 0);
+      $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['UserName'] ?? ''), 'device' => trim(($x['DeviceName'] ?? '') . (!empty($x['Client']) ? ' · ' . $x['Client'] : '')),
+        'state' => !empty($x['PlayState']['IsPaused']) ? 'paused' : 'playing', 'pos' => (int)(($x['PlayState']['PositionTicks'] ?? 0) / 10000000), 'dur' => (int)(($n['RunTimeTicks'] ?? 0) / 10000000),
+        'method' => und_playing_method($x['PlayState']['PlayMethod'] ?? ''), 'quality' => $w >= 3800 ? '4K' : ($w >= 1900 ? '1080p' : ($w >= 1260 ? '720p' : ($w ? 'SD' : ''))),
+        'bandwidth' => isset($x['TranscodingInfo']['Bitrate']) ? (int)$x['TranscodingInfo']['Bitrate'] : null, 'location' => ''];
+    }
+  }
+  return ['streams' => $out];
+}
+
+function und_playing(array $cfg) {
+  $src = und_playing_sources($cfg);
+  if (!$src) return ['unconfigured' => true, 'streams' => [], 'apps' => []];
+  return und_api_cached('playing', 5, function () use ($cfg, $src) {
+    $streams = []; $apps = [];
+    foreach ($src as $s) {
+      try { $r = und_playing_one($cfg, $s['id']); }
+      catch (Throwable $e) { $full = und_service_full($cfg, $s['id']); $r = ['error' => und_redact($e->getMessage(), [$full['key']])]; }
+      $apps[] = ['name' => $s['name'], 'type' => $s['type'], 'icon' => $s['icon'], 'error' => $r['error'] ?? '', 'count' => count($r['streams'] ?? [])];
+      foreach ($r['streams'] ?? [] as $x) $streams[] = $x + ['app' => $s['name'], 'app_type' => $s['type'], 'icon' => $s['icon']];
+    }
+    // playing before buffering before paused, then by user
+    $rank = function ($st) { return $st === 'playing' ? 0 : ($st === 'paused' ? 2 : 1); };
+    usort($streams, function ($a, $b) use ($rank) { return $rank($a['state']) - $rank($b['state']) ?: strcasecmp($a['user'], $b['user']); });
+    return ['streams' => $streams, 'apps' => $apps];
+  });
+}
+]]></INLINE>
+<SHA256>5e00f2d43968077c1e919232f0b4cf529185f22ff543af3beaf4a8ce78a4cd03</SHA256>
+</FILE>
+
+<FILE Name="&emhttp;/include/requests.php" Mode="0644">
+<INLINE><![CDATA[<?php
+/*
+ * UnDash - requests from Overseerr / Jellyseerr (Seerr): pending ones with Approve and Decline, and the latest others
+ * with their status. Request lists do not carry titles, so titles and posters are looked up once per movie or show and
+ * kept for a day. Posters are the public TMDB images Seerr itself uses. The list is cached for 30 seconds.
+ */
+
+function und_seerr_sources(array $cfg) {
+  $list = [];
+  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) if ($s['type'] === 'overseerr') $list[] = $s;
+  return $list;
+}
+
+/** Title, year and poster of a movie or show, cached for a day. */
+function und_seerr_media(array $s, $type, $tmdb) {
+  $f = und_tmp('seerr-media.json');
+  $cache = und_read_json($f, []);
+  $k = $s['id'] . ':' . $type . ':' . $tmdb;
+  if (isset($cache[$k]) && time() - (int)$cache[$k]['at'] < 86400) return $cache[$k];
+  $m = und_get(und_u($s['url'], '/api/v1/' . ($type === 'tv' ? 'tv' : 'movie') . '/' . (int)$tmdb), und_arr_h($s) + ['timeout' => 10]);
+  $date = (string)($m['releaseDate'] ?? $m['firstAirDate'] ?? '');
+  $row = ['title' => (string)($m['title'] ?? $m['name'] ?? ('TMDB ' . $tmdb)), 'year' => $date !== '' ? (int)substr($date, 0, 4) : 0,
+          'poster' => !empty($m['posterPath']) && preg_match('#^/[A-Za-z0-9_.-]+$#', $m['posterPath']) ? 'https://image.tmdb.org/t/p/w92' . $m['posterPath'] : '', 'at' => time()];
+  $cache[$k] = $row;
+  if (count($cache) > 500) $cache = array_slice($cache, -400, null, true);
+  und_write_json($f, $cache);
+  return $row;
+}
+
+function und_seerr_status($req, $media) {
+  $r = (int)$req; $m = (int)$media;
+  if ($r === 1) return ['pending', 'Pending', 'warn'];
+  if ($r === 3) return ['declined', 'Declined', 'bad'];
+  if ($r === 4) return ['failed', 'Failed', 'bad'];
+  if ($m === 5) return ['available', 'Available', 'ok'];
+  if ($m === 4) return ['partial', 'Partly available', 'ok'];
+  if ($m === 3) return ['processing', 'Processing', 'info'];
+  return ['approved', 'Approved', 'info'];
+}
+
+function und_requests(array $cfg) {
+  $src = und_seerr_sources($cfg);
+  if (!$src) return ['unconfigured' => true, 'items' => [], 'apps' => []];
+  return und_api_cached('requests', 30, function () use ($cfg, $src) {
+    $items = []; $apps = [];
+    foreach ($src as $s0) {
+      $s = und_service_full($cfg, $s0['id']);
+      $link = rtrim($s['href'] ?: $s['url'], '/');
+      try {
+        if (trim($s['url']) === '' || und_has($s['url'], '{{')) throw new Exception($s['name'] . ' has no API URL yet.');
+        $pend = und_get(und_u($s['url'], '/api/v1/request?take=20&skip=0&sort=added&filter=pending'), und_arr_h($s) + ['timeout' => 15]);
+        $rest = und_get(und_u($s['url'], '/api/v1/request?take=12&skip=0&sort=modified&filter=all'), und_arr_h($s) + ['timeout' => 15]);
+        $seen = [];
+        foreach (array_merge((array)($pend['results'] ?? []), (array)($rest['results'] ?? [])) as $r) {
+          $id = (int)($r['id'] ?? 0);
+          if (!$id || isset($seen[$id])) continue; $seen[$id] = 1;
+          $type = ($r['type'] ?? $r['media']['mediaType'] ?? 'movie') === 'tv' ? 'tv' : 'movie';
+          $tmdb = (int)($r['media']['tmdbId'] ?? 0);
+          $m = $tmdb ? und_seerr_media($s, $type, $tmdb) : ['title' => 'Unknown', 'year' => 0, 'poster' => ''];
+          [$st, $stLabel, $lvl] = und_seerr_status($r['status'] ?? 0, $r['media']['status'] ?? 0);
+          $seasons = $type === 'tv' ? array_map(function ($x) { return (int)($x['seasonNumber'] ?? 0); }, (array)($r['seasons'] ?? [])) : [];
+          $items[] = ['id' => $id, 'app' => $s['id'], 'app_name' => $s['name'], 'type' => $type, 'title' => $m['title'], 'year' => $m['year'], 'poster' => $m['poster'],
+            'user' => (string)($r['requestedBy']['displayName'] ?? $r['requestedBy']['username'] ?? $r['requestedBy']['email'] ?? ''),
+            'at' => !empty($r['createdAt']) ? (int)strtotime($r['createdAt']) : 0, 'is4k' => !empty($r['is4k']), 'seasons' => $seasons,
+            'status' => $st, 'status_label' => $stLabel, 'level' => $lvl,
+            'href' => preg_match('#^https?://#', $link) && $tmdb ? $link . '/' . $type . '/' . $tmdb : ''];
+        }
+        $apps[] = ['id' => $s['id'], 'name' => $s['name'], 'error' => '', 'href' => preg_match('#^https?://#', $link) ? $link : ''];
+      } catch (Throwable $e) {
+        $apps[] = ['id' => $s['id'], 'name' => $s['name'], 'error' => und_redact($e->getMessage(), [$s['key']]), 'href' => ''];
+      }
+    }
+    // pending first (oldest waiting first), then the rest newest first
+    usort($items, function ($a, $b) { $pa = $a['status'] === 'pending'; $pb = $b['status'] === 'pending'; return $pa !== $pb ? ($pa ? -1 : 1) : ($pa ? $a['at'] - $b['at'] : $b['at'] - $a['at']); });
+    return ['items' => array_slice($items, 0, 30), 'apps' => $apps, 'pending' => count(array_filter($items, function ($x) { return $x['status'] === 'pending'; }))];
+  });
+}
+
+/** Approve or decline one request (op approve | decline). */
+function und_request_action(array $cfg, $app, $id, $op) {
+  if (!in_array($op, ['approve', 'decline'], true)) return ['error' => 'Unknown action.'];
+  if (!preg_match('/^[a-f0-9]{8}$/', (string)$app) || !ctype_digit((string)$id)) return ['error' => 'Unknown request.'];
+  $s0 = null; foreach (und_seerr_sources($cfg) as $x) if ($x['id'] === $app) $s0 = $x;
+  if (!$s0) return ['error' => 'Unknown request app.'];
+  $s = und_service_full($cfg, $app);
+  $lock = und_lock('seerr:' . $app . ':' . $id);
+  if (!$lock) return ['error' => 'That request is already being changed.'];
+  try {
+    $r = und_http('POST', und_u($s['url'], '/api/v1/request/' . (int)$id . '/' . $op), ['headers' => ['X-Api-Key' => $s['key'], 'Content-Type' => 'application/json'], 'body' => '{}', 'timeout' => 20]);
+    if ($r['err'] !== '') throw new Exception($r['err']);
+    if ($r['code'] === 401 || $r['code'] === 403) throw new Exception('The API key may not ' . $op . ' requests (HTTP ' . $r['code'] . ').');
+    if ($r['code'] === 404) throw new Exception('That request no longer exists.');
+    if ($r['code'] < 200 || $r['code'] >= 300) throw new Exception('HTTP ' . $r['code'] . (is_array($r['json']) && !empty($r['json']['message']) ? ': ' . und_clip((string)$r['json']['message'], 200) : ''));
+    und_unlock($lock);
+    @unlink(und_tmp('api-requests.json'));
+    und_history_add('request', $s['name'] . ' #' . (int)$id, $op, true);
+    return ['ok' => true];
+  } catch (Throwable $e) {
+    und_unlock($lock);
+    $m = und_redact($e->getMessage(), [$s['key']]);
+    und_history_add('request', $s['name'] . ' #' . (int)$id, $op, false, $m);
+    return ['error' => $s['name'] . ': ' . $m];
+  }
+}
+]]></INLINE>
+<SHA256>803c865f63b7683f20de844b41b9e31f345276386a5cbdaeb3cb0babb076eb4d</SHA256>
+</FILE>
+
 <FILE Name="&emhttp;/include/api.php" Mode="0644">
 <INLINE><![CDATA[<?php
 /*
@@ -3204,6 +3649,14 @@ switch ($action) {
     if (isset($want['docker'])) $r['docker'] = und_docker_live();
     if (isset($want['vms'])) $r['vms'] = und_vm_live();
     if (isset($want['ups'])) $r['ups'] = und_ups($cfg['general']['ups_name']);
+    // alerts are worked out here (one source for the page and the history); only the parts this request loaded are tracked
+    if (isset($r['system'])) {
+      $dk = $r['docker'] ?? null;
+      $r['alerts'] = und_alerts($cfg, $r['system'], $dk);
+      $scopes = isset($r['system']['error']) ? [] : ['system'];
+      if (is_array($dk) && !isset($dk['error'])) $scopes[] = 'docker';
+      und_alerts_track($dk === null ? array_values(array_filter($r['alerts'], function ($a) { return strpos($a['cat'], 'docker.') !== 0; })) : $r['alerts'], $scopes);
+    }
     // the rules in force now, by the server's clock, so every open tab hides the same alerts
     $r['ignores'] = array_map(function ($x) { return ['id' => $x['id'], 'kind' => $x['kind'], 'key' => $x['key'], 'until' => $x['until']]; }, und_ignores_active($r['at']));
     $r['power'] = is_file(und_tmp('power-started')) ? trim((string)@file_get_contents(und_tmp('power-started'))) : '';
@@ -3232,6 +3685,14 @@ switch ($action) {
     if (!preg_match('/^[a-f0-9]{8}$/', $P('id'))) fail('Invalid client id.');
     out(und_dl_status(und_load_config(), $P('id')));
   }
+  case 'playing':  out(und_playing(und_load_config()));
+  case 'requests': out(und_requests(und_load_config()));
+  case 'request_action': {
+    $r = und_request_action(und_load_config(), $P('app'), $P('id'), $P('op'));
+    if (isset($r['error'])) fail($r['error'], 409);
+    out($r);
+  }
+  case 'health': out(und_health(und_load_config(), $P('force') === '1'));
   case 'dl_action': {
     if (!preg_match('/^[a-f0-9]{8}$/', $P('id'))) fail('Invalid client id.');
     $r = und_dl_action(und_load_config(), $P('id'), $P('op'));
@@ -3258,6 +3719,7 @@ switch ($action) {
   case 'power_prepare': { $r = und_power_prepare($P('op')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'power':         { $r = und_power($P('op'), $P('nonce'), $P('confirm')); if (isset($r['error'])) fail($r['error'], 409); out($r); }
   case 'history':       out(['history' => und_history()]);
+  case 'alert_history': out(und_alert_history());
 
   /* ignored alerts: hiding only, monitoring goes on */
   case 'ignores_list':  out(['now' => time(), 'rules' => und_ignores(), 'categories' => und_alert_categories()]);
@@ -3285,6 +3747,7 @@ switch ($action) {
          'loc' => $loc, 'store' => und_store_dir(), 'flash' => UND_DIR, 'metrics' => und_metric_ids(), 'sections' => und_section_ids()]);
   }
   case 'save': {
+    $lk = und_config_lock();
     $cfg = $J('config');
     if (!$cfg || !isset($cfg['groups'])) fail('Nothing to save.');
     $norm = und_normalize($cfg);
@@ -3295,6 +3758,7 @@ switch ($action) {
   }
   /* small preference changes made on the dashboard itself (favourite, hide, collapse, layout): no backup, no secrets */
   case 'prefs': {
+    $lk = und_config_lock();
     $cfg = und_load_config();
     $kind = $P('kind'); $key = $P('key'); $val = $J('value') ?: [];
     if ($kind === 'docker' || $kind === 'vms') {
@@ -3382,7 +3846,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>6dd5b8a938873f08cd55b86d9824f9c530798c80e210f2c65bfafffedfa97fec</SHA256>
+<SHA256>31c13b429f8efd002060a919f7a55bda1fefccb16cf2e6e000e29f5aa0a71d56</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -3447,6 +3911,11 @@ function sa_ip() { return (string)($_SERVER['REMOTE_ADDR'] ?? ''); }
 
 /* ---- health check (Docker HEALTHCHECK): says nothing about the server ---- */
 if ($uri === '/health') { header('Content-Type: text/plain'); header('Cache-Control: no-store'); echo "ok\n"; exit; }
+if ($uri === '/assets/inter.woff2') {
+  // the bundled Inter font (SIL Open Font License); public, needed by the sign-in page too
+  header('Content-Type: font/woff2'); header('Cache-Control: public, max-age=31536000, immutable');
+  readfile(UND_ROOT . '/assets/inter.woff2'); exit;
+}
 if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
   // needed by the sign-in page too; nothing secret in either
   header('Content-Type: ' . ($uri === '/favicon.png' ? 'image/png' : 'text/css; charset=utf-8'));
@@ -3558,7 +4027,7 @@ if ($uri === '/' || $uri === '/index.html') {
 }
 sa_deny(404, 'Not found');
 ]]></INLINE>
-<SHA256>b1f3fe61e07269427b300ca9493048f253e7365d0e8304a6f56d5ed4e1e64653</SHA256>
+<SHA256>f6d0edb52ee50e39c18722adec1c8be4b0495434f954cc1e7f354b5424c44b31</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/scripts/oscheck.php" Mode="0755">
@@ -3573,6 +4042,16 @@ echo $r['available'] ? 'Unraid ' . $r['latest'] . " is available\n" : ($r['error
 <SHA256>6e2e28f1d5fa0e62f93a2637b66b8d1da2a8fe0bcd3f6a4c1982c6612f1e2605</SHA256>
 </FILE>
 
+<FILE Name="&emhttp;/scripts/alertcheck.php" Mode="0755">
+<INLINE><![CDATA[<?php
+/* UnDash - one alert check for the history (run every minute by rc.undash in the plugin, by the entrypoint in Docker). */
+if (!defined('UND_ROOT')) define('UND_ROOT', dirname(__DIR__));
+require_once UND_ROOT . '/include/lib.php';
+und_alerts_check();
+]]></INLINE>
+<SHA256>4b3eb0707478bfa3bd7b0c118d180990190afb01a444ed28f6c1f8a3ccf42918</SHA256>
+</FILE>
+
 <FILE Name="&emhttp;/scripts/rc.undash" Mode="0755">
 <INLINE><![CDATA[#!/bin/bash
 # UnDash - start / stop the standalone dashboard port (default 9099).
@@ -3580,6 +4059,7 @@ echo $r['available'] ? 'Unraid ' . $r['latest'] . " is available\n" : ($r['error
 EM=/usr/local/emhttp/plugins/undash
 CFG=/boot/config/plugins/undash/undash.cfg
 PIDF=/var/run/undash.pid
+CPIDF=/var/run/undash-check.pid
 
 val() { sed -n "s/^$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}\$/\1/p" "$CFG" 2>/dev/null | tail -1; }
 PORT=$(val PORT); BIND=$(val BIND); ON=$(val STANDALONE)
@@ -3616,15 +4096,28 @@ stop() {
   rm -f $PIDF
 }
 
+# the alert history: one check a minute in the background, whether or not the standalone port is on
+checking() { [[ -f $CPIDF ]] && kill -0 "$(cat $CPIDF)" 2>/dev/null && grep -q "undash-alertcheck" "/proc/$(cat $CPIDF)/cmdline" 2>/dev/null; }
+start_check() {
+  checking && return 0
+  mkdir -p /tmp/undash
+  setsid nohup bash -c 'exec -a undash-alertcheck bash -c "while true; do nice -n 10 /usr/bin/php -d auto_prepend_file= -d error_log=syslog -d display_errors=0 '"$EM"'/scripts/alertcheck.php; sleep 60; done"' > /dev/null 2>&1 &
+  echo $! > $CPIDF
+}
+stop_check() {
+  if checking; then pkill -P "$(cat $CPIDF)" 2>/dev/null; kill "$(cat $CPIDF)" 2>/dev/null; fi
+  rm -f $CPIDF
+}
+
 case "$1" in
-  start) start ;;
-  stop) stop ;;
-  restart) stop; start ;;
-  status) running && echo "running on $BIND:$PORT (pid $(cat $PIDF))" || echo "stopped" ;;
+  start) start_check; start ;;
+  stop) stop; stop_check ;;
+  restart) stop; stop_check; start_check; start ;;
+  status) running && echo "running on $BIND:$PORT (pid $(cat $PIDF))" || echo "stopped"; checking && echo "alert checker running (pid $(cat $CPIDF))" || echo "alert checker stopped" ;;
   *) echo "usage: $0 start|stop|restart|status"; exit 1 ;;
 esac
 ]]></INLINE>
-<SHA256>ac5fc6c561c880d591cfa71f01581c0b3d9681ad41fe1a913a1aa5cadc59f3aa</SHA256>
+<SHA256>2b2bd609551f29d731648d92df227f583cb2cecfa5b7c1e7324635de467816a7</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.css" Mode="0644">
@@ -3632,6 +4125,9 @@ esac
    Colour themes are palettes in app.js (THEMES), applied as the custom properties below; these values are the Default
    dark palette (the Unraid Swiss Manager look: dark grey panels, orange accent) and only show before the script runs.
    The accent (--accent) only colours interactive and selected things; status colours (--ok, --warn, --bad) never follow it. */
+/* Inter, bundled (SIL Open Font License 1.1, see docs/licenses/Inter-OFL.txt): latin subset, variable weight 400-700 */
+@font-face{font-family:Inter;font-style:normal;font-weight:400 700;font-display:swap;src:url(inter.woff2) format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 .und{
   --bg:#1d1b1b;--panel:#232121;--panel-2:#1b1919;--bar:#2a2828;--field:#181616;--line:#343131;--line-2:#454141;
   --text:#ece9e9;--muted:#a19c9c;--faint:#7f7977;--title:#fff;
@@ -3639,7 +4135,7 @@ esac
   --ok:#4ec38b;--warn:#e8b33c;--bad:#ff6b5e;--info:#79a0ee;--off:#8a8484;
   --ok-soft:rgba(78,195,139,.13);--warn-soft:rgba(232,179,60,.14);--bad-soft:rgba(255,107,94,.13);
   --shadow:0 1px 2px rgba(0,0,0,.25);--radius:10px;--gap:12px;--pad:14px;
-  --font:Inter,"Inter Variable",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   color:var(--text);font:14px/1.45 var(--font);margin:0;padding:4px 0 28px;text-align:left;position:relative;isolation:isolate;-webkit-text-size-adjust:100%}
 .und[data-mode=light],.und[data-theme]:not([data-theme=default]),.und.has-bg{background:var(--bg);padding:14px;border-radius:var(--radius)}
 .und[data-density=compact]{--gap:8px;--pad:10px;font-size:13.5px}
@@ -3746,7 +4242,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 
 /* alerts */
 .und .alerts{display:flex;flex-direction:column;gap:6px}
-.und .alert{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-left:3px solid var(--warn);background:var(--panel);border-radius:6px;padding:8px 12px;font-size:13px;flex-wrap:wrap}
+.und .alert{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-left:3px solid var(--warn);background:var(--panel);border-radius:var(--radius);padding:8px 12px;font-size:13px;flex-wrap:wrap}
 .und .alert.bad{border-left-color:var(--bad)}.und .alert.info{border-left-color:var(--accent)}.und .alert.ok{border-left-color:var(--ok)}
 .und .alert .grow{min-width:0}.und .alert>svg{color:var(--ok)}
 
@@ -3878,7 +4374,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0 18px}
 .und .switch{display:flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0;font-size:13.5px}
 .und .inl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.und .olist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.und .olist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 .und .olist .oi{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-bottom:1px solid var(--line);background:var(--panel);min-height:42px;flex-wrap:wrap}
 .und .olist .oi:last-child{border-bottom:0}.und .olist .oi .t{flex:1;min-width:120px}
 .und .olist .oi img{width:22px;height:22px;object-fit:contain;flex:none}
@@ -3907,9 +4403,13 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .toast.bad{border-left-color:var(--bad)}
 .und .toast.act{display:flex;align-items:center;gap:12px}.und .toast.act>span{flex:1;min-width:0}
 .und .ign-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.und .ign-bar input{flex:1 1 220px;min-width:0}
-.und .olist.ign-list{border:0;border-radius:0}.und .ign-list .oi.ign{border:1px solid var(--line);border-radius:6px;margin-bottom:6px}
+.und .olist.ign-list{border:0;border-radius:0}.und .ign-list .oi.ign{border:1px solid var(--line);border-radius:var(--radius);margin-bottom:6px}
 .und .ign-h{margin:14px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .und .oi.ign{align-items:center;gap:10px}.und .oi.ign .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.und .oi.ign.expired{opacity:.6}
+.und .ahist{display:flex;flex-direction:column;gap:6px;max-height:65vh;overflow:auto}
+.und .ah{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel-2)}
+.und .ah .grow{display:flex;flex-direction:column;gap:2px;min-width:0}.und .ah .am{font-size:13px;color:var(--text)}
+.und .ah .badge{flex:none}
 .und .ign-dur{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px}
 .und .overlay{position:fixed;inset:0;z-index:10004;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;color:#fff;text-align:center}
 .und .overlay .box{max-width:440px}.und .overlay h2{font:600 22px/1.3 var(--font);margin:0 0 8px;color:#fff;border:0;background:none;padding:0}
@@ -3993,6 +4493,53 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .spark2 path.a{fill:var(--accent);fill-opacity:.14}.und .spark2 path.l{fill:none;stroke:var(--accent);stroke-width:1.5}
 .und .detail .cores{height:60px;margin:0;grid-auto-columns:minmax(4px,1fr)}
 .und .stale{font-size:12px;color:var(--warn);margin:0 0 6px}
+
+/* keyboard shortcuts */
+.und .keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 24px}
+.und .kh{display:flex;align-items:center;gap:12px;padding:4px 0;font-size:13px}.und .kh>span:first-child{display:flex;gap:4px;min-width:58px}
+.und kbd{font:600 11.5px/1 var(--mono);padding:4px 7px;border-radius:5px;border:1px solid var(--line-2);border-bottom-width:2px;background:var(--panel-2);color:var(--title)}
+
+/* status text */
+.und .err-t,.und .bad-t{color:var(--bad)}.und .ok-t{color:var(--ok)}.und .warn-t{color:var(--warn)}
+.und .badge.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
+
+/* now playing */
+.und .plist,.und .rqlist{display:flex;flex-direction:column;gap:8px}
+.und .pl{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;min-width:0}
+.und .pl.paused{opacity:.75}
+.und .pl>.aico,.und .pl>.ph{width:28px;height:28px;flex:none;border-radius:6px;object-fit:contain;margin-top:2px}
+.und .pl .pt{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.und .pl .pl1{display:flex;flex-direction:column;min-width:0}.und .pl .pl1 b{color:var(--title);font-size:13.5px}
+.und .pl .pl2{display:flex;align-items:center;gap:6px;min-width:0}.und .pl .pl2 svg{width:12px;height:12px;flex:none}
+.und .pl .pl3{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.und .pl .meter{height:4px}
+
+/* requests */
+.und .rq{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;min-width:0}
+.und .rq.pend{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.und .rqp{flex:none;width:38px;height:57px;border-radius:5px;background:var(--panel-2);overflow:hidden;border:1px solid var(--line);display:block}
+.und .rqp img{width:100%;height:100%;object-fit:cover;display:block}
+.und .rqt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.und .rqt b{color:var(--title);font-size:13.5px}
+.und .rqa{display:flex;gap:6px;flex:none}
+.und .rq>.badge{flex:none}
+
+/* endpoint health */
+.und .htab .hrow{display:grid;grid-template-columns:minmax(180px,2.2fr) minmax(130px,1.2fr) minmax(130px,1fr) 80px;gap:12px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);min-width:0}
+.und .htab .hrow:last-child{border-bottom:0}
+.und .htab .hh{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--panel-2);padding-top:7px;padding-bottom:7px}
+.und .htab .hn{display:flex;align-items:center;gap:8px;min-width:0}.und .htab .hn .aico,.und .htab .hn .ph{width:20px;height:20px;flex:none;border-radius:4px;object-fit:contain}
+.und .htab .hn b{color:var(--title);font-weight:600;font-size:13.5px}
+.und .htab .r{text-align:right}
+.und .htab .hrow>span{min-width:0}
+.und .htab>[role=rowgroup]>.empty{padding:14px}
+@media (max-width:640px){
+  .und .htab .hrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+  .und .htab .hh{display:none}
+  .und .htab .hrow>:nth-child(1){flex:1 1 0;order:1}.und .htab .hrow>:nth-child(4){flex:none;order:2}
+  .und .htab .hrow>:nth-child(2){flex:1 1 0;order:3;font-size:12px}.und .htab .hrow>:nth-child(3){flex:none;order:4}
+  .und .htab .hrow::after{content:'';order:2;flex-basis:100%;height:0}
+  .und .rq{flex-wrap:wrap}.und .rqa{width:100%;justify-content:flex-end}
+}
 
 /* media: four equal columns, by the section's own width (a half-width section gets 2 or 1) */
 .und .mbody{container-type:inline-size}
@@ -4140,7 +4687,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   .und .cgrid,.und .agrid{grid-template-columns:1fr}
   .und .ci .acts .btn.ic.sm{width:34px;min-width:34px!important;min-height:34px!important}
 }
-.und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--panel-2)}
+.und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);padding:6px 10px;background:var(--panel-2)}
 .und .switch.pk{margin:3px 0;font-size:13px;min-width:0}
 
 /* ---------- Fluent Dark: frosted glass with blue accents (from Homepage custom.css) ---------- */
@@ -4160,7 +4707,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und[data-theme=fluent] .modal,.und[data-theme=fluent] .menu,.und[data-theme=fluent] .toast{background:rgba(17,19,24,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-color:rgba(255,255,255,.12)}
 .und[data-theme=fluent] *{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.12) transparent}
 ]]></INLINE>
-<SHA256>812061b409974c4eee5b5f58711bb23076ca10dc47e5408f8296e0ee4d6a9614</SHA256>
+<SHA256>8edee1b4025b52ef2df1c38b0a3f8e4b0945930f8f11c4ed451c4e47eab247ca</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -4513,20 +5060,26 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   }
   function balanceHalves() {
     (R.packs || []).forEach(function (p) {
-      var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
-      p.w.classList.toggle('one', !!one);
-      unlevel(p);                                           // measure the natural heights, not the stretched ones
-      p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
-      var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
-      var move = want.join() !== now.join();
-      if (move && !one) {
-        // only move when it clearly helps, so sections do not jump back and forth
-        var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
-        if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
-      }
-      if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
-      if (!one) level(p);
+      // measuring resets the media lists for a moment; keep where the user scrolled them
+      var lists = [].slice.call(p.w.querySelectorAll('.mlist')), tops = lists.map(function (l) { return l.scrollTop; });
+      balancePack(p);
+      lists.forEach(function (l, i) { if (l.scrollTop !== tops[i]) l.scrollTop = tops[i]; });
     });
+  }
+  function balancePack(p) {
+    var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
+    p.w.classList.toggle('one', !!one);
+    unlevel(p);                                           // measure the natural heights, not the stretched ones
+    p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
+    var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
+    var move = want.join() !== now.join();
+    if (move && !one) {
+      // only move when it clearly helps, so sections do not jump back and forth
+      var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
+      if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
+    }
+    if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
+    if (!one) level(p);
   }
   /* Smart height: the shorter column ends level with the taller one. Media in the shorter column shows more items
      (its lists grow); otherwise the column's last box stretches. */
@@ -4566,7 +5119,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   }
   function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
-  var TITLES = { overview: 'System', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
+  var TITLES = { overview: 'System', playing: 'Now playing', requests: 'Requests', health: 'Endpoint health', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
   function buildSection(sec) {
     var tools = h('div', { class: 'tools' });
     var count = h('span', { class: 'count' });
@@ -4648,6 +5201,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     if (!document.hidden && S.mediaStale) loadMedia();
     if (!document.hidden && S.arrStale) loadArr();
     if (!document.hidden && S.dlStale) loadDl();
+    if (!document.hidden) Object.keys(POLL).forEach(function (k) { if (POLL[k].stale) pollRun(k); });
   });
 
   function paintAll() {
@@ -4678,6 +5232,10 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     root.querySelectorAll('.w[data-name]').forEach(function (w) { var m = matches(w.getAttribute('data-name')); w.style.display = m ? '' : 'none'; w.setAttribute('data-match', m && S.q ? '1' : '0'); });
     root.querySelectorAll('.grp').forEach(function (gr) { var any = [].some.call(gr.querySelectorAll('.w[data-name]'), function (w) { return w.style.display !== 'none'; }); gr.style.display = any || !S.q ? '' : 'none'; });
     root.querySelectorAll('.rowi[data-name],.tile[data-name]').forEach(function (r) { r.setAttribute('data-match', S.q ? '1' : '0'); });
+    // Arr Stack rows and download clients filter by app name; media lists repaint from what they already loaded
+    root.querySelectorAll('.aitem[data-name],.card.dl[data-name]').forEach(function (el) { el.style.display = matches(el.getAttribute('data-name')) ? '' : 'none'; });
+    if (R.media) Object.keys(R.media.w).forEach(function (k) { var x = R.media.w[k]; if (x.last) paintMedia(k, x.last); });
+    Object.keys(POLL).forEach(function (k) { if (POLL[k].last && R[k]) POLL[k].paint(POLL[k].last); });
   }
 
   /* ================= sections ================= */
@@ -4852,7 +5410,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
       caps.docker_check ? ['Check container updates', 'box', checkUpdates, '', !!S.busy.dcheck] : null, dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
-      caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog],
+      caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog], ['Keyboard shortcuts  ?', 'grid', keysHelp],
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
       window.UND_STANDALONE ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
       caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
@@ -4863,6 +5421,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     r.list = h('div', { class: 'alerts' }); r.body.appendChild(r.list);
     r.ign = h('button', { type: 'button', class: 'btn ghost sm', hidden: true, onclick: function () { openSettings('ignored'); } });
     r.tools.appendChild(r.ign);
+    r.tools.appendChild(btn('History', alertHistory, 'ghost sm', 'clock', 'When each problem started and ended'));
   };
   /* Alert ids are "<category>:<resource>" (see include/ignores.php); an alert without a category cannot be ignored. */
   var ALERT_CAT = {
@@ -4885,42 +5444,46 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var now = y.at || Date.now() / 1000, key = cat + ':' + res;
     return ignRules(y).filter(function (g) { return (g.until === null || g.until > now) && (g.kind === 'type' ? g.key === cat : g.key === key); })[0] || null;
   }
+  /* the alerts come from the server (include/alerts.php); only the connection ones are the browser's own */
+  var ALERT_ACT = {
+    settings: function () { return ['Settings', function () { openSettings('config'); }]; },
+    restart: function () { return ['Restart…', function () { powerDialog('reboot'); }]; },
+    os: function () { return ['Details', osDialog]; },
+    logs: function (res) { return ['Logs', function () { logs(res); }]; }
+  };
   function alertList(y) {
-    var s = y.system, out = [];
-    function add(lv, msg, b, cat, res) { out.push({ lv: lv, msg: msg, btn: b || null, cat: cat || '', res: res === undefined ? '' : String(res) }); }
-    if (S.conn === 'down') add('bad', 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.');
-    if (S.conn === 'auth') add('bad', 'Your session ended. Reload the page to sign in again.');
-    if (s && s.error) { add('bad', s.error + (s.auth ? ' Check Settings > Configuration.' : ''), ['Settings', function () { openSettings('config'); }], s.auth ? '' : 'api.error', 'unraid'); s = null; }
-    if (s) {
-      var a = s.array || {};
-      if (a.state && a.state !== 'STARTED') add('warn', 'The array is ' + a.state.toLowerCase() + '. Shares, containers and VMs on it are unavailable.', null, 'array.state', a.state);
-      if (a.resync) add('info', (a.resync_action || 'A parity operation') + ' is running' + (a.resync_pct !== null ? ' (' + a.resync_pct + '%)' : '') + '.', null, 'array.resync', 'array');
-      if (a.bad_disks) a.bad_disks.forEach(function (n) { add('bad', n + ' is disabled, missing or emulated. Check Main in Unraid.', null, 'disk.bad', n); });
-      else if (a.bad) add('bad', a.bad + ' disk' + (a.bad > 1 ? 's are' : ' is') + ' disabled, missing or emulated. Check Main in Unraid.', null, 'disk.bad', 'array');
-      if (a.error_disks) a.error_disks.forEach(function (d) { add('bad', d.name + ' reported ' + d.errors + ' read/write error' + (d.errors > 1 ? 's' : '') + '.', null, 'disk.errors', d.name); });
-      else if (a.errors) add('bad', 'Disks reported ' + a.errors + ' read/write error' + (a.errors > 1 ? 's' : '') + '.', null, 'disk.errors', 'array');
-      if (a.hot_disks) a.hot_disks.forEach(function (d) { add('warn', d.name + ' is at ' + d.temp + '°C.', null, 'disk.hot', d.name); });
-      else if (a.hot) add('warn', a.hot + ' disk' + (a.hot > 1 ? 's are' : ' is') + ' at 50°C or more.', null, 'disk.hot', 'array');
-      var o = s.os_update || {};
-      if (o.staged) add('info', 'Unraid ' + o.staged + ' is installed and becomes active after a restart.', ['Restart…', function () { powerDialog('reboot'); }], 'os.staged', o.staged);
-      else if (o.available) add('info', 'Unraid ' + o.latest + ' is available (running ' + o.installed + ').', ['Details', osDialog], 'os.available', o.latest);
-      if (o.error && !o.available) add('warn', 'The Unraid update check failed: ' + o.error, null, 'os.check_failed', 'server');
-    }
-    var d = y.docker && y.docker.containers;
-    if (d) d.forEach(function (c) {
-      if (pref('docker', c.name).hidden) return;
-      var nm = label('docker', c.name), lg = ['Logs', function () { logs(c.name); }];
-      if (c.health === 'unhealthy') add('bad', nm + ' is unhealthy.', lg, 'docker.unhealthy', c.name);
-      else if (c.state === 'restarting') add('bad', nm + ' keeps restarting' + (c.restarts ? ' (' + c.restarts + ' restarts)' : '') + '.', lg, 'docker.restarting', c.name);
-      else if (c.state === 'exited' && c.exit && c.autostart) add('warn', nm + ' stopped with exit code ' + c.exit + '.', lg, 'docker.exited', c.name);
-      if (c.job === 'update_failed') add('bad', 'The update of ' + nm + ' failed.', lg, 'docker.update_failed', c.name);
-    });
+    var out = [];
+    if (S.conn === 'down') out.push({ lv: 'bad', msg: 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.', btn: null, cat: '', res: '' });
+    if (S.conn === 'auth') out.push({ lv: 'bad', msg: 'Your session ended. Reload the page to sign in again.', btn: null, cat: '', res: '' });
+    (y.alerts || []).forEach(function (a) { out.push({ lv: a.lv, msg: a.msg, btn: ALERT_ACT[a.act] ? ALERT_ACT[a.act](a.res) : null, cat: a.cat, res: a.res }); });
     return out;
+  }
+  function alertHistory() {
+    var box = h('div', { class: 'ahist' }, h('div', { class: 'progress' }, h('i')));
+    modal('Alert history', box, null, true);
+    api('alert_history').then(function (j) {
+      clear(box);
+      if (j.error) { box.appendChild(h('div', { class: 'empty' }, j.error)); return; }
+      var dur = function (sec) { sec = Math.max(0, sec); return sec < 90 ? Math.round(sec) + ' s' : sec < 5400 ? Math.round(sec / 60) + ' min' : sec < 172800 ? (sec / 3600).toFixed(1).replace(/\.0$/, '') + ' h' : Math.round(sec / 86400) + ' days'; };
+      var when = function (t) { return new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
+      var row = function (e, open) {
+        return h('div', { class: 'ah ' + e.lv }, h('span', { class: 'sdot ' + (e.lv === 'bad' ? 'bad' : e.lv === 'warn' ? 'warn' : 'ok'), role: 'img', 'aria-label': e.lv }),
+          h('span', { class: 'grow' }, h('span', { class: 'am' }, e.msg), h('span', { class: 'muted xs' }, (ALERT_CAT[e.cat] || e.cat) + ' · ' + when(e.start) + (open ? '' : ' → ' + when(e.end)))),
+          h('span', { class: 'badge ' + (open ? (e.lv === 'bad' ? 'bad' : 'warn') : 'plain') }, open ? 'ongoing · ' + dur(j.now - e.start) : dur(e.end - e.start)));
+      };
+      box.appendChild(h('p', { class: 'muted sm' }, 'Checked once a minute in the background, and on every refresh while the dashboard is open. Ignored alerts are still recorded. Kept for 30 days.'));
+      box.appendChild(h('h4', { class: 'ign-h' }, 'Ongoing (' + j.active.length + ')'));
+      if (!j.active.length) box.appendChild(h('div', { class: 'empty' }, 'Nothing is wrong right now.'));
+      j.active.forEach(function (e) { box.appendChild(row(e, true)); });
+      box.appendChild(h('h4', { class: 'ign-h' }, 'Ended (' + j.log.length + ')'));
+      if (!j.log.length) box.appendChild(h('div', { class: 'empty' }, 'No ended alerts in the last 30 days.'));
+      j.log.forEach(function (e) { box.appendChild(row(e, false)); });
+    });
   }
   function paintAlerts(y) {
     var r = R.alerts, all = alertList(y), hidden = 0;
     var out = all.filter(function (x) { if (x.cat && ignoredBy(y, x.cat, x.res)) { hidden++; return false; } return true; });
-    var sig = JSON.stringify([!!y.system, hidden, out.map(function (x) { return [x.lv, x.msg, x.cat, x.res]; })]);
+    var sig = JSON.stringify([!!y.system, hidden, out.map(function (x) { return [x.lv, x.msg, x.cat, x.res, !!x.btn]; })]);
     if (r.sig === sig) return; r.sig = sig;
     clear(r.list);
     txt(r.count, out.length ? String(out.length) : '');
@@ -4996,7 +5559,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     var sig = JSON.stringify(items.map(function (x) { return [x[0], x[1].name, x[1].state, x[1].health, x[1].webui, x[1].ops, S.busy[(x[0] === 'd' ? 'd:' : 'v:') + x[1].name], x[0] === 's' ? null : pref(x[0] === 'd' ? 'docker' : 'vms', x[1].name)]; }));
     if (r.sig === sig) return; r.sig = sig;
     clear(r.list);
-    if (!items.length) { r.list.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, S.q ? 'No favorites match the filter.' : 'Star containers, VMs or services (⋯ menu or Settings) to pin them here.')); return; }
+    if (!items.length) { r.list.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, S.q ? 'No favorites match the filter.' : 'Star containers, VMs or services (gear menu or Settings) to pin them here.')); return; }
     items.forEach(function (x) {
       var it = x[1], el;
       if (x[0] === 'd') {
@@ -5074,7 +5637,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     r.filters = h('div', { class: 'seg', role: 'group', 'aria-label': 'Show containers' });
     DFILTERS.forEach(function (f) {
       if (f[0] === 'selected' && !D.selected.length) return;
-      var b = h('button', { type: 'button', class: S.fd === f[0] ? 'on' : '', 'aria-pressed': S.fd === f[0] ? 'true' : 'false', title: f[0] === 'selected' ? 'The containers you picked (⋯ > Show in "Selected")' : null, onclick: function () {
+      var b = h('button', { type: 'button', class: S.fd === f[0] ? 'on' : '', 'aria-pressed': S.fd === f[0] ? 'true' : 'false', title: f[0] === 'selected' ? 'The containers you picked (gear > Show in "Selected")' : null, onclick: function () {
         S.fd = f[0]; S.fdSet = true; [].forEach.call(r.filters.childNodes, function (x) { x.className = x === b ? 'on' : ''; x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); r.fSig = null; paintDocker(S.live || {});
       } }, f[1]);
       r.filters.appendChild(b);
@@ -5505,6 +6068,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   }
   function paintMedia(k, j) {
     var x = R.media && R.media.w[k]; if (!x) return;
+    x.last = j;
     var sig = JSON.stringify([j, S.q]); if (x.sig === sig) return; x.sig = sig;
     clear(x.row); clear(x.link);
     if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
@@ -5527,6 +6091,138 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
         h('span', { class: 'mt' }, h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null,
           h('span', { class: 'pm' }, when ? h('span', { class: 'pd' }, when) : null, tags))));
     });
+  }
+
+  /* ---- sections that load their own data on a timer (paused while the browser tab is hidden) ---- */
+  var POLL = {};
+  function poller(key, action, every, paint, data) {
+    clearTimeout((POLL[key] || {}).t);
+    POLL[key] = { action: action, every: every, paint: paint, data: data || null, stale: false, t: null };
+    pollRun(key, true);
+  }
+  function pollRun(key, first, extra) {
+    var p = POLL[key]; if (!p || !R[key]) return;
+    clearTimeout(p.t);
+    if ((document.hidden || S.paused) && !first) { p.stale = true; return; }
+    p.stale = false;
+    api(p.action, Object.assign({}, p.data || {}, extra || {}), 30000).then(function (j) {
+      if (POLL[key] !== p) return;                              // the section was rebuilt meanwhile
+      p.last = j; p.paint(j);
+      p.t = setTimeout(function () { pollRun(key); }, p.every);
+    });
+  }
+  function pollKick(key, extra) { if (POLL[key]) pollRun(key, true, extra); }
+
+  /* ---- Now playing ---- */
+  var METHOD = { 'direct play': ['Direct play', 'ok'], 'direct stream': ['Direct stream', 'info'], transcode: ['Transcode', 'warn'] };
+  BUILD.playing = function (r) {
+    r.list = h('div', { class: 'plist', role: 'list' }, h('div', { class: 'empty' }, 'Loading…'));
+    r.sum = h('span', { class: 'muted sm' }); r.tools.appendChild(r.sum);
+    r.body.appendChild(r.list);
+    poller('playing', 'playing', 10000, paintPlaying);
+  };
+  function paintPlaying(j) {
+    var r = R.playing; if (!r) return;
+    var sig = JSON.stringify([j, S.q]); if (r.sig === sig) return; r.sig = sig;
+    clear(r.list); clear(r.sum);
+    if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Plex, Emby, Jellyfin or Tautulli in Settings > Apps to see who is watching.')); txt(r.count, ''); return; }
+    var bw = 0, tc = 0;
+    j.streams.forEach(function (x) { if (x.bandwidth) bw += x.bandwidth; if (x.method === 'transcode') tc++; });
+    txt(r.count, j.streams.length ? String(j.streams.length) : '');
+    if (j.streams.length) r.sum.appendChild(document.createTextNode((tc ? tc + ' transcoding · ' : '') + (bw ? rate(bw / 8) : '')));
+    (j.apps || []).filter(function (a) { return a.error; }).forEach(function (a) { r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error)); });
+    var shown = j.streams.filter(function (x) { return matches(x.title + ' ' + x.sub + ' ' + x.user + ' ' + x.app); });
+    if (!j.streams.length) { r.list.appendChild(h('div', { class: 'empty' }, 'Nothing is playing right now.')); return; }
+    if (!shown.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No stream matches the filter.')); return; }
+    shown.forEach(function (x) {
+      var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
+      r.list.appendChild(h('div', { class: 'pl' + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
+        img(iconUrl(x.icon), 'aico', 'play'),
+        h('div', { class: 'pt' },
+          h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null),
+          h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [x.user, x.device, x.app].filter(Boolean).join(' · '))),
+          h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { class: 'acc', style: { width: p + '%' } })),
+          h('div', { class: 'pl3 xs' }, h('span', { class: 'num muted' }, dur(x.pos) + ' / ' + dur(x.dur)),
+            m ? h('span', { class: 'badge ' + m[1] }, m[0]) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
+            x.bandwidth ? h('span', { class: 'num muted' }, rate(x.bandwidth / 8)) : null, x.location === 'wan' ? h('span', { class: 'badge plain', title: 'Streaming outside your network' }, 'remote') : null))));
+    });
+  }
+
+  /* ---- Requests (Overseerr / Jellyseerr) ---- */
+  BUILD.requests = function (r) {
+    r.list = h('div', { class: 'rqlist', role: 'list' }, h('div', { class: 'empty' }, 'Loading…'));
+    r.link = h('span'); r.tools.appendChild(r.link);
+    r.body.appendChild(r.list);
+    poller('requests', 'requests', 60000, paintRequests);
+  };
+  function paintRequests(j) {
+    var r = R.requests; if (!r) return;
+    var sig = JSON.stringify([j, S.q, S.busy]); if (r.sig === sig) return; r.sig = sig;
+    clear(r.list); clear(r.link);
+    if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Overseerr or Jellyseerr in Settings > Apps to see and approve requests here.')); txt(r.count, ''); return; }
+    txt(r.count, j.pending ? j.pending + ' pending' : '');
+    (j.apps || []).forEach(function (a) {
+      if (a.error) r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error));
+      else if (a.href && j.apps.length === 1) r.link.appendChild(h('a', { class: 'btn sm ghost', href: a.href, target: '_blank', rel: 'noopener', title: 'Open ' + a.name }, h('span', { class: 'lbl' }, a.name), ic('web')));
+    });
+    var items = j.items.filter(function (x) { return matches(x.title + ' ' + x.user); });
+    if (!j.items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No requests yet.')); return; }
+    if (!items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No request matches the filter.')); return; }
+    items.forEach(function (x) {
+      var key = 'rq:' + x.app + ':' + x.id, busy = !!S.busy[key];
+      var title = x.title + (x.year ? ' (' + x.year + ')' : '');
+      var what = (x.type === 'tv' ? 'Series' + (x.seasons.length ? ' · season ' + x.seasons.join(', ') : '') : 'Movie') + (x.is4k ? ' · 4K' : '');
+      r.list.appendChild(h('div', { class: 'rq' + (x.status === 'pending' ? ' pend' : ''), role: 'listitem', 'data-name': x.title },
+        h(x.href ? 'a' : 'span', { class: 'rqp', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title },
+          x.poster ? h('img', { src: x.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
+        h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs ell' }, what),
+          h('span', { class: 'muted xs ell' }, (x.user ? x.user + ' · ' : '') + (x.at ? rel(x.at) : ''))),
+        x.status === 'pending' ? h('div', { class: 'rqa' },
+          btn('Approve', function () { reqAct(x, 'approve'); }, 'sm pri', 'check', 'Approve ' + title),
+          btn('', function () { confirmBox('Decline ' + title + '?', (x.user || 'The requester') + ' asked for it ' + (x.at ? rel(x.at) : '') + '. Declining tells them in ' + x.app_name + ' and cannot be undone here.', 'Decline', true).then(function (y) { if (y) reqAct(x, 'decline'); }); }, 'sm danger', 'x', 'Decline ' + title))
+          : h('span', { class: 'badge ' + x.level }, x.status_label)));
+      if (busy) [].forEach.call(r.list.lastChild.querySelectorAll('button'), function (b) { b.disabled = true; });
+    });
+  }
+  function reqAct(x, op) {
+    var key = 'rq:' + x.app + ':' + x.id; if (S.busy[key]) return;
+    S.busy[key] = op; if (POLL.requests && POLL.requests.last) { R.requests.sig = null; paintRequests(POLL.requests.last); }
+    act('request_action', { app: x.app, id: x.id, op: op }, (op === 'approve' ? 'Approved: ' : 'Declined: ') + x.title).then(function () { delete S.busy[key]; pollKick('requests'); });
+  }
+
+  /* ---- Endpoint health ---- */
+  BUILD.health = function (r) {
+    r.sum = h('span', { class: 'muted sm' });
+    r.tools.appendChild(r.sum);
+    r.tools.appendChild(btn('Re-probe', function () { txt(r.sum, 'Probing…'); pollKick('health', { force: '1' }); }, 'ghost sm', 'restart', 'Probe every endpoint again now'));
+    r.table = h('div', { class: 'panel htab', role: 'table', 'aria-label': 'Endpoint health' },
+      h('div', { class: 'hrow hh', role: 'row' }, h('span', { role: 'columnheader' }, 'Service'), h('span', { role: 'columnheader' }, 'Address'), h('span', { role: 'columnheader' }, 'Response'), h('span', { role: 'columnheader', class: 'r' }, 'Latency')),
+      r.rows = h('div', { role: 'rowgroup' }, h('div', { class: 'empty' }, 'Probing…')));
+    r.body.appendChild(r.table);
+    poller('health', 'health', 60000, paintHealth);
+  };
+  function paintHealth(j) {
+    var r = R.health; if (!r) return;
+    if (j.error) { clear(r.rows).appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    var bad = j.total - j.up;
+    clear(r.sum);
+    r.sum.appendChild(h('span', { class: bad ? 'bad-t' : 'ok-t' }, j.up + '/' + j.total + ' reachable'));
+    r.sum.appendChild(document.createTextNode(' · checked ' + rel(j.at)));
+    txt(r.count, j.total ? String(j.total) : '');
+    var sig = JSON.stringify([j.rows, S.q]); if (r.sig === sig) return; r.sig = sig;
+    clear(r.rows);
+    if (!j.rows.length) { r.rows.appendChild(h('div', { class: 'empty' }, 'Nothing to probe yet: add links to your apps (Settings > Apps) or give containers a web UI.')); return; }
+    j.rows.filter(function (x) { return matches(x.name + ' ' + x.hostport); }).forEach(function (x) {
+      r.rows.appendChild(h('div', { class: 'hrow ' + x.level, role: 'row', 'data-name': x.name },
+        h('span', { class: 'hn', role: 'cell' }, h('span', { class: 'sdot ' + x.level, role: 'img', 'aria-label': x.level }), img(iconUrl(x.icon), 'aico', x.kind === 'container' ? 'box' : 'tag'),
+          h('b', { class: 'ell' }, x.name), h('span', { class: 'muted xs ell' }, x.kind === 'container' ? 'container' : x.group)),
+        h('span', { role: 'cell', class: 'ell' }, h('a', { href: x.url, target: '_blank', rel: 'noopener', class: 'num' }, x.hostport)),
+        h('span', { role: 'cell' }, h('span', { class: 'badge ' + x.level }, x.text)),
+        h('span', { role: 'cell', class: 'r num' }, x.ms === null ? '–' : x.ms + ' ms')));
+    });
+    if (!r.rows.childNodes.length) r.rows.appendChild(h('div', { class: 'empty' }, 'No endpoint matches the filter.'));
   }
 
   /* ---- Arr Stack: one compact row per app, details on demand ---- */
@@ -5848,7 +6544,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
-  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
+  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', playing: 'Active Plex, Emby, Jellyfin and Tautulli streams', requests: 'Overseerr / Jellyseerr requests, approve or decline', health: 'Every app and container web UI: status and latency', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
     docker: 'Every container, found automatically', vms: 'Every VM, found automatically', apps: 'Plex, Immich, AdGuard, links and other apps' };
   var MET_DESC = { cpu: 'Usage and temperature', memory: 'RAM used and available', storage: 'Array (or pools) capacity', network: 'Download and upload speed', health: 'Array state, disk problems, parity checks',
@@ -5997,7 +6693,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
         h('div', { class: 'inl', style: { 'margin-bottom': '6px' } }, pf,
           btn('Select running', function () { D2.selected = all.filter(function (x) { return x.state === 'running'; }).map(function (x) { return x.name; }); txt(selCount, D2.selected.length + ' selected'); drawPick(); dirty(); }, 'sm'),
           btn('Clear', function () { D2.selected = []; txt(selCount, '0 selected'); drawPick(); dirty(); }, 'sm ghost')),
-        pick, h('div', { class: 'hint' }, 'Also from the dashboard: ⋯ > Show in "Selected".'))));
+        pick, h('div', { class: 'hint' }, 'Also from the dashboard: gear > Show in "Selected".'))));
     var A2 = c.apps;
     b.appendChild(set('Apps', 'Plex, Emby, Immich, AdGuard and your other apps, below Arr Stack and Downloads.', h('div', { class: 'grid2' },
       F('Columns', sIn(A2, 'columns', dirty, [[0, 'Automatic'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']]))),
@@ -6402,8 +7098,43 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   }
 
   /* ---------- keyboard ---------- */
+  // g then a letter jumps to a section (it opens a collapsed one); ? lists everything
+  var GOTO = { o: 'overview', a: 'alerts', f: 'favorites', m: 'media', s: 'arr', d: 'downloads', n: 'playing', q: 'requests', p: 'apps', c: 'docker', v: 'vms', h: 'health' };
+  function jumpTo(id) {
+    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Dashboard).', true); return; }
+    if (r.sec.collapsed) r.el.querySelector('.sec-h h2 button').click();
+    r.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    var b = r.el.querySelector('.sec-h h2 button'); if (b) try { b.focus({ preventScroll: true }); } catch (x) { b.focus(); }
+  }
+  function refreshAll() {
+    refreshNow();
+    if (R.media) loadMedia(true); if (R.arr) loadArr(true); if (R.downloads) loadDl(true);
+    Object.keys(POLL).forEach(function (k) { pollKick(k); });
+    toast('Refreshing everything');
+  }
+  function keysHelp() {
+    var row = function (k, what) { return h('div', { class: 'kh' }, h('span', null, k.split(' ').map(function (x) { return h('kbd', null, x); })), h('span', null, what)); };
+    var go = Object.keys(GOTO).map(function (k) { return row('g ' + k, TITLES[GOTO[k]]); });
+    modal('Keyboard shortcuts', h('div', { class: 'keys' },
+      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Filter the dashboard'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
+        row(',', 'Settings'), row('?', 'This list'), row('Esc', 'Close a dialog, menu or the filter')),
+      h('div', null, h('h4', { class: 'ign-h' }, 'Go to a section'), go)), null, true);
+  }
   document.addEventListener('keydown', function (e) {
-    if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') && !root.querySelector('.modal-bg,.drawer') && R.search) { e.preventDefault(); R.search.focus(); }
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || (document.activeElement && document.activeElement.isContentEditable);
+    if (typing || e.ctrlKey || e.metaKey || e.altKey || !S.L || root.querySelector('.modal-bg,.drawer') || S.menu) { S.gKey = 0; return; }
+    var k = e.key;
+    if (S.gKey && Date.now() - S.gKey < 1500) {
+      S.gKey = 0;
+      if (GOTO[k.toLowerCase()]) { e.preventDefault(); jumpTo(GOTO[k.toLowerCase()]); }
+      return;
+    }
+    if (k === '/' && R.search) { e.preventDefault(); R.search.focus(); }
+    else if (k === 'g') { S.gKey = Date.now(); }
+    else if (k === '?') { e.preventDefault(); keysHelp(); }
+    else if (k === 'r') { e.preventDefault(); refreshAll(); }
+    else if (k === 'p') { e.preventDefault(); togglePause(); toast(S.paused ? 'Live refresh paused' : 'Live refresh resumed'); }
+    else if (k === ',') { e.preventDefault(); openSettings(); }
   });
   window.addEventListener('beforeunload', function (e) { if (S.drawer && S.drawer.dirty) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -6420,12 +7151,12 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   });
 })();
 ]]></INLINE>
-<SHA256>93d1524c843addb68bf052ee7a1fbb7f0abd01a6c99de0760b5aee178d90a2de</SHA256>
+<SHA256>3e4c61caa7a76901e53ff26747da947a25aa4fb8b5f9e593f0d970418b582fbd</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
 <INLINE>
-mkdir -p &emhttp;/images
+mkdir -p $(dirname &emhttp;/images/undash.png)
 echo 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAD+klEQVR42u2cv47UMBCH/Qh5hDwA
 xXaIbp8ApaCiigSPQEOXV6BHSkFFFURDhSJKpJO2QaKEBgqaFX+KA+5kPFL2tOICm+zZXjvzjfQr
 KFhHM5/HE2dujAlgX+/fWjs1Tq1T77R1smiWtoPv2sGXa5OyuQesnTqCHRwK8XGdStCLgU6CfhoY
@@ -6444,9 +7175,867 @@ KpgRMco/BjEkSvnnYMbEKW8IYVCk8pYwjaNitzSFqh0WvRUAetrC1Y6L7wWAlj8IUatWAGhwhFo1
 AsAaR6jV2ojFKgRRUtqanbl/dDhEnbp9AGocok612TeOAaXpfw8A3gY0Vf8jABRkAR27X2Jtxows
 oHT3kwXY/fsQVDhqsarMFOP7wELv/afacBRscNpitDmY+kcgKKkHFnPul+YYc/9xBQTZB39lbmJA
 oDj4fx0H1AR5nfml8WlDYcjbQQbV/uyCbyYIFUdCsim/MjFsyAYNICQT+CborgcEAj8FhnroLAKG
-sEHvrjVzpGZDo2kzFCQ9UBwd7H7wYXPVwOnZ/gAhiqQG7Ue43AAAAABJRU5ErkJggg==' | base64 -d > /tmp/undash-icon.png 2>/dev/null
-if [ "$(sha256sum /tmp/undash-icon.png | cut -d' ' -f1)" = "5678d263c9e0bac03cdf14e0fcf34b7096d0cc17a5c8bad1b68f8425c80994c9" ]; then mv -f /tmp/undash-icon.png &emhttp;/images/undash.png; chmod 644 &emhttp;/images/undash.png; else echo "icon check failed, skipped"; fi
-rm -f /tmp/undash-icon.png
+sEHvrjVzpGZDo2kzFCQ9UBwd7H7wYXPVwOnZ/gAhiqQG7Ue43AAAAABJRU5ErkJggg==' | base64 -d > /tmp/undash-icon 2>/dev/null
+if [ "$(sha256sum /tmp/undash-icon | cut -d' ' -f1)" = "5678d263c9e0bac03cdf14e0fcf34b7096d0cc17a5c8bad1b68f8425c80994c9" ]; then mv -f /tmp/undash-icon &emhttp;/images/undash.png; chmod 644 &emhttp;/images/undash.png; else echo "icon check failed, skipped"; fi
+rm -f /tmp/undash-icon
+</INLINE>
+</FILE>
+
+<FILE Run="/bin/bash">
+<INLINE>
+mkdir -p $(dirname &emhttp;/assets/inter.woff2)
+echo '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' | base64 -d > /tmp/undash-font 2>/dev/null
+if [ "$(sha256sum /tmp/undash-font | cut -d' ' -f1)" = "c940764593d0fe5d596be327ca7558855e018039fb78509aa21921fd3644c3e4" ]; then mv -f /tmp/undash-font &emhttp;/assets/inter.woff2; chmod 644 &emhttp;/assets/inter.woff2; else echo "font check failed, skipped"; fi
+rm -f /tmp/undash-font
 </INLINE>
 </FILE>
 
