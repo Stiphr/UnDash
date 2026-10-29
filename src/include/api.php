@@ -47,6 +47,8 @@ switch ($action) {
     if (isset($want['docker'])) $r['docker'] = und_docker_live();
     if (isset($want['vms'])) $r['vms'] = und_vm_live();
     if (isset($want['ups'])) $r['ups'] = und_ups($cfg['general']['ups_name']);
+    // the rules in force now, by the server's clock, so every open tab hides the same alerts
+    $r['ignores'] = array_map(function ($x) { return ['id' => $x['id'], 'kind' => $x['kind'], 'key' => $x['key'], 'until' => $x['until']]; }, und_ignores_active($r['at']));
     $r['power'] = is_file(und_tmp('power-started')) ? trim((string)@file_get_contents(und_tmp('power-started'))) : '';
     out($r);
   }
@@ -99,6 +101,21 @@ switch ($action) {
   case 'power_prepare': { $r = und_power_prepare($P('op')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'power':         { $r = und_power($P('op'), $P('nonce'), $P('confirm')); if (isset($r['error'])) fail($r['error'], 409); out($r); }
   case 'history':       out(['history' => und_history()]);
+
+  /* ignored alerts: hiding only, monitoring goes on */
+  case 'ignores_list':  out(['now' => time(), 'rules' => und_ignores(), 'categories' => und_alert_categories()]);
+  case 'ignore_add': {
+    $d = $P('duration');
+    $r = und_ignore_add($P('kind'), $P('category'), $P('resource'), $d === 'permanent' ? 'permanent' : (ctype_digit($d) ? (int)$d : -1), $P('title'), $P('severity'));
+    if (isset($r['error'])) fail($r['error']);
+    out($r + ['now' => time()]);
+  }
+  case 'ignore_remove': {
+    $ids = $J('ids') ?? [$P('id')];
+    $r = und_ignore_remove($ids); if (isset($r['error'])) fail($r['error']); out($r);
+  }
+  case 'ignore_restore_all': { if ($P('confirm') !== 'yes') fail('Confirm restoring every ignored alert.'); $r = und_ignore_restore_all(); if (isset($r['error'])) fail($r['error']); out($r); }
+  case 'ignore_purge_expired': { $r = und_ignore_purge_expired(); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'os_status':     out(und_os_cached() + ['log' => und_job(und_tmp('os-update.log'))]);
   case 'os_check':      out(und_os_check());
   case 'os_update':     { $r = und_os_update(); if (isset($r['error'])) fail($r['error']); und_history_add('server', 'Unraid OS', 'update', true, 'install started'); out($r); }

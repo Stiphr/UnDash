@@ -37,8 +37,9 @@ clamped when the file is read, so a hand edit can never break the dashboard. Old
   },
   "media": {
     "radarr": "", "sonarr": "",   // widget ids of the sources; empty = the first Radarr / Sonarr
-    "count": 15, "days_ahead": 30,
-    "widgets": [ { "id": "upcoming_movies", "visible": true } ]   // upcoming_movies upcoming_episodes recent_movies recent_episodes
+    "count": 15,                  // default length for a column without its own count (older files)
+    "days_ahead": 30,             // how far the Upcoming columns look ahead, 7-120
+    "widgets": [ { "id": "upcoming_movies", "visible": true, "count": 15 } ]   // always this order: upcoming_movies upcoming_episodes recent_movies recent_episodes; count 1-50
   },
   "downloads": { "items": 4 },    // active items shown per download client
   "apps": { "columns": 0, "headers": false, "links": false },   // Apps grid; group titles; shortcut links
@@ -74,6 +75,17 @@ Credentials (`key`, `username`, `password`) are never in `config.json`; they are
   "svc":  { "5e6f7a8b": { "key": "{{RADARR_API_KEY}}" } },
   "unraid": { "url": "http://192.168.1.10/graphql", "key": "..." } }   // Docker version only
 ```
+
+Ignored alerts are in `ignores.json` next to `config.json` (also mirrored to the flash drive). Settings > Ignored alerts manages them; a hand edit is checked the same way, and malformed rules are dropped:
+
+```jsonc
+[ { "id": "3f9c0a1b2c4d", "kind": "instance",   // instance = one alert, type = every alert of the category
+    "key": "disk.hot:disk3", "category": "disk.hot", "resource": "disk3",
+    "until": 1793345000,                        // Unix time, null = permanently
+    "created": 1793258600, "title": "disk3 is at 52°C.", "severity": "warn" } ]
+```
+
+Categories: `docker.unhealthy` `docker.restarting` `docker.exited` `docker.update_failed` `array.state` `array.resync` `disk.bad` `disk.errors` `disk.hot` `os.staged` `os.available` `os.check_failed` `api.error`. Connection and sign-in alerts cannot be ignored. Rules only hide alerts; UnDash keeps checking, and rules that ran out more than 30 days ago are removed on the next change.
 
 Apps are placed automatically: Arr apps in Arr Stack, qBittorrent / SABnzbd in Downloads, calendars and "recently added" lists are covered by Media, system / UPS / Docker / VM cards by the overview, everything else in Apps.
 

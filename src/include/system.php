@@ -133,17 +133,25 @@ function und_system(array $cfg) {
 
 /** Array state plus totals and a health summary from Unraid's disks.ini (cheap: a RAM-disk file). */
 function und_array_info(array $v) {
-  $st = und_storage(); $size = 0; $free = 0; $bad = 0; $hot = 0; $errors = 0;
+  $st = und_storage(); $size = 0; $free = 0;
   foreach ($st['array'] as $d) { $size += $d['size']; $free += $d['free']; }
-  foreach (array_merge($st['parity'], $st['array'], $st['pools']) as $d) {
-    if ($d['health'] === 'bad') $bad++;
-    if ($d['temp'] !== null && $d['temp'] >= 50) $hot++;
-    $errors += $d['errors'];
-  }
+  $fl = und_disk_flags(array_merge($st['parity'], $st['array'], $st['pools']));
   $resync = (int)($v['mdResync'] ?? 0);
   return ['state' => (string)($v['mdState'] ?? ''), 'resync' => $resync, 'resync_pct' => $resync && (float)($v['mdResyncSize'] ?? 0) > 0 ? round(100 * (float)$v['mdResyncPos'] / (float)$v['mdResyncSize'], 1) : null,
           'resync_action' => (string)($v['mdResyncAction'] ?? ''), 'size' => $size, 'free' => $free, 'disks' => count($st['array']), 'parity' => count($st['parity']), 'pools' => $st['pools'],
-          'bad' => $bad, 'hot' => $hot, 'errors' => $errors, 'mover' => is_file('/var/run/mover.pid')];
+          'mover' => is_file('/var/run/mover.pid')] + $fl;
+}
+
+/** Health counts plus the names of the disks behind them, so each disk can raise (and be ignored as) its own alert. */
+function und_disk_flags(array $rows) {
+  $o = ['bad' => 0, 'hot' => 0, 'errors' => 0, 'bad_disks' => [], 'hot_disks' => [], 'error_disks' => []];
+  foreach ($rows as $d) {
+    $n = (string)($d['name'] ?? '');
+    if (($d['health'] ?? '') === 'bad') { $o['bad']++; $o['bad_disks'][] = $n; }
+    if (($d['temp'] ?? null) !== null && $d['temp'] >= 50) { $o['hot']++; $o['hot_disks'][] = ['name' => $n, 'temp' => (int)$d['temp']]; }
+    if ((int)($d['errors'] ?? 0) > 0) { $o['errors'] += (int)$d['errors']; $o['error_disks'][] = ['name' => $n, 'errors' => (int)$d['errors']]; }
+  }
+  return $o;
 }
 
 /* ---------- array & pools ---------- */

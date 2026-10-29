@@ -51,7 +51,7 @@ file_put_contents("$fs/var/local/emhttp/var.ini", "NAME=\"R1ZE\"\nmdState=\"STAR
 if (!is_file($state . '/flash/undash.cfg')) { @mkdir($state . '/flash', 0777, true); file_put_contents($state . '/flash/undash.cfg', "CONFIG_DIR=\"/mnt/user/appdata/undash\"\nPORT=\"9099\"\nBIND=\"0.0.0.0\"\nSTANDALONE=\"yes\"\n"); }
 file_put_contents("$fs/var/local/emhttp/network.ini", "[eth0]\nIPADDR:0=\"192.168.1.10\"\n");
 file_put_contents("$fs/var/local/emhttp/disks.ini", "[\"parity\"]\nname=\"parity\"\ndevice=\"sdb\"\nstatus=\"DISK_OK\"\ntemp=\"31\"\ntype=\"Parity\"\nfsSize=\"\"\n" .
-  "[\"disk1\"]\nname=\"disk1\"\ndevice=\"sdc\"\nstatus=\"DISK_OK\"\ntemp=\"33\"\ntype=\"Data\"\nfsSize=\"11718885324\"\nfsFree=\"2343777064\"\nfsType=\"xfs\"\n" .
+  "[\"disk1\"]\nname=\"disk1\"\ndevice=\"sdc\"\nstatus=\"DISK_OK\"\ntemp=\"52\"\ntype=\"Data\"\nfsSize=\"11718885324\"\nfsFree=\"2343777064\"\nfsType=\"xfs\"\n" .
   "[\"disk2\"]\nname=\"disk2\"\ndevice=\"sdd\"\nstatus=\"DISK_OK\"\ntemp=\"*\"\nspundown=\"1\"\ntype=\"Data\"\nfsSize=\"7811939620\"\nfsFree=\"1453512040\"\nfsType=\"xfs\"\n" .
   "[\"cache\"]\nname=\"cache\"\ndevice=\"nvme0n1\"\nstatus=\"DISK_OK\"\ntemp=\"42\"\ntype=\"Cache\"\nfsSize=\"976761560\"\nfsFree=\"611329392\"\nfsType=\"btrfs\"\n");
 file_put_contents("$fs/var/lib/docker/unraid-update-status.json", json_encode(['lscr.io/linuxserver/radarr:latest' => ['status' => 'false'], 'lscr.io/linuxserver/sonarr:latest' => ['status' => 'true'], 'plexinc/pms-docker:latest' => ['status' => 'true'], 'ghcr.io/gethomepage/homepage:latest' => ['status' => 'false']]));
