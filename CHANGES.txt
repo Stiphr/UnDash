@@ -1,3 +1,10 @@
+###2026.11.02a
+- New sections: Now playing (Plex, Emby, Jellyfin, Tautulli streams with progress, direct play or transcode, quality and bandwidth), Requests (Overseerr / Jellyseerr, approve or decline pending requests) and Endpoint health (status and latency of every app and container web UI, with Re-probe).
+- Alert history: when each problem started and ended, checked once a minute in the background (also when no dashboard is open), kept for 30 days. Alerts > History.
+- Keyboard shortcuts: / filter, r refresh, p pause, comma settings, ? list, g + letter to jump to a section.
+- The Inter typeface is now bundled, so the dashboard looks the same on every computer.
+- Fixes: web UI links of containers on a user-defined Docker network with published ports now use the server's address and host port (they pointed at the container's internal address); the filter box now filters Media, Arr Stack and Downloads immediately; quick preference clicks can no longer overwrite each other; scrolled media lists keep their place while columns rebalance; error messages are red again; stale "⋯ menu" hints now say gear.
+
 ###2026.11.01b
 - Containers and VMs: one gear button per item holds every action (open web UI or console, start / stop, restart, pause, update, logs, details, favorites, customize). Click the icon or the name to open the web UI (VNC console for VMs); the separate open buttons are gone.
 - More room in the container grid and the VM list: bigger icons, taller rows, wider gaps.
