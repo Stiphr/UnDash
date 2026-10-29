@@ -13,7 +13,8 @@ function und_export($kind) {
   $cfg = und_load_config(); $sec = und_secrets();
   $out = ['undash_export' => 1, 'schema' => UND_SCHEMA, 'kind' => $kind === 'full' ? 'full' : 'redacted', 'created' => time(), 'version' => UND_VERSION,
           'config' => $cfg, 'css' => und_load_css()];
-  if ($out['kind'] === 'full') { $out['vars'] = (object)$sec['vars']; $out['secrets'] = (object)$sec['svc']; return $out; }
+  if ($out['kind'] === 'full') { $out['vars'] = (object)$sec['vars']; $out['secrets'] = (object)$sec['svc']; $out['unraid'] = (object)$sec['unraid']; return $out; }
+  if (!empty($sec['unraid']['url'])) $out['unraid'] = ['url' => und_redact_url((string)$sec['unraid']['url'])];
   $vars = [];
   foreach ($sec['vars'] as $k => $v) $vars[$k] = und_var_is_secret($k) ? '' : und_redact_url((string)$v);
   $out['vars'] = (object)$vars;
@@ -76,6 +77,7 @@ function und_import_parse($raw) {
 function und_import_apply($raw) {
   $f = und_import_parse($raw);
   if (isset($f['error'])) return $f;
+  $j_unraid = json_decode($raw, true)['unraid'] ?? null;
   $bk = und_backup('before import');
   $old = und_secrets();
   $ids = und_service_ids($f['config']);
@@ -87,7 +89,12 @@ function und_import_apply($raw) {
     foreach (['key', 'password', 'username'] as $k) if (isset($c[$k]) && is_scalar($c[$k]) && (string)$c[$k] !== '') $svc[$id][$k] = und_clip((string)$c[$k], 2000);
   }
   if (!und_save_config($f['config'], false)) return ['error' => 'Could not write the configuration directory.'];
-  und_save_secrets(['vars' => $vars, 'svc' => $svc]);
+  $unraid = $old['unraid'];
+  if (isset($j_unraid) && is_array($j_unraid)) {
+    if (!empty($j_unraid['url']) && is_string($j_unraid['url']) && preg_match('#^https?://#i', $j_unraid['url'])) $unraid['url'] = und_clip($j_unraid['url'], 300);
+    if ($f['kind'] === 'full' && !empty($j_unraid['key']) && is_string($j_unraid['key'])) $unraid['key'] = und_clip($j_unraid['key'], 300);
+  }
+  und_save_secrets(['vars' => $vars, 'svc' => $svc, 'unraid' => $unraid]);
   if ($f['css'] !== null) und_save_css($f['css'], false);
   return ['ok' => true, 'backup' => $bk];
 }

@@ -38,6 +38,7 @@ function und_history() { return array_reverse(und_read_json(und_tmp('history.jso
  *   power         -> needs that nonce and the server's name typed back; the command starts 3 s later so the answer reaches the browser
  */
 function und_power_prepare($op) {
+  if (und_api_mode()) return ['error' => 'The Unraid API has no restart or shutdown. Use Unraid\'s own Reboot / Shutdown buttons (or the UnDash plugin).'];
   if (!in_array($op, ['reboot', 'shutdown'], true)) return ['error' => 'Unknown power action.'];
   $nonce = bin2hex(random_bytes(16));
   und_write_json(und_tmp('power-nonce.json'), ['op' => $op, 'hash' => hash('sha256', $nonce), 'exp' => time() + 120], true);
@@ -51,6 +52,7 @@ function und_power_prepare($op) {
 }
 
 function und_power($op, $nonce, $typed) {
+  if (und_api_mode()) return ['error' => 'Not available in the Docker version.'];
   $n = und_read_json(und_tmp('power-nonce.json'), []);
   @unlink(und_tmp('power-nonce.json'));                       // single use, whatever happens next
   if (!in_array($op, ['reboot', 'shutdown'], true) || ($n['op'] ?? '') !== $op) return ['error' => 'Unknown power action.'];

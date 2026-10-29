@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>UnDash</Name>
+  <Repository>ghcr.io/stiphr/undash:latest</Repository>
+  <Registry>https://github.com/Stiphr/UnDash/pkgs/container/undash</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Stiphr/UnDash/issues</Support>
+  <Project>https://github.com/Stiphr/UnDash</Project>
+  <Overview>UnDash: a compact server dashboard for Unraid (system overview, media, Arr Stack, download clients, containers, VMs). It reads and manages the server through the official Unraid API with an API key: no Docker socket, no privileged mode. Create the key in Settings &gt; Management Access &gt; API Keys (read: Info, Array, Disk, Docker, VMs; update: Docker, VMs). On first start the container log shows a one-time setup code for choosing the dashboard password.</Overview>
+  <Category>Tools: Status:Stable</Category>
+  <WebUI>http://[IP]:[PORT:9099]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Stiphr/UnDash/main/templates/undash.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Stiphr/UnDash/main/assets/icon.png</Icon>
+  <Config Name="WebUI port" Target="9099" Default="9099" Mode="tcp" Description="Port of the dashboard. If the UnDash plugin's own port (also 9099) is turned on, pick another one here or turn the plugin's port off." Type="Port" Display="always" Required="true" Mask="false">9099</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/undash-docker" Mode="rw" Description="Settings, secrets (API keys) and backups. Kept across updates. Separate from the plugin's folder so both can run side by side." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/undash-docker</Config>
+  <Config Name="Unraid API address" Target="UNRAID_API_URL" Default="http://192.168.1.10/graphql" Mode="" Description="Your server's address followed by /graphql (use https:// if Unraid forces it). Can also be set in Settings &gt; Configuration." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Unraid API key" Target="UNRAID_API_KEY" Default="" Mode="" Description="The API key you created in Unraid. Kept on the server; never sent to the browser." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Dashboard password" Target="UNDASH_PASSWORD" Default="" Mode="" Description="Optional. Leave empty to choose the password in the browser with the setup code from the container log." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Import plugin settings" Target="/import" Default="" Mode="ro" Description="Optional, read-only: map /mnt/user/appdata/undash (the plugin's settings) to copy your layout, apps and secrets on the very first start. Nothing is overwritten; remove the mapping afterwards." Type="Path" Display="advanced" Required="false" Mask="false"></Config>
+</Container>

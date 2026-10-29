@@ -107,6 +107,7 @@ function und_docker_update_state(array $upd, $image) {
 
 /** Everything the dashboard shows about containers. Cheap enough for every refresh. */
 function und_docker_live($withDetails = true) {
+  if (und_api_mode()) return und_api_docker_live();
   $ps = und_docker_ps();
   if (isset($ps['error'])) return $ps;
   $ps = $ps['ps'];
@@ -134,6 +135,7 @@ function und_docker_list() { return und_docker_live(); }
 
 function und_docker_action($name, $op) {
   if (!und_valid_container($name)) return ['error' => 'Invalid container name.'];
+  if (und_api_mode()) return und_api_docker_action($name, $op);
   $ps = und_docker_ps();
   if (isset($ps['error'])) return $ps;
   if (!isset($ps['ps'][$name])) return ['error' => 'There is no container named ' . $name . '.'];
@@ -163,6 +165,7 @@ function und_docker_action($name, $op) {
 
 /** Starts Unraid's own update check for every container (the "check for updates" button of the Docker tab). */
 function und_docker_check() {
+  if (und_api_mode()) return ['error' => 'Unraid checks container updates on its own schedule; the API has no "check now".'];
   $log = und_tmp('docker-check.log');
   if (und_job($log)['state'] === 'running') return ['ok' => true, 'job' => 'running'];
   und_spawn([UND_DM . '/scripts/dockerupdate', 'check', 'nonotify'], $log);
@@ -187,6 +190,7 @@ function und_docker_job($name) {
 /** The last N lines of stdout and stderr, merged in time order. */
 function und_docker_logs($name, $lines = 300) {
   if (!und_valid_container($name)) return ['error' => 'Invalid container name.'];
+  if (und_api_mode()) return und_api_docker_logs($name, $lines);
   $lines = max(10, min(5000, (int)$lines));
   $r = und_run([und_docker_bin(), 'logs', '--tail', (string)$lines, '--timestamps', $name], 20, 8388608);
   if ($r['code'] !== 0 && $r['out'] === '' && $r['err'] === '') return ['error' => 'Could not read the log.'];
@@ -205,6 +209,7 @@ function und_docker_logs($name, $lines = 300) {
  */
 function und_docker_inspect($name) {
   if (!und_valid_container($name)) return ['error' => 'Invalid container name.'];
+  if (und_api_mode()) return und_api_docker_inspect($name);
   $r = und_run([und_docker_bin(), 'inspect', $name], 15, 4194304);
   $j = json_decode($r['out'], true);
   if (!is_array($j) || !isset($j[0])) return ['error' => 'There is no container named ' . $name . '.'];
@@ -223,7 +228,7 @@ function und_docker_inspect($name) {
   foreach ((array)($x['Config']['Labels'] ?? []) as $k => $v) if (preg_match('/^(net\.unraid\.docker\.(managed|webui|icon|shell)|org\.opencontainers\.image\.(version|source|title|description|url|created))$/', $k)) $labels[$k] = und_clip((string)$v, 300);
   return ['name' => $name, 'id' => substr((string)$x['Id'], 0, 12), 'image' => (string)($x['Config']['Image'] ?? ''), 'image_id' => substr(str_replace('sha256:', '', (string)($x['Image'] ?? '')), 0, 12),
     'created' => strtotime((string)($x['Created'] ?? '')) ?: null, 'state' => (string)($x['State']['Status'] ?? ''), 'started' => strtotime((string)($x['State']['StartedAt'] ?? '')) ?: null,
-    'finished' => strtotime((string)($x['State']['FinishedAt'] ?? '')) ?: null, 'exit' => (int)($x['State']['ExitCode'] ?? 0), 'error' => (string)($x['State']['Error'] ?? ''),
+    'finished' => strtotime((string)($x['State']['FinishedAt'] ?? '')) ?: null, 'exit' => (int)($x['State']['ExitCode'] ?? 0), 'state_error' => (string)($x['State']['Error'] ?? ''),
     'oom' => !empty($x['State']['OOMKilled']), 'restarts' => (int)($x['RestartCount'] ?? 0), 'restart_policy' => (string)($x['HostConfig']['RestartPolicy']['Name'] ?? ''),
     'network_mode' => (string)($x['HostConfig']['NetworkMode'] ?? ''), 'networks' => $nets, 'ports' => $ports, 'mounts' => $mounts, 'env' => $env, 'labels' => (object)$labels, 'health' => $health,
     'privileged' => !empty($x['HostConfig']['Privileged'])];

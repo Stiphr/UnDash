@@ -276,7 +276,7 @@
   }
   function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
-  var TITLES = { overview: 'Server', alerts: 'Alerts', favorites: 'Favorites', metrics: 'System', docker: 'Containers', vms: 'Virtual machines', storage: 'Storage', services: 'Services' };
+  var TITLES = { overview: 'System', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
   function buildSection(sec) {
     var tools = h('div', { class: 'tools' });
     var count = h('span', { class: 'count' });
@@ -296,12 +296,12 @@
   /* which parts the live request needs, so hidden sections cost nothing */
   function parts() {
     var p = ['system'];
-    if (R.docker || R.favorites || R.alerts || R.overview || metricOn('docker')) p.push('docker');
-    if (R.vms || R.favorites || R.overview || metricOn('vms')) p.push('vms');
-    if (metricOn('ups')) p.push('ups');
+    if (R.docker || R.favorites || R.alerts || tileOn('docker')) p.push('docker');
+    if (R.vms || R.favorites || tileOn('vms')) p.push('vms');
+    if (tileOn('ups')) p.push('ups');
     return p.join(',');
   }
-  function metricOn(id) { return !!R.metrics && S.L.dashboard.metrics.some(function (m) { return m.visible && m.id === id; }); }
+  function tileOn(id) { return !!(R.overview && R.overview.tiles && R.overview.tiles[id]); }
 
   /* ================= live refresh ================= */
   function schedule(ms) { clearTimeout(S.timer); S.timer = setTimeout(tick, ms); }
@@ -334,7 +334,7 @@
   function refreshNow() { if (!S.inflight && !S.paused) { clearTimeout(S.timer); tick(); } }
   function togglePause() {
     S.paused = !S.paused; LS.set('paused', S.paused);
-    if (!S.paused) refreshNow(); else clearTimeout(S.timer);
+    if (!S.paused) { refreshNow(); if (S.dlStale) loadDl(); } else clearTimeout(S.timer);
     paintLive();
   }
   function paintLive() {
@@ -355,6 +355,9 @@
     if (!S.L) return;
     if (!document.hidden && (S.waitVisible || S.L.general.background_poll !== 'normal')) { S.waitVisible = false; refreshNow(); }
     if (!document.hidden && !S.svcRun) pollServices();
+    if (!document.hidden && S.mediaStale) loadMedia();
+    if (!document.hidden && S.arrStale) loadArr();
+    if (!document.hidden && S.dlStale) loadDl();
   });
 
   function paintAll() {
@@ -362,10 +365,8 @@
     if (R.overview && open('overview')) paintOverview(y);
     if (R.alerts) paintAlerts(y);
     if (R.favorites && open('favorites')) paintFavs(y);
-    if (R.metrics && open('metrics')) paintMetrics(y);
     if (R.docker && open('docker')) paintDocker(y);
     if (R.vms && open('vms')) paintVms(y);
-    if (R.storage && open('storage') && Date.now() - S.storageAt > 30000) loadStorage();
     paintCounts(y);
   }
   function paintCounts(y) {
@@ -390,61 +391,155 @@
   /* ================= sections ================= */
   var BUILD = {};
 
-  /* ---- overview ---- */
-  BUILD.overview = function (r) {
-    r.kv = h('div', { class: 'kv' });
-    r.health = h('div', { class: 'chips' });
-    r.qa = h('div', { class: 'qa' });
-    r.body.appendChild(h('div', { class: 'card ov' }, h('div', null, r.kv, h('div', { style: { 'margin-top': '12px' } }, r.health)), r.qa));
+  /* ---- overview: one compact stats bar; a tile opens its details underneath ---- */
+  var MET = {
+    cpu: ['CPU', 'cpu'], memory: ['Memory', 'mem'], storage: ['Storage', 'array'], network: ['Network', 'net'], health: ['Array health', 'server'], disks: ['Disk temps', 'temp'],
+    uptime: ['Uptime', 'clock'], ups: ['UPS', 'bolt'], cores: ['CPU cores', 'cpu'], swap: ['Swap', 'swap'], load: ['Load', 'load'], path: ['Disk', 'disk'], docker: ['Containers', 'box'], vms: ['VMs', 'vm']
   };
+  BUILD.overview = function (r) {
+    r.bar = h('div', { class: 'stats', role: 'list' }); r.tiles = {};
+    S.L.dashboard.metrics.forEach(function (m) {
+      if (!m.visible || !MET[m.id]) return;
+      if ((m.id === 'load' || m.id === 'path') && S.boot.caps.mode === 'api') return;     // not offered by the Unraid API
+      var t = { id: m.id, v: h('span', { class: 'v' }, '–'), s: h('span', { class: 's' }), m: h('i') };
+      t.el = h('button', { type: 'button', class: 'stat', role: 'listitem', 'aria-expanded': 'false', onclick: function () { toggleDetail(m.id); } },
+        h('span', { class: 'k' }, ic(MET[m.id][1]), MET[m.id][0]), t.v, t.s, h('span', { class: 'bar', 'aria-hidden': 'true' }, t.m));
+      r.tiles[m.id] = t; r.bar.appendChild(t.el);
+    });
+    r.detail = h('div', { class: 'detail', hidden: true });
+    r.stale = h('div', { class: 'stale', hidden: true, role: 'status' });
+    r.body.appendChild(r.stale); r.body.appendChild(r.bar); r.body.appendChild(r.detail);
+    if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Dashboard).'));
+    r.open = LS.get('detail', '');
+  };
+  function toggleDetail(id) {
+    var r = R.overview; r.open = r.open === id ? '' : id; LS.set('detail', r.open);
+    for (var k in r.tiles) r.tiles[k].el.setAttribute('aria-expanded', k === r.open ? 'true' : 'false');
+    r.detailSig = null; paintDetail(S.live || {});
+  }
+  function tile(id, val, sub, p, lvl) {
+    var t = R.overview.tiles[id]; if (!t) return;
+    txt(t.v, val); txt(t.s, sub || '');
+    t.m.style.width = (p === null || p === undefined ? 0 : Math.max(0, Math.min(100, p))) + '%';
+    t.el.className = 'stat ' + (lvl || '') + (R.overview.open === id ? ' on' : '');
+  }
+  function lvl(p, w, b) { return p === null || p === undefined ? 'na' : p >= b ? 'bad' : p >= w ? 'warn' : 'ok'; }
   function paintOverview(y) {
     var r = R.overview, s = y.system;
-    if (!s) { if (!r.kv.firstChild) r.kv.appendChild(h('span', { class: 'muted' }, 'Loading…')); return; }
-    var o = s.os_update || {}, a = s.array || {}, dk = dockerStats(y), vm = vmStats(y);
-    var osTxt = (s.os || '-') + (o.staged ? ' · ' + o.staged + ' installed, restart to finish' : o.available ? ' · ' + o.latest + ' available' : o.checked ? ' · up to date' : '');
-    var arr = (a.state || '-').toLowerCase() + (a.resync ? ' · ' + (a.resync_action || 'parity check') + (a.resync_pct !== null ? ' ' + a.resync_pct + '%' : '') : '') + (a.mover ? ' · mover running' : '');
-    var rows = [['Server', s.name], ['Address', s.ip], ['Unraid', osTxt], ['Kernel', s.kernel], ['CPU', (s.cpu.model || '-') + ' · ' + s.cpu.threads + ' threads'], ['Uptime', upt(s.uptime)],
-      ['Array', arr + (a.size ? ' · ' + bytes(a.free) + ' free of ' + bytes(a.size) : a.disks === 0 && (a.pools || []).length ? ' · pools only (' + a.pools.length + ')' : '')],
-      ['Containers', dk ? dk.running + ' running · ' + dk.stopped + ' stopped' + (dk.updates ? ' · ' + dk.updates + ' with updates' : '') : (y.docker && y.docker.error) || '-'],
-      ['VMs', vm ? vm.running + ' running · ' + vm.total + ' total' : (y.vms && y.vms.error) || '-']];
-    var sig = JSON.stringify(rows);
-    if (r.kvSig !== sig) { r.kvSig = sig; clear(r.kv); rows.forEach(function (x) { r.kv.appendChild(h('span', null, x[0])); r.kv.appendChild(h('span', null, x[1])); }); }
-    var chips = [];
-    chips.push(a.state === 'STARTED' ? ['Array started', 'ok'] : ['Array ' + (a.state || 'unknown').toLowerCase(), 'warn']);
-    if (a.bad) chips.push([a.bad + ' disk' + (a.bad > 1 ? 's' : '') + ' need attention', 'bad']); else if (a.disks || (a.pools || []).length) chips.push(['Disks OK', 'ok']);
-    if (a.errors) chips.push([a.errors + ' disk errors', 'bad']);
-    if (a.hot) chips.push([a.hot + ' hot disk' + (a.hot > 1 ? 's' : ''), 'warn']);
-    if (s.cpu.temp !== null && s.cpu.temp !== undefined) chips.push(['CPU ' + Math.round(s.cpu.temp) + '°C', s.cpu.temp >= 85 ? 'bad' : s.cpu.temp >= 75 ? 'warn' : 'ok']);
-    if (dk && dk.unhealthy) chips.push([dk.unhealthy + ' unhealthy container' + (dk.unhealthy > 1 ? 's' : ''), 'bad']);
-    if (s.mem.pct > 90) chips.push(['Memory ' + Math.round(s.mem.pct) + '%', 'warn']);
-    var cs = JSON.stringify(chips);
-    if (r.hSig !== cs) { r.hSig = cs; clear(r.health); chips.forEach(function (c) { r.health.appendChild(h('span', { class: 'badge ' + c[1] }, c[0])); }); }
-    var checking = !!(y.docker && y.docker.checking || S.busy.dcheck);
-    var qs = JSON.stringify([o.available, o.staged, o.job, dk && dk.updates, checking, S.boot.port_enabled]);
-    if (r.qSig === qs) return; r.qSig = qs;
-    clear(r.qa);
-    r.qa.appendChild(h('h4', null, 'Quick actions'));
-    var chk = btn(checking ? 'Checking containers…' : 'Check container updates', checkUpdates, 'sm', 'restart', 'Ask the registries for newer images (Unraid\'s own check)');
-    chk.disabled = checking;
-    r.qa.appendChild(h('div', { class: 'row' }, chk, dk && dk.updates ? btn('Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up') : null));
-    r.qa.appendChild(h('div', { class: 'row' },
-      o.job === 'running' ? btn('Installing Unraid update…', osDialog, 'sm', 'up') : o.available && !o.staged ? btn('Install Unraid ' + o.latest, osDialog, 'sm pri', 'up') : btn('Unraid OS update', osDialog, 'sm', 'up', 'Check for and install Unraid updates'),
-      btn('History', historyDialog, 'sm', 'history', 'Recent operations')));
-    r.qa.appendChild(h('div', { class: 'row' }, btn('Restart server', function () { powerDialog('reboot'); }, 'sm', 'restart'), btn('Shut down', function () { powerDialog('shutdown'); }, 'sm danger', 'power')));
-    var pl = portLink('sm'); if (pl) r.qa.appendChild(h('div', { class: 'row' }, pl));
+    var stale = S.lastOk && Date.now() - S.lastOk > Math.max(10000, S.L.general.refresh * 3000);
+    r.stale.hidden = !stale && S.conn === 'ok';
+    if (!r.stale.hidden) txt(r.stale, S.lastOk ? 'Stale: last update ' + clock(S.lastOk) + (S.connErr ? ' · ' + S.connErr : '') : (S.connErr || 'Waiting for data…'));
+    r.bar.classList.toggle('is-stale', !!stale);
+    if (!s) return;
+    if (s.error) { r.stale.hidden = false; txt(r.stale, s.error); return; }
+    var a = s.array || {}, pools = (a.pools || []).filter(function (p) { return p.size > 0; }), dk = dockerStats(y), vm = vmStats(y);
+    var c = s.cpu.pct;
+    tile('cpu', pct(c), (s.cpu.temp !== null && s.cpu.temp !== undefined ? Math.round(s.cpu.temp) + '°C · ' : '') + (s.cpu.threads ? s.cpu.threads + ' threads' : ''), c, s.cpu.temp >= 85 ? 'bad' : s.cpu.temp >= 75 ? 'warn' : lvl(c, 85, 97));
+    tile('memory', pct(s.mem.pct), bytes(s.mem.free) + ' free of ' + bytes(s.mem.total), s.mem.pct, lvl(s.mem.pct, 85, 95));
+    var st = a.size ? [a.size, a.free] : pools.length ? pools.reduce(function (acc, p) { return [acc[0] + p.size, acc[1] + p.free]; }, [0, 0]) : null;
+    if (st) { var sp = 100 * (st[0] - st[1]) / st[0]; tile('storage', bytes(st[1]) + ' free', pct(sp) + ' of ' + bytes(st[0]) + (a.size ? ' · array' : ' · ' + pools.length + ' pools'), sp, lvl(sp, 85, 95)); }
+    else tile('storage', 'n/a', a.state === 'STARTED' ? 'No sizes reported' : 'Array ' + (a.state || 'unknown').toLowerCase(), null, 'na');
+    tile('network', s.net.rx === null ? 'n/a' : rate(s.net.rx) + ' ↓', s.net.tx === null ? (s.net.iface || '') : rate(s.net.tx) + ' ↑ · ' + s.net.iface, null, s.net.rx === null ? 'na' : '');
+    var hl = a.state !== 'STARTED' ? 'warn' : a.bad || a.errors ? 'bad' : 'ok';
+    tile('health', a.state !== 'STARTED' ? (a.state || 'unknown').toLowerCase() : a.bad ? a.bad + ' disk problem' + (a.bad > 1 ? 's' : '') : a.errors ? a.errors + ' errors' : 'Healthy',
+      a.resync ? (a.resync_action || 'Parity check') + (a.resync_pct !== null ? ' ' + a.resync_pct + '%' : '') : (a.disks || 0) + ' disks · ' + (a.parity || 0) + ' parity · ' + pools.length + ' pools', a.resync_pct, hl);
+    var temps = [], rows = a._rows ? [].concat(a._rows.parity, a._rows.array, a._rows.pools) : null;
+    (rows || pools).forEach(function (d) { if (d.temp !== null && d.temp !== undefined) temps.push(d.temp); });
+    if (S.storage) [].concat(S.storage.parity || [], S.storage.array || [], S.storage.pools || []).forEach(function (d) { if (d.temp !== null && d.temp !== undefined) temps.push(d.temp); });
+    var hot = temps.length ? Math.max.apply(null, temps) : null;
+    tile('disks', hot === null ? 'n/a' : hot + '°C', hot === null ? 'No disk temperatures (spun down?)' : 'hottest · ' + (a.hot ? a.hot + ' at 50°C+' : 'all below 50°C'), hot === null ? null : Math.min(100, hot / 60 * 100), hot === null ? 'na' : hot >= 55 ? 'bad' : hot >= 50 ? 'warn' : 'ok');
+    tile('uptime', upt(s.uptime), s.os ? 'Unraid ' + s.os : '', null, '');
+    var u = y.ups;
+    if (R.overview.tiles.ups) { if (!u) tile('ups', 'n/a', 'No UPS found', null, 'na'); else tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
+    var cores = s.cpu.cores || [];
+    tile('cores', cores.length ? pct(Math.max.apply(null, cores)) : 'n/a', cores.length ? 'busiest of ' + cores.length + ' cores' : '', cores.length ? Math.max.apply(null, cores) : null, cores.length ? lvl(Math.max.apply(null, cores), 90, 99) : 'na');
+    tile('swap', s.mem.swap_total ? pct(100 * s.mem.swap_used / s.mem.swap_total) : 'None', s.mem.swap_total ? bytes(s.mem.swap_used) + ' of ' + bytes(s.mem.swap_total) : 'No swap configured', s.mem.swap_total ? 100 * s.mem.swap_used / s.mem.swap_total : null, s.mem.swap_total ? '' : 'na');
+    if (s.cpu.load) tile('load', s.cpu.load[0].toFixed(2), '5 min ' + s.cpu.load[1].toFixed(2) + ' · 15 min ' + s.cpu.load[2].toFixed(2), 100 * s.cpu.load[0] / (s.cpu.threads || 1), '');
+    if (s.disk) tile('path', s.disk.total ? bytes(s.disk.free) + ' free' : 'n/a', s.disk.total ? s.disk.path + ' · ' + pct(s.disk.pct) : s.disk.path + ' reports no size', s.disk.pct, s.disk.total ? lvl(s.disk.pct, 85, 95) : 'na');
+    if (dk) tile('docker', dk.running + ' / ' + dk.total, 'running' + (dk.updates ? ' · ' + dk.updates + ' updates' : ''), 100 * dk.running / (dk.total || 1), dk.unhealthy ? 'bad' : '');
+    if (vm) tile('vms', vm.running + ' / ' + vm.total, 'running', 100 * vm.running / (vm.total || 1), '');
+    paintDetail(y);
+  }
+  function paintDetail(y) {
+    var r = R.overview, s = y.system, id = r.open;
+    r.detail.hidden = !id || !s || !r.tiles[id];
+    if (r.detail.hidden) { r.detailSig = null; return; }
+    var hist = s.hist || [];
+    if (id === 'storage' || id === 'health' || id === 'disks') {
+      if (Date.now() - S.storageAt > 30000) loadStorage();
+      var sig = JSON.stringify(S.storage); if (r.detailSig === sig) return; r.detailSig = sig;
+      clear(r.detail).appendChild(diskTable());
+      return;
+    }
+    clear(r.detail); r.detailSig = null;
+    if (id === 'cpu' || id === 'cores') {
+      var cores = s.cpu.cores || [];
+      r.detail.appendChild(h('div', { class: 'dgrid' },
+        h('div', null, h('div', { class: 'dk' }, 'CPU history'), sparkBox(hist.map(function (x) { return x[1]; }), 100)),
+        h('div', null, h('div', { class: 'dk' }, cores.length ? 'Per core' : 'Per core (measuring…)'), h('div', { class: 'cores' }, cores.map(function (c, i) { return h('i', { title: 'Core ' + i + ': ' + c + '%', style: { height: Math.max(3, c) + '%' } }); }))),
+        h('div', { class: 'kv2 sm' }, h('span', null, 'Model'), h('span', null, s.cpu.model || '-'), h('span', null, 'Threads'), h('span', null, String(s.cpu.threads || '-')),
+          h('span', null, 'Temperature'), h('span', null, s.cpu.temp === null || s.cpu.temp === undefined ? 'no sensor' : Math.round(s.cpu.temp) + '°C'),
+          s.cpu.load ? [h('span', null, 'Load'), h('span', null, s.cpu.load.join(' / '))] : null, h('span', null, 'Kernel'), h('span', null, s.kernel || '-'))));
+    } else if (id === 'memory' || id === 'swap') {
+      r.detail.appendChild(h('div', { class: 'dgrid' }, h('div', null, h('div', { class: 'dk' }, 'Memory used'), sparkBox(hist.map(function (x) { return x[2]; }), s.mem.total)),
+        h('div', { class: 'kv2 sm' }, h('span', null, 'Used'), h('span', null, bytes(s.mem.used)), h('span', null, 'Available'), h('span', null, bytes(s.mem.free)), h('span', null, 'Total'), h('span', null, bytes(s.mem.total)),
+          h('span', null, 'Swap'), h('span', null, s.mem.swap_total ? bytes(s.mem.swap_used) + ' of ' + bytes(s.mem.swap_total) : 'none'))));
+    } else if (id === 'network') {
+      var rx = hist.map(function (x) { return x[3] || 0; });
+      r.detail.appendChild(h('div', { class: 'dgrid' }, h('div', null, h('div', { class: 'dk' }, 'Download, last ' + Math.round(hist.length * 2 / 60) + ' min'), sparkBox(rx, Math.max.apply(null, rx.concat([1024])))),
+        h('div', { class: 'kv2 sm' }, h('span', null, 'Interface'), h('span', null, s.net.iface || '-'), h('span', null, 'Address'), h('span', null, s.ip || '-'), h('span', null, 'Down'), h('span', null, rate(s.net.rx)), h('span', null, 'Up'), h('span', null, rate(s.net.tx)))));
+    } else {
+      var o = s.os_update || {};
+      r.detail.appendChild(h('div', { class: 'kv2 sm' }, h('span', null, 'Server'), h('span', null, s.name + ' · ' + s.ip), h('span', null, 'Unraid'), h('span', null, (s.os || '-') + (o.available ? ' · ' + o.latest + ' available' : '')),
+        h('span', null, 'Uptime'), h('span', null, upt(s.uptime) + ' · since ' + new Date((s.now - s.uptime) * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })),
+        y.ups ? [h('span', null, 'UPS'), h('span', null, (y.ups.model || '') + ' · ' + y.ups.status + ' · ' + pct(y.ups.charge) + (y.ups.runtime ? ' · ' + Math.round(y.ups.runtime / 60) + ' min runtime' : ''))] : null));
+    }
+  }
+  function sparkBox(vals, max) {
+    var s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', 'spark2'); s.setAttribute('viewBox', '0 0 100 40'); s.setAttribute('preserveAspectRatio', 'none'); s.setAttribute('role', 'img');
+    s.setAttribute('aria-label', vals.length ? 'Last ' + vals.length + ' samples' : 'No history yet');
+    if (vals.length > 1) {
+      var n = vals.length, d = 'M' + vals.map(function (v, i) { return (i / (n - 1) * 100).toFixed(2) + ',' + (40 - Math.max(0, Math.min(1, (v || 0) / (max || 1))) * 38).toFixed(2); }).join(' L');
+      var a = document.createElementNS(SVGNS, 'path'); a.setAttribute('class', 'a'); a.setAttribute('d', d + ' L100,40 L0,40 Z');
+      var l = document.createElementNS(SVGNS, 'path'); l.setAttribute('class', 'l'); l.setAttribute('d', d); l.setAttribute('vector-effect', 'non-scaling-stroke');
+      s.appendChild(a); s.appendChild(l);
+    }
+    return s;
+  }
+  function diskTable() {
+    var st = S.storage;
+    if (!st) return h('div', { class: 'empty' }, 'Loading disks…');
+    if (st.error) return h('div', { class: 'empty' }, st.error);
+    var rows = [].concat((st.parity || []).map(function (d) { d.k = 'Parity'; return d; }), (st.array || []).map(function (d) { d.k = 'Array'; return d; }), (st.pools || []).map(function (d) { d.k = 'Pool'; return d; }));
+    if (!rows.length) return h('div', { class: 'empty' }, 'No disk information. Is the array started?');
+    return h('div', { class: 'tw' }, h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Disk'), h('th', null, 'Health'), h('th', null, 'Temp'), h('th', null, 'Usage'))),
+      h('tbody', null, rows.map(function (d) {
+        var p = d.size ? 100 * (d.size - d.free) / d.size : 0;
+        return h('tr', null, h('td', null, h('b', null, d.name), h('span', { class: 'muted xs' }, ' ' + d.k + (d.device ? ' · ' + d.device : '') + (d.fs ? ' · ' + d.fs : ''))),
+          h('td', null, h('span', { class: 'badge ' + (d.health === 'ok' ? 'ok' : d.health === 'warn' ? 'warn' : 'bad'), title: d.status }, d.health === 'ok' ? 'ok' : String(d.status).replace('DISK_', '').toLowerCase()), d.errors ? h('span', { class: 'badge bad' }, d.errors + ' errors') : null),
+          h('td', { class: 'num' }, d.temp === null ? h('span', { class: 'muted' }, d.spun ? '-' : 'spun down') : h('span', { class: d.temp >= 55 ? 't-bad' : d.temp >= 50 ? 't-warn' : '' }, d.temp + '°C')),
+          h('td', { style: { 'min-width': '160px' } }, d.size ? [h('div', { class: 'xs num' }, bytes(d.size - d.free) + ' / ' + bytes(d.size)), h('div', { class: 'meter' }, h('i', { class: meterCls(p), style: { width: p.toFixed(1) + '%' } }))] : h('span', { class: 'muted' }, '-')));
+      }))));
+  }
+  function loadStorage() {
+    if (S.storageBusy) return; S.storageBusy = true; S.storageAt = Date.now();
+    api('storage').then(function (j) { S.storageBusy = false; S.storage = j; if (R.overview) { R.overview.detailSig = null; paintDetail(S.live || {}); } });
   }
   function portLink(cls) {
-    if (window.UND_STANDALONE) return h('a', { class: 'btn ' + cls, href: UNRAID + '/Dashboard', rel: 'noopener' }, ic('web'), 'Open Unraid');
+    if (window.UND_STANDALONE) return UNRAID ? h('a', { class: 'btn ' + cls, href: UNRAID + '/Dashboard', target: '_blank', rel: 'noopener' }, ic('web'), 'Open Unraid') : null;
     if (!S.boot.port_enabled) return null;
     return h('a', { class: 'btn ' + cls, href: '/plugins/undash/handoff.php', target: '_blank', rel: 'noopener', title: 'UnDash on its own page (port ' + S.boot.port + '), without Unraid\'s menu' }, ic('web'), 'Open on port ' + S.boot.port);
   }
   function serverMenu(from) {
-    var dk = dockerStats(S.live || {});
+    var dk = dockerStats(S.live || {}), caps = S.boot.caps;
+    var pl = portLink('');
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
-      ['Check container updates', 'box', checkUpdates, '', !!S.busy.dcheck], dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
-      ['Unraid OS update', 'up', osDialog], ['Recent operations', 'history', historyDialog], 'hr',
-      ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'], ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger']]);
+      caps.docker_check ? ['Check container updates', 'box', checkUpdates, '', !!S.busy.dcheck] : null, dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
+      caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog],
+      pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
+      window.UND_STANDALONE ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
+      caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
   }
 
   /* ---- alerts ---- */
@@ -453,6 +548,7 @@
     var r = R.alerts, s = y.system, out = [];
     if (S.conn === 'down') out.push(['bad', 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.']);
     if (S.conn === 'auth') out.push(['bad', 'Your session ended. Reload the page to sign in again.']);
+    if (s && s.error) { out.push(['bad', s.error + (s.auth ? ' Check Settings > Configuration.' : ''), ['Settings', function () { openSettings('config'); }]]); s = null; }
     if (s) {
       var a = s.array || {};
       if (a.state && a.state !== 'STARTED') out.push(['warn', 'The array is ' + a.state.toLowerCase() + '. Shares, containers and VMs on it are unavailable.']);
@@ -474,7 +570,7 @@
       else if (c.state === 'exited' && c.exit && c.autostart) out.push(['warn', nm + ' stopped with exit code ' + c.exit + '.', lg]);
       if (c.job === 'update_failed') out.push(['bad', 'The update of ' + nm + ' failed.', lg]);
     });
-    var sig = JSON.stringify(out.map(function (x) { return [x[0], x[1]]; }));
+    var sig = JSON.stringify([!!s, out.map(function (x) { return [x[0], x[1]]; })]);
     if (r.sig === sig) return; r.sig = sig;
     clear(r.list);
     txt(r.count, out.length ? String(out.length) : '');
@@ -514,88 +610,6 @@
       }
       r.list.appendChild(el);
     });
-  }
-
-  /* ---- metrics ---- */
-  var MET = {
-    cpu: ['CPU', 'cpu'], cores: ['CPU cores', 'cpu'], temp: ['CPU temperature', 'temp'], memory: ['Memory', 'mem'], swap: ['Swap', 'swap'], array: ['Array', 'array'],
-    storage: ['Disk', 'disk'], network: ['Network', 'net'], uptime: ['Uptime', 'clock'], load: ['Load', 'load'], host: ['Host', 'server'], os: ['Unraid', 'server'],
-    docker: ['Containers', 'box'], vms: ['VMs', 'vm'], ups: ['UPS', 'bolt']
-  };
-  BUILD.metrics = function (r) {
-    r.grid = h('div', { class: 'metrics' }); r.body.appendChild(r.grid); r.tiles = {};
-    S.L.dashboard.metrics.forEach(function (m) {
-      if (!m.visible || !MET[m.id]) return;
-      var t = { mv: h('div', { class: 'mv' }, '–'), ms: h('div', { class: 'ms' }) };
-      t.el = h('div', { class: 'metric' + (m.id === 'cores' ? ' wide' : ''), 'data-m': m.id }, h('div', { class: 'mh' }, ic(MET[m.id][1]), MET[m.id][0]), t.mv, t.ms);
-      r.tiles[m.id] = t; r.grid.appendChild(t.el);
-    });
-    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, 'No metrics are turned on (Settings > System).'));
-  };
-  function setMeter(t, p, cls) {
-    if (!t.meter) { t.meter = h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i')); t.el.insertBefore(t.meter, t.ms); }
-    var i = t.meter.firstChild; i.style.width = Math.max(0, Math.min(100, p || 0)).toFixed(1) + '%'; i.className = cls === undefined ? meterCls(p) : cls;
-  }
-  function setSpark(t, vals, max) {
-    if (vals.length < 2) return;
-    var n = vals.length, d = 'M' + vals.map(function (v, i) { return (i / (n - 1) * 100).toFixed(2) + ',' + (40 - Math.max(0, Math.min(1, (v || 0) / (max || 1))) * 38).toFixed(2); }).join(' L');
-    if (!t.spark) {
-      t.spark = document.createElementNS(SVGNS, 'svg'); t.spark.setAttribute('class', 'spark'); t.spark.setAttribute('viewBox', '0 0 100 40'); t.spark.setAttribute('preserveAspectRatio', 'none'); t.spark.setAttribute('aria-hidden', 'true');
-      t.sa = document.createElementNS(SVGNS, 'path'); t.sa.setAttribute('class', 'a'); t.sl = document.createElementNS(SVGNS, 'path'); t.sl.setAttribute('class', 'l'); t.sl.setAttribute('vector-effect', 'non-scaling-stroke');
-      t.spark.appendChild(t.sa); t.spark.appendChild(t.sl); t.el.insertBefore(t.spark, t.el.firstChild);
-    }
-    t.sa.setAttribute('d', d + ' L100,40 L0,40 Z'); t.sl.setAttribute('d', d);
-  }
-  function mv(t, main, small) { if (t.mvTxt === main + '|' + small) return; t.mvTxt = main + '|' + small; clear(t.mv); t.mv.appendChild(document.createTextNode(main)); if (small) t.mv.appendChild(h('small', null, small)); }
-  function paintMetrics(y) {
-    var T = R.metrics.tiles, s = y.system;
-    if (!s) return;
-    var hist = s.hist || [], t;
-    if ((t = T.cpu)) { mv(t, pct(s.cpu.pct), ''); txt(t.ms, 'Load ' + s.cpu.load[0].toFixed(2) + ' · ' + s.cpu.threads + ' threads'); setSpark(t, hist.map(function (x) { return x[1]; }), 100); }
-    if ((t = T.cores)) {
-      var cores = s.cpu.cores || [];
-      if (!cores.length) { mv(t, 'Measuring…', ''); }
-      else {
-        mv(t, pct(Math.max.apply(null, cores)), 'busiest core');
-        if (!t.bars || t.bars.childNodes.length !== cores.length) { if (t.bars) t.bars.remove(); t.bars = h('div', { class: 'cores', role: 'img' }); cores.forEach(function () { t.bars.appendChild(h('i')); }); t.el.insertBefore(t.bars, t.ms); }
-        cores.forEach(function (c, i) { t.bars.childNodes[i].style.height = Math.max(2, c) + '%'; t.bars.childNodes[i].title = 'Core ' + i + ': ' + c + '%'; });
-        t.bars.setAttribute('aria-label', 'Per-core load: ' + cores.map(function (c, i) { return i + ': ' + Math.round(c) + '%'; }).join(', '));
-        txt(t.ms, cores.length + ' cores · average ' + pct(s.cpu.pct));
-      }
-    }
-    if ((t = T.temp)) {
-      if (s.cpu.temp === null || s.cpu.temp === undefined) { mv(t, 'No sensor', ''); txt(t.ms, 'Not reported by this server'); }
-      else { mv(t, Math.round(s.cpu.temp) + '°C', ''); setMeter(t, s.cpu.temp, s.cpu.temp >= 85 ? 'bad' : s.cpu.temp >= 75 ? 'warn' : ''); txt(t.ms, 'CPU package'); }
-    }
-    if ((t = T.memory)) { mv(t, pct(s.mem.pct), ''); txt(t.ms, bytes(s.mem.used) + ' used · ' + bytes(s.mem.free) + ' free of ' + bytes(s.mem.total)); setSpark(t, hist.map(function (x) { return x[2]; }), s.mem.total); }
-    if ((t = T.swap)) { if (!s.mem.swap_total) { mv(t, 'None', ''); txt(t.ms, 'No swap configured'); } else { var sp = 100 * s.mem.swap_used / s.mem.swap_total; mv(t, pct(sp), ''); setMeter(t, sp); txt(t.ms, bytes(s.mem.swap_used) + ' of ' + bytes(s.mem.swap_total)); } }
-    if ((t = T.array)) {
-      var a = s.array;
-      var pools = (a.pools || []).filter(function (p) { return p.size > 0; });
-      if (!a.size && pools.length) {
-        // no array data disks (pool-only server): show the pools instead
-        var ps = 0, pf = 0; pools.forEach(function (p) { ps += p.size; pf += p.free; });
-        mv(t, bytes(pf), 'free'); setMeter(t, 100 * (ps - pf) / ps); txt(t.ms, pools.length + ' pool' + (pools.length > 1 ? 's' : '') + ' · ' + pct(100 * (ps - pf) / ps) + ' of ' + bytes(ps) + ' · no array disks');
-      } else if (!a.size) { mv(t, (a.state || '-').toLowerCase(), ''); txt(t.ms, a.state === 'STARTED' ? 'No array disks' : 'Array not started'); }
-      else { var ap = 100 * (a.size - a.free) / a.size; mv(t, bytes(a.free), 'free'); setMeter(t, ap); txt(t.ms, pct(ap) + ' used of ' + bytes(a.size) + ' · ' + a.disks + ' disks' + (a.parity ? ' + ' + a.parity + ' parity' : '')); }
-    }
-    if ((t = T.storage)) {
-      var d = s.disk;
-      if (!d) { mv(t, '-', ''); txt(t.ms, S.L.general.disk_path + ' is not mounted'); }
-      else if (!d.total) { mv(t, 'Not reported', ''); txt(t.ms, d.path + ' has no size here; pick a pool in Settings > System'); }
-      else { mv(t, bytes(d.free), 'free'); setMeter(t, d.pct); txt(t.ms, d.path + ' · ' + pct(d.pct) + ' of ' + bytes(d.total)); }
-    }
-    if ((t = T.network)) {
-      if (s.net.rx === null) { mv(t, 'Measuring…', ''); txt(t.ms, s.net.iface || 'no default route'); }
-      else { mv(t, rate(s.net.rx) + ' ↓', ''); txt(t.ms, rate(s.net.tx) + ' ↑ · ' + (s.net.iface || '-')); setSpark(t, hist.map(function (x) { return x[3] || 0; }), Math.max.apply(null, hist.map(function (x) { return x[3] || 0; }).concat([1024]))); }
-    }
-    if ((t = T.uptime)) { mv(t, upt(s.uptime), ''); txt(t.ms, 'Since ' + new Date((s.now - s.uptime) * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })); }
-    if ((t = T.load)) { mv(t, s.cpu.load[0].toFixed(2), ''); txt(t.ms, '5 min ' + s.cpu.load[1].toFixed(2) + ' · 15 min ' + s.cpu.load[2].toFixed(2)); setMeter(t, 100 * s.cpu.load[0] / s.cpu.threads); }
-    if ((t = T.host)) { mv(t, s.name, ''); txt(t.ms, s.ip); }
-    if ((t = T.os)) { var o = s.os_update || {}; mv(t, s.os || '-', ''); txt(t.ms, o.staged ? o.staged + ' waits for a restart' : o.available ? o.latest + ' available' : o.checked ? 'Up to date · checked ' + rel(o.checked) : 'Not checked yet'); }
-    if ((t = T.docker)) { var dk = dockerStats(y); if (!dk) { mv(t, '-', ''); txt(t.ms, (y.docker && y.docker.error) || 'Loading'); } else { mv(t, String(dk.running), 'of ' + dk.total + ' running'); txt(t.ms, (dk.updates ? dk.updates + ' updates · ' : '') + (dk.unhealthy ? dk.unhealthy + ' unhealthy' : 'none unhealthy')); } }
-    if ((t = T.vms)) { var vm = vmStats(y); if (!vm) { mv(t, '-', ''); txt(t.ms, (y.vms && y.vms.error) || 'Loading'); } else { mv(t, String(vm.running), 'of ' + vm.total + ' running'); txt(t.ms, vm.paused ? vm.paused + ' paused or hibernated' : vm.total ? 'VM service running' : 'No VMs'); } }
-    if ((t = T.ups)) { var u = y.ups; if (!u) { mv(t, 'No UPS', ''); txt(t.ms, 'NUT or apcupsd not found'); } else { mv(t, pct(u.charge), ''); setMeter(t, u.charge, u.charge < 30 ? 'bad' : u.charge < 60 ? 'warn' : ''); txt(t.ms, u.status + (u.load !== null ? ' · load ' + pct(u.load) : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : '')); } }
   }
 
   /* ---------- preferences for discovered containers and VMs ---------- */
@@ -661,8 +675,13 @@
       h('button', { type: 'button', class: D.layout === 'list' ? 'on' : '', title: 'List', 'aria-label': 'List layout', 'aria-pressed': D.layout === 'list' ? 'true' : 'false', onclick: function () { setLayout('docker', 'list'); } }, ic('list')),
       h('button', { type: 'button', class: D.layout === 'cards' ? 'on' : '', title: 'Cards', 'aria-label': 'Card layout', 'aria-pressed': D.layout === 'cards' ? 'true' : 'false', onclick: function () { setLayout('docker', 'cards'); } }, ic('grid')));
     r.updAll = h('span');
-    r.tools.appendChild(r.filters); r.tools.appendChild(sort); r.tools.appendChild(lay); r.tools.appendChild(r.updAll);
-    r.list = D.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel' }, h('div', { class: 'rowh', 'aria-hidden': 'true' }, h('span', null, 'Container'), h('span', null, 'Status'), h('span', { class: 'c-res' }, 'CPU / Memory'), h('span', { class: 'c-up' }, 'Uptime'), h('span', { class: 'c-upd' }, 'Version'), h('span', null, 'Actions')));
+    var view = h('button', { type: 'button', class: 'btn sm ghost', title: D.view === 'compact' ? 'Show image, uptime and restarts' : 'Compact rows', 'aria-pressed': D.view === 'expanded' ? 'true' : 'false',
+      onclick: function () { D.view = D.view === 'compact' ? 'expanded' : 'compact'; api('prefs', { kind: 'docker_view', value: { view: D.view } }); shell(); } }, D.view === 'compact' ? 'Expanded' : 'Compact');
+    r.tools.appendChild(r.filters); r.tools.appendChild(sort); r.tools.appendChild(lay); if (D.layout === 'list') r.tools.appendChild(view); r.tools.appendChild(r.updAll);
+    var cmp = D.view === 'compact';
+    r.list = D.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel' + (cmp ? ' compact' : '') }, cmp
+      ? h('div', { class: 'rowh c', 'aria-hidden': 'true' }, h('span', null, 'Container'), h('span', null, 'Status'), h('span', { class: 'c-cpu' }, 'CPU'), h('span', { class: 'c-mem' }, 'Memory'), h('span', null, ''), h('span', null, ''))
+      : h('div', { class: 'rowh', 'aria-hidden': 'true' }, h('span', null, 'Container'), h('span', null, 'Status'), h('span', { class: 'c-res' }, 'CPU / Memory'), h('span', { class: 'c-up' }, 'Uptime'), h('span', { class: 'c-upd' }, 'Version'), h('span', null, 'Actions')));
     r.rows = D.layout === 'cards' ? r.list : h('div', { role: 'list' });
     if (D.layout !== 'cards') r.list.appendChild(r.rows);
     r.foot = h('div', { class: 'more' });
@@ -702,11 +721,11 @@
     list.forEach(function (c, i) {
       var p = pref('docker', c.name);
       // rows are only rebuilt when something structural changes, so menus and focus survive the 2-second refresh
-      var sig = JSON.stringify([c.state, c.health, c.update, c.job, c.webui, c.managed, S.busy['d:' + c.name] || '', p, c.icon, c.image, D.layout]);
+      var sig = JSON.stringify([c.state, c.health, c.update, c.job, c.webui, c.managed, S.busy['d:' + c.name] || '', p, c.icon, c.image, D.layout, D.view]);
       var row = r.map[c.name];
       if (!row || row._sig !== sig) {
         var had = row && row.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
-        var nrow = D.layout === 'cards' ? dTile(c, p) : dRow(c, p);
+        var nrow = D.layout === 'cards' ? dTile(c, p) : D.view === 'compact' ? dRowC(c, p) : dRow(c, p);
         nrow._sig = sig;
         if (row && row.parentNode) row.parentNode.replaceChild(nrow, row);
         r.map[c.name] = row = nrow;
@@ -764,6 +783,17 @@
     row.appendChild(dActions(c, p, false));
     return row;
   }
+  /* compact row: icon, name, state, CPU, memory, an update badge only when there is one, and the actions */
+  function dRowC(c, p) {
+    var row = h('div', { class: 'rowi c' + (S.busy['d:' + c.name] ? ' busy' : ''), role: 'listitem', 'data-name': c.name, title: c.image });
+    row._cpu = h('span', { class: 'c-cpu num' }); row._mem = h('span', { class: 'c-mem num muted' });
+    row.appendChild(h('div', { class: 'who c-who' }, img(iconUrl(p.icon || c.icon), '', 'box'), h('span', { class: 'nm ell' }, p.label || c.name, p.favorite ? ic('star', true) : null)));
+    row.appendChild(h('div', { class: 'c-st' }, dStateBadge(c)));
+    row.appendChild(row._cpu); row.appendChild(row._mem);
+    row.appendChild(h('div', { class: 'c-upd' }, c.update === 'available' || c.job === 'update_failed' ? dUpdBadge(c) : null));
+    row.appendChild(dActions(c, p, false));
+    return row;
+  }
   function dTile(c, p) {
     var t = h('div', { class: 'tile' + (S.busy['d:' + c.name] ? ' busy' : ''), role: 'listitem', 'data-name': c.name });
     t._cpu = h('span'); t._mem = h('span'); t._up = h('span'); t._m = h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i'));
@@ -776,12 +806,12 @@
   }
   function dVolatile(row, c) {
     var run = c.state === 'running';
-    txt(row._cpu, run && c.cpu !== null ? c.cpu.toFixed(1) + '%' : run ? '…' : '-');
-    txt(row._mem, run && c.mem !== null ? bytes(c.mem) : '');
-    var i = row._m.firstChild;
-    i.style.width = (run && c.cpu !== null ? Math.min(100, c.cpu) : 0) + '%'; i.className = 'acc';
-    row._cpu.title = 'CPU: 100% = one core (as in Unraid\'s Docker tab)';
-    txt(row._up, uptimeText(c) + (c.restarts ? ' · ' + c.restarts + ' restarts' : ''));
+    var na = !S.boot.caps.docker_stats;      // the Unraid API offers no per-container CPU / memory over HTTP
+    txt(row._cpu, na ? '' : run && c.cpu !== null ? c.cpu.toFixed(1) + '%' : run ? '…' : '-');
+    txt(row._mem, na ? '' : run && c.mem !== null ? bytes(c.mem) : '');
+    row._cpu.title = na ? '' : 'CPU: 100% = one core (as in Unraid\'s Docker tab)';
+    if (row._m) { var i = row._m.firstChild; i.style.width = (run && c.cpu !== null ? Math.min(100, c.cpu) : 0) + '%'; i.className = 'acc'; }
+    if (row._up) txt(row._up, uptimeText(c) + (c.restarts ? ' · ' + c.restarts + ' restarts' : ''));
     if (row._mob) txt(row._mob, run ? (c.cpu !== null ? c.cpu.toFixed(1) + '% · ' : '') + (c.mem !== null ? bytes(c.mem) + ' · ' : '') + uptimeText(c) : uptimeText(c));
   }
   function dAct(c, op) {
@@ -896,15 +926,15 @@
       var kv = function (rows) { return h('div', { class: 'kv2' }, rows.filter(Boolean).map(function (r) { return [h('span', null, r[0]), h('span', null, r[1])]; })); };
       var sub = function (t) { return h('h4', { class: 'muted sm', style: { margin: '14px 0 6px' } }, t); };
       box.appendChild(kv([['Image', j.image + ' (' + j.image_id + ')'], ['Container id', j.id], ['State', j.state + (j.exit ? ' · exit code ' + j.exit : '') + (j.oom ? ' · killed: out of memory' : '')],
-        j.error ? ['Error', j.error] : null, ['Created', j.created ? new Date(j.created * 1000).toLocaleString() : '-'], ['Started', j.started ? new Date(j.started * 1000).toLocaleString() : '-'],
+        j.state_error ? ['Error', j.state_error] : null, ['Created', j.created ? new Date(j.created * 1000).toLocaleString() : '-'], ['Started', j.started ? new Date(j.started * 1000).toLocaleString() : '-'],
         ['Restarts', j.restarts + (j.restart_policy ? ' · policy ' + j.restart_policy : '')], ['Network', j.network_mode + (j.networks.length ? ' · ' + j.networks.map(function (n) { return n.name + (n.ip ? ' ' + n.ip : ''); }).join(', ') : '')],
         ['Ports', j.ports.join(', ') || 'none'], j.privileged ? ['Privileged', 'yes'] : null]));
       if (j.health.length) { box.appendChild(sub('Health checks')); j.health.forEach(function (x) { box.appendChild(h('div', { class: 'sm', style: { 'margin-bottom': '4px' } }, h('span', { class: 'badge ' + (x.code ? 'bad' : 'ok') }, x.code ? 'failed' : 'ok'), ' ', x.at ? rel(x.at) : '', ' ', h('span', { class: 'muted' }, x.out))); }); }
       box.appendChild(sub('Volumes'));
       box.appendChild(j.mounts.length ? h('div', { class: 'tw' }, h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Host path'), h('th', null, 'Container path'), h('th', null, 'Mode'))),
         h('tbody', null, j.mounts.map(function (x) { return h('tr', null, h('td', { class: 'mono' }, x.src), h('td', { class: 'mono' }, x.dst), h('td', null, x.rw ? 'read-write' : 'read-only')); })))) : h('div', { class: 'muted sm' }, 'none'));
-      box.appendChild(sub('Environment variables (names only: values often hold passwords)'));
-      box.appendChild(h('div', { class: 'mono muted' }, j.env.join(', ') || 'none'));
+      if (j.note) box.appendChild(h('p', { class: 'muted sm', style: { 'margin-top': '12px' } }, j.note));
+      else { box.appendChild(sub('Environment variables (names only: values often hold passwords)')); box.appendChild(h('div', { class: 'mono muted' }, j.env.join(', ') || 'none')); }
     });
   }
 
@@ -925,7 +955,7 @@
     r.tools.appendChild(h('div', { class: 'seg', role: 'group', 'aria-label': 'Layout' },
       h('button', { type: 'button', class: V.layout === 'list' ? 'on' : '', title: 'List', 'aria-label': 'List layout', 'aria-pressed': V.layout === 'list' ? 'true' : 'false', onclick: function () { setLayout('vms', 'list'); } }, ic('list')),
       h('button', { type: 'button', class: V.layout === 'cards' ? 'on' : '', title: 'Cards', 'aria-label': 'Card layout', 'aria-pressed': V.layout === 'cards' ? 'true' : 'false', onclick: function () { setLayout('vms', 'cards'); } }, ic('grid'))));
-    r.list = V.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel' }, h('div', { class: 'rowh', 'aria-hidden': 'true' }, h('span', null, 'Virtual machine'), h('span', null, 'Status'), h('span', { class: 'c-res' }, 'vCPUs / Memory'), h('span', { class: 'c-up' }, 'Autostart'), h('span', { class: 'c-upd' }, 'Guest agent'), h('span', null, 'Actions')));
+    r.list = V.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel compact' }, h('div', { class: 'rowh c', 'aria-hidden': 'true' }, h('span', null, 'Virtual machine'), h('span', null, 'Status'), h('span', { class: 'c-cpu' }, 'vCPUs'), h('span', { class: 'c-mem' }, 'Memory'), h('span', { class: 'c-upd' }, S.boot.caps.vm_details ? 'Guest agent' : ''), h('span', null, '')));
     r.rows = V.layout === 'cards' ? r.list : h('div', { role: 'list' });
     if (V.layout !== 'cards') r.list.appendChild(r.rows);
     r.body.appendChild(r.list);
@@ -960,11 +990,13 @@
       more.setAttribute('aria-haspopup', 'menu');
       a.appendChild(more);
       if (b) [].forEach.call(a.querySelectorAll('button'), function (z) { if (z !== more) z.disabled = true; });
-      var who = h('div', { class: 'who c-who' }, img(iconUrl(p.icon || x.icon), '', 'vm'), h('div', { class: 'ell' }, h('div', { class: 'nm' }, h('span', { class: 'ell' }, p.label || x.name), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')));
-      var res = x.cpus + ' vCPU · ' + bytes(x.memory);
+      var who = S.L.vms.layout === 'cards' ? h('div', { class: 'who c-who' }, img(iconUrl(p.icon || x.icon), '', 'vm'), h('div', { class: 'ell' }, h('div', { class: 'nm' }, h('span', { class: 'ell' }, p.label || x.name), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')))
+        : h('div', { class: 'who c-who' }, img(iconUrl(p.icon || x.icon), '', 'vm'), h('span', { class: 'nm ell', title: x.os || '' }, p.label || x.name, p.favorite ? ic('star', true) : null));
+      var res = x.cpus ? x.cpus + ' vCPU · ' + bytes(x.memory) : '';
       if (S.L.vms.layout === 'cards') r.rows.appendChild(h('div', { class: 'tile' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'chips' }, vStateBadge(x.state, b), x.autostart ? h('span', { class: 'badge plain' }, 'autostart') : null), h('div', { class: 'stats' }, h('span', null, res), h('span', null, x.agent ? 'guest agent' : 'no guest agent')), a));
-      else r.rows.appendChild(h('div', { class: 'rowi' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'c-st' }, vStateBadge(x.state, b), h('span', { class: 'mob muted sm' }, res)), h('div', { class: 'res c-res' }, res),
-        h('span', { class: 'c-up muted sm' }, x.autostart ? 'autostart' : 'manual'), h('div', { class: 'c-upd' }, x.agent ? h('span', { class: 'badge ok', title: 'Hibernate is available' }, 'agent') : h('span', { class: 'badge plain', title: 'No QEMU guest agent channel: hibernate is not available' }, 'no agent')), a));
+      else r.rows.appendChild(h('div', { class: 'rowi c' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'c-st' }, vStateBadge(x.state, b)),
+        h('span', { class: 'c-cpu num' }, x.cpus ? String(x.cpus) : ''), h('span', { class: 'c-mem num muted' }, x.memory ? bytes(x.memory) : ''),
+        h('div', { class: 'c-upd' }, !S.boot.caps.vm_details ? null : x.agent ? h('span', { class: 'badge ok', title: 'Hibernate is available' }, 'agent') : h('span', { class: 'badge plain', title: 'No QEMU guest agent channel: hibernate is not available' }, 'no agent')), a));
     });
     if (hidden || S.showHidden) r.rows.appendChild(h('div', { class: 'more' }, btn(S.showHidden ? 'Hide hidden VMs' : 'Show ' + hidden + ' hidden', function () { S.showHidden = !S.showHidden; if (R.docker) R.docker.fSig = null; r.sig = null; paintAll(); }, 'sm ghost', 'eye')));
     if (focus) { var f = r.rows.querySelector('[aria-label="' + focus.replace(/"/g, '') + '"]'); if (f && !f.disabled) f.focus(); }
@@ -989,39 +1021,173 @@
     if (ask) confirmBox(ask[0], ask[1], ask[2], ask[3]).then(function (y) { if (y) run(); }); else run();
   }
 
-  /* ---- storage ---- */
-  BUILD.storage = function (r) { r.box = h('div', { class: 'panel tw' }, h('div', { class: 'empty' }, 'Loading disks…')); r.body.appendChild(r.box); };
-  function loadStorage() {
-    S.storageAt = Date.now();
-    api('storage').then(function (j) {
-      var r = R.storage; if (!r) return;
-      if (j.error) { clear(r.box).appendChild(h('div', { class: 'empty' }, j.error)); return; }
-      var rows = [].concat(j.parity.map(function (d) { d.k = 'Parity'; return d; }), j.array.map(function (d) { d.k = 'Array'; return d; }), j.pools.map(function (d) { d.k = 'Pool'; return d; }));
-      clear(r.box);
-      if (!rows.length) { r.box.appendChild(h('div', { class: 'empty' }, 'No disk information. Is the array started?')); return; }
-      r.box.appendChild(h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Disk'), h('th', null, 'Health'), h('th', null, 'Temp'), h('th', null, 'Usage'))),
-        h('tbody', null, rows.map(function (d) {
-          var p = d.size ? 100 * (d.size - d.free) / d.size : 0;
-          return h('tr', null, h('td', null, h('b', null, d.name), h('div', { class: 'muted xs' }, d.k + (d.device ? ' · ' + d.device : '') + (d.fs ? ' · ' + d.fs : ''))),
-            h('td', null, h('span', { class: 'badge ' + (d.health === 'ok' ? 'ok' : d.health === 'warn' ? 'warn' : 'bad'), title: d.status }, d.health === 'ok' ? 'ok' : d.status.replace('DISK_', '').toLowerCase()), d.errors ? h('span', { class: 'badge bad', style: { 'margin-left': '4px' } }, d.errors + ' errors') : null),
-            h('td', { class: 'num' }, d.temp === null ? h('span', { class: 'muted' }, d.spun ? '-' : 'spun down') : h('span', { style: { color: d.temp >= 50 ? 'var(--bad)' : d.temp >= 45 ? 'var(--warn)' : '' } }, d.temp + '°C')),
-            h('td', { style: { 'min-width': '180px' } }, d.size ? [h('div', { class: 'sm num' }, bytes(d.size - d.free) + ' / ' + bytes(d.size)), h('div', { class: 'meter' }, h('i', { class: meterCls(p), style: { width: p.toFixed(1) + '%' } }))] : h('span', { class: 'muted' }, '-')));
-        }))));
+  /* ---- media: four poster rows, each refreshed on its own ---- */
+  var MEDIA = { upcoming_movies: ['Upcoming movies', 'Nothing scheduled in the coming weeks.'], upcoming_episodes: ['Upcoming episodes', 'No episodes airing soon.'],
+                recent_movies: ['Recently added movies', 'No movies imported recently.'], recent_episodes: ['Recently added episodes', 'No episodes imported recently.'] };
+  BUILD.media = function (r) {
+    r.grid = h('div', { class: 'media' }); r.w = {};
+    S.L.media.widgets.forEach(function (w) {
+      if (!w.visible || !MEDIA[w.id]) return;
+      var x = { link: h('span'), row: h('div', { class: 'posters', role: 'list', 'aria-label': MEDIA[w.id][0] }, h('div', { class: 'empty' }, 'Loading…')), count: h('span', { class: 'count' }) };
+      x.el = h('div', { class: 'mw card' }, h('div', { class: 'mh' }, h('h3', null, MEDIA[w.id][0]), x.count, h('span', { class: 'grow' }), x.link), x.row);
+      r.w[w.id] = x; r.grid.appendChild(x.el);
+    });
+    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media widgets are hidden (Settings > Dashboard).'));
+    r.body.appendChild(r.grid);
+    clearTimeout(S.mediaTimer); loadMedia(true);
+  };
+  /* the first load always happens; later refreshes wait while the tab is hidden (visibilitychange catches up) */
+  function loadMedia(first) {
+    var r = R.media; if (!r) return;
+    if (document.hidden && first !== true) { S.mediaStale = true; return; }
+    S.mediaStale = false; S.mediaAt = Date.now();
+    var ids = Object.keys(r.w), left = ids.length;
+    ids.forEach(function (k) {
+      api('media', { kind: k }, 30000).then(function (j) { paintMedia(k, j); if (--left === 0) { clearTimeout(S.mediaTimer); S.mediaTimer = setTimeout(loadMedia, 300000); } });
+    });
+  }
+  function paintMedia(k, j) {
+    var x = R.media && R.media.w[k]; if (!x) return;
+    var sig = JSON.stringify(j); if (x.sig === sig) return; x.sig = sig;
+    clear(x.row); clear(x.link);
+    if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name }, j.app.name, ic('web')));
+    if (j.error && !(j.items || []).length) { x.row.appendChild(h('div', { class: 'empty ' + (j.unconfigured ? '' : 'err-t') }, j.error)); txt(x.count, ''); return; }
+    txt(x.count, String(j.items.length));
+    if (!j.items.length) { x.row.appendChild(h('div', { class: 'empty' }, MEDIA[k][1])); return; }
+    var upcoming = k.indexOf('upcoming') === 0;
+    j.items.forEach(function (it) {
+      if (!matches(it.title + ' ' + (it.sub || ''))) return;
+      var d = new Date(it.ts * 1000);
+      var when = upcoming ? (it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' }))
+        : rel(it.ts);
+      x.row.appendChild(h('a', { class: 'poster', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: 'noopener', title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.sub ? '\n' + it.sub : '') + '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() },
+        h('span', { class: 'pimg' }, it.poster ? h('img', { src: it.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null,
+          it.done ? h('span', { class: 'pdone', title: 'Already downloaded' }, ic('check')) : null, upcoming && it.when !== 'Airs' ? h('span', { class: 'ptag' }, it.when) : null),
+        h('span', { class: 'pt' }, it.title), h('span', { class: 'ps' }, it.sub ? it.sub : (it.year ? String(it.year) : '')), h('span', { class: 'pd' }, when)));
     });
   }
 
-  /* ---- services (widgets of other apps) ---- */
+  /* ---- Arr Stack: one compact row per app, details on demand ---- */
+  function zoneApps(zone) { var out = []; S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (s.zone === zone && !s.hidden) out.push(s); }); }); return out; }
+  BUILD.arr = function (r) {
+    var apps = zoneApps('arr');
+    r.list = h('div', { class: 'panel arr', role: 'list' }); r.rows = {};
+    if (!apps.length) r.list.appendChild(h('div', { class: 'empty' }, 'No Arr apps yet. Add Radarr, Sonarr, Prowlarr… in Settings > Apps.'));
+    apps.forEach(function (s) {
+      var x = { s: s, dot: h('span', { class: 'sdot na', role: 'img', 'aria-label': 'checking' }), info: h('span', { class: 'ai' }, 'Checking…'), extra: h('span', { class: 'ax' }), det: h('div', { class: 'adet', hidden: true }) };
+      var tog = h('button', { type: 'button', class: 'arow', 'aria-expanded': 'false', onclick: function () { x.det.hidden = !x.det.hidden; tog.setAttribute('aria-expanded', x.det.hidden ? 'false' : 'true'); } },
+        img(iconUrl(s.icon), 'aico', 'tag'), h('span', { class: 'an' }, s.name), x.dot, x.info, x.extra);
+      x.el = h('div', { class: 'aitem', role: 'listitem', 'data-name': s.name }, h('div', { class: 'aline' }, tog, s.href_resolved ? h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('web')) : null), x.det);
+      r.rows[s.id] = x; r.list.appendChild(x.el);
+    });
+    r.body.appendChild(r.list);
+    txt(r.count, apps.length ? String(apps.length) : '');
+    clearTimeout(S.arrTimer); loadArr(true);
+  };
+  function loadArr(first) {
+    var r = R.arr; if (!r) return;
+    var ids = Object.keys(r.rows);
+    if (!ids.length) return;
+    if (document.hidden && first !== true) { S.arrStale = true; return; }
+    S.arrStale = false;
+    var left = ids.length, i = 0;
+    function next() {
+      if (i >= ids.length) return;
+      var id = ids[i++];
+      api('arr', { id: id }, 30000).then(function (j) { paintArr(id, j); next(); if (--left === 0) { clearTimeout(S.arrTimer); S.arrTimer = setTimeout(loadArr, Math.max(30, S.L.general.refresh_services) * 1000); } });
+    }
+    for (var k = 0; k < 3; k++) next();
+  }
+  function paintArr(id, j) {
+    var x = R.arr && R.arr.rows[id]; if (!x) return;
+    var sig = JSON.stringify(j); if (x.sig === sig) return; x.sig = sig;
+    var issues = (j.health || []).length + (j.issues || []).length, bad = (j.health || []).concat(j.issues || []).some(function (z) { return z.level === 'bad'; });
+    var state = !j.online ? (j.unconfigured ? 'na' : 'bad') : issues ? (bad ? 'bad' : 'warn') : 'ok';
+    x.dot.className = 'sdot ' + state; x.dot.setAttribute('aria-label', !j.online ? (j.unconfigured ? 'not configured' : 'offline') : issues ? issues + ' issues' : 'online');
+    clear(x.info); clear(x.extra);
+    if (!j.online) x.info.appendChild(h('span', { class: j.unconfigured ? 'muted' : 't-bad' }, j.unconfigured ? 'Not configured' : 'Offline'));
+    else (j.blocks || []).slice(0, 4).forEach(function (b) { x.info.appendChild(h('span', { class: 'st' }, h('b', null, fmt(b.value, b.fmt)), ' ' + b.label.toLowerCase())); });
+    if (issues) x.extra.appendChild(h('span', { class: 'badge ' + (bad ? 'bad' : 'warn') }, issues + (issues === 1 ? ' issue' : ' issues')));
+    else if (j.version) x.extra.appendChild(h('span', { class: 'muted xs' }, 'v' + j.version));
+    clear(x.det);
+    if (j.error) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
+    if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(function (b) { return h('div', { class: 'blk' }, h('div', { class: 'v' }, fmt(b.value, b.fmt)), h('div', { class: 'l' }, b.label)); })));
+    (j.health || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, (z.source ? z.source + ': ' : '') + z.msg))); });
+    (j.issues || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, h('b', null, z.title), ' · ' + z.msg))); });
+    if (j.online && !issues && !j.error) x.det.appendChild(h('div', { class: 'muted sm' }, 'No warnings' + (j.version ? ' · version ' + j.version : '') + '.'));
+  }
+
+  /* ---- download clients ---- */
+  BUILD.downloads = function (r) {
+    var apps = zoneApps('downloads');
+    r.list = h('div', { class: 'dls' }); r.c = {};
+    if (!apps.length) r.list.appendChild(h('div', { class: 'card empty' }, 'No download clients yet. Add qBittorrent or SABnzbd in Settings > Apps.'));
+    apps.forEach(function (s) {
+      var x = { s: s, head: h('div', { class: 'dlh' }), body: h('div', { class: 'dlb' }, h('div', { class: 'muted sm' }, 'Loading…')) };
+      x.el = h('div', { class: 'card dl', 'data-name': s.name }, x.head, x.body);
+      r.c[s.id] = x; r.list.appendChild(x.el);
+    });
+    r.body.appendChild(r.list);
+    clearTimeout(S.dlTimer); loadDl(true);
+  };
+  function loadDl(first) {
+    var r = R.downloads; if (!r) return;
+    var ids = Object.keys(r.c);
+    if (!ids.length) return;
+    if ((document.hidden || S.paused) && first !== true) { S.dlStale = true; return; }
+    S.dlStale = false;
+    var left = ids.length;
+    ids.forEach(function (id) { api('dl', { id: id }, 20000).then(function (j) { paintDl(id, j); if (--left === 0) { clearTimeout(S.dlTimer); S.dlTimer = setTimeout(loadDl, Math.max(3, S.L.general.refresh) * 1000 * 2); } }); });
+  }
+  var DLSTATE = { downloading: ['Downloading', 'ok'], stalled: ['Stalled', 'warn'], paused: ['Paused', 'off'], idle: ['Idle', 'off'], disconnected: ['Disconnected', 'bad'] };
+  function paintDl(id, j) {
+    var x = R.downloads && R.downloads.c[id]; if (!x) return;
+    var busy = S.busy['dl:' + id] || '';
+    var sig = JSON.stringify([j, busy, S.L.downloads.items]); if (x.sig === sig) return; x.sig = sig;
+    var s = x.s, st = j.error ? ['Unreachable', 'bad'] : (DLSTATE[j.state] || [j.state, 'off']);
+    clear(x.head); clear(x.body);
+    var paused = j.state === 'paused' || j.paused;
+    x.head.appendChild(img(iconUrl(s.icon), 'aico', 'download'));
+    x.head.appendChild(h('span', { class: 'an' }, s.name));
+    x.head.appendChild(h('span', { class: 'badge ' + st[1] }, busy || (j.unconfigured ? 'Not configured' : st[0])));
+    x.head.appendChild(h('span', { class: 'grow' }));
+    if (j.online && j.can_pause) x.head.appendChild(btn('', function () { dlAct(s, id, paused ? 'resume' : 'pause'); }, 'sm' + (paused ? ' okc' : ''), paused ? 'play' : 'pause', (paused ? 'Resume all in ' : 'Pause all in ') + s.name));
+    if (s.href_resolved) x.head.appendChild(h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('web')));
+    if (busy) x.head.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    if (j.error) { x.body.appendChild(h('div', { class: 'sm t-bad' }, j.error)); return; }
+    var c = j.counts || {};
+    x.body.appendChild(h('div', { class: 'dlspeed' }, h('span', null, h('b', null, rate(j.down)), ' ↓'), j.up !== null && j.up !== undefined ? h('span', null, h('b', null, rate(j.up)), ' ↑') : null, j.eta && j.eta !== '0:00:00' ? h('span', { class: 'muted' }, j.eta + ' left') : null));
+    var chips = [['downloading', 'active', ''], ['stalled', 'stalled', 'warn'], ['queued', 'queued', ''], ['paused', 'paused', 'off'], ['seeding', 'seeding', ''], ['completed', 'done', ''], ['error', 'errors', 'bad']];
+    x.body.appendChild(h('div', { class: 'chips' }, chips.filter(function (z) { return c[z[0]]; }).map(function (z) { return h('span', { class: 'badge plain ' + z[2] }, c[z[0]].toLocaleString() + ' ' + z[1]); })));
+    if (j.note) x.body.appendChild(h('div', { class: 'xs t-warn' }, j.note));
+    (j.items || []).slice(0, S.L.downloads.items).forEach(function (it) {
+      x.body.appendChild(h('div', { class: 'dli', title: it.name },
+        h('div', { class: 'dln' }, h('span', { class: 'ell' }, it.name), h('span', { class: 'muted xs num' }, it.progress.toFixed(it.progress < 10 ? 1 : 0) + '%' + (it.eta ? ' · ' + dur(it.eta) : '') + (it.speed ? ' · ' + rate(it.speed) : '') + (it.state !== 'downloading' ? ' · ' + it.state : ''))),
+        h('div', { class: 'meter' }, h('i', { class: it.state === 'stalled' ? 'warn' : it.state === 'paused' ? 'off' : 'acc', style: { width: Math.min(100, it.progress) + '%' } }))));
+    });
+  }
+  function dlAct(s, id, op) {
+    var key = 'dl:' + id; if (S.busy[key]) return;
+    confirmBox((op === 'pause' ? 'Pause' : 'Resume') + ' all downloads in ' + s.name + '?', op === 'pause' ? 'Every download and upload in ' + s.name + ' is paused until you resume it.' : 'Everything paused in ' + s.name + ' starts again.', op === 'pause' ? 'Pause all' : 'Resume all').then(function (y) {
+      if (!y) return;
+      S.busy[key] = op === 'pause' ? 'pausing' : 'resuming'; R.downloads.c[id].sig = null;
+      act('dl_action', { id: id, op: op }, s.name + ': ' + (op === 'pause' ? 'paused' : 'resumed')).then(function () { delete S.busy[key]; clearTimeout(S.dlTimer); loadDl(); });
+    });
+  }
+
+  /* ---- apps: everything that is not Arr, a download client, media or already in the overview ---- */
   var NATIVE = { system_info: 1, cpu: 1, memory: 1, link: 1 };
-  BUILD.services = function (r) {
+  BUILD.apps = function (r) {
     var closed = LS.get('closed', {});
-    var groups = S.L.groups.filter(function (g) { return g.services.some(function (s) { return !s.hidden; }); });
-    if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No widgets yet. Add them or import your Homepage config in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Services'), '.')); return; }
-    groups.forEach(function (gr) {
-      var vis = gr.services.filter(function (s) { return !s.hidden; });
-      var grid = h('div', { class: 'grid', style: { '--cols': String(gr.columns) } });
+    var groups = S.L.groups.map(function (g) { return { g: g, s: g.services.filter(function (s) { return s.zone === 'apps' && !s.hidden; }) }; }).filter(function (x) { return x.s.length; });
+    if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No other apps. Add Plex, Immich, AdGuard, links… in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Apps'), '.')); return; }
+    groups.forEach(function (x) {
+      var gr = x.g;
+      var links = x.s.every(function (s) { return s.type === 'link'; });
+      var grid = h('div', { class: 'grid' + (links ? ' links' : ''), style: { '--cols': String(links ? Math.max(gr.columns, 6) : gr.columns) } });
       var wrap = h('div', { class: 'grp' + (closed[gr.id] ? ' closed' : '') });
-      if (gr.header) wrap.appendChild(h('h3', null, h('button', { type: 'button', 'aria-expanded': closed[gr.id] ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name)));
-      vis.forEach(function (s) { grid.appendChild(widget(s)); });
+      if (gr.header && groups.length > 1) wrap.appendChild(h('h3', null, h('button', { type: 'button', 'aria-expanded': closed[gr.id] ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name)));
+      x.s.forEach(function (s) { grid.appendChild(widget(s)); });
       wrap.appendChild(grid); r.body.appendChild(wrap);
     });
     clearTimeout(S.svcTimer); S.svcRun = false;
@@ -1036,15 +1202,15 @@
     var nm = href ? h('a', { class: 'nm', href: href, target: '_blank', rel: 'noopener' }, s.name) : h('span', { class: 'nm' }, s.name);
     var c = h('div', { class: 'card w wait' + (s.span === 2 ? ' span2' : ''), id: 'w-' + s.id, 'data-name': s.name },
       h('div', { class: 'ch' }, img(u), nm, h('span', { class: 'sub' })), s.description ? h('div', { class: 'desc' }, s.description) : null,
-      h('div', { class: 'cb' }, NATIVE[s.type] ? h('div', { class: 'muted sm' }, 'Shown in the System section now; you can remove this widget.') : h('div', { class: 'muted sm' }, 'Loading…')));
+      h('div', { class: 'cb' }, NATIVE[s.type] ? h('div', { class: 'muted sm' }, 'Shown in the overview now; you can remove this widget.') : h('div', { class: 'muted sm' }, 'Loading…')));
     var prev = S.svc[s.id]; if (prev) setTimeout(function () { paintService(s, prev); }, 0);
     return c;
   }
-  /* widgets of other apps: at most 4 requests at a time; the next round starts only after the last answer */
+  /* app widgets: at most 4 requests at a time; the next round starts only after the last answer */
   function pollServices() {
-    if (S.svcRun || !R.services || S.power || (document.hidden && S.L.general.background_poll !== 'normal')) return;
+    if (S.svcRun || !R.apps || S.power || (document.hidden && S.L.general.background_poll !== 'normal')) return;
     var list = [];
-    S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (!NATIVE[s.type] && !s.hidden) list.push(s); }); });
+    S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (s.zone === 'apps' && !NATIVE[s.type] && !s.hidden) list.push(s); }); });
     if (!list.length) return;
     S.svcRun = true;
     var i = 0, running = 0;
@@ -1055,6 +1221,7 @@
     }
     for (var k = 0; k < 4; k++) next();
   }
+
   function blocks(list) { return h('div', { class: 'blocks' }, list.map(function (x) { return h('div', { class: 'blk' }, h('div', { class: 'v' }, fmt(x.value, x.fmt)), h('div', { class: 'l' }, x.label)); })); }
   function paintService(s, r) {
     var c = document.getElementById('w-' + s.id); if (!c) return;
@@ -1201,11 +1368,13 @@
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
-  var SEC_DESC = { overview: 'Server facts, health and quick actions', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and services', metrics: 'CPU, memory, storage, network and more',
-    docker: 'Every container, found automatically', vms: 'Every VM, found automatically', storage: 'Disks and pools with health and temperatures', services: 'Widgets of your apps (Radarr, Plex, …)' };
-  var MET_DESC = { cpu: 'Usage with history', cores: 'Load of every core', temp: 'CPU package temperature', memory: 'RAM used and available', swap: 'Swap usage', array: 'Array capacity',
-    storage: 'Free space of one path', network: 'Download and upload speed', uptime: 'Time since boot', load: 'Load average', host: 'Hostname and address', os: 'Unraid version and updates',
-    docker: 'Running containers', vms: 'Running VMs', ups: 'UPS battery (NUT or apcupsd)' };
+  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
+    media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
+    docker: 'Every container, found automatically', vms: 'Every VM, found automatically', apps: 'Plex, Immich, AdGuard, links and other apps' };
+  var MET_DESC = { cpu: 'Usage and temperature', memory: 'RAM used and available', storage: 'Array (or pools) capacity', network: 'Download and upload speed', health: 'Array state, disk problems, parity checks',
+    disks: 'Hottest disk', uptime: 'Time since boot', ups: 'UPS battery', cores: 'Busiest core', swap: 'Swap usage', load: 'Load average (plugin only)', path: 'Free space of one path (plugin only)',
+    docker: 'Running containers', vms: 'Running VMs' };
+  var MEDIA_DESC = { upcoming_movies: 'Radarr calendar', upcoming_episodes: 'Sonarr calendar', recent_movies: 'Radarr imports', recent_episodes: 'Sonarr imports' };
 
   function openSettings(tab) {
     if (S.drawer) return;
@@ -1217,7 +1386,7 @@
     var saveB = btn('Save', save, 'pri'); saveB.disabled = true;
     var status = h('span', { class: 'muted sm grow', role: 'status' }, 'Loading…');
     var tabs = h('div', { class: 'dt', role: 'tablist', 'aria-label': 'Settings sections' });
-    [['dashboard', 'Dashboard'], ['system', 'System'], ['appearance', 'Appearance'], ['services', 'Services'], ['config', 'Configuration']].forEach(function (t) {
+    [['dashboard', 'Dashboard'], ['system', 'System'], ['appearance', 'Appearance'], ['services', 'Apps'], ['config', 'Configuration']].forEach(function (t) {
       tabs.appendChild(h('button', { type: 'button', role: 'tab', 'data-t': t[0], onclick: function () { D.tab = t[0]; paintTabs(); render(); } }, t[1]));
     });
     var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
@@ -1281,9 +1450,19 @@
   function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return false; var x = arr[i]; arr[i] = arr[j]; arr[j] = x; return true; }
   function rid() { var a = new Uint8Array(4); window.crypto.getRandomValues(a); return [].map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
   function set(title, hint) { var b = h('section', { class: 'set' }, h('h3', null, title), hint ? h('p', { class: 'hint' }, hint) : null); for (var i = 2; i < arguments.length; i++) add(b, arguments[i]); return b; }
+  /* reorderable list: drag the handle (mouse) or use the arrow buttons (keyboard, touch) */
   function orderList(arr, row, dirty, redraw) {
+    var from = null;
     return h('div', { class: 'olist' }, arr.map(function (x, i) {
-      return h('div', { class: 'oi' }, row(x, i), btn('', function () { if (move(arr, i, -1)) { dirty(); redraw(); } }, 'sm ghost', 'upar', 'Move up'), btn('', function () { if (move(arr, i, 1)) { dirty(); redraw(); } }, 'sm ghost', 'dnar', 'Move down'));
+      var el = h('div', { class: 'oi', draggable: 'true',
+        ondragstart: function (e) { from = i; el.classList.add('drag'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); } catch (z) { /* old browser */ } },
+        ondragend: function () { el.classList.remove('drag'); },
+        ondragover: function (e) { if (from !== null) { e.preventDefault(); el.classList.add('over'); } },
+        ondragleave: function () { el.classList.remove('over'); },
+        ondrop: function (e) { e.preventDefault(); el.classList.remove('over'); if (from === null || from === i) return; var it = arr.splice(from, 1)[0]; arr.splice(i, 0, it); from = null; dirty(); redraw(); } },
+        h('span', { class: 'grip', 'aria-hidden': 'true', title: 'Drag to reorder' }, '⋮⋮'), row(x, i),
+        btn('', function () { if (move(arr, i, -1)) { dirty(); redraw(); } }, 'sm ghost', 'upar', 'Move up'), btn('', function () { if (move(arr, i, 1)) { dirty(); redraw(); } }, 'sm ghost', 'dnar', 'Move down'));
+      return el;
     }));
   }
 
@@ -1294,8 +1473,17 @@
         return [h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: s.visible, onchange: function (e) { s.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, TITLES[s.id]), h('span', { class: 'muted sm' }, ' · ' + SEC_DESC[s.id]))),
           sIn(s, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']])];
       }, dirty, redraw)));
+    b.appendChild(set('System overview', 'The tiles at the top, in this order. Click a tile on the dashboard to see its details. A metric the server cannot measure says so instead of showing a made-up number.',
+      orderList(c.dashboard.metrics, function (m) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: m.visible, onchange: function (e) { m.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MET[m.id][0]), h('span', { class: 'muted sm' }, ' · ' + MET_DESC[m.id]))); }, dirty, redraw)));
+    var radarrs = [['', 'First Radarr app']], sonarrs = [['', 'First Sonarr app']];
+    c.groups.forEach(function (g) { g.services.forEach(function (x) { if (x.type === 'radarr') radarrs.push([x.id, x.name]); if (x.type === 'sonarr') sonarrs.push([x.id, x.name]); }); });
+    b.appendChild(set('Media', 'Posters and dates from your Radarr and Sonarr apps.',
+      orderList(c.media.widgets, function (w) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: w.visible, onchange: function (e) { w.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MEDIA[w.id][0]), h('span', { class: 'muted sm' }, ' · ' + MEDIA_DESC[w.id]))); }, dirty, redraw),
+      h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Radarr', sIn(c.media, 'radarr', dirty, radarrs)), F('Sonarr', sIn(c.media, 'sonarr', dirty, sonarrs)),
+        F('Items per row', tIn(c.media, 'count', dirty, '15', 'number', { min: 4, max: 40 })), F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 })))));
+    b.appendChild(set('Downloads', null, h('div', { class: 'grid2' }, F('Active items shown per client', tIn(c.downloads, 'items', dirty, '4', 'number', { min: 0, max: 20 }), '0 shows the totals only.'))));
     b.appendChild(set('Containers', 'Containers are found automatically: new ones appear and removed ones disappear on their own.', h('div', { class: 'grid2' },
-      F('Layout', sIn(c.docker, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])), F('Sort by', sIn(c.docker, 'sort', dirty, [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']]))),
+      F('Layout', sIn(c.docker, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])), F('Rows', sIn(c.docker, 'view', dirty, [['compact', 'Compact'], ['expanded', 'Expanded (image, uptime, restarts)']])), F('Sort by', sIn(c.docker, 'sort', dirty, [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']]))),
       cIn(c.docker, 'hide_stopped', dirty, 'Hide stopped containers in the "All" view')));
     b.appendChild(set('Virtual machines', 'VMs are found automatically through libvirt.', h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])))));
     var y = S.live || {}, items = [];
@@ -1330,8 +1518,6 @@
       F('When the browser tab is in the background', sIn(g, 'background_poll', dirty, [['slow', 'Slow down (every 30 s)'], ['pause', 'Pause'], ['normal', 'Keep the same speed']])),
       F('App widgets refresh every (seconds)', tIn(g, 'refresh_services', dirty, '15', 'number', { min: 5, max: 3600 }), 'Radarr, Plex and the other app widgets.'),
       F('Check for Unraid updates every (hours)', tIn(g, 'os_check_hours', dirty, '6', 'number', { min: 1, max: 168 })))));
-    b.appendChild(set('System metrics', 'Shown in the System section, in this order. A metric the server cannot measure (no sensor, no swap, no UPS) says so instead of showing made-up numbers.',
-      orderList(D.cfg.dashboard.metrics, function (m) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: m.visible, onchange: function (e) { m.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MET[m.id][0]), h('span', { class: 'muted sm' }, ' · ' + MET_DESC[m.id]))); }, dirty, function () { D.render(); })));
     b.appendChild(set('Display', null, h('div', { class: 'grid2' },
       F('Dashboard title', tIn(g, 'title', dirty, 'UnDash')),
       F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
@@ -1353,7 +1539,7 @@
     col = h('input', { type: 'color', value: a.accent, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
     b.appendChild(set('Theme', 'Three built-in themes. The accent colours buttons, links and selections only; status colours (green, amber, red) never change.', tw,
       h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex, btn('Default orange', function () { a.accent = '#f15a2c'; hex.value = col.value = a.accent; dirty(); preview(); }, 'sm ghost')),
-      h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Density', sIn(a, 'density', dirty, [['comfortable', 'Comfortable'], ['compact', 'Compact']], preview)))));
+      h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)))));
     var pd = function () { dirty(); preview(); };
     b.appendChild(set('Wallpaper', 'Optional image behind the dashboard (https:// or a path served by Unraid).', h('div', { class: 'grid2' },
       F('Image URL', tIn(a, 'background', pd, 'https://…')),
@@ -1524,6 +1710,36 @@
   }
 
   function tabConfig(b, D) {
+    if (S.boot.caps.mode === 'api') unraidConn(b); else locPort(b, D);
+    configCommon(b, D);
+  }
+  /* Docker version: where the Unraid API is and its key (the key is never shown again once saved) */
+  function unraidConn(b) {
+    var box = h('div', null, h('div', { class: 'progress' }, h('i')));
+    b.appendChild(set('Unraid connection', 'The Docker version reads the server through the official Unraid API. Create a key in Unraid under Settings > Management Access > API Keys with read access to Info, Array, Disk, Docker and VMs, plus update access to Docker and VMs for the buttons.', box));
+    api('unraid_conf').then(function (c) {
+      clear(box);
+      var u = { url: c.url || '', key: c.key_set ? S.KEEP || '__KEEP__' : '' };
+      var res = h('div', { role: 'status', style: { 'margin-top': '10px' } });
+      box.appendChild(h('div', { class: 'grid2' },
+        F('API address', h('input', { type: 'url', value: u.url, placeholder: 'http://192.168.1.10/graphql', disabled: c.from_env.url, oninput: function (e) { u.url = e.target.value; } }), c.from_env.url ? 'Set by UNRAID_API_URL in the container settings.' : 'Unraid\'s address followed by /graphql.'),
+        F('API key', h('input', { type: 'password', autocomplete: 'off', value: '', placeholder: c.key_set ? 'stored (leave empty to keep)' : 'paste the key', disabled: c.from_env.key, oninput: function (e) { u.key = e.target.value || (c.key_set ? '__KEEP__' : ''); } }), c.from_env.key ? 'Set by UNRAID_API_KEY in the container settings.' : 'Kept on the server only.')));
+      box.appendChild(h('div', { class: 'inl', style: { 'margin-top': '8px' } },
+        c.from_env.url && c.from_env.key ? null : btn('Save', function () { act('unraid_save', u, 'Saved').then(function (j) { if (!j.error) test(); }); }, 'pri'),
+        btn('Test connection', test, '', 'check')));
+      box.appendChild(res);
+      function test() {
+        clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
+        api('unraid_test', {}, 60000).then(function (t) {
+          clear(res);
+          if (!t.ok) { res.appendChild(h('div', { class: 'banner bad' }, t.error || 'The connection failed.')); return; }
+          res.appendChild(h('div', { class: 'banner ok' }, 'Connected to ' + t.hostname + ' (Unraid ' + t.unraid + ', API ' + t.api + ').'));
+          res.appendChild(h('div', { class: 'kv2 sm' }, Object.keys(t.access).map(function (k) { return [h('span', null, k), h('span', { class: t.access[k] === 'ok' ? 't-ok' : 't-bad' }, t.access[k] === 'ok' ? 'readable' : t.access[k])]; })));
+        });
+      }
+    });
+  }
+  function locPort(b, D) {
     var L = Object.assign({}, D.loc);
     var dir = h('input', { type: 'text', value: L.CONFIG_DIR, oninput: function (e) { L.CONFIG_DIR = e.target.value; } });
     var port = h('input', { type: 'number', min: 1024, max: 65535, value: L.PORT, oninput: function (e) { L.PORT = e.target.value; } });
@@ -1540,6 +1756,8 @@
       h('div', { style: { 'margin-top': '8px' } }, btn('Apply location and port', function () {
         act('loc_save', { dir: L.CONFIG_DIR, port: L.PORT, bind: L.BIND, standalone: L.STANDALONE }, 'Saved. The standalone port restarts.').then(function (j) { if (!j.error) { D.loc = j.loc; D.store = j.store; S.boot.port = +j.loc.PORT; S.boot.port_enabled = j.loc.STANDALONE === 'yes'; D.render(); } });
       }, 'pri'))));
+  }
+  function configCommon(b, D) {
     var dl = function (kind) {
       api('export', { kind: kind }).then(function (j) {
         if (j.error) { toast(j.error, true); return; }

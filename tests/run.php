@@ -29,7 +29,7 @@ function reset_store() { global $SANDBOX; rmrf(UND_DIR); rmrf("$SANDBOX/fs/mnt/u
 group('config');
 reset_store();
 $c = und_load_config();
-t('defaults have schema 2', $c['schema'] === 2);
+t('defaults have schema 3', $c['schema'] === 3);
 t('default refresh is 2 s', $c['general']['refresh'] === 2);
 t('three themes only', und_normalize(['groups' => [], 'appearance' => ['theme' => 'midnight']])['appearance']['theme'] === 'default');
 t('accent must be a hex colour', und_normalize(['groups' => [], 'appearance' => ['accent' => 'red;}']])['appearance']['accent'] === '#f15a2c');
@@ -53,7 +53,15 @@ t('v1 title kept', $m['general']['title'] === 'R1ZE');
 t('v1 midnight becomes default theme', $m['appearance']['theme'] === 'default');
 t('v1 wallpaper moved to appearance', $m['appearance']['background'] === '/bg.jpg');
 t('v1 Glances-style group removed, others kept', count($m['groups']) === 1 && $m['groups'][0]['name'] === 'Arr' && $m['groups'][0]['services'][0]['id'] === 'eeeeeeee');
-t('migration result is schema 2', $m['schema'] === 2);
+t('migration result is schema 3', $m['schema'] === 3);
+$v2 = ['schema' => 2, 'groups' => [], 'dashboard' => ['sections' => [['id' => 'overview', 'visible' => true], ['id' => 'favorites', 'visible' => false], ['id' => 'metrics', 'visible' => true], ['id' => 'docker', 'visible' => false], ['id' => 'storage', 'visible' => true], ['id' => 'services', 'visible' => true, 'collapsed' => true]]]];
+$m3 = und_normalize(und_migrate($v2));
+$ids = array_column($m3['dashboard']['sections'], 'id');
+t('v2 metrics and storage sections are folded into the overview', !in_array('metrics', $ids, true) && !in_array('storage', $ids, true));
+t('v2 services becomes apps and keeps its state', $m3['dashboard']['sections'][array_search('apps', $ids)]['collapsed'] === true);
+t('media, arr and downloads follow favorites', array_slice($ids, 0, 5) === ['overview', 'favorites', 'media', 'arr', 'downloads']);
+t('v2 hidden sections stay hidden', $m3['dashboard']['sections'][array_search('docker', $ids)]['visible'] === false);
+t('density accepts expanded', und_normalize(['groups' => [], 'appearance' => ['density' => 'expanded']])['appearance']['density'] === 'expanded');
 
 group('storage location');
 reset_store();
@@ -142,7 +150,7 @@ t('redacted export keeps css', strpos($red, 'color:red') !== false);
 t('redacted export marks its kind', json_decode($red, true)['kind'] === 'redacted');
 $full = json_encode(und_export('full'));
 t('full export has the secrets', strpos($full, 'SVCSECRET') !== false && strpos($full, 'VARSECRET1') !== false);
-t('exports contain nothing but settings', count(array_diff(array_keys(json_decode($full, true)), ['undash_export', 'schema', 'kind', 'created', 'version', 'config', 'css', 'vars', 'secrets'])) === 0);
+t('exports contain nothing but settings', count(array_diff(array_keys(json_decode($full, true)), ['undash_export', 'schema', 'kind', 'created', 'version', 'config', 'css', 'vars', 'secrets', 'unraid'])) === 0);
 
 group('import');
 t('empty file refused', isset(und_import_parse('')['error']));
@@ -194,6 +202,9 @@ t('history records actions', count(und_history()) >= 2 && und_history()[0]['targ
 $u = und_docker_update_state(['img:latest' => ['status' => 'undef']], 'img');
 t('an unchecked image is "unknown", never "current"', $u === 'unknown' && und_docker_update_state([], 'x') === 'unknown' && und_docker_update_state(['x:latest' => ['status' => 'true']], 'x') === 'current');
 t('health is parsed from docker ps', und_docker_ps()['ps']['plex']['health'] === 'healthy');
+$GLOBALS['MOCK'] = function ($argv) { return $argv[1] === 'inspect' ? ['out' => json_encode([['Id' => 'abc', 'Config' => ['Image' => 'x', 'Env' => ['A=1']], 'State' => ['Status' => 'running', 'Error' => ''], 'HostConfig' => []]])] : ['code' => 1]; };
+$ins = und_docker_inspect('plex');
+t('container details do not look like an error (regression)', !isset($ins['error']) && $ins['state_error'] === '' && $ins['env'] === ['A']);
 
 /* ---------------- VMs ---------------- */
 group('vms');
