@@ -170,7 +170,23 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
       return $j($t);
     case $p === '/api': return $j(['error' => 'API Key Incorrect']);
     case substr($p, -13) === '/Items/Counts': return $j(['MovieCount' => 173, 'SeriesCount' => 151, 'EpisodeCount' => 5570, 'SongCount' => 0]);
-    case substr($p, -9) === '/Sessions': return $j([]);
+    case substr($p, -9) === '/Sessions': return $j([['UserName' => 'Sarah', 'DeviceName' => 'Living Room TV', 'Client' => 'Emby Theater', 'PlayState' => ['PositionTicks' => 31200000000, 'IsPaused' => false, 'PlayMethod' => 'Transcode'],
+      'NowPlayingItem' => ['Name' => 'Dune: Part Two', 'ProductionYear' => 2024, 'RunTimeTicks' => 99600000000, 'Width' => 3840], 'TranscodingInfo' => ['Bitrate' => 12000000]], ['UserName' => 'idle', 'DeviceName' => 'Phone']]);
+    /* Seerr requests: two pending, a few others; approve / decline change the state */
+    case $p === '/api/v1/request' && isset($q['filter']):
+      $sf = sys_get_temp_dir() . '/undash-dev/seerr.json'; $st = json_decode((string)@file_get_contents($sf), true) ?: [];
+      $all = [[11, 1, 2, 'movie', 693134, 'Alex', 2], [12, 1, 2, 'tv', 1399, 'Marcus', 5], [9, 2, 3, 'movie', 98, 'Sarah', 30], [8, 2, 5, 'movie', 438631, 'Alex', 50], [7, 3, 1, 'tv', 1396, 'Guest', 70]];
+      $res = [];
+      foreach ($all as $r) { $status = $st[$r[0]] ?? $r[1]; if ($q['filter'] === 'pending' && $status !== 1) continue;
+        $res[] = ['id' => $r[0], 'status' => $status, 'type' => $r[3], 'is4k' => $r[0] === 12, 'createdAt' => gmdate('c', time() - $r[6] * 3600), 'requestedBy' => ['displayName' => $r[5]],
+                  'media' => ['tmdbId' => $r[4], 'mediaType' => $r[3], 'status' => $status === 2 ? $r[2] : 2], 'seasons' => $r[3] === 'tv' ? [['seasonNumber' => 1], ['seasonNumber' => 2]] : []]; }
+      return $j(['pageInfo' => ['results' => count($res)], 'results' => $res]);
+    case preg_match('#^/api/v1/request/(\d+)/(approve|decline)$#', $p, $m) === 1 && $method === 'POST':
+      $sf = sys_get_temp_dir() . '/undash-dev/seerr.json'; $st = json_decode((string)@file_get_contents($sf), true) ?: [];
+      $st[$m[1]] = $m[2] === 'approve' ? 2 : 3; @file_put_contents($sf, json_encode($st)); return $j(['id' => (int)$m[1]]);
+    case preg_match('#^/api/v1/(movie|tv)/(\d+)$#', $p, $m) === 1:
+      $t = [693134 => ['Dune: Part Two', '2024-02-27'], 1399 => ['Game of Thrones', '2011-04-17'], 98 => ['Gladiator', '2000-05-01'], 438631 => ['Dune', '2021-09-15'], 1396 => ['Breaking Bad', '2008-01-20']][(int)$m[2]] ?? ['Unknown', ''];
+      return $j([$m[1] === 'tv' ? 'name' : 'title' => $t[0], $m[1] === 'tv' ? 'firstAirDate' : 'releaseDate' => $t[1], 'posterPath' => '/dev' . $m[2] . '.jpg']);
     case $p === '/status/sessions': return $j(['MediaContainer' => ['size' => 1]]);
     case $p === '/library/sections': return $j(['MediaContainer' => ['Directory' => [['key' => '1', 'type' => 'movie'], ['key' => '2', 'type' => 'show']]]]);
     case preg_match('#^/library/sections/(\d)/all$#', $p, $m) === 1: return $j(['MediaContainer' => ['totalSize' => $m[1] === '1' ? 173 : 129]]);
@@ -195,6 +211,18 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
     case strpos($p, '/api/v1/devices/') === 0: return $j(['battery.charge' => 100, 'ups.load' => 9, 'ups.status' => 'OL']);
   }
   return $j(['error' => 'not found'], 404);
+};
+
+/* endpoint health: mostly 200, some redirects, one 404, one refused (stable per address) */
+$GLOBALS['UND_HEALTH_MOCK'] = function ($targets) {
+  $out = [];
+  foreach ($targets as $i => $t) {
+    $n = crc32($t['hostport']) % 13;
+    $code = $n === 0 ? 0 : ($n === 1 ? 404 : ($n < 4 ? 302 : ($n === 4 ? 401 : 200)));
+    $out[$i] = ['code' => $code, 'ms' => $code ? 3 + $n * 2 : null, 'err' => $code ? '' : 'Connection refused'];
+  }
+  usleep(150000);
+  return $out;
 };
 
 /* a fake Unraid GraphQL API (Docker mode: UNDASH_MODE=api), answering with the shapes of the official schema */

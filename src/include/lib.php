@@ -175,7 +175,7 @@ unset($__ident);
 
 } // UND_LIB_LOADED
 
-foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts'] as $__m) {
+foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'health', 'playing', 'requests'] as $__m) {
   $__f = __DIR__ . '/' . $__m . '.php';
   if (is_file($__f)) require_once $__f;
 }

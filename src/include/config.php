@@ -35,7 +35,10 @@ function und_types() {
 }
 
 /** Dashboard sections, in their default order. */
-function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'apps', 'docker', 'vms']; }
+function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'playing', 'requests', 'apps', 'docker', 'vms', 'health']; }
+
+/** Sections added after the first release, and the section each goes after in a layout saved before it existed. */
+function und_section_since() { return ['playing' => 'downloads', 'requests' => 'playing', 'health' => 'vms']; }
 
 /** System metrics the overview can show, in their default order. */
 function und_metric_ids() { return ['cpu', 'memory', 'storage', 'network', 'health', 'disks', 'uptime', 'ups', 'cores', 'swap', 'load', 'path', 'docker', 'vms']; }
@@ -46,7 +49,7 @@ function und_media_ids() { return ['upcoming_movies', 'upcoming_episodes', 'rece
 function und_default_config() {
   $svc = function ($name, $type, $icon = '') { return ['id' => und_id(), 'name' => $name, 'type' => $type, 'icon' => $icon, 'href' => '', 'url' => '', 'fields' => [], 'options' => new stdClass()]; };
   $sections = [];
-  foreach (und_section_ids() as $id) $sections[] = ['id' => $id, 'visible' => $id !== 'favorites', 'width' => in_array($id, ['arr', 'downloads'], true) ? 'half' : 'full', 'collapsed' => false];
+  foreach (und_section_ids() as $id) $sections[] = ['id' => $id, 'visible' => $id !== 'favorites', 'width' => in_array($id, ['arr', 'downloads', 'playing', 'requests'], true) ? 'half' : 'full', 'collapsed' => false];
   $metrics = [];
   foreach (und_metric_ids() as $id) $metrics[] = ['id' => $id, 'visible' => !in_array($id, ['cores', 'swap', 'load', 'path', 'docker', 'vms'], true)];
   return [
@@ -318,6 +321,15 @@ function und_normalize(array $c) {
     return $out;
   };
   $sections = $order($db['sections'] ?? [], und_section_ids(), $d['dashboard']['sections'], ['visible' => 'bool', 'width' => ['full', 'half'], 'collapsed' => 'bool']);
+  // a section added in a later version goes where it belongs, not at the bottom of an older layout
+  $had = array_column(array_filter((array)($db['sections'] ?? []), 'is_array'), 'id');
+  if ($had) foreach (und_section_since() as $new => $after) {
+    if (in_array($new, $had, true)) continue;
+    $ids = array_column($sections, 'id'); $i = array_search($new, $ids, true); $row = $sections[$i];
+    array_splice($sections, $i, 1);
+    $ids = array_column($sections, 'id'); $j = array_search($after, $ids, true);
+    array_splice($sections, $j === false ? count($sections) : $j + 1, 0, [$row]);
+  }
   $metrics = $order($db['metrics'] ?? [], und_metric_ids(), $d['dashboard']['metrics'], ['visible' => 'bool']);
 
   $items = function ($list, $extra = []) {

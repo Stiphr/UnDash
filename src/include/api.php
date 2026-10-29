@@ -83,6 +83,14 @@ switch ($action) {
     if (!preg_match('/^[a-f0-9]{8}$/', $P('id'))) fail('Invalid client id.');
     out(und_dl_status(und_load_config(), $P('id')));
   }
+  case 'playing':  out(und_playing(und_load_config()));
+  case 'requests': out(und_requests(und_load_config()));
+  case 'request_action': {
+    $r = und_request_action(und_load_config(), $P('app'), $P('id'), $P('op'));
+    if (isset($r['error'])) fail($r['error'], 409);
+    out($r);
+  }
+  case 'health': out(und_health(und_load_config(), $P('force') === '1'));
   case 'dl_action': {
     if (!preg_match('/^[a-f0-9]{8}$/', $P('id'))) fail('Invalid client id.');
     $r = und_dl_action(und_load_config(), $P('id'), $P('op'));
