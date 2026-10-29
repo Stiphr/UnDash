@@ -10,7 +10,7 @@
  * Either way UnDash then keeps its own session (HttpOnly, SameSite=Strict, 12 h, renewed while used) with its own CSRF token.
  */
 
-define('UND_SESS_TTL', 12 * 3600);
+if (!defined('UND_SESS_TTL')) define('UND_SESS_TTL', 12 * 3600);
 
 function und_sess_dir() { $d = und_tmp('sess'); @mkdir($d, 0700, true); return $d; }
 
@@ -24,6 +24,12 @@ function und_sess_get() {
   if (!is_array($s) || (int)($s['exp'] ?? 0) < time()) { @unlink(und_sess_file($sid)); return null; }
   if ((int)$s['exp'] - time() < UND_SESS_TTL - 600) { $s['exp'] = time() + UND_SESS_TTL; und_write_json(und_sess_file($sid), $s, true); }
   return $s;
+}
+
+/** After a password change: every other browser has to sign in again (sessions opened without a password included). */
+function und_sess_drop_others() {
+  $keep = und_sess_file((string)($_COOKIE['undash_sid'] ?? ''));
+  foreach (glob(und_sess_dir() . '/*.json') ?: [] as $f) if ($f !== $keep) @unlink($f);
 }
 
 function und_sess_new($how) {
@@ -90,11 +96,20 @@ function und_handoff_use($t) {
 function und_auth_file() { return UND_DIR . '/auth.json'; }
 function und_setup_file() { return UND_DIR . '/setup-code.txt'; }
 
-/** none = nobody can sign in yet (first start), env = UNDASH_PASSWORD, file = password set in the setup page. */
+/** none = not set up yet (first start), env = UNDASH_PASSWORD, file = password set in the dashboard,
+ *  open = the owner chose to go without a password for now (anyone who reaches the port is signed in). */
 function und_auth_kind() {
   if ((string)getenv('UNDASH_PASSWORD') !== '') return 'env';
   $a = und_read_json(und_auth_file(), []);
-  return !empty($a['hash']) ? 'file' : 'none';
+  return !empty($a['hash']) ? 'file' : (!empty($a['open']) ? 'open' : 'none');
+}
+
+/** Skip the password (setup page) or remove it later (Settings). A password can be added again at any time. */
+function und_auth_open() {
+  if (und_auth_kind() === 'env') return ['error' => 'The password comes from UNDASH_PASSWORD in the container settings; remove it there.'];
+  if (!und_write_json(und_auth_file(), ['open' => true, 'set' => time()], true)) return ['error' => 'Could not write ' . und_auth_file() . '. Check the /config volume.'];
+  @unlink(und_setup_file());
+  return ['ok' => true];
 }
 
 function und_password_ok($pw) {

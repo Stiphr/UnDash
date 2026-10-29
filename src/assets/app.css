@@ -496,6 +496,7 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .login{max-width:380px;margin:12vh auto 0;padding:24px}
 .und .login .brand{margin-bottom:10px}.und .login .btn{width:100%;margin-top:6px!important}
 .und .login input{width:100%}
+.und .login.skip{margin-top:12px;padding:16px 24px}.und .login.skip p{margin:0 0 6px;font-size:12.5px}
 
 @media (max-width:1100px){
   .und .rowh.c,.und .rowi.c{grid-template-columns:minmax(150px,2fr) minmax(90px,1fr) 64px 76px 48px}

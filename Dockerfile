@@ -9,7 +9,7 @@ COPY src/ src/
 COPY tests/ tests/
 RUN set -e; \
     for f in $(find src tests -name '*.php'); do php -l "$f" > /dev/null; done; \
-    php tests/run.php; php tests/api_mode_test.php; php tests/router_test.php; \
+    php tests/run.php; php tests/api_mode_test.php; php tests/router_test.php; php tests/docker_auth_test.php; \
     sed -i "s/@@VERSION@@/${VERSION}/" src/include/lib.php
 
 # ---- stage 2: the runtime image ----
