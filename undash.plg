@@ -13,9 +13,9 @@
 ###0.5.1
 - Version numbers are now x.y.z (this is 0.5.1); releases are the vX.Y.Z tags. Plugin users coming from a 2026.x.x date version: reinstall the plugin once, as Unraid compares the old and new numbers as text.
 - Title bar: the UnDash logo and name, your server, its Unraid version and the UnDash version, each with an "available" badge when a newer one exists (UnDash checks its GitHub releases at most every 6 hours). The Docker version now shows the server's name and address instead of the container's.
-- The same safe margin in every theme (other themes used to get less room than Default on the full-window page); set your own side and top/bottom margins in Settings > Theme > Spacing.
+- The same safe margin in every theme (other themes used to get less room than Default on the full-window page); set your own side and top/bottom margins in Settings &gt; Theme &gt; Spacing.
 - Search: while filtering, sections and media columns with nothing that matches are hidden instead of showing empty boxes; one line says when nothing matches at all.
-- Settings reorganized into grouped pages with a side menu: Layout, Media & downloads, Containers & VMs, Apps, Theme, Custom CSS, Refresh & display, Ignored alerts, Connection, Backup & import. Checkboxes, sliders, dropdown lists and confirmation dialogs now follow the theme.
+- Settings reorganized into grouped pages with a side menu: Layout, Media &amp; downloads, Containers &amp; VMs, Apps, Theme, Custom CSS, Refresh &amp; display, Ignored alerts, Connection, Backup &amp; import. Checkboxes, sliders, dropdown lists and confirmation dialogs now follow the theme.
 - Fixes: Fluent's background gradient was lost on the full-window page; the settings group headings lost their style when switching pages.
 
 ###2026.11.02d
@@ -25,7 +25,7 @@
 - Docker version: the "no dashboard password" alert is red, highlighted and always first.
 
 ###2026.11.02c
-- Docker version: the first-start page can be skipped ("Continue without a password", no setup code needed); a password is still recommended. Add, change or remove it any time in Settings > Configuration > Dashboard password. While there is none, an alert says so (it can be ignored like any other).
+- Docker version: the first-start page can be skipped ("Continue without a password", no setup code needed); a password is still recommended. Add, change or remove it any time in Settings &gt; Configuration &gt; Dashboard password. While there is none, an alert says so (it can be ignored like any other).
 - Setting or changing the password signs out every other browser, including ones that came in while there was no password.
 
 ###2026.11.02b
@@ -34,7 +34,7 @@
 
 ###2026.11.02a
 - New sections: Now playing (Plex, Emby, Jellyfin, Tautulli streams with progress, direct play or transcode, quality and bandwidth), Requests (Overseerr / Jellyseerr, approve or decline pending requests) and Endpoint health (status and latency of every app and container web UI, with Re-probe).
-- Alert history: when each problem started and ended, checked once a minute in the background (also when no dashboard is open), kept for 30 days. Alerts > History.
+- Alert history: when each problem started and ended, checked once a minute in the background (also when no dashboard is open), kept for 30 days. Alerts &gt; History.
 - Keyboard shortcuts: / filter, r refresh, p pause, comma settings, ? list, g + letter to jump to a section.
 - The Inter typeface is now bundled, so the dashboard looks the same on every computer.
 - Fixes: web UI links of containers on a user-defined Docker network with published ports now use the server's address and host port (they pointed at the container's internal address); the filter box now filters Media, Arr Stack and Downloads immediately; quick preference clicks can no longer overwrite each other; scrolled media lists keep their place while columns rebalance; error messages are red again; stale "⋯ menu" hints now say gear.
@@ -56,17 +56,17 @@
 
 ###2026.10.31e
 - System tiles are separate cards with bigger numbers; CPU, memory, network and disk temperature show their recent history as a small chart under the value.
-- New Launcher section (right after System): one-click icons for every app with a link, with a status dot taken from the container of the same name. Hide or move it in Settings > Dashboard.
+- New Launcher section (right after System): one-click icons for every app with a link, with a status dot taken from the container of the same name. Hide or move it in Settings &gt; Dashboard.
 - App cards: large numbers are shortened (16.9K, exact value on hover), latency is rounded, and labels no longer break mid-word.
 
 ###2026.10.31b
-- Media: four equal columns (upcoming movies, upcoming episodes, recently added movies, recently added episodes) as compact lists that scroll on their own; 4, 2 or 1 columns depending on the space. Each column has its own item count (Settings > Dashboard > Media).
+- Media: four equal columns (upcoming movies, upcoming episodes, recently added movies, recently added episodes) as compact lists that scroll on their own; 4, 2 or 1 columns depending on the space. Each column has its own item count (Settings &gt; Dashboard &gt; Media).
 - Alerts: Ignore on each alert, for 1 hour, 24 hours, 7 days, a custom time or permanently, or for every alert of that type (with a confirmation). Undo right after ignoring. Disk alerts are now per disk.
-- Settings > Ignored alerts: temporarily ignored, permanently ignored and ignored alert types, with filter, Restore, Restore all and Delete expired.
+- Settings &gt; Ignored alerts: temporarily ignored, permanently ignored and ignored alert types, with filter, Restore, Restore all and Delete expired.
 - Ignoring only hides an alert; monitoring continues, and an alert comes back when its rule is restored or runs out while the problem is still there. Rules are kept in ignores.json in the configuration folder.
 
 ###2026.10.31a
-- Apps (Plex, Emby, Tautulli, AdGuard, Immich …) now sit right below Arr Stack and Downloads as one grid of compact cards; group titles and the old Services shortcut links are off by default (Settings > Dashboard > Apps).
+- Apps (Plex, Emby, Tautulli, AdGuard, Immich …) now sit right below Arr Stack and Downloads as one grid of compact cards; group titles and the old Services shortcut links are off by default (Settings &gt; Dashboard &gt; Apps).
 - Containers: a compact multi-column grid instead of a full-width table, showing the running containers by default. Pick your own set with "Selected" (⋯ menu or Settings), choose the columns and which details each container shows. Table and card layouts are still there.
 - Settings schema 4; existing settings are migrated.
 
