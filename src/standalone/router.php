@@ -22,8 +22,62 @@ function sa_deny($code, $msg) { http_response_code($code); header('Content-Type:
 /** Where Unraid's web UI is: same host, its own port (80/443). nginx redirects http to https when Unraid requires it. */
 function sa_unraid_base() { $h = und_req_host(); return $h === '' ? '' : 'http://' . $h; }
 
+/** The login / setup page (Docker version). Plain HTML, no script, so the strict CSP still applies. */
+function sa_form_page($title, $intro, $fields, $error = '') {
+  $pre = bin2hex(random_bytes(16));
+  setcookie('undash_pre', $pre, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
+  $e = function ($x) { return htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8'); };
+  header('Content-Type: text/html; charset=utf-8'); header('Cache-Control: no-store');
+  echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UnDash · ', $e($title), '</title>',
+       '<link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/assets/app.css"></head><body class="und-page"><div class="und"><form class="login card" method="post">',
+       '<div class="brand"><img src="/favicon.png" alt="" width="40" height="40"><h1 class="und-name">', $e($title), '</h1></div><p class="muted">', $e($intro), '</p>';
+  if ($error !== '') echo '<div class="banner bad" role="alert">', $e($error), '</div>';
+  foreach ($fields as $f) echo '<div class="fld"><label for="', $f[0], '">', $e($f[1]), '</label><input id="', $f[0], '" name="', $f[0], '" type="', $f[2], '" autocomplete="', $f[3], '" required', $f[0] === $fields[0][0] ? ' autofocus' : '', '></div>';
+  echo '<input type="hidden" name="pre" value="', $pre, '"><button class="btn pri" type="submit">Continue</button></form></div></body></html>';
+  exit;
+}
+function sa_pre_ok() { $c = (string)($_COOKIE['undash_pre'] ?? ''); return $c !== '' && hash_equals($c, (string)($_POST['pre'] ?? '')); }
+function sa_ip() { return (string)($_SERVER['REMOTE_ADDR'] ?? ''); }
+
+/* ---- health check (Docker HEALTHCHECK): says nothing about the server ---- */
+if ($uri === '/health') { header('Content-Type: text/plain'); header('Cache-Control: no-store'); echo "ok\n"; exit; }
+if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
+  // needed by the sign-in page too; nothing secret in either
+  header('Content-Type: ' . ($uri === '/favicon.png' ? 'image/png' : 'text/css; charset=utf-8'));
+  header('Cache-Control: no-cache');
+  readfile($uri === '/favicon.png' ? UND_ROOT . '/images/undash.png' : UND_ROOT . $uri); exit;
+}
+
 /* ---- sign-in ---- */
 $sess = und_sess_get();
+if (!$sess && und_api_mode()) {
+  $kind = und_auth_kind();
+  if ($kind === 'none') {
+    if ($uri !== '/setup') { if ($method === 'GET' && $uri === '/') { header('Location: /setup', true, 303); exit; } sa_deny(401, 'Not signed in.'); }
+    $err = '';
+    if ($method === 'POST') {
+      $code = trim((string)@file_get_contents(und_setup_file()));
+      if (!sa_pre_ok()) $err = 'The form expired. Try again.';
+      elseif (und_login_throttled(sa_ip())) $err = 'Too many attempts. Wait 15 minutes.';
+      elseif ($code === '' || !hash_equals($code, strtoupper(trim((string)($_POST['code'] ?? ''))))) { und_login_failed(sa_ip()); $err = 'The setup code is wrong. It is in the container log.'; }
+      elseif ((string)($_POST['password'] ?? '') !== (string)($_POST['password2'] ?? '')) $err = 'The passwords do not match.';
+      else { $r = und_password_set((string)$_POST['password']); if (isset($r['error'])) $err = $r['error']; else { und_sess_new('setup'); header('Location: /', true, 303); exit; } }
+    }
+    sa_form_page('Set up UnDash', 'Choose the password for this dashboard. The setup code is printed in the container log (Docker tab > UnDash > Logs).',
+      [['code', 'Setup code', 'text', 'one-time-code'], ['password', 'New password (10+ characters)', 'password', 'new-password'], ['password2', 'Repeat the password', 'password', 'new-password']], $err);
+  }
+  if ($uri === '/login' || ($method === 'GET' && $uri === '/')) {
+    $err = '';
+    if ($method === 'POST' && $uri === '/login') {
+      if (!sa_pre_ok()) $err = 'The form expired. Try again.';
+      elseif (und_login_throttled(sa_ip())) $err = 'Too many wrong passwords. Wait 15 minutes.';
+      elseif (!und_password_ok((string)($_POST['password'] ?? ''))) { und_login_failed(sa_ip()); usleep(400000); $err = 'Wrong password.'; error_log('undash: failed sign-in from ' . sa_ip()); }
+      else { und_sess_new('password'); header('Location: /', true, 303); exit; }
+    } elseif ($uri === '/') { header('Location: /login', true, 303); exit; }
+    sa_form_page('UnDash', 'Sign in to the dashboard.', [['password', 'Password', 'password', 'current-password']], $err);
+  }
+  sa_deny(401, 'Not signed in.');
+}
 if (!$sess && $method === 'GET' && isset($_GET['t'])) {
   if (und_handoff_use((string)$_GET['t'])) { und_sess_new('handoff'); header('Location: /', true, 303); exit; }
   sa_deny(403, 'That sign-in link expired. Open UnDash from Unraid again.');
@@ -41,7 +95,7 @@ if (!$sess) {
 }
 
 /* ---- routes ---- */
-if ($uri === '/logout') { und_sess_end(); header('Location: ' . sa_unraid_base() . '/', true, 303); exit; }
+if ($uri === '/logout') { und_sess_end(); header('Location: ' . (und_api_mode() ? '/login' : sa_unraid_base() . '/'), true, 303); exit; }
 
 if ($uri === '/api') {
   if ($method !== 'POST') sa_deny(405, 'POST only.');
@@ -56,7 +110,7 @@ if ($uri === '/api') {
   exit;
 }
 
-if ($uri === '/assets/app.css' || $uri === '/assets/app.js') {
+if ($uri === '/assets/app.js') {
   $f = UND_ROOT . $uri;
   header('Content-Type: ' . (substr($uri, -3) === 'css' ? 'text/css' : 'application/javascript') . '; charset=utf-8');
   header('Cache-Control: no-cache');
@@ -66,10 +120,11 @@ if ($uri === '/assets/boot.js') {
   // page settings as a script file, so the page needs no inline script (the CSP forbids it)
   header('Content-Type: application/javascript; charset=utf-8');
   header('Cache-Control: no-store');
-  echo 'window.UND_API="/api";window.UND_CSRF=' . json_encode($sess['csrf']) . ';window.UND_UNRAID=' . json_encode(sa_unraid_base()) . ';window.UND_STANDALONE=true;';
+  $unraid = und_api_mode() ? preg_replace('#/graphql$#', '', und_api_conf()['url']) : sa_unraid_base();
+  echo 'window.UND_API="/api";window.UND_CSRF=' . json_encode($sess['csrf']) . ';window.UND_UNRAID=' . json_encode($unraid) . ';window.UND_STANDALONE=true;';
   exit;
 }
-if ($uri === '/favicon.png' || $uri === '/images/undash.png') { header('Content-Type: image/png'); header('Cache-Control: max-age=86400'); readfile(UND_ROOT . '/images/undash.png'); exit; }
+if ($uri === '/images/undash.png') { header('Content-Type: image/png'); header('Cache-Control: max-age=86400'); readfile(UND_ROOT . '/images/undash.png'); exit; }
 
 // container and VM icons that Unraid itself serves from these two folders
 $icons = ['/state/plugins/dynamix.docker.manager/images/' => '/usr/local/emhttp/state/plugins/dynamix.docker.manager/images/',

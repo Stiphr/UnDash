@@ -2,26 +2,44 @@
 
 # UnDash
 
-A [Homepage](https://github.com/gethomepage/homepage)-style dashboard that runs **as a native Unraid plugin** instead of a Docker container, so it can also *manage* the server: containers, VMs, server power and Unraid OS updates, next to your *arr stack, downloaders and media servers, all on **one page**.
+A compact, information-dense server dashboard for Unraid: system overview, media, Arr Stack, download clients, containers and VMs on **one page**, with the controls to manage them.
 
-It keeps the look of [Unraid Swiss Manager](https://github.com/Stiphr/Unraid-Swiss-Manager) (dark grey panels, orange accent) as its Default theme, with Light and AMOLED alternatives.
+It comes two ways:
 
-## Features
+| | **Plugin** (recommended for full control) | **Docker image** |
+|---|---|---|
+| Reads the server through | the kernel and Unraid's own state files | the official [Unraid API](https://docs.unraid.net/API/) (API key) |
+| Containers: start / stop / restart / pause / update, logs | ✓ | ✓ |
+| Container CPU and memory | ✓ | — (the API only offers it as a WebSocket subscription) |
+| Check container updates now | ✓ | — (Unraid checks on its own schedule) |
+| VMs: start / shut down / force stop / restart / pause / resume | ✓ | ✓ |
+| VM hibernate, vCPUs / memory, VNC link | ✓ | — (not in the API) |
+| Restart / shut down the server | ✓ | — (not in the API) |
+| Unraid OS update | ✓ | — (not in the API) |
+| Media, Arr Stack, download clients, apps | ✓ | ✓ |
+| Sign-in | Unraid's own login | its own password |
+
+Both use the same code and the same settings format. See [docs/DOCKER.md](docs/DOCKER.md) for the Docker image.
+
+The Default theme keeps the look of [Unraid Swiss Manager](https://github.com/Stiphr/Unraid-Swiss-Manager) (dark grey panels, orange accent); Light and AMOLED are the alternatives.
+
+## What is on the page
 
 | Section | What you get |
 |---|---|
-| **Server** | Hostname, address, Unraid version and update state, kernel, CPU, uptime, array state, container and VM totals, health chips, and quick actions: check / update containers, Unraid OS update, operation history, **restart or shut down the server**. |
-| **Alerts** | Problems only: unhealthy or restart-looping containers, crashed autostart containers, failed updates, disabled or erroring disks, hot disks, array not started, parity operations, OS updates waiting. |
-| **Favorites** | Starred containers, VMs and services with their status and a quick action. |
-| **System** | CPU (with history), per-core load, CPU temperature, memory, swap, array or pool capacity, a disk path of your choice, network up/down, uptime, load, host, Unraid version, container and VM totals, UPS. Each one can be shown, hidden and reordered. Metrics a server cannot measure say so instead of showing made-up numbers. |
-| **Containers** | Found automatically. Status and health, CPU and memory (from cgroups, refreshed every 2 s), uptime, restart count, image, update state. Start, stop, restart, pause / resume, **update** (Unraid's own `update_container`), **bulk update** with confirmation and live progress, logs (live, highlight, download), details (ports, volumes, health checks, env names). Filters, sorting, list or card layout. Custom names, icons, descriptions, favorites and hiding survive re-created containers. "Not checked" is never shown as "up to date". |
-| **Virtual machines** | Found automatically through libvirt. State, vCPUs, memory, guest agent. Only the actions valid for the current state are shown: start, graceful shut down, force stop, restart, pause / resume, hibernate (QEMU guest agent), VNC console. Disruptive ones ask first. |
-| **Storage** | Parity, array disks and pools with health, errors, temperature and usage. |
-| **Services** | Widgets for Radarr, Sonarr, Lidarr, Readarr, Bazarr, Prowlarr, Overseerr / Jellyseerr, Autobrr, Wizarr, qBittorrent, SABnzbd, Emby, Jellyfin, Plex, Tautulli, AdGuard Home, Pi-hole, Nginx Proxy Manager, Immich, PeaNUT, a Radarr / Sonarr calendar, a custom JSON API widget and links. |
+| **System** | One compact bar: CPU (usage and temperature), memory, storage (array, or pools on pool-only servers), network, array health, hottest disk, uptime, UPS; optionally per-core load, swap, load, a disk path, container and VM totals. Click a tile for its details (history graph, every core, every disk with health and temperature). Anything the server cannot measure says so; stale data is marked. |
+| **Alerts** | Problems only: unhealthy or restart-looping containers, crashed autostart containers, failed updates, disk problems, hot disks, array not started, parity checks, Unraid updates waiting, the API or server not answering. |
+| **Favorites** | Starred containers, VMs and apps. |
+| **Media** | Upcoming movies (with cinema / digital / physical release), upcoming episodes (season, episode, air time), recently added movies and episodes, as poster rows from Radarr and Sonarr. |
+| **Arr Stack** | One row per Radarr, Sonarr, Lidarr, Readarr, Prowlarr, Bazarr, Overseerr / Jellyseerr, Autobrr: online state, key numbers, health warnings and stuck or failed imports; click for details. Several instances work. |
+| **Downloads** | qBittorrent and SABnzbd: speeds, active / stalled / queued / paused / done counts, active items with progress and ETA, pause and resume all. |
+| **Containers** | Compact rows (icon, name, state, CPU, memory, update badge only when there is one, actions); an expanded view adds image, uptime and restarts. Filters, sorting, bulk update with progress, logs, details. |
+| **Virtual machines** | Compact rows with only the actions that fit each VM's state. |
+| **Apps** | Everything else you configured (Plex, Emby, Immich, AdGuard, links …). Nothing is shown twice: Arr apps, download clients, calendars and system cards live in their own sections. |
 
-Plus: live refresh every **2 seconds** (configurable) with pause / resume, last-update time, connection status and automatic reconnect; a filter box for everything on the page (`/` focuses it); collapsible sections; a settings panel; three themes with a custom accent colour; a custom CSS editor; import / export; works on phones, tablets and desktops; keyboard accessible.
+Plus: live refresh every **2 seconds** (configurable, pause / resume, reconnects on its own); a filter box for the whole page (`/`); sections, tiles and media widgets you can show, hide and drag into order; compact / comfortable / expanded density; three themes with a custom accent colour; custom CSS; import / export; phones, tablets and desktops; keyboard accessible.
 
-## Install
+## Install the plugin
 
 In Unraid: **Plugins > Install Plugin**, paste
 
@@ -65,6 +83,10 @@ The configuration directory holds:
 
 Every save is mirrored to `/boot/config/plugins/undash/`, so UnDash keeps working while the array (and `/mnt/user`) is stopped. The first time the directory is available, existing settings are copied in; existing files are never overwritten. Settings from version 2026.10.29 are migrated automatically.
 
+## Install the Docker image
+
+See [docs/DOCKER.md](docs/DOCKER.md): the Unraid template is in `templates/undash.xml`, the image builds from the `Dockerfile` (its build runs the test suite).
+
 ## Export and import
 
 Settings > Configuration:
@@ -87,6 +109,7 @@ Neither export contains anything but UnDash's own settings.
 
 * Inside Unraid every request goes through Unraid's login and its CSRF check. On the standalone port, UnDash checks Unraid's login session itself (or a one-time 60-second sign-in link created behind Unraid's login), then keeps its own HttpOnly, SameSite=Strict session with its own CSRF token, refuses cross-origin requests and sends a strict Content-Security-Policy.
 * Every action is a fixed operation on a validated container or VM name, checked against its current state and locked so the same target cannot get two actions at once. Commands run without a shell. Nothing executes text from the browser.
+* The Docker image runs as uid 99 (not root), unprivileged, on the bridge network, with only `/config` mounted. It has no Docker socket: everything goes through the Unraid API with a key you scope yourself. Its password is stored as a hash; 5 wrong passwords lock an address out for 15 minutes.
 * Restart and shutdown need a one-time confirmation from the server (valid 2 minutes, single use) plus the server's name typed back; they run Unraid's own `/sbin/reboot -n` / `/sbin/poweroff -n` (what Unraid's buttons run) and are written to the system log.
 * Secrets never reach the browser: the settings page only shows that a value is stored. Links that would contain a secret variable are not resolved for the browser. Container details list environment variable *names* only.
 * Custom CSS is nested under `.und` so it only styles UnDash; `@import`, scripts, `expression()` and remote `url()`s are removed.
@@ -106,16 +129,20 @@ src/                    the plugin (PHP 7.4+ backend, plain JS + CSS frontend, n
 src/standalone/         the standalone-port router
 build.py                inlines src/ into undash.plg
 tests/run.php           unit tests (settings, migration, export redaction, imports, CSS, actions, power, sign-in)
+tests/api_mode_test.php the Docker version's Unraid API layer against a fake GraphQL server
 tests/router_test.php   end-to-end test of the standalone port
+Dockerfile, docker/     the Docker image; templates/undash.xml is the Unraid template
+docs/unraid-api-schema-4.37.7.graphql   the official API schema the queries were checked against
 dev/server.php          local preview with fake /proc, Docker, libvirt and app APIs
 ```
 
 ```bash
-php tests/run.php && php tests/router_test.php
+php tests/run.php && php tests/api_mode_test.php && php tests/router_test.php
 ```
 
 ```bash
-UNDASH_HOMEPAGE_DIR=/path/to/homepage/config php -S 127.0.0.1:8088 dev/server.php
+UNDASH_HOMEPAGE_DIR=/path/to/homepage/config php -S 127.0.0.1:8088 dev/server.php            # plugin mode
+UNDASH_DEV_MODE=api UNDASH_HOMEPAGE_DIR=/path/to/homepage/config php -S 127.0.0.1:8089 dev/server.php   # Docker mode, fake Unraid API
 ```
 
 ```bash

@@ -12,6 +12,7 @@ function und_valid_vm($n) { return is_string($n) && $n !== '' && strlen($n) <= 2
 
 /** name => state ("running", "shut off", "paused", "pmsuspended", "in shutdown", "crashed"). Null when libvirt is not running. */
 function und_vm_states() {
+  if (und_api_mode()) { $l = und_api_vm_live(); if (isset($l['error'])) return null; $o = []; foreach ($l['vms'] as $v) $o[$v['name']] = $v['state']; return $o; }
   $r = und_run([und_virsh(), 'list', '--all'], 10);
   if ($r['code'] !== 0) return null;
   $out = [];
@@ -56,6 +57,7 @@ function und_vm_valid_ops($state, $agent) {
 }
 
 function und_vm_live() {
+  if (und_api_mode()) return und_api_vm_live();
   $st = und_vm_states();
   if ($st === null) return ['error' => 'The VM service is not running.'];
   $det = und_vm_details($st);
@@ -72,6 +74,7 @@ function und_vm_list() { return und_vm_live(); }
 
 function und_vm_action($name, $op) {
   if (!und_valid_vm($name)) return ['error' => 'Invalid VM name.'];
+  if (und_api_mode()) return und_api_vm_action($name, $op);
   $st = und_vm_states();
   if ($st === null) return ['error' => 'The VM service is not running.'];
   if (!isset($st[$name])) return ['error' => 'There is no VM named ' . $name . '.'];

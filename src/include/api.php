@@ -34,7 +34,8 @@ switch ($action) {
     $cfg = und_load_config(); $loc = und_loc();
     out(['version' => UND_VERSION, 'layout' => und_layout_view($cfg), 'types' => und_types(), 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
          'server' => ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip()],
-         'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes']);
+         'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes' && !und_api_mode(), 'caps' => und_caps(),
+         'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null]);
   }
 
   /* one call per refresh: system metrics, containers and VMs (each part can be skipped when its section is hidden) */
@@ -42,7 +43,7 @@ switch ($action) {
     $cfg = und_load_config();
     $want = array_flip(explode(',', $P('parts', 'system,docker,vms')));
     $r = ['at' => time()];
-    if (isset($want['system'])) { $r['system'] = und_system($cfg); api_os_autocheck($cfg, $r['system']['os_update']); }
+    if (isset($want['system'])) { $r['system'] = und_system($cfg); if (!und_api_mode() && isset($r['system']['os_update'])) api_os_autocheck($cfg, $r['system']['os_update']); }
     if (isset($want['docker'])) $r['docker'] = und_docker_live();
     if (isset($want['vms'])) $r['vms'] = und_vm_live();
     if (isset($want['ups'])) $r['ups'] = und_ups($cfg['general']['ups_name']);
@@ -55,6 +56,27 @@ switch ($action) {
     if (!preg_match('/^[a-f0-9]{8}$/', $id)) fail('Invalid widget id.');
     $r = und_fetch_service(und_load_config(), $id);
     $r['at'] = time();
+    out($r);
+  }
+
+  /* ---- media, Arr Stack, download clients ---- */
+  case 'media': {
+    $k = $P('kind');
+    if (!in_array($k, und_media_ids(), true)) fail('Unknown media list.');
+    out(und_media(und_load_config(), $k));
+  }
+  case 'arr': {
+    if (!preg_match('/^[a-f0-9]{8}$/', $P('id'))) fail('Invalid app id.');
+    out(und_arr_status(und_load_config(), $P('id')));
+  }
+  case 'dl': {
+    if (!preg_match('/^[a-f0-9]{8}$/', $P('id'))) fail('Invalid client id.');
+    out(und_dl_status(und_load_config(), $P('id')));
+  }
+  case 'dl_action': {
+    if (!preg_match('/^[a-f0-9]{8}$/', $P('id'))) fail('Invalid client id.');
+    $r = und_dl_action(und_load_config(), $P('id'), $P('op'));
+    if (isset($r['error'])) fail($r['error'], 409);
     out($r);
   }
 
@@ -128,6 +150,23 @@ switch ($action) {
     out(und_fetch_service($norm, $id));
   }
   case 'validate': out(['issues' => und_validate(und_load_config())]);
+
+  /* ---- Unraid API connection (Docker version) ---- */
+  case 'unraid_conf': {
+    $c = und_api_conf();
+    out(['url' => $c['url'], 'key_set' => $c['key'] !== '', 'from_env' => $c['from_env'], 'mode' => UND_MODE]);
+  }
+  case 'unraid_save': {
+    $url = trim($P('url')); $key = $P('key');
+    if ($url !== '' && !preg_match('#^https?://[^\s"\'<>]+$#i', $url)) fail('The address must start with http:// or https://, e.g. http://192.168.1.10/graphql');
+    $sec = und_secrets();
+    $sec['unraid']['url'] = und_clip($url, 300);
+    if ($key !== UND_KEEP) $sec['unraid']['key'] = und_clip(trim($key), 300);
+    und_save_secrets($sec);
+    foreach (['system', 'containers', 'vms', 'ups'] as $n) @unlink(und_tmp('api-' . $n . '.json'));
+    out(['ok' => true]);
+  }
+  case 'unraid_test': out(und_api_test());
   case 'loc_save': {
     $r = und_save_loc(['CONFIG_DIR' => $P('dir'), 'PORT' => $P('port'), 'BIND' => $P('bind'), 'STANDALONE' => $P('standalone') === 'yes' ? 'yes' : 'no']);
     if (isset($r['error'])) fail($r['error']);

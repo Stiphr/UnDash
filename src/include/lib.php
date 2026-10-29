@@ -14,8 +14,15 @@ define('UND_LIB_LOADED', 1);
 
 define('UND_VERSION', '@@VERSION@@');
 define('UND_NAME',    'UnDash');
-if (!defined('UND_ROOT')) define('UND_ROOT',    '/usr/local/emhttp/plugins/undash');
-if (!defined('UND_DIR')) define('UND_DIR',     '/boot/config/plugins/undash');
+/*
+ * Two ways to run the same code:
+ *   plugin  (default) inside Unraid: reads /proc and Unraid's state files, runs docker / virsh / plugin directly.
+ *   api     the Docker image (UNDASH_MODE=api): everything about the server comes from the official Unraid GraphQL API
+ *           (include/unraid_api.php); nothing on the host is touched directly. Settings live in UNDASH_CONFIG (/config).
+ */
+if (!defined('UND_MODE')) define('UND_MODE', getenv('UNDASH_MODE') === 'api' ? 'api' : 'plugin');
+if (!defined('UND_ROOT')) define('UND_ROOT',    UND_MODE === 'api' ? dirname(__DIR__) : '/usr/local/emhttp/plugins/undash');
+if (!defined('UND_DIR')) define('UND_DIR',     UND_MODE === 'api' ? rtrim(getenv('UNDASH_CONFIG') ?: '/config', '/') : '/boot/config/plugins/undash');
 if (!defined('UND_TMP')) define('UND_TMP',     '/tmp/undash');
 define('UND_DM',      '/usr/local/emhttp/plugins/dynamix.docker.manager');
 define('UND_UPDSTATUS', '/var/lib/docker/unraid-update-status.json');
@@ -141,6 +148,15 @@ function und_valid_name($n) { return is_string($n) && preg_match('/^[A-Za-z0-9][
 
 function und_var_ini() { $v = @parse_ini_string(und_read('/var/local/emhttp/var.ini')); return is_array($v) ? $v : []; }
 
+function und_api_mode() { return UND_MODE === 'api'; }
+
+/** What this deployment can do; the UI hides what is not available instead of failing. */
+function und_caps() {
+  $p = !und_api_mode();
+  return ['power' => $p, 'os_update' => $p, 'docker_check' => $p, 'docker_stats' => $p, 'docker_inspect' => true, 'vm_hibernate' => $p, 'vm_details' => $p,
+          'vnc' => $p, 'storage_detail' => true, 'mode' => UND_MODE];
+}
+
 function und_os_version() {
   $v = @parse_ini_string(und_read('/etc/unraid-version'));
   return is_array($v) && !empty($v['version']) ? (string)$v['version'] : '';
@@ -159,7 +175,7 @@ unset($__ident);
 
 } // UND_LIB_LOADED
 
-foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops'] as $__m) {
+foreach (['config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads'] as $__m) {
   $__f = __DIR__ . '/' . $__m . '.php';
   if (is_file($__f)) require_once $__f;
 }

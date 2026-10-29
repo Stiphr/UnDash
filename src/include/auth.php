@@ -52,6 +52,7 @@ function und_req_host() {
 
 /** Is this browser logged in to Unraid? Reads Unraid's PHP session file (read-only, so Unraid's session is never touched). */
 function und_unraid_logged_in() {
+  if (und_api_mode()) return false;            // a container cannot see Unraid's sessions
   $host = und_req_host();
   if ($host === '') return false;
   $sid = (string)($_COOKIE['unraid_' . md5($host)] ?? '');
@@ -76,9 +77,60 @@ function und_handoff_create() {
 }
 
 function und_handoff_use($t) {
+  if (und_api_mode()) return false;
   if (!preg_match('/^[a-f0-9]{48}$/', (string)$t)) return false;
   $f = und_tmp('handoff') . '/' . hash('sha256', $t);
   $exp = (int)@file_get_contents($f);
   @unlink($f);                                   // single use
   return $exp >= time();
+}
+
+/* ---------- password sign-in (Docker version: there is no Unraid session to reuse) ---------- */
+
+function und_auth_file() { return UND_DIR . '/auth.json'; }
+function und_setup_file() { return UND_DIR . '/setup-code.txt'; }
+
+/** none = nobody can sign in yet (first start), env = UNDASH_PASSWORD, file = password set in the setup page. */
+function und_auth_kind() {
+  if ((string)getenv('UNDASH_PASSWORD') !== '') return 'env';
+  $a = und_read_json(und_auth_file(), []);
+  return !empty($a['hash']) ? 'file' : 'none';
+}
+
+function und_password_ok($pw) {
+  $pw = (string)$pw;
+  if (und_auth_kind() === 'env') return hash_equals((string)getenv('UNDASH_PASSWORD'), $pw);
+  $a = und_read_json(und_auth_file(), []);
+  return !empty($a['hash']) && password_verify($pw, (string)$a['hash']);
+}
+
+function und_password_set($pw) {
+  if (strlen((string)$pw) < 10) return ['error' => 'Use at least 10 characters.'];
+  if (!und_write_json(und_auth_file(), ['hash' => password_hash((string)$pw, PASSWORD_DEFAULT), 'set' => time()], true)) return ['error' => 'Could not write ' . und_auth_file() . '. Check the /config volume.'];
+  @unlink(und_setup_file());
+  return ['ok' => true];
+}
+
+/** The one-time code that proves the person creating the password can read the container log. Created at container start. */
+function und_setup_code_ensure() {
+  if (und_auth_kind() !== 'none') { @unlink(und_setup_file()); return null; }
+  $c = trim((string)@file_get_contents(und_setup_file()));
+  if (!preg_match('/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/', $c)) {
+    $abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; $c = '';
+    for ($i = 0; $i < 12; $i++) $c .= ($i && $i % 4 === 0 ? '-' : '') . $abc[random_int(0, strlen($abc) - 1)];
+    @file_put_contents(und_setup_file(), $c); @chmod(und_setup_file(), 0600);
+  }
+  return $c;
+}
+
+/** At most 5 wrong passwords per address in 15 minutes. */
+function und_login_throttled($ip) {
+  $f = und_tmp('login-' . hash('sha256', (string)$ip) . '.json');
+  $a = array_values(array_filter(und_read_json($f, []), function ($t) { return $t > time() - 900; }));
+  return count($a) >= 5;
+}
+function und_login_failed($ip) {
+  $f = und_tmp('login-' . hash('sha256', (string)$ip) . '.json');
+  $a = array_values(array_filter(und_read_json($f, []), function ($t) { return $t > time() - 900; }));
+  $a[] = time(); und_write_json($f, $a, true);
 }

@@ -117,6 +117,7 @@ function und_disk($path) {
 
 /** Everything the overview needs, in one cheap call (no Docker, no network). */
 function und_system(array $cfg) {
+  if (und_api_mode()) return und_api_system($cfg);
   $r = und_rates(); $mem = und_meminfo(); $v = und_var_ini();
   $hist = und_read_json(und_tmp('hist.json'), []);
   $now = time();
@@ -148,6 +149,7 @@ function und_array_info(array $v) {
 /* ---------- array & pools ---------- */
 
 function und_storage() {
+  if (und_api_mode()) return und_api_storage();
   $d = @parse_ini_string(und_read('/var/local/emhttp/disks.ini'), true);
   $out = ['array' => [], 'pools' => [], 'parity' => []];
   if (!is_array($d)) return $out;
@@ -170,6 +172,7 @@ function und_storage() {
 /* ---------- UPS: NUT (upsc) first, then apcupsd (apcaccess) ---------- */
 
 function und_ups($name = 'ups') {
+  if (und_api_mode()) return und_api_ups();
   $upsc = und_bin('upsc');
   if ($upsc !== 'upsc' || isset($GLOBALS['UND_EXEC_MOCK'])) {
     $r = und_run([$upsc, strpos($name, '@') === false ? $name . '@localhost' : $name], 8);
@@ -226,6 +229,7 @@ function und_os_staged() {
 }
 
 function und_os_check() {
+  if (und_api_mode()) return ['error' => 'Unraid OS updates are not available through the Unraid API; use Tools > Update OS in Unraid.'];
   $tmp = '/tmp/plugins/unRAIDServer.plg';
   @unlink($tmp);
   $r = und_run([und_bin('plugin'), 'check', 'unRAIDServer.plg'], 120);
@@ -239,6 +243,7 @@ function und_os_check() {
 
 /** Downloads and installs the newer release onto the flash drive. It becomes active after a reboot. */
 function und_os_update() {
+  if (und_api_mode()) return ['error' => 'Unraid OS updates are not available through the Unraid API; use Tools > Update OS in Unraid.'];
   $st = und_os_check();
   if (!$st['available']) return ['error' => $st['error'] ?: 'No newer Unraid release is available.'];
   if (und_job(und_tmp('os-update.log'))['state'] === 'running') return ['error' => 'An update is already running.'];

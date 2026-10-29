@@ -1,0 +1,9 @@
+.git
+.github
+dev
+docs
+templates
+undash.plg
+build.py
+*.md
+.DS_Store

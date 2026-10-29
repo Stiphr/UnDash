@@ -25,6 +25,7 @@ if (strpos($uri, '/assets/') === 0) {
 if ($uri !== '/api') { http_response_code(404); return true; }
 
 /* ---------- fake system ---------- */
+if (getenv('UNDASH_DEV_MODE') === 'api') { define('UND_MODE', 'api'); $state .= '-api'; putenv('UNRAID_API_URL=http://tower.test/graphql'); putenv('UNRAID_API_KEY=dev-key'); }
 define('UND_DIR', $state . '/flash');
 define('UND_TMP', $state . '/tmp');
 define('UND_ROOT', $repo . '/src');
@@ -122,7 +123,29 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
   $host = parse_url($url, PHP_URL_HOST);
   if ($host === 'down.invalid') return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'Failed to connect to down.invalid port 80: Connection refused', 'headers' => []];
   $d = function ($days) { return gmdate('Y-m-d\TH:i:s\Z', time() + $days * 86400); };
+  $img = function ($t) { return [['coverType' => 'poster', 'remoteUrl' => 'https://picsum.photos/seed/' . rawurlencode($t) . '/200/300']]; };
+  $series = function ($t) use ($img) { return ['title' => $t, 'titleSlug' => strtolower(preg_replace('/\W+/', '-', $t)), 'images' => $img($t)]; };
+  if (substr($p, -8) === '/graphql') return $j(dev_graphql(json_decode((string)($o['body'] ?? ''), true), $o['headers']['x-api-key'] ?? ''));
   switch (true) {
+    case $p === '/api/v3/system/status' || $p === '/api/v1/system/status': return $j(['version' => strpos($p, 'v3') ? '5.14.0.9383' : '1.30.2.4939']);
+    case $p === '/api/v3/health' || $p === '/api/v1/health':
+      return $j(strpos($url, ':8989') !== false || strpos($url, 'sonarr') !== false ? [['type' => 'warning', 'source' => 'IndexerStatusCheck', 'message' => 'Indexers unavailable due to failures: NZBgeek']] : []);
+    case $p === '/api/v3/queue' && isset($q['page']):
+      return $j(['totalRecords' => 2, 'records' => strpos($url, 'includeSeries') !== false ? [['title' => 'Bleach.S01E14.1080p', 'trackedDownloadStatus' => 'warning', 'trackedDownloadState' => 'importPending', 'statusMessages' => [['messages' => ['No files found are eligible for import']]]]] : []]);
+    case $p === '/api/v3/history' && isset($q['includeMovie']):
+      $r = []; foreach (['The Paradise', 'Dastaar', 'Jailer 2', 'Runner', 'Toxic', 'Khalifa: The Ruler', 'Sinners', 'Weapons'] as $i => $t) $r[] = ['movieId' => $i, 'date' => gmdate('c', time() - ($i * 2 + 1) * 86400), 'quality' => ['quality' => ['name' => 'Bluray-1080p']], 'movie' => ['title' => $t, 'year' => 2025, 'titleSlug' => strtolower(preg_replace('/\W+/', '-', $t)), 'images' => $img($t)]];
+      return $j(['records' => $r]);
+    case $p === '/api/v3/history' && isset($q['includeEpisode']):
+      $r = []; foreach (['Bleach', 'Has Fallen', 'A Wild Last Boss Appeared!', 'Black Clover', 'Tokyo Revengers', 'Cupertino', 'Slow Horses'] as $i => $t) $r[] = ['episodeId' => $i, 'date' => gmdate('c', time() - ($i * 9 + 3) * 3600), 'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'series' => $series($t), 'episode' => ['seasonNumber' => 1 + $i % 3, 'episodeNumber' => 3 + $i, 'title' => 'Episode ' . (3 + $i)]];
+      return $j(['records' => $r]);
+    case $p === '/api/v1/status': return $j(['version' => '2.7.3', 'updateAvailable' => false]);
+    case $p === '/api/system/status': return $j(['data' => ['bazarr_version' => '1.5.3']]);
+    case $p === '/api/system/health': return $j(['data' => []]);
+    case $p === '/api/v2/transfer/info': return $j(['dl_info_speed' => 6815744, 'up_info_speed' => 429600, 'connection_status' => 'connected']);
+    case $p === '/api/v2/torrents/stop' || $p === '/api/v2/torrents/start': return ['code' => 200, 'body' => '', 'json' => null, 'err' => '', 'headers' => []];
+    case $p === '/api' && ($q['mode'] ?? '') === 'queue' && strpos($url, 'apikey') !== false && strpos($url, 'down.invalid') === false:
+      return $j(['queue' => ['paused' => false, 'kbpersec' => '10240', 'timeleft' => '0:12:40', 'noofslots_total' => 3, 'slots' => [['filename' => 'Some.Show.S01E02.1080p.WEB', 'percentage' => '64', 'timeleft' => '0:04:10', 'status' => 'Downloading', 'mb' => '2100'], ['filename' => 'Another.Movie.2024.2160p', 'percentage' => '0', 'timeleft' => '0:08:30', 'status' => 'Queued', 'mb' => '18000']]]]);
+    case $p === '/api' && ($q['mode'] ?? '') === 'history': return $j(['history' => ['noofslots' => 1284]]);
     case $p === '/api/v3/movie': $m = []; for ($i = 0; $i < 173; $i++) $m[] = ['monitored' => true, 'hasFile' => $i > 7, 'isAvailable' => true]; return $j($m);
     case $p === '/api/v3/queue/status': return $j(['totalCount' => 0]);
     case $p === '/api/v3/wanted/missing': return $j(['totalRecords' => 62]);
@@ -139,7 +162,12 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
     case $p === '/api/release/indexers': return $j(array_fill(0, 7, 'x'));
     case $p === '/api/status': return $j(['users' => 14, 'invites' => 2, 'pending' => 0, 'expired' => 2]);
     case $p === '/api/v2/auth/login': return ['code' => 200, 'body' => 'Ok.', 'json' => null, 'err' => '', 'headers' => ['set-cookie' => ['SID=dev; path=/']]];
-    case $p === '/api/v2/torrents/info': $t = []; for ($i = 0; $i < 1808; $i++) $t[] = ['progress' => 1, 'dlspeed' => 0, 'upspeed' => $i < 3 ? 143200 : 0]; return $j($t);
+    case $p === '/api/v2/torrents/info':
+      $t = []; for ($i = 0; $i < 1808; $i++) $t[] = ['name' => 'Seed ' . $i, 'state' => $i < 3 ? 'uploading' : 'stalledUP', 'progress' => 1, 'dlspeed' => 0, 'upspeed' => $i < 3 ? 143200 : 0];
+      $t[] = ['name' => 'Linux.Distro.ISO.Collection', 'state' => 'downloading', 'progress' => 0.42, 'dlspeed' => 5242880, 'eta' => 1260, 'size' => 9e9];
+      $t[] = ['name' => 'Some.Old.Torrent', 'state' => 'stalledDL', 'progress' => 0.87, 'dlspeed' => 0, 'eta' => 8640000, 'size' => 2e9];
+      $t[] = ['name' => 'Paused.One', 'state' => 'stoppedDL', 'progress' => 0.1, 'dlspeed' => 0, 'eta' => 8640000, 'size' => 1e9];
+      return $j($t);
     case $p === '/api': return $j(['error' => 'API Key Incorrect']);
     case substr($p, -13) === '/Items/Counts': return $j(['MovieCount' => 173, 'SeriesCount' => 151, 'EpisodeCount' => 5570, 'SongCount' => 0]);
     case substr($p, -9) === '/Sessions': return $j([]);
@@ -154,12 +182,12 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
       $r = []; foreach ($names as $i => $n) $r[] = ['media_type' => $ep ? 'episode' : 'movie', ($ep ? 'grandparent_title' : 'title') => $n, 'title' => $n, 'added_at' => (string)(time() - $ago[$i] * 86400)];
       return $j(['response' => ['result' => 'success', 'data' => ['recently_added' => $r]]]);
     case $p === '/api/v3/calendar' && isset($q['includeSeries']):
-      return $j([['airDateUtc' => $d(1), 'series' => ['title' => 'Cupertino'], 'seasonNumber' => 1, 'episodeNumber' => 4, 'hasFile' => false], ['airDateUtc' => $d(1), 'series' => ['title' => 'MobLand'], 'seasonNumber' => 2, 'episodeNumber' => 1, 'hasFile' => false],
+      return $j(array_map(function ($e) use ($series) { $e['series'] = $series($e['series']['title']); $e['title'] = 'Episode ' . $e['episodeNumber']; return $e; }, [['airDateUtc' => $d(1), 'series' => ['title' => 'Cupertino'], 'seasonNumber' => 1, 'episodeNumber' => 4, 'hasFile' => false], ['airDateUtc' => $d(1), 'series' => ['title' => 'MobLand'], 'seasonNumber' => 2, 'episodeNumber' => 1, 'hasFile' => false],
         ['airDateUtc' => $d(1), 'series' => ['title' => 'Tulsa King'], 'seasonNumber' => 3, 'episodeNumber' => 8, 'hasFile' => false], ['airDateUtc' => $d(2), 'series' => ['title' => 'Black Clover'], 'seasonNumber' => 5, 'episodeNumber' => 2, 'hasFile' => false],
-        ['airDateUtc' => $d(2), 'series' => ['title' => 'A Wild Last Boss Appeared!'], 'seasonNumber' => 1, 'episodeNumber' => 5, 'hasFile' => true], ['airDateUtc' => $d(4), 'series' => ['title' => 'Dexter: Resurrection'], 'seasonNumber' => 2, 'episodeNumber' => 1, 'hasFile' => false]]);
+        ['airDateUtc' => $d(2), 'series' => ['title' => 'A Wild Last Boss Appeared!'], 'seasonNumber' => 1, 'episodeNumber' => 5, 'hasFile' => true], ['airDateUtc' => $d(4), 'series' => ['title' => 'Dexter: Resurrection'], 'seasonNumber' => 2, 'episodeNumber' => 1, 'hasFile' => false]]));
     case $p === '/api/v3/calendar':
-      return $j([['title' => 'Avatar Aang: The Last Airbender', 'physicalRelease' => $d(4), 'hasFile' => true], ['title' => 'The End of Oak Street', 'physicalRelease' => $d(5), 'hasFile' => true],
-        ['title' => 'Ramayana: Rise of a Legend', 'inCinemas' => $d(6), 'hasFile' => false], ['title' => 'How to Rob a Bank', 'inCinemas' => $d(13), 'hasFile' => false], ['title' => 'The Odyssey', 'physicalRelease' => $d(19), 'digitalRelease' => $d(19), 'hasFile' => false]]);
+      return $j(array_map(function ($m) use ($img) { $m['images'] = $img($m['title']); $m['year'] = 2026; $m['titleSlug'] = 'x'; return $m; }, [['title' => 'Avatar Aang: The Last Airbender', 'physicalRelease' => $d(4), 'hasFile' => true], ['title' => 'The End of Oak Street', 'physicalRelease' => $d(5), 'hasFile' => true],
+        ['title' => 'Ramayana: Rise of a Legend', 'inCinemas' => $d(6), 'hasFile' => false], ['title' => 'How to Rob a Bank', 'inCinemas' => $d(13), 'hasFile' => false], ['title' => 'The Odyssey', 'physicalRelease' => $d(19), 'digitalRelease' => $d(19), 'hasFile' => false]]));
     case $p === '/control/stats': return $j(['num_dns_queries' => 16947, 'num_blocked_filtering' => 2973, 'num_replaced_safebrowsing' => 0, 'avg_processing_time' => 0.045284]);
     case $p === '/api/tokens': return $j(['token' => 'devtoken', 'expires' => gmdate('c', time() + 86400)]);
     case $p === '/api/nginx/proxy-hosts': return $j(array_merge(array_fill(0, 7, ['enabled' => 1]), array_fill(0, 5, ['enabled' => 0])));
@@ -168,6 +196,34 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
   }
   return $j(['error' => 'not found'], 404);
 };
+
+/* a fake Unraid GraphQL API (Docker mode: UNDASH_MODE=api), answering with the shapes of the official schema */
+function dev_graphql($req, $key) {
+  if ($key !== 'dev-key') return ['errors' => [['message' => 'Invalid API key', 'extensions' => ['code' => 'UNAUTHENTICATED']]], 'data' => null];
+  $q = (string)($req['query'] ?? ''); $d = [];
+  $vs = sys_get_temp_dir() . '/undash-dev/gql-state.json';
+  $st = is_file($vs) ? json_decode(file_get_contents($vs), true) : ['plex' => 'RUNNING', 'radarr' => 'RUNNING', 'homepage' => 'EXITED', 'vm' => 'RUNNING'];
+  if (preg_match('/mutation/', $q)) {
+    $id = (string)($req['variables']['id'] ?? '');
+    if (preg_match('/docker \{ (\w+)\(/', $q, $m)) { $n = str_replace('ct:', '', $id); $st[$n] = ['start' => 'RUNNING', 'stop' => 'EXITED', 'restart' => 'RUNNING', 'pause' => 'PAUSED', 'unpause' => 'RUNNING'][$m[1]] ?? $st[$n]; file_put_contents($vs, json_encode($st)); return ['data' => ['docker' => [$m[1] => ['id' => $id, 'state' => $st[$n]]]]]; }
+    if (preg_match('/vm \{ (\w+)\(/', $q, $m)) { $st['vm'] = ['start' => 'RUNNING', 'stop' => 'SHUTOFF', 'forceStop' => 'SHUTOFF', 'reboot' => 'RUNNING', 'pause' => 'PAUSED', 'resume' => 'RUNNING'][$m[1]]; file_put_contents($vs, json_encode($st)); return ['data' => ['vm' => [$m[1] => true]]]; }
+  }
+  $t = microtime(true);
+  if (strpos($q, 'info {') !== false) $d['info'] = ['os' => ['hostname' => 'tower', 'uptime' => gmdate('c', time() - 300000), 'kernel' => '6.18.58-Unraid'], 'cpu' => ['brand' => 'Intel Core i5-14500', 'threads' => 20], 'versions' => ['core' => ['unraid' => '7.3.4', 'api' => '4.37.7']], 'primaryNetwork' => ['name' => 'br0', 'ipAddress' => '192.168.1.10']];
+  if (strpos($q, 'metrics {') !== false) $d['metrics'] = ['cpu' => ['percentTotal' => 12 + 6 * sin($t / 5), 'cpus' => array_map(function ($i) use ($t) { return ['percentTotal' => abs(40 * sin($i + $t / 7))]; }, range(0, 19))],
+    'memory' => ['total' => 67108864000, 'used' => 30e9, 'available' => 37e9, 'swapTotal' => 0, 'swapUsed' => 0, 'percentTotal' => 45], 'temperature' => ['sensors' => [['type' => 'CPU_PACKAGE', 'current' => ['value' => 41]]], 'summary' => ['hottest' => ['current' => ['value' => 41]]]],
+    'network' => [['name' => 'br0', 'rxSec' => 3e6 + 1e6 * sin($t / 4), 'txSec' => 4e5]]];
+  if (strpos($q, 'array {') !== false) $d['array'] = ['state' => 'STARTED', 'capacity' => ['kilobytes' => ['free' => '1', 'used' => '1', 'total' => '2']], 'parityCheckStatus' => ['running' => false, 'progress' => 0, 'status' => 'COMPLETED'],
+    'parities' => [['name' => 'parity', 'device' => 'sdb', 'status' => 'DISK_OK', 'temp' => 33, 'numErrors' => '0', 'fsSize' => null, 'fsFree' => null, 'color' => 'GREEN_ON', 'isSpinning' => true, 'type' => 'PARITY']],
+    'disks' => [['name' => 'disk1', 'device' => 'sdc', 'status' => 'DISK_OK', 'temp' => 36, 'numErrors' => '0', 'fsSize' => '11718885324', 'fsFree' => '2343777064', 'fsType' => 'xfs', 'color' => 'GREEN_ON', 'isSpinning' => true, 'type' => 'DATA']],
+    'caches' => [['name' => 'cache', 'device' => 'nvme0n1', 'status' => 'DISK_OK', 'temp' => 44, 'numErrors' => '0', 'fsSize' => '976761560', 'fsFree' => '611329392', 'fsType' => 'btrfs', 'color' => 'GREEN_ON', 'isSpinning' => true, 'type' => 'CACHE']]];
+  if (strpos($q, 'vars {') !== false) $d['vars'] = ['name' => 'Tower'];
+  if (strpos($q, 'upsDevices') !== false) return ['errors' => [['message' => 'Forbidden resource', 'extensions' => ['code' => 'FORBIDDEN']]], 'data' => null];
+  if (strpos($q, 'docker {') !== false) { $c = []; foreach (['plex' => 'plexinc/pms-docker', 'radarr' => 'lscr.io/linuxserver/radarr', 'homepage' => 'ghcr.io/gethomepage/homepage'] as $n => $im) $c[] = ['id' => 'ct:' . $n, 'names' => ['/' . $n], 'image' => $im, 'imageId' => 'sha256:abc', 'created' => time() - 9e6, 'state' => $st[$n], 'status' => $st[$n] === 'RUNNING' ? 'Up 3 days' . ($n === 'plex' ? ' (healthy)' : '') : ($st[$n] === 'PAUSED' ? 'Up 3 days (Paused)' : 'Exited (0) 2 hours ago'), 'autoStart' => true, 'iconUrl' => 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/' . $n . '.png', 'webUiUrl' => 'http://192.168.1.10:7878/', 'isUpdateAvailable' => $n === 'radarr', 'isRebuildReady' => false, 'ports' => [['ip' => '0.0.0.0', 'privatePort' => 7878, 'publicPort' => 7878, 'type' => 'TCP']], 'hostConfig' => ['networkMode' => 'bridge'], 'mounts' => [['Source' => '/mnt/user/appdata/' . $n, 'Destination' => '/config', 'RW' => true]], 'networkSettings' => ['Networks' => ['bridge' => ['IPAddress' => '172.17.0.5']]]];
+    $d['docker'] = strpos($q, 'logs(') !== false ? ['logs' => ['lines' => [['timestamp' => gmdate('c'), 'message' => 'hello from the API log']]]] : ['containers' => $c]; }
+  if (strpos($q, 'vms {') !== false) $d['vms'] = ['domains' => [['id' => 'vm:1', 'name' => 'Windows 11', 'state' => $st['vm']]]];
+  return ['data' => $d];
+}
 
 /* first run: import a real Homepage layout when UNDASH_HOMEPAGE_DIR points at its config folder, so the preview looks like your dashboard */
 if (!is_file(UND_DIR . '/config.json')) {

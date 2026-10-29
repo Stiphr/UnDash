@@ -1,3 +1,13 @@
+###2026.10.30b
+- Redesign: a compact System overview bar first (click a tile for details: per-core CPU, history, disks), then Media, Arr Stack and Download Clients, then containers, VMs and other apps.
+- Media: upcoming movies (with cinema / digital / physical release), upcoming episodes, recently added movies and episodes, as poster rows from Radarr and Sonarr.
+- Arr Stack: one row per app with online state, key numbers, health warnings and stuck or failed imports.
+- Download clients: speeds, active / stalled / queued / paused counts, progress and ETA, pause and resume all.
+- Containers: compact rows by default (expanded view available); VMs compact too.
+- The Services section is gone: apps appear where they belong (Arr Stack, Downloads, Media), the rest under Apps. Nothing is shown twice.
+- Settings: drag to reorder sections, overview tiles and media widgets; compact / comfortable / expanded density.
+- New: Docker image that uses the official Unraid API (see the README). The plugin keeps working as before.
+
 ###2026.10.29e
 - One page for everything: server overview with health and quick actions, alerts, favorites, system metrics, containers, VMs, storage and app widgets. The separate Docker, VMs and System tabs are gone; settings open in a side panel.
 - Live refresh every 2 seconds by default (configurable, pause/resume, last update time, reconnects on its own, slows down in background tabs). One light request per refresh; per-container CPU and memory come from cgroups.
