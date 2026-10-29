@@ -16,7 +16,8 @@ files = [
     ('include/downloads.php', '0644'), ('include/ignores.php', '0644'), ('include/alerts.php', '0644'), ('include/health.php', '0644'), ('include/playing.php', '0644'), ('include/requests.php', '0644'), ('include/api.php', '0644'), ('handoff.php', '0644'), ('standalone/router.php', '0644'),
     ('scripts/oscheck.php', '0755'), ('scripts/alertcheck.php', '0755'), ('scripts/rc.undash', '0755'), ('assets/app.css', '0644'), ('assets/app.js', '0644'),
 ]
-changes = (root / 'CHANGES.txt').read_text().strip()
+# the changelog goes into the XML as text, so &, < and > must be escaped (an unescaped & breaks plugin installs)
+changes = (root / 'CHANGES.txt').read_text().strip().replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 out = ["""<?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
