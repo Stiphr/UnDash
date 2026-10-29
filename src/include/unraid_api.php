@@ -179,7 +179,8 @@ function und_api_docker_live() {
     $status = (string)$c['status'];
     $health = preg_match('/\((healthy|unhealthy|health: starting)\)/', $status, $m) ? str_replace('health: ', '', $m[1]) : '';
     $state = strtolower((string)$c['state']);
-    if ($state === 'running' && stripos($status, 'restarting') === 0) $state = 'restarting';
+    // a restart loop shows up as EXITED (or RUNNING) with a "Restarting (1) …" status
+    if (stripos($status, 'restarting') === 0) $state = 'restarting';
     $ports = [];
     foreach ((array)($c['ports'] ?? []) as $p) if (!empty($p['publicPort'])) $ports[$p['privatePort'] . '/' . strtolower((string)$p['type'])] = (int)$p['publicPort'];
     $job = und_job(und_tmp('docker-update-' . $name . '.log'));
