@@ -83,7 +83,7 @@
   function upt(s) { var d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), mm = Math.floor(s % 3600 / 60); return d ? d + 'd ' + hh + 'h' : hh ? hh + 'h ' + mm + 'm' : mm + 'm'; }
   function pct(v) { return v === null || v === undefined ? '-' : (Math.round(v * 10) / 10) + '%'; }
   function fmt(v, f) {
-    if (f === 'bytes') return bytes(v); if (f === 'rate') return rate(v); if (f === 'ms') return num(v) + ' ms';
+    if (f === 'bytes') return bytes(v); if (f === 'rate') return rate(v); if (f === 'ms') return v === null || v === undefined || v === '' || !isFinite(+v) ? num(v) : num(+v >= 10 ? Math.round(+v) : Math.round(+v * 10) / 10) + ' ms';
     if (f === 'pct') return pct(v); if (f === 'dur') return dur(v);
     if (f === 'text') return v === null || v === undefined || v === '' ? '-' : (typeof v === 'number' ? v.toLocaleString() : String(v));
     return num(v);
@@ -279,7 +279,7 @@
   }
   function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
-  var TITLES = { overview: 'System', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
+  var TITLES = { overview: 'System', launcher: 'Launcher', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
   function buildSection(sec) {
     var tools = h('div', { class: 'tools' });
     var count = h('span', { class: 'count' });
@@ -299,7 +299,7 @@
   /* which parts the live request needs, so hidden sections cost nothing */
   function parts() {
     var p = ['system'];
-    if (R.docker || R.favorites || R.alerts || tileOn('docker')) p.push('docker');
+    if (R.docker || R.favorites || R.alerts || R.launcher || tileOn('docker')) p.push('docker');
     if (R.vms || R.favorites || tileOn('vms')) p.push('vms');
     if (tileOn('ups')) p.push('ups');
     return p.join(',');
@@ -367,6 +367,7 @@
     var y = S.live || {};
     if (R.overview && open('overview')) paintOverview(y);
     if (R.alerts) paintAlerts(y);
+    if (R.launcher && open('launcher')) paintLauncher(y);
     if (R.favorites && open('favorites')) paintFavs(y);
     if (R.docker && open('docker')) paintDocker(y);
     if (R.vms && open('vms')) paintVms(y);
@@ -404,9 +405,9 @@
     S.L.dashboard.metrics.forEach(function (m) {
       if (!m.visible || !MET[m.id]) return;
       if ((m.id === 'load' || m.id === 'path') && S.boot.caps.mode === 'api') return;     // not offered by the Unraid API
-      var t = { id: m.id, v: h('span', { class: 'v' }, '–'), s: h('span', { class: 's' }), m: h('i') };
+      var t = { id: m.id, v: h('span', { class: 'v' }, '–'), s: h('span', { class: 's' }), m: h('i'), sp: h('span', { class: 'sp', 'aria-hidden': 'true' }) };
       t.el = h('button', { type: 'button', class: 'stat', role: 'listitem', 'aria-expanded': 'false', onclick: function () { toggleDetail(m.id); } },
-        h('span', { class: 'k' }, ic(MET[m.id][1]), MET[m.id][0]), t.v, t.s, h('span', { class: 'bar', 'aria-hidden': 'true' }, t.m));
+        t.sp, h('span', { class: 'k' }, ic(MET[m.id][1]), MET[m.id][0]), t.v, t.s, h('span', { class: 'bar', 'aria-hidden': 'true' }, t.m));
       r.tiles[m.id] = t; r.bar.appendChild(t.el);
     });
     r.detail = h('div', { class: 'detail', hidden: true });
@@ -425,6 +426,23 @@
     txt(t.v, val); txt(t.s, sub || '');
     t.m.style.width = (p === null || p === undefined ? 0 : Math.max(0, Math.min(100, p))) + '%';
     t.el.className = 'stat ' + (lvl || '') + (R.overview.open === id ? ' on' : '');
+  }
+  /* a tile's history as an area chart behind the number (Grafana-style); the plain bar stays for tiles without history */
+  /* hi null = scale to the data, never below floor (so a quiet 3% CPU still shows its shape without looking busy) */
+  function sparkTile(id, vals, lo, hi, floor) {
+    var t = R.overview.tiles[id]; if (!t) return;
+    vals = vals.filter(function (v) { return v !== null && v !== undefined && isFinite(v); });
+    var sig = vals.length + ':' + (vals[vals.length - 1] || 0) + ':' + lo + ':' + hi;
+    if (t.spSig === sig) return; t.spSig = sig;
+    clear(t.sp); t.el.classList.toggle('has-sp', vals.length > 1);
+    if (vals.length < 2) return;
+    if (hi === null) hi = Math.max(Math.max.apply(null, vals) * 1.25, floor || 1);
+    var n = vals.length, sc = function (v) { return (40 - Math.max(0, Math.min(1, (v - lo) / ((hi - lo) || 1))) * 36).toFixed(2); };
+    var d = 'M' + vals.map(function (v, i) { return (i / (n - 1) * 100).toFixed(2) + ',' + sc(v); }).join(' L');
+    var sv = document.createElementNS(SVGNS, 'svg'); sv.setAttribute('viewBox', '0 0 100 40'); sv.setAttribute('preserveAspectRatio', 'none');
+    var a = document.createElementNS(SVGNS, 'path'); a.setAttribute('class', 'a'); a.setAttribute('d', d + ' L100,40 L0,40 Z');
+    var l = document.createElementNS(SVGNS, 'path'); l.setAttribute('class', 'l'); l.setAttribute('d', d); l.setAttribute('vector-effect', 'non-scaling-stroke');
+    sv.appendChild(a); sv.appendChild(l); t.sp.appendChild(sv);
   }
   function lvl(p, w, b) { return p === null || p === undefined ? 'na' : p >= b ? 'bad' : p >= w ? 'warn' : 'ok'; }
   function paintOverview(y) {
@@ -461,6 +479,13 @@
     if (s.disk) tile('path', s.disk.total ? bytes(s.disk.free) + ' free' : 'n/a', s.disk.total ? s.disk.path + ' · ' + pct(s.disk.pct) : s.disk.path + ' reports no size', s.disk.pct, s.disk.total ? lvl(s.disk.pct, 85, 95) : 'na');
     if (dk) tile('docker', dk.running + ' / ' + dk.total, 'running' + (dk.updates ? ' · ' + dk.updates + ' updates' : ''), 100 * dk.running / (dk.total || 1), dk.unhealthy ? 'bad' : '');
     if (vm) tile('vms', vm.running + ' / ' + vm.total, 'running', 100 * vm.running / (vm.total || 1), '');
+    var hs = (s.hist || []).slice(-60);
+    sparkTile('cpu', hs.map(function (x) { return x[1]; }), 0, null, 25);
+    if (s.mem.total) sparkTile('memory', hs.map(function (x) { return x[2]; }), 0, s.mem.total);
+    sparkTile('network', hs.map(function (x) { return (x[3] || 0) + (x[4] || 0); }), 0, null, 131072);
+    // disk temperatures are not in the server history: keep the last few minutes here
+    if (hot !== null && S.tempAt !== y.at) { S.tempAt = y.at; (S.tempHist = S.tempHist || []).push(hot); if (S.tempHist.length > 60) S.tempHist.shift(); }
+    if (S.tempHist) sparkTile('disks', S.tempHist, 20, 60);
     paintDetail(y);
   }
   function paintDetail(y) {
@@ -669,6 +694,36 @@
       ignHold({ del: ids });
       if (okMsg) toast(okMsg);
       return j;
+    });
+  }
+
+  /* ---- launcher: one icon per app with a link, the dot comes from the container of the same name ---- */
+  BUILD.launcher = function (r) {
+    r.grid = h('div', { class: 'launch', role: 'list' }); r.items = [];
+    S.L.groups.forEach(function (g) { g.services.forEach(function (s) {
+      if (s.hidden || !s.href_resolved) return;
+      var dot = h('span', { class: 'ldot', hidden: true }), u = iconUrl(s.icon);
+      var a = h('a', { class: 'lnk', role: 'listitem', href: s.href_resolved, target: '_blank', rel: 'noopener', title: s.name + (s.description ? ' · ' + s.description : ''), 'data-name': s.name },
+        h('span', { class: 'lic' }, u ? img(u, 'aico') : h('span', { class: 'lph' }, s.name.slice(0, 2)), dot), h('span', { class: 'ln' }, s.name));
+      r.items.push({ s: s, a: a, dot: dot, keys: lkeys(s.name) }); r.grid.appendChild(a);
+    }); });
+    if (!r.items.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'Apps with a link (Settings > Apps) show up here as one-click icons.'));
+    txt(r.count, r.items.length ? String(r.items.length) : '');
+    r.body.appendChild(r.grid);
+  };
+  /* "Radarr Movies" matches a container called radarr; "Seerr Requests" matches seerr; a longer container name only when nothing matches exactly */
+  function lkeys(n) { var a = String(n).toLowerCase(), k = [a.replace(/[^a-z0-9]/g, '')], f = a.split(/[\s_.-]+/)[0].replace(/[^a-z0-9]/g, ''); if (f && f !== k[0]) k.push(f); return k; }
+  function paintLauncher(y) {
+    var r = R.launcher, cs = (y.docker && y.docker.containers) || [], by = {};
+    cs.forEach(function (c) { by[c.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = c; });
+    r.items.forEach(function (x) {
+      var c = null; x.keys.some(function (k) { return (c = by[k] || null); });
+      // then a container named the app plus a short extra word: Emby -> EmbyServer, Adguard -> AdGuard-Home (but not Unraid -> Unraid-Cloudflared-Tunnel)
+      if (!c && x.keys[0].length >= 4) { var best = ''; Object.keys(by).forEach(function (k) { if (k.indexOf(x.keys[0]) === 0 && k.length - x.keys[0].length <= 6 && (!best || k.length < best.length)) best = k; }); c = best ? by[best] : null; }
+      var st = !c ? '' : c.health === 'unhealthy' || c.state === 'restarting' ? 'bad' : c.state === 'running' ? (c.health === 'starting' ? 'warn' : 'ok') : c.state === 'paused' ? 'warn' : 'off';
+      x.dot.hidden = !st; x.dot.className = 'ldot ' + st;
+      x.dot.setAttribute('title', c ? c.name + ': ' + (c.health && c.health !== 'none' ? c.health : c.state) : '');
+      x.a.style.display = matches(x.s.name) ? '' : 'none';
     });
   }
 
@@ -1253,7 +1308,7 @@
     else if (j.version) x.extra.appendChild(h('span', { class: 'muted xs' }, 'v' + j.version));
     clear(x.det);
     if (j.error) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
-    if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(function (b) { return h('div', { class: 'blk' }, h('div', { class: 'v' }, fmt(b.value, b.fmt)), h('div', { class: 'l' }, b.label)); })));
+    if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(blk)));
     (j.health || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, (z.source ? z.source + ': ' : '') + z.msg))); });
     (j.issues || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, h('b', null, z.title), ' · ' + z.msg))); });
     if (j.online && !issues && !j.error) x.det.appendChild(h('div', { class: 'muted sm' }, 'No warnings' + (j.version ? ' · version ' + j.version : '') + '.'));
@@ -1372,7 +1427,15 @@
     for (var k = 0; k < 4; k++) next();
   }
 
-  function blocks(list) { return h('div', { class: 'blocks' }, list.map(function (x) { return h('div', { class: 'blk' }, h('div', { class: 'v' }, fmt(x.value, x.fmt)), h('div', { class: 'l' }, x.label)); })); }
+  /* stat blocks: big numbers are shortened (45.3K) so they fit, the exact value is in the tooltip */
+  var CMP = window.Intl ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }) : null;
+  function blkVal(x) {
+    var n = typeof x.value === 'number' ? x.value : (typeof x.value === 'string' && /^-?\d+(\.\d+)?$/.test(x.value) ? +x.value : null);
+    if (CMP && n !== null && Math.abs(n) >= 10000 && (!x.fmt || x.fmt === 'n' || x.fmt === 'text')) return CMP.format(n);
+    return fmt(x.value, x.fmt);
+  }
+  function blk(x) { var full = fmt(x.value, x.fmt); return h('div', { class: 'blk', title: x.label + ': ' + full }, h('div', { class: 'v' }, blkVal(x)), h('div', { class: 'l' }, x.label)); }
+  function blocks(list) { return h('div', { class: 'blocks' }, list.map(blk)); }
   function paintService(s, r) {
     var c = document.getElementById('w-' + s.id); if (!c) return;
     c.classList.remove('wait');
@@ -1520,7 +1583,7 @@
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
-  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
+  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', launcher: 'One-click icons for your apps, with a status dot from the matching container', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
     docker: 'Every container, found automatically', vms: 'Every VM, found automatically', apps: 'Plex, Immich, AdGuard, links and other apps' };
   var MET_DESC = { cpu: 'Usage and temperature', memory: 'RAM used and available', storage: 'Array (or pools) capacity', network: 'Download and upload speed', health: 'Array state, disk problems, parity checks',

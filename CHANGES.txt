@@ -1,3 +1,8 @@
+###2026.10.31e
+- System tiles are separate cards with bigger numbers; CPU, memory, network and disk temperature show their recent history as a small chart under the value.
+- New Launcher section (right after System): one-click icons for every app with a link, with a status dot taken from the container of the same name. Hide or move it in Settings > Dashboard.
+- App cards: large numbers are shortened (16.9K, exact value on hover), latency is rounded, and labels no longer break mid-word.
+
 ###2026.10.31b
 - Media: four equal columns (upcoming movies, upcoming episodes, recently added movies, recently added episodes) as compact lists that scroll on their own; 4, 2 or 1 columns depending on the space. Each column has its own item count (Settings > Dashboard > Media).
 - Alerts: Ignore on each alert, for 1 hour, 24 hours, 7 days, a custom time or permanently, or for every alert of that type (with a confirmation). Undo right after ignoring. Disk alerts are now per disk.

@@ -329,15 +329,22 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .sec-h h2 button{color:var(--text)}
 
 /* stats bar */
-.und .stats{display:flex;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.und .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px}
 .und .stats.is-stale{opacity:.6}
-.und button.stat{all:unset;box-sizing:border-box;flex:1 1 150px;display:flex;flex-direction:column;gap:2px;padding:10px 12px 12px;background:var(--panel);cursor:pointer;position:relative;min-width:0;min-height:76px;box-shadow:1px 0 0 var(--line),0 1px 0 var(--line)}
+.und button.stat{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;padding:11px 13px 13px;background:var(--panel);cursor:pointer;position:relative;min-width:0;min-height:92px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;isolation:isolate}
+.und button.stat>.k,.und button.stat>.v,.und button.stat>.s{position:relative;z-index:1}
+.und .stat .sp{position:absolute;left:0;right:0;bottom:0;height:30px;z-index:0;pointer-events:none}
+.und button.stat.has-sp{padding-bottom:34px}
+.und .stat .sp svg{width:100%;height:100%;display:block}
+.und .stat .sp path.a{fill:var(--accent);fill-opacity:.13}.und .stat .sp path.l{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-opacity:.85}
+.und .stat.warn .sp path.a{fill:var(--warn)}.und .stat.warn .sp path.l{stroke:var(--warn)}.und .stat.bad .sp path.a{fill:var(--bad)}.und .stat.bad .sp path.l{stroke:var(--bad)}
+.und .stat.has-sp .bar{display:none}
 .und button.stat:hover{background:var(--panel-2)}
 .und button.stat:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.und button.stat.on{background:var(--panel-2);box-shadow:inset 0 -2px 0 var(--accent)}
+.und button.stat.on{background:var(--panel-2);border-color:var(--accent)}
 .und .stat .k{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 .und .stat .k svg{width:13px;height:13px}
-.und .stat .v{font-size:18px;font-weight:600;color:var(--title);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.und .stat .v{font-size:22px;font-weight:650;letter-spacing:-.01em;color:var(--title);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .und .stat .s{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .stat .bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:transparent}
 .und .stat .bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .35s}
@@ -353,6 +360,19 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .spark2 path.a{fill:var(--accent);fill-opacity:.14}.und .spark2 path.l{fill:none;stroke:var(--accent);stroke-width:1.5}
 .und .detail .cores{height:60px;margin:0;grid-auto-columns:minmax(4px,1fr)}
 .und .stale{font-size:12px;color:var(--warn);margin:0 0 6px}
+
+/* launcher: app icons with a status dot */
+.und .launch{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px}
+.und a.lnk{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px 8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);color:var(--text);text-decoration:none!important;min-width:0;transition:border-color .15s,background .15s}
+.und a.lnk:hover{border-color:var(--accent);background:var(--panel-2)}
+.und a.lnk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.und .lic{position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center}
+.und .lic img{width:34px;height:34px;object-fit:contain}
+.und .lph{width:34px;height:34px;border-radius:8px;background:var(--panel-2);color:var(--muted);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;text-transform:uppercase}
+.und .ldot{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;border:2px solid var(--panel);background:var(--off)}
+.und .ldot.ok{background:var(--ok)}.und .ldot.warn{background:var(--warn)}.und .ldot.bad{background:var(--bad)}
+.und .ln{font-size:11.5px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.und a.lnk:hover .ln{color:var(--title)}
 
 /* media: four equal columns, by the section's own width (a half-width section gets 2 or 1) */
 .und .mbody{container-type:inline-size}
@@ -442,8 +462,9 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
   .und .rowi.c>.c-cpu,.und .rowi.c>.c-mem{display:none}
 }
 @media (max-width:640px){
-  .und button.stat{flex-basis:40%}
-  .und button.stat{min-height:68px;padding:8px 10px 10px}.und .stat .v{font-size:16px}
+  .und .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .und button.stat{min-height:76px;padding:9px 10px 10px}.und .stat .v{font-size:18px}
+  .und .launch{grid-template-columns:repeat(auto-fill,minmax(64px,1fr))}
   .und .ai{display:none}.und .an{min-width:0;flex:1}
   .und .adet{padding-left:12px}
 }
@@ -477,11 +498,12 @@ body.und-page .und{min-height:100vh;padding:16px clamp(12px,2.5vw,32px) 40px;bor
 .und .ac .ch .nm{font-size:13.5px;font-weight:600}
 .und .ac .ch .sub{margin-left:auto}
 .und .ac .ch .btn{margin-left:2px!important}
-.und .ac .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:0;background:var(--panel-2);border-radius:6px;padding:6px 0}
+.und .ac .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(54px,1fr));gap:0;background:var(--panel-2);border-radius:6px;padding:6px 0}
 .und .ac .blk{background:transparent;padding:0 6px;border-left:1px solid var(--line);border-radius:0;min-width:0}
 .und .ac .blk:first-child{border-left:0}
 .und .ac .blk .v{font-size:14px;font-weight:600;color:var(--title)}
-.und .ac .blk .l{font-size:10px;font-weight:600;color:var(--muted)}
+.und .ac .blk .l{font-size:9.5px;font-weight:600;color:var(--muted);letter-spacing:.02em;white-space:normal;line-height:1.2;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.und .ac .blk .v{font-size:15px}
 .und .ac .streams{margin-top:0}
 .und .ac .stream{font-size:12px}
 .und .ac button.err{padding:5px 8px!important;text-align:left}
