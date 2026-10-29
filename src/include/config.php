@@ -449,6 +449,11 @@ function und_save_secrets(array $s) {
 
 function und_var_is_secret($name) { return preg_match('/KEY|TOKEN|PASS|SECRET|AUTH|COOKIE|SESSION|CREDENTIAL/i', $name) === 1; }
 
+/** Stricter, for redacted exports that may be shared: login names and e-mail addresses go too (half a credential, and personal). */
+function und_var_is_private($name, $value) {
+  return und_var_is_secret($name) || preg_match('/USER|LOGIN|EMAIL|MAIL|ACCOUNT/i', $name) === 1 || preg_match('/[^\s@]+@[^\s@]+\.[a-z]{2,}/i', (string)$value) === 1;
+}
+
 /** What the browser may see: secret variables and stored credentials are replaced by UND_KEEP. */
 function und_secrets_view(array $s) {
   $vars = [];
