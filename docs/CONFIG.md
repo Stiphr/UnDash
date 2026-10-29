@@ -29,7 +29,7 @@ clamped when the file is read, so a hand edit can never break the dashboard. Old
   "dashboard": {
     "sections": [                 // order = order on the page
       { "id": "overview", "visible": true, "width": "full", "collapsed": false }
-      // ids: overview alerts favorites media arr downloads apps docker vms; width: full | half
+      // ids: overview alerts favorites media arr downloads playing requests apps docker vms health; width: full | half
     ],
     "metrics": [                  // order = order of the tiles in the System overview
       { "id": "cpu", "visible": true }

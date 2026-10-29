@@ -347,20 +347,26 @@
   }
   function balanceHalves() {
     (R.packs || []).forEach(function (p) {
-      var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
-      p.w.classList.toggle('one', !!one);
-      unlevel(p);                                           // measure the natural heights, not the stretched ones
-      p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
-      var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
-      var move = want.join() !== now.join();
-      if (move && !one) {
-        // only move when it clearly helps, so sections do not jump back and forth
-        var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
-        if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
-      }
-      if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
-      if (!one) level(p);
+      // measuring resets the media lists for a moment; keep where the user scrolled them
+      var lists = [].slice.call(p.w.querySelectorAll('.mlist')), tops = lists.map(function (l) { return l.scrollTop; });
+      balancePack(p);
+      lists.forEach(function (l, i) { if (l.scrollTop !== tops[i]) l.scrollTop = tops[i]; });
     });
+  }
+  function balancePack(p) {
+    var one = NARROW && NARROW.matches, gap = 16, hh = [0, 0], want = [];
+    p.w.classList.toggle('one', !!one);
+    unlevel(p);                                           // measure the natural heights, not the stretched ones
+    p.items.forEach(function (el) { var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += el.offsetHeight + gap; });
+    var now = p.items.map(function (el) { return el.parentNode === p.cols[1] ? 1 : 0; });
+    var move = want.join() !== now.join();
+    if (move && !one) {
+      // only move when it clearly helps, so sections do not jump back and forth
+      var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
+      if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
+    }
+    if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
+    if (!one) level(p);
   }
   /* Smart height: the shorter column ends level with the taller one. Media in the shorter column shows more items
      (its lists grow); otherwise the column's last box stretches. */
@@ -400,7 +406,7 @@
   }
   function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
-  var TITLES = { overview: 'System', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
+  var TITLES = { overview: 'System', playing: 'Now playing', requests: 'Requests', health: 'Endpoint health', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
   function buildSection(sec) {
     var tools = h('div', { class: 'tools' });
     var count = h('span', { class: 'count' });
@@ -482,6 +488,7 @@
     if (!document.hidden && S.mediaStale) loadMedia();
     if (!document.hidden && S.arrStale) loadArr();
     if (!document.hidden && S.dlStale) loadDl();
+    if (!document.hidden) Object.keys(POLL).forEach(function (k) { if (POLL[k].stale) pollRun(k); });
   });
 
   function paintAll() {
@@ -512,6 +519,10 @@
     root.querySelectorAll('.w[data-name]').forEach(function (w) { var m = matches(w.getAttribute('data-name')); w.style.display = m ? '' : 'none'; w.setAttribute('data-match', m && S.q ? '1' : '0'); });
     root.querySelectorAll('.grp').forEach(function (gr) { var any = [].some.call(gr.querySelectorAll('.w[data-name]'), function (w) { return w.style.display !== 'none'; }); gr.style.display = any || !S.q ? '' : 'none'; });
     root.querySelectorAll('.rowi[data-name],.tile[data-name]').forEach(function (r) { r.setAttribute('data-match', S.q ? '1' : '0'); });
+    // Arr Stack rows and download clients filter by app name; media lists repaint from what they already loaded
+    root.querySelectorAll('.aitem[data-name],.card.dl[data-name]').forEach(function (el) { el.style.display = matches(el.getAttribute('data-name')) ? '' : 'none'; });
+    if (R.media) Object.keys(R.media.w).forEach(function (k) { var x = R.media.w[k]; if (x.last) paintMedia(k, x.last); });
+    Object.keys(POLL).forEach(function (k) { if (POLL[k].last && R[k]) POLL[k].paint(POLL[k].last); });
   }
 
   /* ================= sections ================= */
@@ -686,7 +697,7 @@
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
       caps.docker_check ? ['Check container updates', 'box', checkUpdates, '', !!S.busy.dcheck] : null, dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
-      caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog],
+      caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog], ['Keyboard shortcuts  ?', 'grid', keysHelp],
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
       window.UND_STANDALONE ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
       caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
@@ -697,6 +708,7 @@
     r.list = h('div', { class: 'alerts' }); r.body.appendChild(r.list);
     r.ign = h('button', { type: 'button', class: 'btn ghost sm', hidden: true, onclick: function () { openSettings('ignored'); } });
     r.tools.appendChild(r.ign);
+    r.tools.appendChild(btn('History', alertHistory, 'ghost sm', 'clock', 'When each problem started and ended'));
   };
   /* Alert ids are "<category>:<resource>" (see include/ignores.php); an alert without a category cannot be ignored. */
   var ALERT_CAT = {
@@ -719,42 +731,46 @@
     var now = y.at || Date.now() / 1000, key = cat + ':' + res;
     return ignRules(y).filter(function (g) { return (g.until === null || g.until > now) && (g.kind === 'type' ? g.key === cat : g.key === key); })[0] || null;
   }
+  /* the alerts come from the server (include/alerts.php); only the connection ones are the browser's own */
+  var ALERT_ACT = {
+    settings: function () { return ['Settings', function () { openSettings('config'); }]; },
+    restart: function () { return ['Restart…', function () { powerDialog('reboot'); }]; },
+    os: function () { return ['Details', osDialog]; },
+    logs: function (res) { return ['Logs', function () { logs(res); }]; }
+  };
   function alertList(y) {
-    var s = y.system, out = [];
-    function add(lv, msg, b, cat, res) { out.push({ lv: lv, msg: msg, btn: b || null, cat: cat || '', res: res === undefined ? '' : String(res) }); }
-    if (S.conn === 'down') add('bad', 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.');
-    if (S.conn === 'auth') add('bad', 'Your session ended. Reload the page to sign in again.');
-    if (s && s.error) { add('bad', s.error + (s.auth ? ' Check Settings > Configuration.' : ''), ['Settings', function () { openSettings('config'); }], s.auth ? '' : 'api.error', 'unraid'); s = null; }
-    if (s) {
-      var a = s.array || {};
-      if (a.state && a.state !== 'STARTED') add('warn', 'The array is ' + a.state.toLowerCase() + '. Shares, containers and VMs on it are unavailable.', null, 'array.state', a.state);
-      if (a.resync) add('info', (a.resync_action || 'A parity operation') + ' is running' + (a.resync_pct !== null ? ' (' + a.resync_pct + '%)' : '') + '.', null, 'array.resync', 'array');
-      if (a.bad_disks) a.bad_disks.forEach(function (n) { add('bad', n + ' is disabled, missing or emulated. Check Main in Unraid.', null, 'disk.bad', n); });
-      else if (a.bad) add('bad', a.bad + ' disk' + (a.bad > 1 ? 's are' : ' is') + ' disabled, missing or emulated. Check Main in Unraid.', null, 'disk.bad', 'array');
-      if (a.error_disks) a.error_disks.forEach(function (d) { add('bad', d.name + ' reported ' + d.errors + ' read/write error' + (d.errors > 1 ? 's' : '') + '.', null, 'disk.errors', d.name); });
-      else if (a.errors) add('bad', 'Disks reported ' + a.errors + ' read/write error' + (a.errors > 1 ? 's' : '') + '.', null, 'disk.errors', 'array');
-      if (a.hot_disks) a.hot_disks.forEach(function (d) { add('warn', d.name + ' is at ' + d.temp + '°C.', null, 'disk.hot', d.name); });
-      else if (a.hot) add('warn', a.hot + ' disk' + (a.hot > 1 ? 's are' : ' is') + ' at 50°C or more.', null, 'disk.hot', 'array');
-      var o = s.os_update || {};
-      if (o.staged) add('info', 'Unraid ' + o.staged + ' is installed and becomes active after a restart.', ['Restart…', function () { powerDialog('reboot'); }], 'os.staged', o.staged);
-      else if (o.available) add('info', 'Unraid ' + o.latest + ' is available (running ' + o.installed + ').', ['Details', osDialog], 'os.available', o.latest);
-      if (o.error && !o.available) add('warn', 'The Unraid update check failed: ' + o.error, null, 'os.check_failed', 'server');
-    }
-    var d = y.docker && y.docker.containers;
-    if (d) d.forEach(function (c) {
-      if (pref('docker', c.name).hidden) return;
-      var nm = label('docker', c.name), lg = ['Logs', function () { logs(c.name); }];
-      if (c.health === 'unhealthy') add('bad', nm + ' is unhealthy.', lg, 'docker.unhealthy', c.name);
-      else if (c.state === 'restarting') add('bad', nm + ' keeps restarting' + (c.restarts ? ' (' + c.restarts + ' restarts)' : '') + '.', lg, 'docker.restarting', c.name);
-      else if (c.state === 'exited' && c.exit && c.autostart) add('warn', nm + ' stopped with exit code ' + c.exit + '.', lg, 'docker.exited', c.name);
-      if (c.job === 'update_failed') add('bad', 'The update of ' + nm + ' failed.', lg, 'docker.update_failed', c.name);
-    });
+    var out = [];
+    if (S.conn === 'down') out.push({ lv: 'bad', msg: 'The server is not answering (' + (S.connErr || 'no answer') + '). Retrying.', btn: null, cat: '', res: '' });
+    if (S.conn === 'auth') out.push({ lv: 'bad', msg: 'Your session ended. Reload the page to sign in again.', btn: null, cat: '', res: '' });
+    (y.alerts || []).forEach(function (a) { out.push({ lv: a.lv, msg: a.msg, btn: ALERT_ACT[a.act] ? ALERT_ACT[a.act](a.res) : null, cat: a.cat, res: a.res }); });
     return out;
+  }
+  function alertHistory() {
+    var box = h('div', { class: 'ahist' }, h('div', { class: 'progress' }, h('i')));
+    modal('Alert history', box, null, true);
+    api('alert_history').then(function (j) {
+      clear(box);
+      if (j.error) { box.appendChild(h('div', { class: 'empty' }, j.error)); return; }
+      var dur = function (sec) { sec = Math.max(0, sec); return sec < 90 ? Math.round(sec) + ' s' : sec < 5400 ? Math.round(sec / 60) + ' min' : sec < 172800 ? (sec / 3600).toFixed(1).replace(/\.0$/, '') + ' h' : Math.round(sec / 86400) + ' days'; };
+      var when = function (t) { return new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
+      var row = function (e, open) {
+        return h('div', { class: 'ah ' + e.lv }, h('span', { class: 'sdot ' + (e.lv === 'bad' ? 'bad' : e.lv === 'warn' ? 'warn' : 'ok'), role: 'img', 'aria-label': e.lv }),
+          h('span', { class: 'grow' }, h('span', { class: 'am' }, e.msg), h('span', { class: 'muted xs' }, (ALERT_CAT[e.cat] || e.cat) + ' · ' + when(e.start) + (open ? '' : ' → ' + when(e.end)))),
+          h('span', { class: 'badge ' + (open ? (e.lv === 'bad' ? 'bad' : 'warn') : 'plain') }, open ? 'ongoing · ' + dur(j.now - e.start) : dur(e.end - e.start)));
+      };
+      box.appendChild(h('p', { class: 'muted sm' }, 'Checked once a minute in the background, and on every refresh while the dashboard is open. Ignored alerts are still recorded. Kept for 30 days.'));
+      box.appendChild(h('h4', { class: 'ign-h' }, 'Ongoing (' + j.active.length + ')'));
+      if (!j.active.length) box.appendChild(h('div', { class: 'empty' }, 'Nothing is wrong right now.'));
+      j.active.forEach(function (e) { box.appendChild(row(e, true)); });
+      box.appendChild(h('h4', { class: 'ign-h' }, 'Ended (' + j.log.length + ')'));
+      if (!j.log.length) box.appendChild(h('div', { class: 'empty' }, 'No ended alerts in the last 30 days.'));
+      j.log.forEach(function (e) { box.appendChild(row(e, false)); });
+    });
   }
   function paintAlerts(y) {
     var r = R.alerts, all = alertList(y), hidden = 0;
     var out = all.filter(function (x) { if (x.cat && ignoredBy(y, x.cat, x.res)) { hidden++; return false; } return true; });
-    var sig = JSON.stringify([!!y.system, hidden, out.map(function (x) { return [x.lv, x.msg, x.cat, x.res]; })]);
+    var sig = JSON.stringify([!!y.system, hidden, out.map(function (x) { return [x.lv, x.msg, x.cat, x.res, !!x.btn]; })]);
     if (r.sig === sig) return; r.sig = sig;
     clear(r.list);
     txt(r.count, out.length ? String(out.length) : '');
@@ -830,7 +846,7 @@
     var sig = JSON.stringify(items.map(function (x) { return [x[0], x[1].name, x[1].state, x[1].health, x[1].webui, x[1].ops, S.busy[(x[0] === 'd' ? 'd:' : 'v:') + x[1].name], x[0] === 's' ? null : pref(x[0] === 'd' ? 'docker' : 'vms', x[1].name)]; }));
     if (r.sig === sig) return; r.sig = sig;
     clear(r.list);
-    if (!items.length) { r.list.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, S.q ? 'No favorites match the filter.' : 'Star containers, VMs or services (⋯ menu or Settings) to pin them here.')); return; }
+    if (!items.length) { r.list.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, S.q ? 'No favorites match the filter.' : 'Star containers, VMs or services (gear menu or Settings) to pin them here.')); return; }
     items.forEach(function (x) {
       var it = x[1], el;
       if (x[0] === 'd') {
@@ -908,7 +924,7 @@
     r.filters = h('div', { class: 'seg', role: 'group', 'aria-label': 'Show containers' });
     DFILTERS.forEach(function (f) {
       if (f[0] === 'selected' && !D.selected.length) return;
-      var b = h('button', { type: 'button', class: S.fd === f[0] ? 'on' : '', 'aria-pressed': S.fd === f[0] ? 'true' : 'false', title: f[0] === 'selected' ? 'The containers you picked (⋯ > Show in "Selected")' : null, onclick: function () {
+      var b = h('button', { type: 'button', class: S.fd === f[0] ? 'on' : '', 'aria-pressed': S.fd === f[0] ? 'true' : 'false', title: f[0] === 'selected' ? 'The containers you picked (gear > Show in "Selected")' : null, onclick: function () {
         S.fd = f[0]; S.fdSet = true; [].forEach.call(r.filters.childNodes, function (x) { x.className = x === b ? 'on' : ''; x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); r.fSig = null; paintDocker(S.live || {});
       } }, f[1]);
       r.filters.appendChild(b);
@@ -1339,6 +1355,7 @@
   }
   function paintMedia(k, j) {
     var x = R.media && R.media.w[k]; if (!x) return;
+    x.last = j;
     var sig = JSON.stringify([j, S.q]); if (x.sig === sig) return; x.sig = sig;
     clear(x.row); clear(x.link);
     if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
@@ -1361,6 +1378,138 @@
         h('span', { class: 'mt' }, h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null,
           h('span', { class: 'pm' }, when ? h('span', { class: 'pd' }, when) : null, tags))));
     });
+  }
+
+  /* ---- sections that load their own data on a timer (paused while the browser tab is hidden) ---- */
+  var POLL = {};
+  function poller(key, action, every, paint, data) {
+    clearTimeout((POLL[key] || {}).t);
+    POLL[key] = { action: action, every: every, paint: paint, data: data || null, stale: false, t: null };
+    pollRun(key, true);
+  }
+  function pollRun(key, first, extra) {
+    var p = POLL[key]; if (!p || !R[key]) return;
+    clearTimeout(p.t);
+    if ((document.hidden || S.paused) && !first) { p.stale = true; return; }
+    p.stale = false;
+    api(p.action, Object.assign({}, p.data || {}, extra || {}), 30000).then(function (j) {
+      if (POLL[key] !== p) return;                              // the section was rebuilt meanwhile
+      p.last = j; p.paint(j);
+      p.t = setTimeout(function () { pollRun(key); }, p.every);
+    });
+  }
+  function pollKick(key, extra) { if (POLL[key]) pollRun(key, true, extra); }
+
+  /* ---- Now playing ---- */
+  var METHOD = { 'direct play': ['Direct play', 'ok'], 'direct stream': ['Direct stream', 'info'], transcode: ['Transcode', 'warn'] };
+  BUILD.playing = function (r) {
+    r.list = h('div', { class: 'plist', role: 'list' }, h('div', { class: 'empty' }, 'Loading…'));
+    r.sum = h('span', { class: 'muted sm' }); r.tools.appendChild(r.sum);
+    r.body.appendChild(r.list);
+    poller('playing', 'playing', 10000, paintPlaying);
+  };
+  function paintPlaying(j) {
+    var r = R.playing; if (!r) return;
+    var sig = JSON.stringify([j, S.q]); if (r.sig === sig) return; r.sig = sig;
+    clear(r.list); clear(r.sum);
+    if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Plex, Emby, Jellyfin or Tautulli in Settings > Apps to see who is watching.')); txt(r.count, ''); return; }
+    var bw = 0, tc = 0;
+    j.streams.forEach(function (x) { if (x.bandwidth) bw += x.bandwidth; if (x.method === 'transcode') tc++; });
+    txt(r.count, j.streams.length ? String(j.streams.length) : '');
+    if (j.streams.length) r.sum.appendChild(document.createTextNode((tc ? tc + ' transcoding · ' : '') + (bw ? rate(bw / 8) : '')));
+    (j.apps || []).filter(function (a) { return a.error; }).forEach(function (a) { r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error)); });
+    var shown = j.streams.filter(function (x) { return matches(x.title + ' ' + x.sub + ' ' + x.user + ' ' + x.app); });
+    if (!j.streams.length) { r.list.appendChild(h('div', { class: 'empty' }, 'Nothing is playing right now.')); return; }
+    if (!shown.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No stream matches the filter.')); return; }
+    shown.forEach(function (x) {
+      var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
+      r.list.appendChild(h('div', { class: 'pl' + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
+        img(iconUrl(x.icon), 'aico', 'play'),
+        h('div', { class: 'pt' },
+          h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null),
+          h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [x.user, x.device, x.app].filter(Boolean).join(' · '))),
+          h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { class: 'acc', style: { width: p + '%' } })),
+          h('div', { class: 'pl3 xs' }, h('span', { class: 'num muted' }, dur(x.pos) + ' / ' + dur(x.dur)),
+            m ? h('span', { class: 'badge ' + m[1] }, m[0]) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
+            x.bandwidth ? h('span', { class: 'num muted' }, rate(x.bandwidth / 8)) : null, x.location === 'wan' ? h('span', { class: 'badge plain', title: 'Streaming outside your network' }, 'remote') : null))));
+    });
+  }
+
+  /* ---- Requests (Overseerr / Jellyseerr) ---- */
+  BUILD.requests = function (r) {
+    r.list = h('div', { class: 'rqlist', role: 'list' }, h('div', { class: 'empty' }, 'Loading…'));
+    r.link = h('span'); r.tools.appendChild(r.link);
+    r.body.appendChild(r.list);
+    poller('requests', 'requests', 60000, paintRequests);
+  };
+  function paintRequests(j) {
+    var r = R.requests; if (!r) return;
+    var sig = JSON.stringify([j, S.q, S.busy]); if (r.sig === sig) return; r.sig = sig;
+    clear(r.list); clear(r.link);
+    if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Overseerr or Jellyseerr in Settings > Apps to see and approve requests here.')); txt(r.count, ''); return; }
+    txt(r.count, j.pending ? j.pending + ' pending' : '');
+    (j.apps || []).forEach(function (a) {
+      if (a.error) r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error));
+      else if (a.href && j.apps.length === 1) r.link.appendChild(h('a', { class: 'btn sm ghost', href: a.href, target: '_blank', rel: 'noopener', title: 'Open ' + a.name }, h('span', { class: 'lbl' }, a.name), ic('web')));
+    });
+    var items = j.items.filter(function (x) { return matches(x.title + ' ' + x.user); });
+    if (!j.items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No requests yet.')); return; }
+    if (!items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No request matches the filter.')); return; }
+    items.forEach(function (x) {
+      var key = 'rq:' + x.app + ':' + x.id, busy = !!S.busy[key];
+      var title = x.title + (x.year ? ' (' + x.year + ')' : '');
+      var what = (x.type === 'tv' ? 'Series' + (x.seasons.length ? ' · season ' + x.seasons.join(', ') : '') : 'Movie') + (x.is4k ? ' · 4K' : '');
+      r.list.appendChild(h('div', { class: 'rq' + (x.status === 'pending' ? ' pend' : ''), role: 'listitem', 'data-name': x.title },
+        h(x.href ? 'a' : 'span', { class: 'rqp', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title },
+          x.poster ? h('img', { src: x.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
+        h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs ell' }, what),
+          h('span', { class: 'muted xs ell' }, (x.user ? x.user + ' · ' : '') + (x.at ? rel(x.at) : ''))),
+        x.status === 'pending' ? h('div', { class: 'rqa' },
+          btn('Approve', function () { reqAct(x, 'approve'); }, 'sm pri', 'check', 'Approve ' + title),
+          btn('', function () { confirmBox('Decline ' + title + '?', (x.user || 'The requester') + ' asked for it ' + (x.at ? rel(x.at) : '') + '. Declining tells them in ' + x.app_name + ' and cannot be undone here.', 'Decline', true).then(function (y) { if (y) reqAct(x, 'decline'); }); }, 'sm danger', 'x', 'Decline ' + title))
+          : h('span', { class: 'badge ' + x.level }, x.status_label)));
+      if (busy) [].forEach.call(r.list.lastChild.querySelectorAll('button'), function (b) { b.disabled = true; });
+    });
+  }
+  function reqAct(x, op) {
+    var key = 'rq:' + x.app + ':' + x.id; if (S.busy[key]) return;
+    S.busy[key] = op; if (POLL.requests && POLL.requests.last) { R.requests.sig = null; paintRequests(POLL.requests.last); }
+    act('request_action', { app: x.app, id: x.id, op: op }, (op === 'approve' ? 'Approved: ' : 'Declined: ') + x.title).then(function () { delete S.busy[key]; pollKick('requests'); });
+  }
+
+  /* ---- Endpoint health ---- */
+  BUILD.health = function (r) {
+    r.sum = h('span', { class: 'muted sm' });
+    r.tools.appendChild(r.sum);
+    r.tools.appendChild(btn('Re-probe', function () { txt(r.sum, 'Probing…'); pollKick('health', { force: '1' }); }, 'ghost sm', 'restart', 'Probe every endpoint again now'));
+    r.table = h('div', { class: 'panel htab', role: 'table', 'aria-label': 'Endpoint health' },
+      h('div', { class: 'hrow hh', role: 'row' }, h('span', { role: 'columnheader' }, 'Service'), h('span', { role: 'columnheader' }, 'Address'), h('span', { role: 'columnheader' }, 'Response'), h('span', { role: 'columnheader', class: 'r' }, 'Latency')),
+      r.rows = h('div', { role: 'rowgroup' }, h('div', { class: 'empty' }, 'Probing…')));
+    r.body.appendChild(r.table);
+    poller('health', 'health', 60000, paintHealth);
+  };
+  function paintHealth(j) {
+    var r = R.health; if (!r) return;
+    if (j.error) { clear(r.rows).appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    var bad = j.total - j.up;
+    clear(r.sum);
+    r.sum.appendChild(h('span', { class: bad ? 'bad-t' : 'ok-t' }, j.up + '/' + j.total + ' reachable'));
+    r.sum.appendChild(document.createTextNode(' · checked ' + rel(j.at)));
+    txt(r.count, j.total ? String(j.total) : '');
+    var sig = JSON.stringify([j.rows, S.q]); if (r.sig === sig) return; r.sig = sig;
+    clear(r.rows);
+    if (!j.rows.length) { r.rows.appendChild(h('div', { class: 'empty' }, 'Nothing to probe yet: add links to your apps (Settings > Apps) or give containers a web UI.')); return; }
+    j.rows.filter(function (x) { return matches(x.name + ' ' + x.hostport); }).forEach(function (x) {
+      r.rows.appendChild(h('div', { class: 'hrow ' + x.level, role: 'row', 'data-name': x.name },
+        h('span', { class: 'hn', role: 'cell' }, h('span', { class: 'sdot ' + x.level, role: 'img', 'aria-label': x.level }), img(iconUrl(x.icon), 'aico', x.kind === 'container' ? 'box' : 'tag'),
+          h('b', { class: 'ell' }, x.name), h('span', { class: 'muted xs ell' }, x.kind === 'container' ? 'container' : x.group)),
+        h('span', { role: 'cell', class: 'ell' }, h('a', { href: x.url, target: '_blank', rel: 'noopener', class: 'num' }, x.hostport)),
+        h('span', { role: 'cell' }, h('span', { class: 'badge ' + x.level }, x.text)),
+        h('span', { role: 'cell', class: 'r num' }, x.ms === null ? '–' : x.ms + ' ms')));
+    });
+    if (!r.rows.childNodes.length) r.rows.appendChild(h('div', { class: 'empty' }, 'No endpoint matches the filter.'));
   }
 
   /* ---- Arr Stack: one compact row per app, details on demand ---- */
@@ -1682,7 +1831,7 @@
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
-  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
+  var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', playing: 'Active Plex, Emby, Jellyfin and Tautulli streams', requests: 'Overseerr / Jellyseerr requests, approve or decline', health: 'Every app and container web UI: status and latency', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
     docker: 'Every container, found automatically', vms: 'Every VM, found automatically', apps: 'Plex, Immich, AdGuard, links and other apps' };
   var MET_DESC = { cpu: 'Usage and temperature', memory: 'RAM used and available', storage: 'Array (or pools) capacity', network: 'Download and upload speed', health: 'Array state, disk problems, parity checks',
@@ -1831,7 +1980,7 @@
         h('div', { class: 'inl', style: { 'margin-bottom': '6px' } }, pf,
           btn('Select running', function () { D2.selected = all.filter(function (x) { return x.state === 'running'; }).map(function (x) { return x.name; }); txt(selCount, D2.selected.length + ' selected'); drawPick(); dirty(); }, 'sm'),
           btn('Clear', function () { D2.selected = []; txt(selCount, '0 selected'); drawPick(); dirty(); }, 'sm ghost')),
-        pick, h('div', { class: 'hint' }, 'Also from the dashboard: ⋯ > Show in "Selected".'))));
+        pick, h('div', { class: 'hint' }, 'Also from the dashboard: gear > Show in "Selected".'))));
     var A2 = c.apps;
     b.appendChild(set('Apps', 'Plex, Emby, Immich, AdGuard and your other apps, below Arr Stack and Downloads.', h('div', { class: 'grid2' },
       F('Columns', sIn(A2, 'columns', dirty, [[0, 'Automatic'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']]))),
@@ -2236,8 +2385,43 @@
   }
 
   /* ---------- keyboard ---------- */
+  // g then a letter jumps to a section (it opens a collapsed one); ? lists everything
+  var GOTO = { o: 'overview', a: 'alerts', f: 'favorites', m: 'media', s: 'arr', d: 'downloads', n: 'playing', q: 'requests', p: 'apps', c: 'docker', v: 'vms', h: 'health' };
+  function jumpTo(id) {
+    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Dashboard).', true); return; }
+    if (r.sec.collapsed) r.el.querySelector('.sec-h h2 button').click();
+    r.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    var b = r.el.querySelector('.sec-h h2 button'); if (b) try { b.focus({ preventScroll: true }); } catch (x) { b.focus(); }
+  }
+  function refreshAll() {
+    refreshNow();
+    if (R.media) loadMedia(true); if (R.arr) loadArr(true); if (R.downloads) loadDl(true);
+    Object.keys(POLL).forEach(function (k) { pollKick(k); });
+    toast('Refreshing everything');
+  }
+  function keysHelp() {
+    var row = function (k, what) { return h('div', { class: 'kh' }, h('span', null, k.split(' ').map(function (x) { return h('kbd', null, x); })), h('span', null, what)); };
+    var go = Object.keys(GOTO).map(function (k) { return row('g ' + k, TITLES[GOTO[k]]); });
+    modal('Keyboard shortcuts', h('div', { class: 'keys' },
+      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Filter the dashboard'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
+        row(',', 'Settings'), row('?', 'This list'), row('Esc', 'Close a dialog, menu or the filter')),
+      h('div', null, h('h4', { class: 'ign-h' }, 'Go to a section'), go)), null, true);
+  }
   document.addEventListener('keydown', function (e) {
-    if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') && !root.querySelector('.modal-bg,.drawer') && R.search) { e.preventDefault(); R.search.focus(); }
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || (document.activeElement && document.activeElement.isContentEditable);
+    if (typing || e.ctrlKey || e.metaKey || e.altKey || !S.L || root.querySelector('.modal-bg,.drawer') || S.menu) { S.gKey = 0; return; }
+    var k = e.key;
+    if (S.gKey && Date.now() - S.gKey < 1500) {
+      S.gKey = 0;
+      if (GOTO[k.toLowerCase()]) { e.preventDefault(); jumpTo(GOTO[k.toLowerCase()]); }
+      return;
+    }
+    if (k === '/' && R.search) { e.preventDefault(); R.search.focus(); }
+    else if (k === 'g') { S.gKey = Date.now(); }
+    else if (k === '?') { e.preventDefault(); keysHelp(); }
+    else if (k === 'r') { e.preventDefault(); refreshAll(); }
+    else if (k === 'p') { e.preventDefault(); togglePause(); toast(S.paused ? 'Live refresh paused' : 'Live refresh resumed'); }
+    else if (k === ',') { e.preventDefault(); openSettings(); }
   });
   window.addEventListener('beforeunload', function (e) { if (S.drawer && S.drawer.dirty) { e.preventDefault(); e.returnValue = ''; } });
 

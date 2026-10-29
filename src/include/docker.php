@@ -51,7 +51,9 @@ function und_docker_details(array $ps, $force = false) {
       foreach ((array)($x['NetworkSettings']['Networks'] ?? []) as $n) if (!empty($n['IPAddress'])) { $cip = $n['IPAddress']; break; }
       $webui = (string)($labels['net.unraid.docker.webui'] ?? '');
       if ($webui !== '') {
-        $own = !in_array($net, ['bridge', 'host', 'default', ''], true) && strpos($net, 'container:') !== 0 && $cip !== '';
+        // the container's own address only when it has one on the LAN (br0 / macvlan style) and publishes nothing on the host;
+        // on a user-defined bridge with published ports the web UI is reached through the server's address and the host port
+        $own = !$ports && !in_array($net, ['bridge', 'host', 'default', ''], true) && strpos($net, 'container:') !== 0 && $cip !== '';
         $webui = str_replace('[IP]', $own ? $cip : $ip, $webui);
         $webui = preg_replace_callback('/\[PORT:(\d+)\]/', function ($m) use ($ports, $own) {
           foreach ($ports as $cp => $hp) if ((int)$cp === (int)$m[1]) return (string)($own ? $m[1] : $hp);
