@@ -136,7 +136,7 @@ The dashboard is made of sections: **System**, **Alerts**, **Favorites**, **Medi
    | Section | Options |
    |---|---|
    | System | which tiles to show (CPU, memory, storage, network, health, disks, UPS…) and their order |
-   | Media | which columns (upcoming and recent movies and episodes), items per column, days ahead, which Radarr and Sonarr |
+   | Media | which columns (upcoming and recent movies and episodes), items per column, days ahead, which Radarr and Sonarr, posters or text only |
    | Arr Stack / Downloads | their apps; how many active downloads per client |
    | Apps | columns, groups, group names, shortcut links |
    | Containers / Virtual machines | see [Add containers and VMs](#add-containers-and-vms) |
