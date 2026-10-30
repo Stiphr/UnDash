@@ -787,6 +787,25 @@ t('Home Assistant: an entity with its name and unit, token sent', $r['blocks'] =
 t('Home Assistant: people home, lights and switches by default', array_column(und_w_homeassistant($sv('homeassistant', ['key' => 'tok']))['blocks'], 'value') === ['2 / 3', '0 / 4', '0 / 4']);
 $e = ''; try { und_w_homeassistant($sv('homeassistant', ['key' => 'tok', 'options' => ['entities' => '../../api/config']])); } catch (Exception $x) { $e = $x->getMessage(); }
 t('Home Assistant: only entity ids are asked for', strpos($e, 'Not an entity id') !== false);
+$cfgSm = und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'Disks', 'services' => [['id' => '5c000001', 'type' => 'scrutiny', 'name' => 'Scrutiny', 'url' => 'http://app.lan:1', 'fields' => [], 'options' => []]]]]]);
+@unlink(und_tmp('smart-5c000001.json'));
+t('alerts: nothing is known about the disks before Scrutiny is read', und_smart_failures($cfgSm) === ['checked' => false, 'failed' => []]);
+$n = count($GLOBALS['SEEN']);
+$sm = und_smart_failures($cfgSm, true);
+t('the background check reads Scrutiny and keeps the failed disks', $sm['checked'] && count($sm['failed']) === 1 && $sm['failed'][0]['disk'] === 'sdb' && count($GLOBALS['SEEN']) > $n);
+$n = count($GLOBALS['SEEN']);
+und_smart_failures($cfgSm, true); und_smart_failures($cfgSm);
+t('... and does not ask again within 5 minutes; the refresh never asks', count($GLOBALS['SEEN']) === $n);
+$al = array_values(array_filter(und_alerts($cfgSm, null, null, $sm), function ($x) { return $x['cat'] === 'disk.smart'; }));
+t('a failed disk is a red alert naming the disk, the model and the app', count($al) === 1 && $al[0]['lv'] === 'bad' && $al[0]['res'] === 'sdb' && strpos($al[0]['msg'], 'sdb (WD) failed its SMART check in Scrutiny') === 0, json_encode($al));
+t('the alert category can be ignored like the others', isset(und_alert_categories()['disk.smart']));
+und_alerts_track($al, ['system', 'smart'], 1000);
+und_alerts_track([], ['system', 'docker'], 1100);
+t('the alert stays open while Scrutiny was not asked', isset(und_alert_history()['active'][0]) && und_alert_history()['active'][0]['cat'] === 'disk.smart');
+und_alerts_track([], ['system', 'smart'], 1200);
+t('... and ends once Scrutiny says the disk is fine', !und_alert_history()['active']);
+$st = json_decode(file_get_contents(und_tmp('smart-5c000001.json')), true); $st['at'] -= 3600; file_put_contents(und_tmp('smart-5c000001.json'), json_encode($st));
+t('an hour-old Scrutiny result counts as not checked', und_smart_failures($cfgSm)['checked'] === false);
 t('the new apps show in Apps', und_zone(['type' => 'scrutiny']) === 'apps' && und_zone(['type' => 'homeassistant']) === 'apps');
 unset($GLOBALS['UND_HTTP_MOCK']);
 
