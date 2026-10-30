@@ -8,7 +8,7 @@ mirrored to the flash drive):
 | `config.yaml` | everything you set in Settings: apps, layout, theme, preferences, ignored alerts, custom CSS. No secrets. |
 | `.env` | API keys, user names and passwords (mode 600), the Unraid API key and the dashboard password hash. |
 
-Next to them, `data/` holds the automatic backups (`data/backups`, the newest 15) and the alert history.
+Next to them, `data/` holds the automatic backups (`data/backups`: one after every settings save, the last 7 different versions) and the alert history.
 
 You normally change everything in Settings. `config.yaml` can also be edited by hand (reload the dashboard
 afterwards): unknown keys are dropped and every value is checked and clamped when the file is read, so a mistake
@@ -36,11 +36,11 @@ groups:
 RADARR_API_KEY=0123456789abcdef
 ```
 
-Settings > Apps writes both for you: type the key into the app's form and it is stored in `.env` under a name made
+Settings > Sections & apps writes both for you: type the key into the app's form and it is stored in `.env` under a name made
 from the app's name (`QBITTORRENT_PRIVATE_PASSWORD`). Removing an app removes its keys. A key typed straight into
 `config.yaml` is ignored, so the file can always be shared.
 
-**Shared values** (Settings > Apps, advanced) are other `.env` entries you use as `{{NAME}}` in an address, link,
+**Shared values** (Settings > Sections & apps, advanced) are other `.env` entries you use as `{{NAME}}` in an address, link,
 header or key field, for example one server address used by many apps. `{{UNRAID_IP}}` is built in.
 
 ## config.yaml
@@ -53,7 +53,8 @@ general:
   refresh_services: 15       # seconds between app refreshes, 5-3600
   background_poll: slow      # slow (every 30 s) | pause | normal, while the browser tab is hidden
   disk_path: /mnt/user       # path under /mnt for the Disk metric
-  search: duckduckgo         # duckduckgo | google | bing | startpage | brave | none
+  search: duckduckgo         # duckduckgo | google | bing | startpage | brave
+  search_in: [apps, web, seerr]   # what the search box lists: apps/containers/VMs, a web search, Seerr movies and series
   os_check_hours: 6          # Unraid update check interval, 1-168
   ups_name: ups              # NUT ups name (apcupsd needs none)
 appearance:

@@ -172,6 +172,7 @@ switch ($action) {
     if (!und_save_config($norm)) fail('Could not write the configuration directory. Check that ' . und_store_dir() . ' is writable.', 500);
     if (!und_env_write($env)) fail('Could not write the .env file in ' . und_store_dir() . '.', 500);
     if (isset($_POST['css'])) und_save_css($P('css'), false);
+    und_backup('settings saved');
     out(['ok' => true]);
   }
   /* small preference changes made on the dashboard itself (favourite, hide, collapse, layout): no backup, no secrets */
@@ -190,6 +191,11 @@ switch ($action) {
     } elseif ($kind === 'docker_view' || $kind === 'vms_view') {
       $k = $kind === 'docker_view' ? 'docker' : 'vms';
       $cfg[$k] = array_merge($cfg[$k], array_intersect_key($val, ['layout' => 1, 'sort' => 1, 'hide_stopped' => 1, 'view' => 1, 'filter' => 1, 'selected' => 1, 'columns' => 1]));
+    } elseif ($kind === 'group') {
+      if (isset($val['name'])) $val['name'] = trim((string)$val['name']);
+      if (isset($val['name']) && ($val['name'] === '' || strlen($val['name']) > 60)) fail('Give the group a name of up to 60 characters.');
+      foreach ($cfg['groups'] as &$g) if ($g['id'] === $key) $g = array_merge($g, array_intersect_key($val, ['name' => 1, 'header' => 1]));
+      unset($g);
     } elseif ($kind === 'service') {
       foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) if ($s['id'] === $key) $s = array_merge($s, array_intersect_key($val, ['favorite' => 1, 'hidden' => 1]));
       unset($g, $s);

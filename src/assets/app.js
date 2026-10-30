@@ -322,15 +322,11 @@
     var g = S.L.general;
     R.live = h('div', { class: 'live', role: 'status' }, h('span', { class: 'dot' }), R.liveTxt = h('span', null, 'Connecting…'),
       R.pause = btn('', togglePause, 'ghost sm', 'pause', 'Pause live refresh'));
-    var seerr = hasSeerr();
-    R.search = h('input', { type: 'search', placeholder: (seerr ? 'Filter the dashboard or find a movie / series to request' : 'Filter containers, VMs, services…') + '  ( / )', 'aria-label': 'Filter the dashboard' + (seerr ? ' and search ' + seerr.name : ''), value: S.q,
-      'aria-controls': 'und-sbox', autocomplete: 'off',
-      oninput: function () { S.q = R.search.value; refreshFilters(); seerrSoon(); },
-      onfocus: function () { if (R.sbox && R.sbox.childNodes.length && S.q.trim().length >= 2) R.sbox.hidden = false; },
-      onkeydown: function (e) {
-        if (e.key === 'Escape') { R.search.value = ''; S.q = ''; refreshFilters(); seerrSoon(); }
-        if (e.key === 'Enter' && g.search !== 'none' && S.q.trim() && !root.querySelector('[data-match="1"]')) webSearch(S.q.trim());
-      } });
+    var ph = searchPlaceholder();
+    R.search = ph ? h('input', { type: 'search', placeholder: ph + '  ( / )', 'aria-label': ph, value: S.q, role: 'combobox', 'aria-controls': 'und-sbox', 'aria-expanded': 'false', 'aria-autocomplete': 'list', autocomplete: 'off',
+      oninput: function () { S.q = R.search.value; searchRun(); },
+      onfocus: function () { if (S.q.trim() && R.sbox.hidden) searchRun(); },
+      onkeydown: searchKey }) : null;
     var acts = h('div', { class: 'acts' }, R.live,
       R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
       window.UND_STANDALONE ? null : btn('', toggleFull, 'focus' + (S.full ? ' on' : ''), 'full', S.full ? 'Exit focus mode' : 'Focus mode (hide Unraid\'s menu)'),
@@ -339,11 +335,11 @@
     root.appendChild(h('header', { class: 'top' },
       h('div', { class: 'brand' }, logo(), h('div', { class: 'ell' }, h('h1', { class: 'und-name' }, g.title || 'UnDash'),
         R.sub = h('div', { class: 'und-sub' }))),
-      h('div', { class: 'search' }, ic('search'), R.search, R.sbox = h('div', { class: 'sbox', id: 'und-sbox', hidden: true, role: 'region', 'aria-label': 'Results to request' })), acts));
+      R.search ? h('div', { class: 'search' }, ic('search'), R.search, R.sbox = h('div', { class: 'sbox', id: 'und-sbox', hidden: true, role: 'listbox', 'aria-label': 'Search results' })) : h('span', { class: 'grow' }), acts));
     R.sections = h('main', { class: 'sections' }); R.noMatch = null;
     root.appendChild(R.sections);
     S.L.dashboard.sections.forEach(function (sec) { if (sec.visible) buildSection(sec); });
-    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Layout.'));
+    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Sections & apps.'));
     packHalves();
     paintAll(); paintLive(); paintIdent();
     if (!S.selfT) { S.selfT = 1; checkSelf(); }
@@ -407,7 +403,7 @@
     // sections hidden by the filter take no room and stay where they are
     p.items.forEach(function (el, i) { var h0 = el.offsetHeight; if (!h0) { want.push(now[i]); return; } var c = one ? 0 : hh[0] <= hh[1] ? 0 : 1; want.push(c); hh[c] += h0 + gap; });
     var move = want.join() !== now.join();
-    if (move && !one && !S.q.trim()) {
+    if (move && !one) {
       // only move when it clearly helps, so sections do not jump back and forth
       var cur = [0, 0]; p.items.forEach(function (el, i) { cur[now[i]] += el.offsetHeight + gap; });
       if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
@@ -447,26 +443,120 @@
   }
   if (NARROW) (NARROW.addEventListener ? NARROW.addEventListener('change', function () { balanceHalves(); }) : NARROW.addListener(balanceHalves));
 
-  /* ---- search box: also finds movies and series in Overseerr / Jellyseerr, with Request right there ---- */
+  /* ---- search box: a list under it with the apps, containers and VMs that match, a web search and movies and series to request
+     (Overseerr / Jellyseerr). What it searches is set in Settings > Refresh & display; the dashboard itself stays as it is. ---- */
+  var ENGINES = { duckduckgo: ['DuckDuckGo', 'https://duckduckgo.com/?q='], google: ['Google', 'https://www.google.com/search?q='], bing: ['Bing', 'https://www.bing.com/search?q='],
+    startpage: ['Startpage', 'https://www.startpage.com/do/search?q='], brave: ['Brave Search', 'https://search.brave.com/search?q='] };
   function hasSeerr() { var f = null; S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (!f && s.type === 'overseerr') f = s; }); }); return f; }
-  function seerrSoon() {
-    clearTimeout(S.seerrT);
-    var q = S.q.trim();
-    if (!R.sbox || !hasSeerr() || q.length < 2) { if (R.sbox) { R.sbox.hidden = true; clear(R.sbox); } return; }
-    S.seerrT = setTimeout(function () { seerrSearch(q); }, 450);
+  function searchIn(k) { var g = S.L.general; return (g.search_in || []).indexOf(k) >= 0 && (k !== 'web' || !!ENGINES[g.search]) && (k !== 'seerr' || !!hasSeerr()); }
+  function searchPlaceholder() {
+    var p = [searchIn('apps') ? 'apps, containers' : '', searchIn('seerr') ? 'movies, series' : '', searchIn('web') ? 'the web' : ''].filter(Boolean);
+    return p.length ? 'Search ' + p.join(', ').replace(/, ([^,]+)$/, ' or $1') : '';
   }
-  function seerrSearch(q) {
-    var box = R.sbox, seq = (S.seerrSeq = (S.seerrSeq || 0) + 1);
-    clear(box).appendChild(h('div', { class: 'sb-h' }, 'Searching ' + hasSeerr().name + '…'));
-    box.hidden = false;
+  function searchClose(reset) {
+    if (!R.sbox) return;
+    R.sbox.hidden = true; R.search.setAttribute('aria-expanded', 'false');
+    if (reset) { R.search.value = ''; S.q = ''; clear(R.sbox); S.seerrSeq = (S.seerrSeq || 0) + 1; }
+  }
+  function searchRun() {
+    var box = R.sbox, q = S.q.trim();
+    clearTimeout(S.seerrT); S.seerrSeq = (S.seerrSeq || 0) + 1;
+    if (!q) { searchClose(true); return; }
+    clear(box);
+    if (searchIn('apps')) {
+      var hits = localHits(q);
+      box.appendChild(h('div', { class: 'sb-h' }, 'Apps, containers and VMs'));
+      if (hits.length) hits.forEach(function (x) { box.appendChild(x); }); else box.appendChild(h('div', { class: 'empty' }, 'Nothing called "' + q + '".'));
+    }
+    if (searchIn('web')) {
+      var E = ENGINES[S.L.general.search];
+      box.appendChild(sbItem(h('span', { class: 'aico' }, ic('web')), ['Search the web for "' + q + '"', E[0]], function () { window.open(E[1] + encodeURIComponent(q), '_blank', 'noopener'); }));
+    }
+    if (searchIn('seerr') && q.length >= 2) {
+      var seq = S.seerrSeq, part = h('div', null, h('div', { class: 'sb-h' }, 'Searching ' + hasSeerr().name + '…'));
+      box.appendChild(part);
+      S.seerrT = setTimeout(function () { seerrSearch(q, seq, part); }, 400);
+    }
+    box.hidden = false; R.search.setAttribute('aria-expanded', 'true');
+    searchSel(box.querySelector('.sb-i'));
+  }
+  /* apps by name (best matches first), then containers and VMs; hidden ones are left out */
+  function localHits(q) {
+    var lq = q.toLowerCase(), y = S.live || {}, out = [];
+    var score = function (n) { n = String(n || '').toLowerCase(); var i = n.indexOf(lq); return i < 0 ? -1 : i === 0 ? 0 : 1; };
+    var put = function (n, el) { var sc = score(n); if (sc >= 0) out.push([sc, out.length, el]); };
+    S.L.groups.forEach(function (g) { g.services.forEach(function (s) {
+      if (s.hidden || score(s.name) < 0) return;
+      var href = s.href_resolved || '';
+      put(s.name, sbItem(img(iconUrl(s.icon), 'aico', 'web'), [s.name, (TITLES[s.zone] || 'Apps') + (href ? ' · ' + href.replace(/^https?:\/\//, '').replace(/\/$/, '') : '')],
+        function () { if (href) window.open(href, '_blank', 'noopener'); else sbJump(s.zone, s.name, 'w-' + s.id); }, href ? null : sbBtn('Show on the dashboard', 'eye', function () { sbJump(s.zone, s.name, 'w-' + s.id); })));
+    }); });
+    ((y.docker && y.docker.containers) || []).forEach(function (c) {
+      var p = pref('docker', c.name), nm = p.label || c.name, web = dWeb(c);
+      if (p.hidden || (score(nm) < 0 && score(c.name) < 0)) return;
+      put(score(nm) >= 0 ? nm : c.name, sbItem(img(iconUrl(p.icon || c.icon), 'aico', 'box'), [nm, 'Container · ' + c.state],
+        function () { if (web) window.open(web, '_blank', 'noopener'); else inspect(c.name); },
+        h('span', { class: 'sb-acts' }, web ? sbBtn('Open web UI', 'web', function () { window.open(web, '_blank', 'noopener'); }) : null,
+          sbBtn('Logs', 'logs', function () { logs(c.name); }), sbBtn('Details', 'info', function () { inspect(c.name); }))));
+    });
+    ((y.vms && y.vms.vms) || []).forEach(function (v) {
+      var p = pref('vms', v.name), nm = p.label || v.name, web = vWeb(v);
+      if (p.hidden || (score(nm) < 0 && score(v.name) < 0)) return;
+      put(score(nm) >= 0 ? nm : v.name, sbItem(img(iconUrl(p.icon), 'aico', 'vm'), [nm, 'VM · ' + v.state],
+        function () { if (web) window.open(web, '_blank', 'noopener'); else sbJump('vms', v.name); }));
+    });
+    return out.sort(function (a, c) { return a[0] - c[0] || a[1] - c[1]; }).slice(0, 8).map(function (x) { return x[2]; });
+  }
+  /* one result: click or Enter runs go(); buttons in it do their own thing */
+  function sbItem(pic, lines, go, extra) {
+    var el = h('div', { class: 'sb-r sb-i', role: 'option', 'aria-selected': 'false',
+      onclick: function (e) { if (e.target.closest('button,a')) return; searchClose(true); go(); },
+      onmousemove: function () { if (!el.classList.contains('sel')) searchSel(el); } },
+      pic, h('div', { class: 'rqt' }, h('b', { class: 'ell', title: lines[0] }, lines[0]), lines.slice(1).map(function (l) { return typeof l === 'string' ? h('span', { class: 'muted xs ell' }, l) : l; })), extra || null);
+    el._go = go;
+    return el;
+  }
+  function sbBtn(title, icon, fn) { return btn('', function () { searchClose(true); fn(); }, 'sm ghost', icon, title); }
+  function searchSel(el) {
+    if (!R.sbox) return;
+    [].forEach.call(R.sbox.querySelectorAll('.sb-i.sel'), function (x) { x.classList.remove('sel'); x.setAttribute('aria-selected', 'false'); });
+    if (!el) return;
+    el.classList.add('sel'); el.setAttribute('aria-selected', 'true');
+    var b = R.sbox.getBoundingClientRect(), r = el.getBoundingClientRect();
+    if (r.top < b.top || r.bottom > b.bottom) el.scrollIntoView({ block: 'nearest' });
+  }
+  function searchKey(e) {
+    var box = R.sbox;
+    if (e.key === 'Escape') { if (!box.hidden) { e.preventDefault(); searchClose(); } else searchClose(true); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (box.hidden) { if (S.q.trim()) searchRun(); return; }
+      var all = [].slice.call(box.querySelectorAll('.sb-i')), i = all.indexOf(box.querySelector('.sb-i.sel'));
+      if (all.length) searchSel(all[(i + (e.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]);
+      return;
+    }
+    if (e.key === 'Enter') {
+      var sel = !box.hidden && box.querySelector('.sb-i.sel');
+      if (sel) { e.preventDefault(); searchClose(true); sel._go(); }
+    }
+  }
+  /* bring an app, container or VM on the dashboard into view and highlight it for a moment */
+  function sbJump(zone, name, id) {
+    var sec = R.sections && R.sections.querySelector('section.sec[data-sec="' + zone + '"]');
+    var el = (id && document.getElementById(id)) || (sec && [].filter.call(sec.querySelectorAll('[data-name]'), function (x) { return x.getAttribute('data-name') === name; })[0]) || sec;
+    if (!el) { toast(name + ' is not on the dashboard (its section is hidden).'); return; }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+    setTimeout(function () { el.classList.remove('flash'); }, 1800);
+  }
+  function seerrSearch(q, seq, part) {
     api('seerr_search', { q: q }, 20000).then(function (j) {
-      if (seq !== S.seerrSeq || S.q.trim() !== q) return;            // a newer search is on its way
-      clear(box);
-      box.appendChild(h('div', { class: 'sb-h' }, ic('search'), h('span', { class: 'grow' }, (j.app ? j.app.name : 'Seerr') + ': movies and series for "' + q + '"'),
-        btn('', function () { box.hidden = true; }, 'ghost sm', 'x', 'Close')));
-      if (j.error) { box.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
-      if (!j.items.length) { box.appendChild(h('div', { class: 'empty' }, 'No movie or series found.')); return; }
-      j.items.forEach(function (x) { box.appendChild(seerrRow(j.app, x)); });
+      if (seq !== S.seerrSeq || !part.isConnected) return;            // a newer search is on its way
+      clear(part).appendChild(h('div', { class: 'sb-h' }, (j.app ? j.app.name : 'Seerr') + ': movies and series to request'));
+      if (j.error) { part.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+      if (!j.items.length) { part.appendChild(h('div', { class: 'empty' }, 'No movie or series found.')); return; }
+      j.items.forEach(function (x) { part.appendChild(seerrRow(j.app, x)); });
+      if (!R.sbox.querySelector('.sb-i.sel')) searchSel(part.querySelector('.sb-i'));
     });
   }
   function seerrRow(app, x) {
@@ -482,19 +572,12 @@
           });
         }, 'sm pri', 'plus', x.type === 'tv' ? 'Request every season of ' + title : 'Request ' + title)
       : h('span', { class: 'badge ' + (x.status === 'available' || x.status === 'partial' ? 'ok' : 'info') }, x.status_label);
-    return h('div', { class: 'sb-r' },
-      h(x.href ? 'a' : 'span', { class: 'rqp', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: 'Open in ' + app.name },
-        x.poster ? h('img', { src: x.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
-      h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs' }, x.type === 'tv' ? 'Series' : 'Movie'),
-        x.overview ? h('span', { class: 'muted xs sb-o' }, x.overview) : null),
-      action);
+    return sbItem(h('span', { class: 'rqp' }, x.poster ? h('img', { src: x.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
+      [title, x.type === 'tv' ? 'Series' : 'Movie', x.overview ? h('span', { class: 'muted xs sb-o' }, x.overview) : null].filter(Boolean),
+      function () { if (x.href) window.open(x.href, '_blank', 'noopener'); }, action);
   }
-  document.addEventListener('mousedown', function (e) { if (R.sbox && !R.sbox.hidden && !R.sbox.contains(e.target) && e.target !== R.search) R.sbox.hidden = true; });
+  document.addEventListener('mousedown', function (e) { if (R.sbox && !R.sbox.hidden && !R.sbox.contains(e.target) && e.target !== R.search) searchClose(); });
 
-  function webSearch(q) {
-    var E = { duckduckgo: 'https://duckduckgo.com/?q=', google: 'https://www.google.com/search?q=', bing: 'https://www.bing.com/search?q=', startpage: 'https://www.startpage.com/do/search?q=', brave: 'https://search.brave.com/search?q=' };
-    var u = E[S.L.general.search]; if (u) window.open(u + encodeURIComponent(q), '_blank', 'noopener');
-  }
   function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
   var TITLES = { overview: 'System', playing: 'Now playing', requests: 'Requests', health: 'Endpoint health', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
@@ -590,7 +673,6 @@
     if (R.docker && open('docker')) paintDocker(y);
     if (R.vms && open('vms')) paintVms(y);
     paintCounts(y);
-    if (S.q) matchVisibility();
     // ResizeObserver does not run in a background tab; the live refresh catches up instead
     if (R.packs && R.packs.length) balanceHalves();
   }
@@ -600,43 +682,6 @@
       txt(R.docker.count, c.filter(function (x) { return x.state === 'running'; }).length + ' of ' + c.length + ' running');
     }
     if (R.vms && y.vms && y.vms.vms) txt(R.vms.count, y.vms.vms.filter(function (v) { return v.state === 'running'; }).length + ' of ' + y.vms.vms.length + ' running');
-  }
-
-  /* ---------- filtering ---------- */
-  function matches(str) { var q = S.q.trim().toLowerCase(); return !q || String(str).toLowerCase().indexOf(q) >= 0; }
-  function refreshFilters() {
-    if (R.favorites) R.favorites.sig = null;
-    if (R.vms) R.vms.sig = null;
-    paintAll();
-    root.querySelectorAll('.w[data-name]').forEach(function (w) { var m = matches(w.getAttribute('data-name')); w.style.display = m ? '' : 'none'; w.setAttribute('data-match', m && S.q ? '1' : '0'); });
-    root.querySelectorAll('.grp').forEach(function (gr) { var any = [].some.call(gr.querySelectorAll('.w[data-name]'), function (w) { return w.style.display !== 'none'; }); gr.style.display = any || !S.q ? '' : 'none'; });
-    root.querySelectorAll('.rowi[data-name],.tile[data-name]').forEach(function (r) { r.setAttribute('data-match', S.q ? '1' : '0'); });
-    // Arr Stack rows and download clients filter by app name; media lists repaint from what they already loaded
-    root.querySelectorAll('.aitem[data-name],.card.dl[data-name]').forEach(function (el) { el.style.display = matches(el.getAttribute('data-name')) ? '' : 'none'; });
-    if (R.media) Object.keys(R.media.w).forEach(function (k) { var x = R.media.w[k]; if (x.last) paintMedia(k, x.last); });
-    Object.keys(POLL).forEach(function (k) { if (POLL[k].last && R[k]) POLL[k].paint(POLL[k].last); });
-    matchVisibility();
-  }
-
-  /* While the filter box is in use, sections (and media columns) with nothing that matches step aside instead of showing
-     empty boxes; the overview and alerts stay. If nothing at all matches, one line says so. */
-  var MATCH_ITEMS = '.mi,.aitem,.card.dl,.pl,.rq,.agrid>.w,.alinks>.alink,.ci,.rowi,.tile,.hrow:not(.hh),.fav';
-  function matchVisibility() {
-    if (!R.sections) return;
-    var q = S.q.trim(), any = false;
-    [].forEach.call(R.sections.querySelectorAll('section.sec[data-sec]'), function (el) {
-      var id = el.getAttribute('data-sec');
-      if (!q || id === 'overview' || id === 'alerts') { el.classList.remove('nomatch'); [].forEach.call(el.querySelectorAll('.nomatch-col'), function (c) { c.classList.remove('nomatch-col'); }); return; }
-      var shown = function (x) { return x.style.display !== 'none' && !x.closest('[hidden]'); };
-      [].forEach.call(el.querySelectorAll('.mw'), function (c) { c.classList.toggle('nomatch-col', ![].some.call(c.querySelectorAll('.mi'), shown)); });
-      var n = [].filter.call(el.querySelectorAll(MATCH_ITEMS), function (x) { return shown(x) && !x.closest('.nomatch-col'); }).length;
-      el.classList.toggle('nomatch', n === 0);
-      if (n) any = true;
-    });
-    if (!R.noMatch) { R.noMatch = h('div', { class: 'nomatch-note', role: 'status' }); R.sections.parentNode.insertBefore(R.noMatch, R.sections); }
-    R.noMatch.hidden = !q || any;
-    if (R.packs && R.packs.length) balanceHalves();
-    if (q && !any) txt(R.noMatch, 'Nothing on the dashboard matches "' + q + '".' + (hasSeerr() ? ' Movies and series to request are in the list under the search box.' : ''));
   }
 
   /* ================= sections ================= */
@@ -660,7 +705,7 @@
     r.detail = h('div', { class: 'detail', hidden: true });
     r.stale = h('div', { class: 'stale', hidden: true, role: 'status' });
     r.body.appendChild(r.stale); r.body.appendChild(r.bar); r.body.appendChild(r.detail);
-    if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Layout).'));
+    if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Sections & apps).'));
     r.open = LS.get('detail', '');
   };
   function toggleDetail(id) {
@@ -959,11 +1004,10 @@
     ((y.docker && y.docker.containers) || []).forEach(function (c) { if (pref('docker', c.name).favorite) items.push(['d', c]); });
     ((y.vms && y.vms.vms) || []).forEach(function (v) { if (pref('vms', v.name).favorite) items.push(['v', v]); });
     S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (s.favorite && !s.hidden) items.push(['s', s]); }); });
-    items = items.filter(function (x) { return matches(x[1].name + ' ' + (x[0] === 's' ? '' : label(x[0] === 'd' ? 'docker' : 'vms', x[1].name))); });
     var sig = JSON.stringify(items.map(function (x) { return [x[0], x[1].name, x[1].state, x[1].health, x[1].webui, x[1].ops, S.busy[(x[0] === 'd' ? 'd:' : 'v:') + x[1].name], x[0] === 's' ? null : pref(x[0] === 'd' ? 'docker' : 'vms', x[1].name)]; }));
     if (r.sig === sig) return; r.sig = sig;
     clear(r.list);
-    if (!items.length) { r.list.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, S.q ? 'No favorites match the filter.' : 'Star containers, VMs or services (gear menu or Settings) to pin them here.')); return; }
+    if (!items.length) { r.list.appendChild(h('div', { class: 'card empty', style: { 'grid-column': '1/-1' } }, 'Star containers, VMs or services (gear menu or Settings) to pin them here.')); return; }
     items.forEach(function (x) {
       var it = x[1], el;
       if (x[0] === 'd') {
@@ -1075,7 +1119,7 @@
     var D = S.L.docker, i = D.selected.indexOf(name), first = !D.selected.length;
     if (i >= 0) D.selected.splice(i, 1); else D.selected.push(name);
     api('prefs', { kind: 'docker_view', value: { selected: D.selected } }).then(function (j) { if (j.error) toast(j.error, true); });
-    toast(i >= 0 ? name + ' removed from "Selected"' : name + ' added to "Selected"' + (first ? '. Pick "Selected" as the default view in Settings > Containers & VMs.' : ''));
+    toast(i >= 0 ? name + ' removed from "Selected"' : name + ' added to "Selected"' + (first ? '. Pick "Selected" as the default view in Settings > Sections & apps > Containers.' : ''));
     shell();
   }
   function setLayout(kind, l) { S.L[kind].layout = l; api('prefs', { kind: kind + '_view', value: { layout: l } }); shell(); }
@@ -1089,14 +1133,13 @@
     var list = d.containers.filter(function (c) {
       var p = pref('docker', c.name);
       if (p.hidden && !S.showHidden) { hiddenN++; return false; }
-      if (!matches(c.name + ' ' + (p.label || '') + ' ' + c.image)) return false;
       if (S.fd === 'selected') return D.selected.indexOf(c.name) >= 0;
       if (S.fd === 'running') return c.state === 'running';
       if (S.fd === 'stopped') return c.state !== 'running';
       if (S.fd === 'updates') return c.update === 'available';
       if (S.fd === 'problems') return c.health === 'unhealthy' || c.state === 'restarting' || c.job === 'update_failed' || (c.state === 'exited' && c.exit && c.autostart);
       if (S.fd === 'favorites') return !!p.favorite;
-      if (D.hide_stopped && c.state !== 'running' && !S.q) { hiddenN++; return false; }
+      if (D.hide_stopped && c.state !== 'running') { hiddenN++; return false; }
       return true;
     });
     var order = { running: 0, restarting: 1, paused: 2, created: 3, exited: 4, dead: 5 };
@@ -1127,11 +1170,11 @@
       seen[c.name] = 1;
     });
     Object.keys(r.map).forEach(function (n) { if (!seen[n]) { var x = r.map[n]; if (x.parentNode) x.parentNode.removeChild(x); delete r.map[n]; } });
-    if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, S.q ? 'No containers match "' + S.q + '".' : S.fd === 'selected' ? 'None of your selected containers exist any more.' : d.containers.length ? 'No containers in this view.' : 'No containers yet.'));
+    if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, S.fd === 'selected' ? 'None of your selected containers exist any more.' : d.containers.length ? 'No containers in this view.' : 'No containers yet.'));
     var dk = dockerStats(y), fs = JSON.stringify([hiddenN, S.showHidden, dk.updates, S.fd, list.length, d.containers.length]);
     if (r.fSig !== fs) {
       r.fSig = fs; clear(r.foot); clear(r.updAll);
-      if (S.fd !== 'all' && !S.q && list.length < d.containers.length) r.foot.appendChild(btn('Show all ' + d.containers.length, function () { S.fd = 'all'; S.fdSet = true; shell(); }, 'sm ghost', 'eye', 'Show every container'));
+      if (S.fd !== 'all' && list.length < d.containers.length) r.foot.appendChild(btn('Show all ' + d.containers.length, function () { S.fd = 'all'; S.fdSet = true; shell(); }, 'sm ghost', 'eye', 'Show every container'));
       if (hiddenN || S.showHidden) r.foot.appendChild(btn(S.showHidden ? 'Hide hidden containers' : 'Show ' + hiddenN + ' hidden', function () { S.showHidden = !S.showHidden; r.fSig = null; if (R.vms) R.vms.sig = null; paintAll(); }, 'sm ghost', S.showHidden ? 'eyeoff' : 'eye'));
       if (dk.updates) r.updAll.appendChild(btn('Update all (' + dk.updates + ')', function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up', 'Update every container that has an update'));
     }
@@ -1385,14 +1428,14 @@
     var r = R.vms, v = y.vms;
     if (!v) { if (!r.rows.firstChild) r.rows.appendChild(h('div', { class: 'empty' }, 'Loading VMs…')); return; }
     var hidden = 0;
-    var list = v.error ? [] : v.vms.filter(function (x) { var p = pref('vms', x.name); if (p.hidden && !S.showHidden) { hidden++; return false; } return matches(x.name + ' ' + (p.label || '') + ' ' + x.os); });
+    var list = v.error ? [] : v.vms.filter(function (x) { var p = pref('vms', x.name); if (p.hidden && !S.showHidden) { hidden++; return false; } return true; });
     var busy = {}; list.forEach(function (x) { busy[x.name] = S.busy['v:' + x.name] || ''; });
-    var sig = JSON.stringify([v.error, list, hidden, S.showHidden, S.L.vms, busy, S.q]);
+    var sig = JSON.stringify([v.error, list, hidden, S.showHidden, S.L.vms, busy]);
     if (r.sig === sig) return; r.sig = sig;
     var focus = r.rows.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
     clear(r.rows);
     if (v.error) { r.rows.appendChild(h('div', { class: 'empty' }, v.error)); return; }
-    if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, S.q ? 'No VMs match "' + S.q + '".' : v.vms.length ? 'All VMs are hidden.' : 'No virtual machines.'));
+    if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, v.vms.length ? 'All VMs are hidden.' : 'No virtual machines.'));
     list.forEach(function (x) {
       var p = pref('vms', x.name), b = busy[x.name];
       var a = vActions(x, p), vw = vWeb(x), vt = vw ? 'Open the console of ' + x.name : x.os || x.name;
@@ -1455,7 +1498,7 @@
       x.el = h('div', { class: 'mw card' }, h('div', { class: 'mh' }, h('h3', null, MEDIA[id][0]), x.count, h('span', { class: 'grow' }), x.link), x.row);
       r.w[id] = x; r.grid.appendChild(x.el);
     });
-    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Media & downloads).'));
+    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Sections & apps > Media).'));
     r.body.classList.add('mbody');
     r.body.appendChild(r.grid);
     clearTimeout(S.mediaTimer); loadMedia(true);
@@ -1473,14 +1516,13 @@
   function paintMedia(k, j) {
     var x = R.media && R.media.w[k]; if (!x) return;
     x.last = j;
-    var sig = JSON.stringify([j, S.q]); if (x.sig === sig) return; x.sig = sig;
+    var sig = JSON.stringify(j); if (x.sig === sig) return; x.sig = sig;
     clear(x.row); clear(x.link);
     if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
     if (j.error && !(j.items || []).length) { x.row.appendChild(h('div', { class: 'empty ' + (j.unconfigured ? '' : 'err-t') }, j.error)); txt(x.count, ''); return; }
-    var items = (j.items || []).filter(function (it) { return matches(it.title + ' ' + (it.sub || '')); });
+    var items = j.items || [];
     txt(x.count, String(j.items.length));
     if (!j.items.length) { x.row.appendChild(h('div', { class: 'empty' }, MEDIA[k][1])); return; }
-    if (!items.length) { x.row.appendChild(h('div', { class: 'empty' }, 'Nothing here matches the filter.')); return; }
     var upcoming = k.indexOf('upcoming') === 0;
     items.forEach(function (it) {
       var d = it.ts ? new Date(it.ts * 1000) : null;
@@ -1511,7 +1553,7 @@
     p.stale = false;
     api(p.action, Object.assign({}, p.data || {}, extra || {}), 30000).then(function (j) {
       if (POLL[key] !== p) return;                              // the section was rebuilt meanwhile
-      p.last = j; p.paint(j); if (S.q) matchVisibility();
+      p.last = j; p.paint(j);
       p.t = setTimeout(function () { pollRun(key); }, p.every);
     });
   }
@@ -1527,19 +1569,17 @@
   };
   function paintPlaying(j) {
     var r = R.playing; if (!r) return;
-    var sig = JSON.stringify([j, S.q]); if (r.sig === sig) return; r.sig = sig;
+    var sig = JSON.stringify(j); if (r.sig === sig) return; r.sig = sig;
     clear(r.list); clear(r.sum);
     if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
-    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Plex, Emby, Jellyfin or Tautulli in Settings > Apps to see who is watching.')); txt(r.count, ''); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Plex, Emby, Jellyfin or Tautulli in Settings > Sections & apps to see who is watching.')); txt(r.count, ''); return; }
     var bw = 0, tc = 0;
     j.streams.forEach(function (x) { if (x.bandwidth) bw += x.bandwidth; if (x.method === 'transcode') tc++; });
     txt(r.count, j.streams.length ? String(j.streams.length) : '');
     if (j.streams.length) r.sum.appendChild(document.createTextNode((tc ? tc + ' transcoding · ' : '') + (bw ? rate(bw / 8) : '')));
     (j.apps || []).filter(function (a) { return a.error; }).forEach(function (a) { r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error)); });
-    var shown = j.streams.filter(function (x) { return matches(x.title + ' ' + x.sub + ' ' + x.user + ' ' + x.app); });
     if (!j.streams.length) { r.list.appendChild(h('div', { class: 'empty' }, 'Nothing is playing right now.')); return; }
-    if (!shown.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No stream matches the filter.')); return; }
-    shown.forEach(function (x) {
+    j.streams.forEach(function (x) {
       var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
       r.list.appendChild(h('div', { class: 'pl' + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
         img(iconUrl(x.icon), 'aico', 'play'),
@@ -1562,19 +1602,17 @@
   };
   function paintRequests(j) {
     var r = R.requests; if (!r) return;
-    var sig = JSON.stringify([j, S.q, S.busy]); if (r.sig === sig) return; r.sig = sig;
+    var sig = JSON.stringify([j, S.busy]); if (r.sig === sig) return; r.sig = sig;
     clear(r.list); clear(r.link);
     if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
-    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Overseerr or Jellyseerr in Settings > Apps to see and approve requests here.')); txt(r.count, ''); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Overseerr or Jellyseerr in Settings > Sections & apps to see and approve requests here.')); txt(r.count, ''); return; }
     txt(r.count, j.pending ? j.pending + ' pending' : '');
     (j.apps || []).forEach(function (a) {
       if (a.error) r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error));
       else if (a.href && j.apps.length === 1) r.link.appendChild(h('a', { class: 'btn sm ghost', href: a.href, target: '_blank', rel: 'noopener', title: 'Open ' + a.name }, h('span', { class: 'lbl' }, a.name), ic('web')));
     });
-    var items = j.items.filter(function (x) { return matches(x.title + ' ' + x.user); });
     if (!j.items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No requests yet.')); return; }
-    if (!items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No request matches the filter.')); return; }
-    items.forEach(function (x) {
+    j.items.forEach(function (x) {
       var key = 'rq:' + x.app + ':' + x.id, busy = !!S.busy[key];
       var title = x.title + (x.year ? ' (' + x.year + ')' : '');
       var what = (x.type === 'tv' ? 'Series' + (x.seasons.length ? ' · season ' + x.seasons.join(', ') : '') : 'Movie') + (x.is4k ? ' · 4K' : '');
@@ -1614,10 +1652,10 @@
     r.sum.appendChild(h('span', { class: bad ? 'bad-t' : 'ok-t' }, j.up + '/' + j.total + ' reachable'));
     r.sum.appendChild(document.createTextNode(' · checked ' + rel(j.at)));
     txt(r.count, j.total ? String(j.total) : '');
-    var sig = JSON.stringify([j.rows, S.q]); if (r.sig === sig) return; r.sig = sig;
+    var sig = JSON.stringify(j.rows); if (r.sig === sig) return; r.sig = sig;
     clear(r.rows);
-    if (!j.rows.length) { r.rows.appendChild(h('div', { class: 'empty' }, 'Nothing to probe yet: add links to your apps (Settings > Apps) or give containers a web UI.')); return; }
-    j.rows.filter(function (x) { return matches(x.name + ' ' + x.hostport); }).forEach(function (x) {
+    if (!j.rows.length) { r.rows.appendChild(h('div', { class: 'empty' }, 'Nothing to probe yet: add links to your apps (Settings > Sections & apps) or give containers a web UI.')); return; }
+    j.rows.forEach(function (x) {
       r.rows.appendChild(h('div', { class: 'hrow ' + x.level, role: 'row', 'data-name': x.name },
         h('span', { class: 'hn', role: 'cell' }, h('span', { class: 'sdot ' + x.level, role: 'img', 'aria-label': x.level }), img(iconUrl(x.icon), 'aico', x.kind === 'container' ? 'box' : 'tag'),
           h('b', { class: 'ell' }, x.name), h('span', { class: 'muted xs ell' }, x.kind === 'container' ? 'container' : x.group)),
@@ -1633,7 +1671,7 @@
   BUILD.arr = function (r) {
     var apps = zoneApps('arr');
     r.list = h('div', { class: 'panel arr', role: 'list' }); r.rows = {};
-    if (!apps.length) r.list.appendChild(h('div', { class: 'empty' }, 'No Arr apps yet. Add Radarr, Sonarr, Prowlarr… in Settings > Apps.'));
+    if (!apps.length) r.list.appendChild(h('div', { class: 'empty' }, 'No Arr apps yet. Add Radarr, Sonarr, Prowlarr… in Settings > Sections & apps.'));
     apps.forEach(function (s) {
       var x = { s: s, dot: h('span', { class: 'sdot na', role: 'img', 'aria-label': 'checking' }), info: h('span', { class: 'ai' }, 'Checking…'), extra: h('span', { class: 'ax' }), det: h('div', { class: 'adet', hidden: true }) };
       var tog = h('button', { type: 'button', class: 'arow', 'aria-expanded': 'false', onclick: function () { x.det.hidden = !x.det.hidden; tog.setAttribute('aria-expanded', x.det.hidden ? 'false' : 'true'); } },
@@ -1682,7 +1720,7 @@
   BUILD.downloads = function (r) {
     var apps = zoneApps('downloads');
     r.list = h('div', { class: 'dls' }); r.c = {};
-    if (!apps.length) r.list.appendChild(h('div', { class: 'card empty' }, 'No download clients yet. Add qBittorrent, qui or SABnzbd in Settings > Apps.'));
+    if (!apps.length) r.list.appendChild(h('div', { class: 'card empty' }, 'No download clients yet. Add qBittorrent, qui or SABnzbd in Settings > Sections & apps.'));
     apps.forEach(function (s) {
       var x = { s: s, head: h('div', { class: 'dlh' }), body: h('div', { class: 'dlb' }, h('div', { class: 'muted sm' }, 'Loading…')) };
       x.el = h('div', { class: 'card dl', 'data-name': s.name }, x.head, x.body);
@@ -1749,7 +1787,7 @@
   BUILD.apps = function (r) {
     var A = S.L.apps, closed = LS.get('closed', {});
     var groups = S.L.groups.map(function (g) { return { g: g, s: g.services.filter(function (s) { return s.zone === 'apps' && !s.hidden && (A.links || s.type !== 'link'); }) }; }).filter(function (x) { return x.s.length; });
-    if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No other apps to show. Add Plex, Immich, AdGuard… in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Apps'), '.')); return; }
+    if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No other apps to show. Add Plex, Immich, AdGuard… in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Sections & apps'), '.')); return; }
     var grid = function () { var g = h('div', { class: 'agrid' + (A.columns ? ' fixed' : ''), role: 'list' }); if (A.columns) g.style.setProperty('--ac', String(A.columns)); return g; };
     if (!A.headers) {
       var all = grid(), links = h('div', { class: 'alinks' });
@@ -1757,8 +1795,9 @@
       if (all.childNodes.length) r.body.appendChild(all);
       if (links.childNodes.length) r.body.appendChild(links);
     } else groups.forEach(function (x) {
-      var gr = x.g, wrap = h('div', { class: 'grp' + (closed[gr.id] ? ' closed' : '') }), gd = grid(), links = h('div', { class: 'alinks' });
-      wrap.appendChild(h('h3', null, h('button', { type: 'button', 'aria-expanded': closed[gr.id] ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name)));
+      var gr = x.g, shut = gr.header && closed[gr.id], wrap = h('div', { class: 'grp' + (shut ? ' closed' : '') }), gd = grid(), links = h('div', { class: 'alinks' });
+      if (gr.header) wrap.appendChild(h('h3', null, h('button', { type: 'button', 'aria-expanded': shut ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name),
+        gear('group ' + gr.name, function () { return [['Rename group…', 'edit', function () { renameGroup(gr); }], ['Hide the group name', 'eyeoff', function () { groupPref(gr, { header: false }, 'Group name hidden. Show it again in Settings > Sections & apps > Apps.'); }]]; })));
       x.s.forEach(function (s) { (s.type === 'link' ? links : gd).appendChild(widget(s)); });
       if (gd.childNodes.length) wrap.appendChild(gd);
       if (links.childNodes.length) wrap.appendChild(links);
@@ -1768,6 +1807,16 @@
     clearTimeout(S.svcTimer); S.svcRun = false;
     setTimeout(pollServices, 0);
   };
+  function groupPref(gr, val, msg) {
+    Object.assign(gr, val); shell();
+    return api('prefs', { kind: 'group', key: gr.id, value: val }).then(function (j) { if (j.error) { toast(j.error, true); return; } S.L = j.layout; shell(); if (msg) toast(msg); });
+  }
+  function renameGroup(gr) {
+    var inp = h('input', { type: 'text', value: gr.name, maxlength: 60, 'aria-label': 'Group name', onkeydown: function (e) { if (e.key === 'Enter') ok(); } }), m;
+    var ok = function () { var n = inp.value.trim(); if (!n) { inp.focus(); return; } m.close(); if (n !== gr.name) groupPref(gr, { name: n }); };
+    m = modal('Rename group', h('div', null, F('Name', inp)), [btn('Cancel', function () { m.close(); }), btn('Save', ok, 'pri')]);
+    setTimeout(function () { inp.focus(); inp.select(); }, 0);
+  }
   function widget(s) {
     var u = iconUrl(s.icon), href = s.href_resolved || '';
     if (s.type === 'link') {
@@ -1966,7 +2015,8 @@
   function openSettings(tab) {
     if (S.drawer) { if (S.drawer.previewing) S.drawer.back(); return; }
     closeMenu(true);
-    var D = { tab: SET_ALIAS[tab] || (SET_PAGES[tab] ? tab : 'layout'), dirty: false };
+    var al = SET_ALIAS[tab], D = { tab: al ? al[0] : SET_PAGES[tab] ? tab : 'dashboard', dirty: false, open: {} };
+    if (al && al[1]) D.open[al[1]] = true;
     S.drawer = D;
     var last = document.activeElement;
     var bodyEl = h('div', { class: 'db', role: 'tabpanel' });
@@ -2081,10 +2131,7 @@
     };
   }
   var SET_PAGES = {
-    layout: ['Layout', 'grid', pick(tabDashboard, ['Sections', 'System overview'])],
-    media: ['Media & downloads', 'play', pick(tabDashboard, ['Media', 'Downloads'])],
-    containers: ['Containers & VMs', 'box', pick(tabDashboard, ['Containers', 'Virtual machines', 'Favorites, names and visibility'])],
-    services: ['Apps', 'web', function (b, D, dirty) { tabServices(b, D, dirty); pick(tabDashboard, ['How apps are shown'])(b, D, dirty); }],
+    dashboard: ['Sections & apps', 'grid', tabDashboard],
     appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Spacing', 'Wallpaper'])],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['Refresh & display', 'clock', tabSystem],
@@ -2092,11 +2139,12 @@
     config: ['Connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }],
     backup: ['Backup & import', 'download', configCommon]
   };
-  var SET_NAV = [['Dashboard', ['layout', 'media', 'containers', 'services']], ['Look', ['appearance', 'css']], ['Behaviour', ['system', 'ignored']], ['Server', ['config', 'backup']]];
-  var SET_ALIAS = { dashboard: 'layout' };
+  var SET_NAV = [['Dashboard', ['dashboard', 'appearance', 'css']], ['Behaviour', ['system', 'ignored']], ['Server', ['config', 'backup']]];
+  /* older page names (links in messages) open Sections & apps with that part unfolded */
+  var SET_ALIAS = { layout: ['dashboard'], media: ['dashboard', 'media'], containers: ['dashboard', 'docker'], services: ['dashboard', 'apps'] };
   function set(title, hint) { var b = h('section', { class: 'set' }, h('h3', null, title), hint ? h('p', { class: 'hint' }, hint) : null); for (var i = 2; i < arguments.length; i++) add(b, arguments[i]); return b; }
-  /* reorderable list: drag the handle (mouse) or use the arrow buttons (keyboard, touch) */
-  function orderList(arr, row, dirty, redraw) {
+  /* reorderable list: drag the handle (mouse) or use the arrow buttons (keyboard, touch); below(x) can add a panel under a row */
+  function orderList(arr, row, dirty, redraw, below) {
     var from = null;
     return h('div', { class: 'olist' }, arr.map(function (x, i) {
       var el = h('div', { class: 'oi', draggable: 'true',
@@ -2107,30 +2155,70 @@
         ondrop: function (e) { e.preventDefault(); el.classList.remove('over'); if (from === null || from === i) return; var it = arr.splice(from, 1)[0]; arr.splice(i, 0, it); from = null; dirty(); redraw(); } },
         h('span', { class: 'grip', 'aria-hidden': 'true', title: 'Drag to reorder' }, '⋮⋮'), row(x, i),
         btn('', function () { if (move(arr, i, -1)) { dirty(); redraw(); } }, 'sm ghost', 'upar', 'Move up'), btn('', function () { if (move(arr, i, 1)) { dirty(); redraw(); } }, 'sm ghost', 'dnar', 'Move down'));
-      return el;
+      var more = below && below(x);
+      return more ? h('div', { class: 'oi-w' }, el, more) : el;
     }));
   }
 
+  /* Settings > Sections & apps: the dashboard's sections in order, each with its own options folded under it.
+     Apps are listed in the section they show in; "Find an app" opens every section that has a match. */
+  var SEC_OPTS = { overview: 'Tiles and apps', media: 'Columns and apps', arr: 'Apps', downloads: 'Clients', apps: 'Groups and apps', docker: 'View and names', vms: 'View and names' };
   function tabDashboard(b, D, dirty) {
-    var c = D.cfg, redraw = function () { D.render(); };
-    b.appendChild(set('Sections', 'Show, hide and order the parts of the dashboard. Half-width sections sit side by side on wide screens.',
+    var c = D.cfg, open = D.open || (D.open = {}), panels = {}, chevs = {};
+    var ed = appsEditor(D, dirty, function () { paint(); });
+    var filter = h('input', { type: 'search', placeholder: 'Find an app…', 'aria-label': 'Find an app', value: ed.q, oninput: function () { ed.q = filter.value.trim().toLowerCase(); ed.draw(); } });
+    function paint() {
+      Object.keys(panels).forEach(function (id) {
+        var on = ed.q ? ed.hits(id) > 0 : !!open[id];
+        panels[id].hidden = !on; chevs[id].setAttribute('aria-expanded', on ? 'true' : 'false'); chevs[id].classList.toggle('on', on);
+      });
+    }
+    var opts = {
+      overview: function () { return [sub('Tiles', 'In this order. Click a tile on the dashboard for its details. A metric the server cannot measure says so instead of showing a made-up number.'),
+        orderList(c.dashboard.metrics, function (m) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: m.visible, onchange: function (e) { m.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MET[m.id][0]), h('span', { class: 'muted sm' }, ' · ' + MET_DESC[m.id]))); }, dirty, D.render),
+        ed.zone('overview')]; },
+      media: function () {
+        var radarrs = [['', 'First Radarr app']], sonarrs = [['', 'First Sonarr app']];
+        c.groups.forEach(function (g) { g.services.forEach(function (x) { if (x.type === 'radarr') radarrs.push([x.id, x.name]); if (x.type === 'sonarr') sonarrs.push([x.id, x.name]); }); });
+        return [sub('Columns', 'Always in this order, with posters and dates from Radarr and Sonarr. Each column scrolls on its own.'),
+          h('div', { class: 'olist' }, c.media.widgets.map(function (w) {
+            return h('div', { class: 'oi' }, h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: w.visible, onchange: function (e) { w.visible = e.target.checked; dirty(); } }),
+              h('span', null, h('b', null, MEDIA[w.id][0]), h('span', { class: 'muted sm' }, ' · ' + MEDIA_DESC[w.id]))),
+              h('label', { class: 'muted sm nowrap' }, 'Items ', tIn(w, 'count', dirty, '15', 'number', { min: 1, max: 50, style: 'width:70px', 'aria-label': 'Items in ' + MEDIA[w.id][0] })));
+          })),
+          h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Radarr', sIn(c.media, 'radarr', dirty, radarrs)), F('Sonarr', sIn(c.media, 'sonarr', dirty, sonarrs)),
+            F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 }), 'How far the two Upcoming columns look ahead.')),
+          ed.zone('media')];
+      },
+      arr: function () { return [ed.zone('arr')]; },
+      downloads: function () { return [h('div', { class: 'grid2' }, F('Active items shown per client', tIn(c.downloads, 'items', dirty, '4', 'number', { min: 0, max: 20 }), '0 shows the totals only.')), ed.zone('downloads')]; },
+      apps: function () {
+        var A2 = c.apps;
+        return [h('div', { class: 'grid2' }, F('Columns', sIn(A2, 'columns', dirty, [[0, 'Automatic'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']]))),
+          cIn(A2, 'headers', dirty, 'Show apps in their groups, with the group names'), cIn(A2, 'links', dirty, 'Show shortcut links (the old Services links) as small buttons'),
+          h('div', { class: 'hint', style: { 'margin-bottom': '10px' } }, 'Rename a group in its name box. "Show name" hides one group\'s name and keeps its apps together. On the dashboard, the gear next to a group name does the same.'),
+          ed.groups()];
+      },
+      docker: function () { return [dockerOpts(c, dirty), sub('Names, icons and visibility', 'Kept by name, so they survive updates and re-created containers. Star = favorite, crossed eye = hidden from the dashboard.'), namesList(c, dirty, 'docker')]; },
+      vms: function () { return [h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']]))), sub('Names, icons and visibility', 'VMs are found automatically through libvirt.'), namesList(c, dirty, 'vms')]; }
+    };
+    function sub(t, hint) { return h('div', { class: 'sub-h' }, h('b', null, t), hint ? h('span', { class: 'hint' }, hint) : null); }
+    b.appendChild(h('div', { class: 'ae-bar' }, filter, h('span', { class: 'grow' }),
+      btn('Add app', function () { addApp(D, null, null, function () { ed.draw(); }, dirty); }, 'pri sm', 'plus')));
+    b.appendChild(set('Sections', 'Tick the sections to show, drag to reorder, and open one for its options and apps. Half-width sections sit side by side on wide screens. Keys and passwords stay in .env on the server, never in the browser.',
       orderList(c.dashboard.sections, function (s) {
+        var o = SEC_OPTS[s.id];
+        if (o) chevs[s.id] = h('button', { type: 'button', class: 'btn sm ghost sec-opt', 'aria-controls': 'und-so-' + s.id, onclick: function () { open[s.id] = !open[s.id]; if (ed.q) { ed.q = ''; filter.value = ''; ed.draw(); } else paint(); } }, h('span', { class: 'lbl' }, o), ic('chev'));
         return [h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: s.visible, onchange: function (e) { s.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, TITLES[s.id]), h('span', { class: 'muted sm' }, ' · ' + SEC_DESC[s.id]))),
-          sIn(s, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']])];
-      }, dirty, redraw)));
-    b.appendChild(set('System overview', 'The tiles at the top, in this order. Click a tile on the dashboard to see its details. A metric the server cannot measure says so instead of showing a made-up number.',
-      orderList(c.dashboard.metrics, function (m) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: m.visible, onchange: function (e) { m.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MET[m.id][0]), h('span', { class: 'muted sm' }, ' · ' + MET_DESC[m.id]))); }, dirty, redraw)));
-    var radarrs = [['', 'First Radarr app']], sonarrs = [['', 'First Sonarr app']];
-    c.groups.forEach(function (g) { g.services.forEach(function (x) { if (x.type === 'radarr') radarrs.push([x.id, x.name]); if (x.type === 'sonarr') sonarrs.push([x.id, x.name]); }); });
-    b.appendChild(set('Media', 'Four columns, always in this order, with posters and dates from your Radarr and Sonarr apps. Each column scrolls on its own.',
-      h('div', { class: 'olist' }, c.media.widgets.map(function (w) {
-        return h('div', { class: 'oi' }, h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: w.visible, onchange: function (e) { w.visible = e.target.checked; dirty(); } }),
-          h('span', null, h('b', null, MEDIA[w.id][0]), h('span', { class: 'muted sm' }, ' · ' + MEDIA_DESC[w.id]))),
-          h('label', { class: 'muted sm nowrap' }, 'Items ', tIn(w, 'count', dirty, '15', 'number', { min: 1, max: 50, style: 'width:70px', 'aria-label': 'Items in ' + MEDIA[w.id][0] })));
-      })),
-      h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Radarr', sIn(c.media, 'radarr', dirty, radarrs)), F('Sonarr', sIn(c.media, 'sonarr', dirty, sonarrs)),
-        F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 }), 'How far the two Upcoming columns look ahead.'))));
-    b.appendChild(set('Downloads', null, h('div', { class: 'grid2' }, F('Active items shown per client', tIn(c.downloads, 'items', dirty, '4', 'number', { min: 0, max: 20 }), '0 shows the totals only.'))));
+          sIn(s, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']]), chevs[s.id] || h('span', { class: 'sec-opt-x' })];
+      }, dirty, D.render, function (s) {
+        if (!opts[s.id]) return null;
+        return (panels[s.id] = h('div', { class: 'sec-opts', id: 'und-so-' + s.id, hidden: true }, opts[s.id]()));
+      })));
+    sharedValues(b, D, dirty);
+    ed.draw();
+  }
+  function dockerOpts(c, dirty) {
     var D2 = c.docker;
     var shows = [['cpu', 'CPU'], ['memory', 'Memory'], ['uptime', 'Uptime'], ['image', 'Image'], ['update', 'Update badge']];
     var showBox = h('div', { class: 'inl' }, shows.map(function (x) {
@@ -2151,7 +2239,7 @@
     }
     var selCount = h('span', { class: 'muted sm' }, D2.selected.length + ' selected');
     drawPick();
-    b.appendChild(set('Containers', 'Found automatically: new containers appear and removed ones disappear on their own.',
+    return h('div', null,
       h('div', { class: 'grid2' },
         F('Show by default', sIn(D2, 'filter', dirty, [['running', 'Running containers'], ['selected', 'Selected containers (below)'], ['all', 'All containers']])),
         F('Layout', sIn(D2, 'layout', dirty, [['grid', 'Compact grid'], ['list', 'Table'], ['cards', 'Cards']])),
@@ -2162,35 +2250,31 @@
         h('div', { class: 'inl', style: { 'margin-bottom': '6px' } }, pf,
           btn('Select running', function () { D2.selected = all.filter(function (x) { return x.state === 'running'; }).map(function (x) { return x.name; }); txt(selCount, D2.selected.length + ' selected'); drawPick(); dirty(); }, 'sm'),
           btn('Clear', function () { D2.selected = []; txt(selCount, '0 selected'); drawPick(); dirty(); }, 'sm ghost')),
-        pick, h('div', { class: 'hint' }, 'Also from the dashboard: gear > Show in "Selected".'))));
-    var A2 = c.apps;
-    b.appendChild(set('How apps are shown', 'The Apps section: Plex, Immich, AdGuard and the other apps that are not in Arr Stack or Downloads.', h('div', { class: 'grid2' },
-      F('Columns', sIn(A2, 'columns', dirty, [[0, 'Automatic'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']]))),
-      cIn(A2, 'headers', dirty, 'Show group titles (Streaming, Other …)'), cIn(A2, 'links', dirty, 'Show shortcut links (the old Services links) as small buttons')));
-    b.appendChild(set('Virtual machines', 'VMs are found automatically through libvirt.', h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']])))));
-    var y = S.live || {}, items = [];
-    ((y.docker && y.docker.containers) || []).forEach(function (x) { items.push(['docker', x]); });
-    ((y.vms && y.vms.vms) || []).forEach(function (x) { items.push(['vms', x]); });
-    var filter = h('input', { type: 'search', placeholder: 'Filter…', 'aria-label': 'Filter containers and VMs', oninput: function () { draw(); } });
+        pick, h('div', { class: 'hint' }, 'Also from the dashboard: gear > Show in "Selected". Containers are found automatically.')));
+  }
+  /* display name, icon, favorite and hidden for each container (or VM), kept by name */
+  function namesList(c, dirty, kind) {
+    var y = S.live || {}, items = kind === 'docker' ? ((y.docker && y.docker.containers) || []) : ((y.vms && y.vms.vms) || []);
+    var filter = h('input', { type: 'search', placeholder: 'Filter…', 'aria-label': 'Filter ' + (kind === 'docker' ? 'containers' : 'VMs'), oninput: function () { draw(); } });
     var list = h('div', { class: 'olist' });
     function draw() {
       clear(list);
       var q = filter.value.toLowerCase();
-      items.filter(function (x) { return !q || x[1].name.toLowerCase().indexOf(q) >= 0; }).slice(0, 300).forEach(function (x) {
-        var kind = x[0], it = x[1], bag = c[kind].items;
+      items.filter(function (it) { return !q || it.name.toLowerCase().indexOf(q) >= 0; }).slice(0, 300).forEach(function (it) {
+        var bag = c[kind].items;
         var p = bag[it.name] || { label: '', icon: '', description: '', favorite: false, hidden: false };
         var put = function () { bag[it.name] = p; dirty(); };
         list.appendChild(h('div', { class: 'oi' }, img(iconUrl(p.icon || it.icon), '', kind === 'docker' ? 'box' : 'vm'),
-          h('span', { class: 't' }, h('b', null, it.name), h('span', { class: 'muted xs' }, kind === 'docker' ? ' · container' : ' · VM')),
+          h('span', { class: 't' }, h('b', null, it.name)),
           h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
           h('label', { class: 'switch', title: 'Favorite' }, h('input', { type: 'checkbox', checked: !!p.favorite, 'aria-label': 'Favorite ' + it.name, onchange: function (e) { p.favorite = e.target.checked; put(); } }), ic('star')),
           h('label', { class: 'switch', title: 'Hidden from the dashboard' }, h('input', { type: 'checkbox', checked: !!p.hidden, 'aria-label': 'Hide ' + it.name, onchange: function (e) { p.hidden = e.target.checked; put(); } }), ic('eyeoff'))));
       });
-      if (!list.childNodes.length) list.appendChild(h('div', { class: 'empty' }, items.length ? 'Nothing matches.' : 'No containers or VMs found yet.'));
+      if (!list.childNodes.length) list.appendChild(h('div', { class: 'empty' }, items.length ? 'Nothing matches.' : kind === 'docker' ? 'No containers found yet.' : 'No VMs found yet.'));
     }
     draw();
-    b.appendChild(set('Favorites, names and visibility', 'Kept by name, so they survive updates and re-created containers. Star = favorite, crossed eye = hidden from the dashboard.', h('div', { style: { 'margin-bottom': '8px' } }, filter), list));
+    return h('div', null, items.length > 8 ? h('div', { style: { 'margin-bottom': '8px' } }, filter) : null, list);
   }
 
   function tabSystem(b, D, dirty) {
@@ -2203,8 +2287,20 @@
     b.appendChild(set('Display', null, h('div', { class: 'grid2' },
       F('Dashboard title', tIn(g, 'title', dirty, 'UnDash')),
       F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
-      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT (upsc) is tried first, then apcupsd.'),
-      F('Web search (Enter in the filter box when nothing matches)', sIn(g, 'search', dirty, [['duckduckgo', 'DuckDuckGo'], ['google', 'Google'], ['bing', 'Bing'], ['startpage', 'Startpage'], ['brave', 'Brave'], ['none', 'Off']])))));
+      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT (upsc) is tried first, then apcupsd.'))));
+    if (!Array.isArray(g.search_in)) g.search_in = [];
+    var src = function (k, lab, hint) {
+      return h('label', { class: 'switch t' }, h('input', { type: 'checkbox', checked: g.search_in.indexOf(k) >= 0, onchange: function (e) {
+        g.search_in = g.search_in.filter(function (x) { return x !== k; }); if (e.target.checked) g.search_in.push(k); dirty(); } }),
+        h('span', null, h('b', null, lab), h('span', { class: 'muted sm' }, ' · ' + hint)));
+    };
+    var seerr = null; D.cfg.groups.forEach(function (gr) { gr.services.forEach(function (x) { if (!seerr && x.type === 'overseerr') seerr = x; }); });
+    b.appendChild(set('Search', 'The search box at the top (press / to jump to it) lists what it finds underneath; the dashboard itself is never filtered. Turn everything off to hide the box.',
+      h('div', { class: 'olist' },
+        h('div', { class: 'oi' }, src('apps', 'Apps and containers', 'your apps, containers and VMs by name; opens their web page')),
+        h('div', { class: 'oi' }, src('web', 'Web search', 'one line to search the web with the engine below'),
+          sIn(g, 'search', dirty, [['duckduckgo', 'DuckDuckGo'], ['google', 'Google'], ['bing', 'Bing'], ['startpage', 'Startpage'], ['brave', 'Brave Search']])),
+        h('div', { class: 'oi' }, src('seerr', 'Movies and series', seerr ? 'found in ' + seerr.name + ', with a Request button' : 'needs Overseerr or Jellyseerr in your apps')))));
   }
 
   /* Ignored alerts: changes apply at once (no Save needed); restoring only removes the rule, the next refresh shows the alert again if it still applies */
@@ -2341,16 +2437,15 @@
   function appZone(D, s) { return s.type === 'customapi' && /get_recently_added/.test(s.url || '') ? 'media' : (D.zones || {})[s.type] || 'apps'; }
   function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : 'API key', username: 'Username', password: 'Password' }[k]; }
 
-  function tabServices(b, D, dirty) {
-    var q = '', box = h('div');
-    var filter = h('input', { type: 'search', placeholder: 'Find an app…', 'aria-label': 'Find an app', oninput: function () { q = filter.value.toLowerCase(); draw(); } });
-    var redraw = function () { draw(); };
-    b.appendChild(set('Your apps', 'Each app goes to its section on its own: Radarr and Sonarr to Arr Stack, download clients to Downloads, everything else to Apps. API keys and passwords are kept in .env on the server, never in the settings file or the browser.',
-      h('div', { class: 'ae-bar' }, filter, h('span', { class: 'grow' }),
-        btn('Add group', function () { D.cfg.groups.push({ id: rid(), name: 'New group', columns: 4, header: true, services: [] }); dirty(); draw(); }, 'sm', 'plus'),
-        btn('Add app', function () { addApp(D, null, null, redraw, dirty); }, 'pri sm', 'plus')), box));
+  /* the app lists in Settings > Sections & apps: one per section (zone), plus the groups of the Apps section.
+     Every list redraws together, so moving or finding an app updates all of them. */
+  function appsEditor(D, dirty, after) {
+    var E = { q: '', draws: [] }, redraw = function () { E.draw(); };
+    E.draw = function () { E.draws.forEach(function (f) { f(); }); if (after) after(); };
     function entries() { var out = []; D.cfg.groups.forEach(function (g) { g.services.forEach(function (s) { out.push({ s: s, g: g }); }); }); return out; }
-    function swap(a, c) { var ia = a.g.services.indexOf(a.s), ic2 = c.g.services.indexOf(c.s); a.g.services[ia] = c.s; c.g.services[ic2] = a.s; dirty(); draw(); }
+    function hit(x) { return !E.q || [x.s.name, (D.types[x.s.type] || [''])[0], x.g.name].join(' ').toLowerCase().indexOf(E.q) >= 0; }
+    E.hits = function (z) { return entries().filter(function (x) { return appZone(D, x.s) === z && hit(x); }).length; };
+    function swap(a, c) { var ia = a.g.services.indexOf(a.s), ic2 = c.g.services.indexOf(c.s); a.g.services[ia] = c.s; c.g.services[ic2] = a.s; dirty(); redraw(); }
     function row(x, list) {
       var s = x.s, T = D.types[s.type] || [s.type, [], false], c = D.creds[s.id] || {}, i = list.indexOf(x);
       var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && s.type !== 'peanut' && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
@@ -2361,55 +2456,64 @@
         warn ? h('span', { class: 'badge warn' }, warn) : null,
         btn('', function () { if (i > 0) swap(x, list[i - 1]); }, 'sm ghost', 'upar', 'Move ' + s.name + ' up'),
         btn('', function () { if (i < list.length - 1) swap(x, list[i + 1]); }, 'sm ghost', 'dnar', 'Move ' + s.name + ' down'),
-        btn('', function () { s.hidden = !s.hidden; dirty(); draw(); }, 'sm ghost', s.hidden ? 'eyeoff' : 'eye', (s.hidden ? 'Show ' : 'Hide ') + s.name),
+        btn('', function () { s.hidden = !s.hidden; dirty(); redraw(); }, 'sm ghost', s.hidden ? 'eyeoff' : 'eye', (s.hidden ? 'Show ' : 'Hide ') + s.name),
         btn('', edit, 'sm', 'edit', 'Edit ' + s.name),
         btn('', function () {
           confirmBox('Remove ' + s.name + '?', 'It leaves the dashboard when you save. Its stored key and password are deleted with it.', 'Remove', true).then(function (y) {
             if (!y) return;
-            x.g.services.splice(x.g.services.indexOf(s), 1); delete D.creds[s.id]; dirty(); draw();
+            x.g.services.splice(x.g.services.indexOf(s), 1); delete D.creds[s.id]; dirty(); redraw();
           });
         }, 'sm ghost danger', 'trash', 'Remove ' + s.name));
     }
-    function draw() {
-      clear(box);
-      var all = entries(), hit = function (x) { return !q || [x.s.name, (D.types[x.s.type] || [''])[0], x.g.name].join(' ').toLowerCase().indexOf(q) >= 0; }, any = false;
-      ['arr', 'downloads', 'media', 'overview'].forEach(function (z) {
-        var list = all.filter(function (x) { return appZone(D, x.s) === z; }), shown = list.filter(hit);
-        if (!shown.length) return;
-        any = true;
-        box.appendChild(h('div', { class: 'ae-sec' }, h('div', { class: 'ae-h' }, h('b', null, ZONE_NAME[z]), h('span', { class: 'muted sm' }, String(list.length)), h('span', { class: 'grow' }),
-          btn('Add', function () { addApp(D, z, null, redraw, dirty); }, 'sm ghost', 'plus', 'Add an app to ' + ZONE_NAME[z])),
-          h('div', { class: 'olist' }, shown.map(function (x) { return row(x, list); }))));
+    /* the apps of one section other than Apps */
+    E.zone = function (z) {
+      var box = h('div', { class: 'ae-sec' });
+      E.draws.push(function () {
+        var list = entries().filter(function (x) { return appZone(D, x.s) === z; }), shown = list.filter(hit);
+        clear(box).appendChild(h('div', { class: 'ae-h' }, h('b', null, 'Apps'), h('span', { class: 'muted sm' }, String(list.length)), h('span', { class: 'grow' }),
+          btn('Add', function () { addApp(D, z, null, redraw, dirty); }, 'sm ghost', 'plus', 'Add an app to ' + ZONE_NAME[z])));
+        box.appendChild(h('div', { class: 'olist' }, shown.length ? shown.map(function (x) { return row(x, list); })
+          : h('div', { class: 'empty' }, E.q ? 'No app here matches.' : { arr: 'Add Radarr, Sonarr, Prowlarr, Overseerr…', downloads: 'Add qBittorrent, SABnzbd, Transmission…', media: 'Media uses your Radarr and Sonarr; apps added here show recent items.', overview: 'Apps such as a UPS (PeaNUT) show as tiles here.' }[z] || 'None yet.')));
       });
-      D.cfg.groups.forEach(function (g, gi) {
-        var list = all.filter(function (x) { return x.g === g && appZone(D, x.s) === 'apps'; }), shown = list.filter(hit);
-        if (q && !shown.length) return;
-        any = true;
-        var others = g.services.filter(function (s) { return appZone(D, s) !== 'apps'; });
-        box.appendChild(h('div', { class: 'ae-sec' }, h('div', { class: 'ae-h' }, h('b', null, 'Apps'), h('span', { class: 'muted' }, '·'),
-          h('input', { type: 'text', value: g.name, 'aria-label': 'Group name', oninput: function (e) { g.name = e.target.value; dirty(); } }),
-          h('label', { class: 'switch sm', title: 'Show the group title on the dashboard' }, h('input', { type: 'checkbox', checked: g.header, onchange: function (e) { g.header = e.target.checked; dirty(); } }), 'Title'),
-          h('span', { class: 'grow' }),
-          btn('', function () { if (move(D.cfg.groups, gi, -1)) { dirty(); draw(); } }, 'sm ghost', 'upar', 'Move group ' + g.name + ' up'),
-          btn('', function () { if (move(D.cfg.groups, gi, 1)) { dirty(); draw(); } }, 'sm ghost', 'dnar', 'Move group ' + g.name + ' down'),
-          btn('Add', function () { addApp(D, 'apps', g, redraw, dirty); }, 'sm ghost', 'plus', 'Add an app to ' + g.name),
-          D.cfg.groups.length > 1 ? btn('', function () {
-            var n = g.services.length - others.length;
-            confirmBox('Delete the group "' + g.name + '"?', n ? 'Its ' + n + ' app' + (n > 1 ? 's are' : ' is') + ' removed too when you save.' : 'It has no apps.', 'Delete', true).then(function (y) {
-              if (!y) return;
-              var to = D.cfg.groups[gi ? 0 : 1];
-              others.forEach(function (s) { to.services.push(s); });          // Arr and download apps kept in this group stay
-              g.services.forEach(function (s) { if (others.indexOf(s) < 0) delete D.creds[s.id]; });
-              D.cfg.groups.splice(gi, 1); dirty(); draw();
-            });
-          }, 'sm ghost danger', 'trash', 'Delete group ' + g.name) : null),
-          h('div', { class: 'olist' }, shown.length ? shown.map(function (x) { return row(x, list); }) : h('div', { class: 'empty' }, others.length
-            ? 'Nothing for the Apps section; its ' + others.length + ' other app' + (others.length > 1 ? 's are' : ' is') + ' listed above (' + others.map(function (o) { return o.name; }).join(', ') + ').' : 'No apps in this group yet.'))));
+      return box;
+    };
+    /* the groups of the Apps section: name, show name, order, apps */
+    E.groups = function () {
+      var box = h('div');
+      E.draws.push(function () {
+        clear(box);
+        var all = entries(), holders = [];
+        D.cfg.groups.forEach(function (g, gi) {
+          var list = all.filter(function (x) { return x.g === g && appZone(D, x.s) === 'apps'; }), shown = list.filter(hit);
+          var others = g.services.filter(function (s) { return appZone(D, s) !== 'apps'; });
+          if (!list.length && others.length) { holders.push(g.name); return; }     // only Arr, download … apps: nothing of it shows in Apps
+          if (E.q && !shown.length) return;
+          box.appendChild(h('div', { class: 'ae-sec' + (g.header ? '' : ' noname') }, h('div', { class: 'ae-h' },
+            h('input', { type: 'text', value: g.name, maxlength: 60, 'aria-label': 'Group name', title: 'Group name', oninput: function (e) { g.name = e.target.value; dirty(); } }),
+            h('label', { class: 'switch sm', title: 'Show this group\'s name on the dashboard' }, h('input', { type: 'checkbox', checked: g.header, onchange: function (e) { g.header = e.target.checked; dirty(); e.target.closest('.ae-sec').classList.toggle('noname', !g.header); } }), 'Show name'),
+            h('span', { class: 'muted sm' }, String(list.length)), h('span', { class: 'grow' }),
+            btn('', function () { if (move(D.cfg.groups, gi, -1)) { dirty(); redraw(); } }, 'sm ghost', 'upar', 'Move group ' + g.name + ' up'),
+            btn('', function () { if (move(D.cfg.groups, gi, 1)) { dirty(); redraw(); } }, 'sm ghost', 'dnar', 'Move group ' + g.name + ' down'),
+            btn('Add', function () { addApp(D, 'apps', g, redraw, dirty); }, 'sm ghost', 'plus', 'Add an app to ' + g.name),
+            D.cfg.groups.length > 1 ? btn('', function () {
+              var n = g.services.length - others.length;
+              confirmBox('Delete the group "' + g.name + '"?', n ? 'Its ' + n + ' app' + (n > 1 ? 's are' : ' is') + ' removed too when you save.' : 'It has no apps.', 'Delete', true).then(function (y) {
+                if (!y) return;
+                var to = D.cfg.groups[gi ? 0 : 1];
+                others.forEach(function (s) { to.services.push(s); });          // Arr and download apps kept in this group stay
+                g.services.forEach(function (s) { if (others.indexOf(s) < 0) delete D.creds[s.id]; });
+                D.cfg.groups.splice(gi, 1); dirty(); redraw();
+              });
+            }, 'sm ghost danger', 'trash', 'Delete group ' + g.name) : null),
+            h('div', { class: 'olist' }, shown.length ? shown.map(function (x) { return row(x, list); }) : h('div', { class: 'empty' }, 'No apps in this group yet.'))));
+        });
+        if (holders.length && !E.q) box.appendChild(h('div', { class: 'hint', style: { 'margin-bottom': '10px' } }, 'Not shown here: ' + holders.join(', ') + ' (their apps are all in other sections).'));
+        if (!E.q) box.appendChild(h('div', null, btn('Add group', function () { D.cfg.groups.push({ id: rid(), name: 'New group', columns: 4, header: true, services: [] }); dirty(); redraw(); }, 'sm', 'plus')));
+        else if (!box.childNodes.length) box.appendChild(h('div', { class: 'empty' }, 'No app in the Apps section matches.'));
       });
-      if (!any) box.appendChild(h('div', { class: 'empty' }, q ? 'No app matches "' + q + '".' : 'No apps yet. Use Add app to add Radarr, qBittorrent, Plex and the others.'));
-    }
-    draw();
-    sharedValues(b, D, dirty);
+      return box;
+    };
+    return E;
   }
 
   /* pick a type, then fill in the details */
@@ -2678,7 +2782,7 @@
         clear(vbox).appendChild(h('div', { class: 'progress' }, h('i')));
         api('validate').then(function (j) { clear(vbox); if (j.error) { vbox.appendChild(h('div', { class: 'banner bad' }, j.error)); return; } if (!j.issues.length) vbox.appendChild(h('div', { class: 'banner ok', style: { 'margin-top': '10px' } }, 'No problems found.')); j.issues.forEach(function (x) { vbox.appendChild(h('div', { class: 'banner ' + (x.level === 'bad' ? 'bad' : ''), style: { 'margin-top': '8px' } }, x.msg)); }); });
       }, '', 'check'), vbox));
-    b.appendChild(set('Backups', 'Both files are backed up before every save, import, restore and reset. The newest 15 are kept in data/backups of the configuration folder.', bbox,
+    b.appendChild(set('Backups', 'Every time you save settings, both files are backed up automatically (and before an import, restore or reset). The last 7 different versions are kept in data/backups of the configuration folder.', bbox,
       h('div', { style: { 'margin-top': '10px' } }, btn('Reset to defaults…', function () {
         confirmBox('Reset the dashboard?', 'Apps, sections and preferences go back to the defaults. Your keys and passwords stay in .env, and a backup is taken first.', 'Reset', true).then(function (y) { if (y) act('reset', {}, 'Reset').then(function (j) { if (!j.error) location.reload(); }); });
       }, 'danger', 'trash'))));
@@ -2709,7 +2813,7 @@
           var missing = j.vars.filter(function (v) { return !v.set && !v.stored; });
           prev.appendChild(h('div', { class: 'banner ok' }, j.groups + ' groups and ' + j.services + ' apps found.'));
           j.warnings.forEach(function (w) { prev.appendChild(h('div', { class: 'banner' }, w)); });
-          if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' value' + (missing.length > 1 ? 's are' : ' is') + ' not in the pasted .env: ' + missing.map(function (v) { return v.name; }).join(', ') + '. Paste the .env too, or fill in those addresses and keys in Settings > Apps afterwards.'));
+          if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' value' + (missing.length > 1 ? 's are' : ' is') + ' not in the pasted .env: ' + missing.map(function (v) { return v.name; }).join(', ') + '. Paste the .env too, or fill in those addresses and keys in Settings > Sections & apps afterwards.'));
           prev.appendChild(h('div', { class: 'kv2 sm' }, j.layout.map(function (g) { return [h('span', null, g.name), h('span', null, g.services.join(', '))]; })));
           prev.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Import and replace my apps', function () {
             confirmBox('Replace your apps?', 'Your current apps and groups are replaced. Theme, sections, container and VM preferences and saved keys stay. A backup is taken first.', 'Import', true).then(function (y) {
@@ -2728,7 +2832,7 @@
   // g then a letter jumps to a section (it opens a collapsed one); ? lists everything
   var GOTO = { o: 'overview', a: 'alerts', f: 'favorites', m: 'media', s: 'arr', d: 'downloads', n: 'playing', q: 'requests', p: 'apps', c: 'docker', v: 'vms', h: 'health' };
   function jumpTo(id) {
-    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Layout).', true); return; }
+    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Sections & apps).', true); return; }
     if (r.sec.collapsed) r.el.querySelector('.sec-h h2 button').click();
     r.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     var b = r.el.querySelector('.sec-h h2 button'); if (b) try { b.focus({ preventScroll: true }); } catch (x) { b.focus(); }
@@ -2743,7 +2847,7 @@
     var row = function (k, what) { return h('div', { class: 'kh' }, h('span', null, k.split(' ').map(function (x) { return h('kbd', null, x); })), h('span', null, what)); };
     var go = Object.keys(GOTO).map(function (k) { return row('g ' + k, TITLES[GOTO[k]]); });
     modal('Keyboard shortcuts', h('div', { class: 'keys' },
-      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Filter the dashboard'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
+      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Search'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
         row(',', 'Settings'), row('?', 'This list'), row('Esc', 'Close a dialog, menu or the filter')),
       h('div', null, h('h4', { class: 'ign-h' }, 'Go to a section'), go)), null, true);
   }

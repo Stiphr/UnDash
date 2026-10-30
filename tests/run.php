@@ -33,6 +33,11 @@ t('defaults have schema 5', $c['schema'] === 5);
 t('containers show the running ones in a grid by default', $c['docker']['filter'] === 'running' && $c['docker']['layout'] === 'grid');
 t('shortcut links are off by default', $c['apps']['links'] === false);
 t('default refresh is 2 s', $c['general']['refresh'] === 2);
+$sn = function ($g) { return und_normalize(['groups' => [], 'general' => $g])['general']; };
+t('the search box looks through everything by default', $sn([])['search_in'] === ['apps', 'web', 'seerr']);
+t('search sources keep only known ones, in a fixed order', $sn(['search_in' => ['seerr', 'evil', 'apps']])['search_in'] === ['apps', 'seerr']);
+t('the old engine "none" turns web search off', ($x = $sn(['search' => 'none'])) && $x['search_in'] === ['apps', 'seerr'] && $x['search'] === 'duckduckgo');
+t('all search sources can be turned off', $sn(['search_in' => []])['search_in'] === []);
 t('unknown themes fall back to default', und_normalize(['groups' => [], 'appearance' => ['theme' => 'midnight']])['appearance']['theme'] === 'default');
 t('the new themes are accepted', und_normalize(['groups' => [], 'appearance' => ['theme' => 'catppuccin', 'mode' => 'system']])['appearance'] ['theme'] === 'catppuccin'
   && und_normalize(['groups' => [], 'appearance' => ['theme' => 'fluent']])['appearance']['theme'] === 'fluent');
@@ -125,8 +130,13 @@ $target = null; foreach (und_backups() as $x) { $j = und_read_json(und_backup_di
 t('the backup holding the earlier state exists', $target !== null);
 t('restore works', isset(und_restore($target)['ok']) && und_load_config()['general']['title'] === 'Before');
 t('restore refuses odd ids', isset(und_restore('../../etc/passwd')['error']));
-for ($i = 0; $i < 20; $i++) und_backup('x' . $i);
-t('only 15 backups are kept', count(glob(und_backup_dir() . '/*.json')) === 15);
+und_backup('same'); $n = count(glob(und_backup_dir() . '/*.json'));
+und_backup('same again');
+t('an unchanged config is not backed up twice', count(glob(und_backup_dir() . '/*.json')) === $n);
+for ($i = 0; $i < 12; $i++) { $cfg['general']['title'] = 'T' . $i; und_save_config($cfg, false); und_backup('settings saved'); }
+t('only the last 7 backups are kept', count(glob(und_backup_dir() . '/*.json')) === 7);
+$j = und_read_json(und_backup_dir() . '/' . und_backups()[0]['id'] . '.json', []);
+t('the newest backup holds the config just saved', strpos((string)($j['yaml'] ?? ''), 'title: T11') !== false);
 
 /* ---------------- custom CSS ---------------- */
 group('custom css');
