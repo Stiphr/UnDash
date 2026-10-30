@@ -1,3 +1,10 @@
+###0.7.4
+- Settings > Sections & apps > Containers (and Virtual machines) lists every container and VM UnDash finds, through the Unraid API in the Docker version. Tick the ones to show on the dashboard, or use Select all, Running only or None (they act on what the filter lists). New containers show until you untick them.
+- The star (favorite) and arrow (update check) in that list are icons you click, and the list fits a phone screen.
+- Media: dates and times, and the "Downloaded" tag, use the same quiet colour as the year instead of the accent colour and green. The same goes for times in other lists.
+- Shorter titles: "Recent movies" and "Recent episodes" (no longer cut off in half-width columns), and a shorter search box hint.
+- config.yaml: container and VM entries keep only what was changed (a hidden one is just "hidden: true").
+
 ###0.7.3
 - Containers: the grid no longer repeats "running" or "stopped" (the coloured dot already says it) and drops the "update" badge. When a container has an update, its gear turns orange and the menu's first Update line says so.
 - Update checks can be turned off: for every container in Settings > Sections & apps > Containers, or for one container from its gear menu or the arrow next to it in that list. A container that is not checked never turns orange and is left out of "Update all".
