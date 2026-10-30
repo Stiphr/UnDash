@@ -261,6 +261,7 @@
     root.setAttribute('data-mode', mode);
     root.style.colorScheme = mode;          // native controls, dropdown lists and scrollbars follow the theme
     root.setAttribute('data-density', a.density);
+    root.classList.toggle('no-sec-names', a.sec_names === false);
     var set = function (k, v) { root.style.setProperty(k, v); };
     [['--bg', 'bg'], ['--panel', 'panel'], ['--panel-2', 'p2'], ['--bar', 'bar'], ['--field', 'field'], ['--line', 'line'], ['--line-2', 'l2'], ['--text', 'text'], ['--muted', 'muted'], ['--faint', 'faint'], ['--title', 'title']]
       .forEach(function (x) { set(x[0], p[x[1]]); });
@@ -409,7 +410,32 @@
       if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
     }
     if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
-    if (!one) level(p);
+    if (!one) { pairTop(p); level(p); }
+  }
+  /* The first sections of the two columns sit side by side (Media beside Arr Stack, say): the shorter one grows to the
+     taller one's height, when that does not stretch it out of shape (media lists can always show more). */
+  function pairTop(p) {
+    p.paired = null;
+    var a = firstOpen(p.cols[0]), b = firstOpen(p.cols[1]); if (!a || !b) return;
+    p.paired = a.getAttribute('data-sec') === 'media' ? a : b.getAttribute('data-sec') === 'media' ? b : null;
+    var ha = a.offsetHeight, hb = b.offsetHeight, short = ha < hb ? a : b, tall = Math.max(ha, hb), diff = Math.abs(ha - hb);
+    if (diff < 4) return;
+    if (short.getAttribute('data-sec') === 'media') { if (growMedia(short, diff)) return; }
+    if (short.offsetHeight < tall * 0.55) { p.paired = null; return; }
+    short.classList.add('fill'); short.style.minHeight = tall + 'px';
+  }
+  function firstOpen(col) { return [].filter.call(col.children, function (el) { return el.offsetHeight > 0; })[0]; }
+  /* every row of media columns gets its share of the extra height; lists in a row share one height */
+  function growMedia(media, diff) {
+    var rows = {}, lists = [].slice.call(media.querySelectorAll('.mlist'));
+    lists.forEach(function (l) { var t = Math.round(l.getBoundingClientRect().top); (rows[t] = rows[t] || []).push(l); });
+    var keys = Object.keys(rows); if (!keys.length) return false;
+    var add = diff / keys.length;
+    keys.forEach(function (k) {
+      var tall = Math.max.apply(null, rows[k].map(function (l) { return l.offsetHeight; }));
+      rows[k].forEach(function (l) { l.style.maxHeight = 'none'; l.style.height = Math.round(tall + add) + 'px'; });
+    });
+    return true;
   }
   /* Smart height: the shorter column ends level with the taller one. Media in the shorter column shows more items
      (its lists grow); otherwise the column's last box stretches. */
@@ -423,21 +449,9 @@
     var h0 = p.cols[0].offsetHeight, h1 = p.cols[1].offsetHeight, diff = Math.abs(h0 - h1);
     var short = p.cols[h0 < h1 ? 0 : 1], kids = [].slice.call(short.children);
     if (diff < 4 || !kids.length) return;
-    var media = kids.filter(function (el) { return el.getAttribute('data-sec') === 'media' && !el.classList.contains('closed'); })[0];
-    if (media) {
-      // every row of media columns gets its share of the difference; lists in a row share one height
-      var rows = {}, lists = [].slice.call(media.querySelectorAll('.mlist'));
-      lists.forEach(function (l) { var t = Math.round(l.getBoundingClientRect().top); (rows[t] = rows[t] || []).push(l); });
-      var keys = Object.keys(rows);
-      if (keys.length) {
-        var add = diff / keys.length;
-        keys.forEach(function (k) {
-          var tall = Math.max.apply(null, rows[k].map(function (l) { return l.offsetHeight; }));
-          rows[k].forEach(function (l) { l.style.maxHeight = 'none'; l.style.height = Math.round(tall + add) + 'px'; });
-        });
-        return;
-      }
-    }
+    // media matched to the section beside it keeps that height; the column's last box takes the rest
+    var media = kids.filter(function (el) { return el.getAttribute('data-sec') === 'media' && !el.classList.contains('closed') && p.paired !== el; })[0];
+    if (media && growMedia(media, diff)) return;
     var last = kids.filter(function (el) { return !el.classList.contains('closed'); }).pop();
     if (last) { last.classList.add('fill'); last.style.minHeight = last.offsetHeight + diff + 'px'; }
   }
@@ -937,7 +951,9 @@
     txt(r.count, out.length ? String(out.length) : '');
     r.ign.hidden = !hidden; clear(r.ign); r.ign.appendChild(ic('mute')); r.ign.appendChild(document.createTextNode(hidden + ' ignored'));
     r.ign.title = 'Alerts hidden by ignore rules. Open Settings > Ignored alerts.';
-    if (!out.length) { r.list.appendChild(h('div', { class: 'alert ok' }, ic('check'), h('span', { class: 'grow' }, !y.system ? 'Waiting for data…' : hidden ? 'No problems found apart from ignored alerts.' : 'No problems found.'))); return; }
+    // nothing wrong: the whole section steps aside (ignored alerts and the history are under Settings > Ignored alerts)
+    r.el.hidden = !out.length;
+    if (!out.length) return;
     out.forEach(function (x) {
       var mb = x.cat ? h('button', { type: 'button', class: 'btn ghost sm', 'aria-haspopup': 'menu', title: 'Ignore this alert', 'aria-label': 'Ignore: ' + x.msg, onclick: function (e) { ignoreMenu(e.currentTarget, x); } }, ic('mute'), 'Ignore') : null;
       r.list.appendChild(h('div', { class: 'alert ' + x.lv + (x.crit ? ' crit' : ''), role: x.crit ? 'alert' : null, 'data-alert': x.cat ? x.cat + ':' + x.res : null },
@@ -2359,7 +2375,7 @@
       });
     }, 'sm danger', 'restart');
     b.appendChild(set('Ignored alerts', 'Ignoring only hides an alert on the dashboard. UnDash keeps checking, and an alert comes back when its rule is restored or runs out while the problem is still there.',
-      h('div', null, h('div', { class: 'ign-bar' }, q, sev, h('span', { class: 'grow' }), purge, all), list)));
+      h('div', null, h('div', { class: 'ign-bar' }, q, sev, h('span', { class: 'grow' }), btn('History', alertHistory, 'sm', 'clock', 'When each problem started and ended'), purge, all), list)));
     function when(t) { return new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
     function row(r) {
       var expired = r.until !== null && r.until <= V.now;
@@ -2428,7 +2444,9 @@
         a[k] = e.target.checked ? -1 : +r.value; r.disabled = e.target.checked; txt(out, e.target.checked ? 'auto' : a[k] + ' px'); dirty(); preview(); } }), 'Auto'), r, out));
     };
     b.appendChild(set('Spacing', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
-      F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)), h('span'),
+      F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
+      F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
+        'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
       margin('safe_x', 'Side margin'), margin('safe_y', 'Top and bottom margin'))));
     var pd = function () { dirty(); preview(); };
     var rng = function (k, lo, hi, unit, lab) {

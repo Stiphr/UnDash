@@ -701,6 +701,7 @@ t('per-column count kept and clamped', $m['widgets'][3]['count'] === 7 && $m['wi
 t('older configs fall back to the shared count', $m['widgets'][1]['count'] === 12);
 t('style defaults to posters', $m['style'] === 'art' && und_normalize(['groups' => [], 'media' => ['style' => 'text']])['media']['style'] === 'text' && und_normalize(['groups' => [], 'media' => ['style' => 'x']])['media']['style'] === 'art');
 t('requests style defaults to posters', und_normalize(['groups' => []])['requests']['style'] === 'art' && und_normalize(['groups' => [], 'requests' => ['style' => 'text']])['requests']['style'] === 'text' && und_normalize(['groups' => [], 'requests' => 'x'])['requests']['style'] === 'art');
+t('section names shown by default and can be hidden', und_normalize(['groups' => []])['appearance']['sec_names'] === true && und_normalize(['groups' => [], 'appearance' => ['sec_names' => false]])['appearance']['sec_names'] === false);
 t('visibility kept', $m['widgets'][3]['visible'] === false && $m['widgets'][0]['visible'] === true);
 t('default count is 15', und_load_config()['media']['widgets'][2]['count'] === 15);
 $ap = und_normalize(['groups' => [], 'appearance' => ['brightness' => 0, 'blur_target' => 'cards']])['appearance'];
