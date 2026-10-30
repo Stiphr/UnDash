@@ -736,6 +736,38 @@ t('a NUT UPS is read over TCP', is_array($u) && $u['charge'] === 87.0 && $u['loa
 t('no NUT daemon means no UPS', und_nut_tcp('127.0.0.1:' . $port, 'ups') === null);
 t('odd UPS names are refused', und_nut_tcp('127.0.0.1', "ups\nFSD") === null);
 
+/* ---------------- icon picker ---------------- */
+group('icons');
+reset_store();
+$GLOBALS['ICON_GETS'] = 0;
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['ICON_GETS']++;
+  $j = function ($d) { return ['code' => 200, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []]; };
+  if (strpos($url, 'selfhst') !== false) return $j([['Name' => 'Plex', 'Reference' => 'plex', 'SVG' => 'Yes', 'Tags' => 'media'], ['Name' => 'Plexamp', 'Reference' => 'plexamp', 'SVG' => 'No', 'Tags' => ''],
+    ['Name' => 'Jellyfin', 'Reference' => 'jellyfin', 'SVG' => 'Yes', 'Tags' => 'media, plex alternative'], ['Name' => 'Bad', 'Reference' => '../etc', 'SVG' => 'Yes']]);
+  if (strpos($url, 'dashboard-icons') !== false) return $j(['png' => ['plex.png', 'plex-light.png', 'complex.png'], 'svg' => ['plex-light.svg']]);
+  return null;
+};
+$ic = und_icon_search('Plex');
+t('an exact name comes first, as a selfh.st icon', $ic['icons'][0] === ['v' => 'sh-plex', 'n' => 'Plex', 's' => 'selfh.st'], json_encode($ic));
+t('a selfh.st icon without SVG is asked for as PNG', in_array('sh-plexamp.png', array_column($ic['icons'], 'v'), true));
+t('dashboard-icons fills in, without repeating selfh.st, SVG when it has one', in_array('plex-light.svg', array_column($ic['icons'], 'v'), true) && in_array('complex.png', array_column($ic['icons'], 'v'), true)
+  && !in_array('plex.png', array_column($ic['icons'], 'v'), true));
+t('tags match last', end($ic['icons'])['v'] === 'sh-jellyfin');
+t('odd names in the lists are dropped', !array_filter(array_column($ic['icons'], 'v'), function ($v) { return strpos($v, '..') !== false; }));
+$n = $GLOBALS['ICON_GETS'];
+und_icon_search('jelly');
+t('the lists are downloaded once, then kept', $GLOBALS['ICON_GETS'] === $n && $n === 2);
+t('an empty search returns nothing without downloading', und_icon_search('  <> ')['icons'] === []);
+t('the number of results is capped', count(und_icon_search('p', 2)['icons']) === 2 && und_icon_search('p', 2)['more'] === true);
+reset_store();
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) { return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'Could not resolve host', 'headers' => []]; };
+$err = ''; try { und_icon_search('plex'); } catch (Exception $e) { $err = $e->getMessage(); }
+t('no internet gives a readable error', strpos($err, 'could not be downloaded') !== false, $err);
+$err2 = ''; try { und_icon_search('plex'); } catch (Exception $e) { $err2 = $e->getMessage(); }
+t('a failed download is not retried at once', strpos($err2, 'Try again in a few minutes') !== false, $err2);
+unset($GLOBALS['UND_HTTP_MOCK']);
+
 rmrf($SANDBOX);
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);
