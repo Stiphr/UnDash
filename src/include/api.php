@@ -150,6 +150,7 @@ switch ($action) {
   case 'storage':       out(und_storage());
   case 'container_sources': out(und_container_sources());
   case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'))); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
+  case 'icon_slugs':    { $l = json_decode($P('slugs', '[]'), true); try { out(und_icon_slugs(is_array($l) ? $l : [])); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
 
   /* ---- settings ---- */
   case 'settings': {

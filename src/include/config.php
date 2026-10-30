@@ -58,7 +58,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -329,6 +329,7 @@ function und_normalize(array $c) {
   $a['blur_target'] = in_array($a['blur_target'], ['wallpaper', 'cards'], true) ? $a['blur_target'] : 'wallpaper';   // blur the whole picture, or only what is behind the cards
   $a['css_enabled'] = !empty($a['css_enabled']);
   $a['sec_names'] = !empty($a['sec_names']);
+  $a['icon_mode'] = in_array($a['icon_mode'], ['color', 'auto', 'light', 'dark', 'off'], true) ? $a['icon_mode'] : 'color';   // container / VM icons from selfh.st, off = Unraid's own
 
   // sections and metrics: keep the user's order, drop unknown ids, append new ones at the end
   $db = isset($c['dashboard']) && is_array($c['dashboard']) ? $c['dashboard'] : [];
