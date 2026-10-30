@@ -10,7 +10,7 @@
  * Files in the configuration directory (see include/store.php)
  *   config.yaml   everything you set up; credentials only as references like {{RADARR_API_KEY}}
  *   .env          the values of those references, the Unraid API key (never sent to the browser in clear text)
- *   data/         backups (both files, before every save, import and restore; newest 15) and the alert history
+ *   data/         backups (both files, after every settings save and before imports and restores; newest 7, no duplicates) and the alert history
  */
 
 define('UND_SCHEMA', 5);
@@ -53,7 +53,7 @@ function und_default_config() {
   foreach (und_metric_ids() as $id) $metrics[] = ['id' => $id, 'visible' => !in_array($id, ['cores', 'swap', 'load', 'path', 'docker', 'vms'], true)];
   return [
     'schema' => UND_SCHEMA,
-    'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo',
+    'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
     'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
@@ -171,19 +171,25 @@ function und_store_write($name, $content, $private = false) {
 
 function und_backup_dir() { return und_data_dir() . '/backups'; }
 
-/** Snapshot both settings files before they change. Returns the backup id. */
+const UND_BACKUPS_KEPT = 7;
+
+/** Snapshot both settings files. Returns the backup id, or the newest one when the files have not changed since. */
 function und_backup($reason) {
   $dir = und_backup_dir();
   @mkdir($dir, 0700, true);
-  $id = date('Ymd-His') . '-' . substr(und_id(), 0, 4);
   $y = (string)@file_get_contents(und_file('config.yaml')); $e = (string)@file_get_contents(und_file('.env'));
   if ($y === '' && $e === '') return null;
+  $all = glob("$dir/*.json") ?: [];
+  sort($all);
+  if ($all) { $last = und_read_json(end($all), []); if (($last['yaml'] ?? null) === $y && ($last['env'] ?? null) === $e) return basename(end($all), '.json'); }
+  $id = date('Ymd-His');
+  $id .= '-' . sprintf('%04x', count(glob("$dir/$id-*.json") ?: []));   // a counter, so names sort in the order they were taken
   $snap = ['undash_backup' => 2, 'schema' => UND_SCHEMA, 'created' => time(), 'reason' => und_clip((string)$reason, 80), 'yaml' => $y, 'env' => $e];
   @file_put_contents("$dir/$id.json", json_encode($snap, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
   @chmod("$dir/$id.json", 0600);
   $all = glob("$dir/*.json") ?: [];
   sort($all);
-  foreach (array_slice($all, 0, max(0, count($all) - 15)) as $old) @unlink($old);
+  foreach (array_slice($all, 0, max(0, count($all) - UND_BACKUPS_KEPT)) as $old) @unlink($old);
   return $id;
 }
 
@@ -298,7 +304,10 @@ function und_normalize(array $c) {
   foreach (['show_search', 'show_date'] as $k) $g[$k] = !empty($g[$k]);
   $g['background_poll'] = in_array($g['background_poll'], ['slow', 'pause', 'normal'], true) ? $g['background_poll'] : 'slow';
   $g['disk_path'] = preg_match('#^/mnt/[A-Za-z0-9_./ -]*$#', (string)$g['disk_path']) && strpos($g['disk_path'], '..') === false ? (string)$g['disk_path'] : '/mnt/user';
-  $g['search'] = in_array($g['search'], ['duckduckgo', 'google', 'bing', 'startpage', 'brave', 'none'], true) ? $g['search'] : 'duckduckgo';
+  // what the search box looks through; 'none' as the engine was the old "web search off"
+  $g['search_in'] = array_values(array_intersect(['apps', 'web', 'seerr'], is_array($g['search_in']) ? $g['search_in'] : []));
+  if ($g['search'] === 'none') $g['search_in'] = array_values(array_diff($g['search_in'], ['web']));
+  $g['search'] = in_array($g['search'], ['duckduckgo', 'google', 'bing', 'startpage', 'brave'], true) ? $g['search'] : 'duckduckgo';
   $g['ups_name'] = preg_match('/^[A-Za-z0-9_.@:-]{1,64}$/', (string)$g['ups_name']) ? (string)$g['ups_name'] : 'ups';
 
   $a = (isset($c['appearance']) && is_array($c['appearance']) ? $c['appearance'] : []) + $d['appearance'];
@@ -416,7 +425,7 @@ function und_config_lock() {
 }
 
 function und_save_config(array $c, $backup = true) {
-  if ($backup) und_backup('settings saved');
+  if ($backup) und_backup('before saving');
   $n = und_normalize($c); unset($n['schema']);
   return und_doc_write(['version' => UND_SCHEMA] + json_decode(json_encode($n), true));
 }
@@ -558,7 +567,7 @@ function und_validate(array $cfg) {
     $where = '"' . $s['name'] . '" in "' . $g['name'] . '"';
     if (!empty($types[$s['type']][2]) && trim($s['url']) === '') $issues[] = ['level' => 'warn', 'msg' => "$where has no address."];
     $kr = und_ref_name($s['key'] ?? '');
-    if (in_array('key', $types[$s['type']][1] ?? [], true) && $s['type'] !== 'peanut' && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Apps)."];
+    if (in_array('key', $types[$s['type']][1] ?? [], true) && $s['type'] !== 'peanut' && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Sections & apps)."];
     foreach (['url', 'href'] as $f) if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s[$f], $m)) foreach ($m[1] as $n) {
       $n = strtoupper($n);
       if (!isset($vars[$n]) && $n !== 'UNRAID_IP') $issues[] = ['level' => 'bad', 'msg' => "$where uses {{" . $n . '}}, which is not defined.'];
