@@ -1,5 +1,6 @@
 ###0.7.1
 - Check configuration and the app list no longer say a Custom API app has no API key: its key is optional (it can sit in the address, as with Tautulli, or not be needed at all).
+- config.yaml is shorter and easier to read: an app's empty and default fields (no description, not hidden, no fields of its own …) are no longer written out. Older files load as before.
 - Title bar: the server's name is a pill like the Unraid and UnDash versions, and the IP address is gone (hover the name to see it).
 
 ###0.7.0
