@@ -1,3 +1,7 @@
+###0.7.6
+- Add apps from your containers: UnDash spots containers it can read (Radarr, Sonarr, qBittorrent, Plex, Immich, AdGuard Home and the other supported apps), matched on the image name, then the container name. They are listed under "Found on your server" in Settings > Sections & apps and at the top of the Add app window. Pick one and the name, type, icon and address (from the container's web UI or published port) are filled in; only the key or login is left to paste.
+- Containers whose app is already added (same address, same port or same name) are not listed. The x hides the list until Settings is opened again.
+
 ###0.7.5
 - Apps: a Groups / One grid switch in the section header turns the groups (sub-categories) on or off right from the dashboard. The gear next to a group name also has "Show all apps in one grid".
 - The gear next to a group name is centred in its button again.
