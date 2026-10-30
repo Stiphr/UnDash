@@ -617,6 +617,13 @@ t('streams carry who, what and how', $pl['streams'][0]['user'] === 'Bo' && $pl['
 t('playing comes before paused; transcodes and remote streams are marked', $pl['streams'][1]['state'] === 'paused' && $pl['streams'][1]['method'] === 'transcode' && $pl['streams'][1]['location'] === 'wan' && $pl['streams'][1]['bandwidth'] === 8000000);
 $tw = und_w_tautulli(und_service_full($cfgS, 'a0000002'));
 t('app cards get the same stream details as Now playing', $tw['streams'][0]['method'] === 'transcode' && $tw['streams'][0]['location'] === 'wan' && $tw['streams'][0]['bandwidth'] === 8000000 && $tw['empty'] === 'No active streams');
+$qi = und_arr_queue_issues(array_merge(array_map(function ($e) { return ['title' => 'The.Mentalist.S03E' . sprintf('%02d', $e) . '.1080p', 'seasonNumber' => 3, 'series' => ['title' => 'The Mentalist'], 'trackedDownloadStatus' => 'warning', 'trackedDownloadState' => 'importBlocked', 'statusMessages' => [['messages' => ['Episode was not found']]]]; }, range(1, 16)),
+  [['title' => 'Some.Show.S01E02.720p', 'trackedDownloadStatus' => 'ok', 'trackedDownloadState' => 'downloading'], ['title' => 'Movie.2024.1080p', 'movie' => ['title' => 'Movie', 'year' => 2024], 'trackedDownloadStatus' => 'error', 'trackedDownloadState' => 'failedPending', 'errorMessage' => 'Download failed']]));
+t('Arr queue problems are grouped per release and problem', count($qi) === 2 && $qi[0]['title'] === 'Movie (2024)' && $qi[0]['level'] === 'bad' && $qi[0]['tag'] === 'Failed'
+  && $qi[1]['title'] === 'The Mentalist · Season 3' && $qi[1]['count'] === 16 && $qi[1]['tag'] === 'Import blocked' && $qi[1]['msg'] === 'Episode was not found' && count($qi[1]['releases']) === 5);
+$hi = und_arr_health_item('warn', 'IndexerLongTermStatusCheck', 'Indexers unavailable due to failures for more than 6 hours: X');
+$hc = und_arr_health_item('warn', 'SomethingNewCheck', 'Caution: be careful');
+t('Arr health checks get a short tag', $hi['tag'] === 'Indexer' && und_arr_health_item('warn', 'RemovedSeriesCheck', 'x')['tag'] === 'Series removed' && $hc['tag'] === 'Caution' && $hc['msg'] === 'be careful' && und_arr_health_item('warn', 'SomethingNewCheck', 'x')['tag'] === 'Something New');
 t('no media server means a hint, not an error', !empty(und_playing(und_normalize(['groups' => []]))['unconfigured']));
 $rq = und_requests($cfgS);
 t('pending requests first, titles looked up', $rq['pending'] === 1 && $rq['items'][0]['title'] === 'Memento' && $rq['items'][0]['status'] === 'pending' && $rq['items'][1]['status'] === 'available' && $rq['items'][1]['seasons'] === [1]);
@@ -702,6 +709,7 @@ t('older configs fall back to the shared count', $m['widgets'][1]['count'] === 1
 t('style defaults to posters', $m['style'] === 'art' && und_normalize(['groups' => [], 'media' => ['style' => 'text']])['media']['style'] === 'text' && und_normalize(['groups' => [], 'media' => ['style' => 'x']])['media']['style'] === 'art');
 t('requests style defaults to posters', und_normalize(['groups' => []])['requests']['style'] === 'art' && und_normalize(['groups' => [], 'requests' => ['style' => 'text']])['requests']['style'] === 'text' && und_normalize(['groups' => [], 'requests' => 'x'])['requests']['style'] === 'art');
 t('section names shown by default and can be hidden', und_normalize(['groups' => []])['appearance']['sec_names'] === true && und_normalize(['groups' => [], 'appearance' => ['sec_names' => false]])['appearance']['sec_names'] === false);
+t('icon mode defaults to color and is checked', und_normalize(['groups' => []])['appearance']['icon_mode'] === 'color' && und_normalize(['groups' => [], 'appearance' => ['icon_mode' => 'auto']])['appearance']['icon_mode'] === 'auto' && und_normalize(['groups' => [], 'appearance' => ['icon_mode' => 'x']])['appearance']['icon_mode'] === 'color');
 t('visibility kept', $m['widgets'][3]['visible'] === false && $m['widgets'][0]['visible'] === true);
 t('default count is 15', und_load_config()['media']['widgets'][2]['count'] === 15);
 $ap = und_normalize(['groups' => [], 'appearance' => ['brightness' => 0, 'blur_target' => 'cards']])['appearance'];
@@ -913,7 +921,7 @@ $GLOBALS['ICON_GETS'] = 0;
 $GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
   $GLOBALS['ICON_GETS']++;
   $j = function ($d) { return ['code' => 200, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []]; };
-  if (strpos($url, 'selfhst') !== false) return $j([['Name' => 'Plex', 'Reference' => 'plex', 'SVG' => 'Yes', 'Tags' => 'media'], ['Name' => 'Plexamp', 'Reference' => 'plexamp', 'SVG' => 'No', 'Tags' => ''],
+  if (strpos($url, 'selfhst') !== false) return $j([['Name' => 'Plex', 'Reference' => 'plex', 'SVG' => 'Yes', 'Light' => 'Yes', 'Dark' => 'No', 'PNG' => 'Yes', 'Tags' => 'media'], ['Name' => 'Plexamp', 'Reference' => 'plexamp', 'SVG' => 'No', 'PNG' => 'Yes', 'Tags' => ''],
     ['Name' => 'Jellyfin', 'Reference' => 'jellyfin', 'SVG' => 'Yes', 'Tags' => 'media, plex alternative'], ['Name' => 'Bad', 'Reference' => '../etc', 'SVG' => 'Yes']]);
   if (strpos($url, 'dashboard-icons') !== false) return $j(['png' => ['plex.png', 'plex-light.png', 'complex.png'], 'svg' => ['plex-light.svg']]);
   return null;
@@ -928,6 +936,7 @@ t('odd names in the lists are dropped', !array_filter(array_column($ic['icons'],
 $n = $GLOBALS['ICON_GETS'];
 und_icon_search('jelly');
 t('the lists are downloaded once, then kept', $GLOBALS['ICON_GETS'] === $n && $n === 2);
+t('icon names that exist are reported with their forms', (array)und_icon_slugs(['plex', 'plexamp', 'nothere', '../x'])['icons'] === ['plex' => 'svg,light,png', 'plexamp' => 'png'] && $GLOBALS['ICON_GETS'] === $n);
 t('an empty search returns nothing without downloading', und_icon_search('  <> ')['icons'] === []);
 t('the number of results is capped', count(und_icon_search('p', 2)['icons']) === 2 && und_icon_search('p', 2)['more'] === true);
 reset_store();
