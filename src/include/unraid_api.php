@@ -206,11 +206,17 @@ function und_api_storage() {
 }
 
 function und_api_ups() {
-  $r = und_api_cached('ups', 5, function () { return und_gql('query { upsDevices { name model status battery { chargeLevel estimatedRuntime } power { loadPercentage } } }'); });
+  // nominalPower and currentPower are in newer API versions only; an older one rejects the whole query, so ask again without them
+  $r = und_api_cached('ups', 5, function () {
+    $q = 'query { upsDevices { name model status battery { chargeLevel estimatedRuntime } power { loadPercentage%s } } }';
+    $r = und_gql(sprintf($q, ' nominalPower currentPower'));
+    return isset($r['error']) && empty($r['auth']) ? und_gql(sprintf($q, '')) : $r;
+  });
   $u = $r['data']['upsDevices'][0] ?? null;
   if (!$u) return null;
   return ['source' => 'Unraid API', 'charge' => (float)$u['battery']['chargeLevel'], 'load' => (float)$u['power']['loadPercentage'], 'status' => (string)$u['status'],
-          'runtime' => isset($u['battery']['estimatedRuntime']) ? (int)$u['battery']['estimatedRuntime'] : null, 'model' => (string)$u['model']];
+          'runtime' => isset($u['battery']['estimatedRuntime']) ? (int)$u['battery']['estimatedRuntime'] : null, 'model' => (string)$u['model'],
+          'nominal' => !empty($u['power']['nominalPower']) ? (int)$u['power']['nominalPower'] : null, 'watts' => !empty($u['power']['currentPower']) ? (float)$u['power']['currentPower'] : null];
 }
 
 /* ---------- Docker ---------- */

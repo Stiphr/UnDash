@@ -5,6 +5,8 @@
 - Header: the server, Unraid and UnDash chips sit on the same row as the name.
 - Ctrl+K / Cmd+K opens the search. Its results can now start, stop and restart containers and VMs, and open a VM's console.
 - VMs: hovering a stopped VM's name says how to start it, instead of nothing.
+- UPS: the power draw in watts next to the load ("load 8% (48 W)"), measured by the UPS when it reports it, otherwise load × rated power. The rating comes from the UPS (apcupsd NOMPOWER, NUT ups.realpower.nominal, the Unraid API) or from the new Settings > Refresh & display > UPS rated power (W). An older Unraid API without the power fields still works.
+- Docker version: clicking a running VM opens Unraid's VMs page (the Unraid API has no VNC port to open the console directly).
 
 ###0.9.3
 - Arr Stack: roomier rows. When it sits beside Media (or another section) at the top of the half-width columns, it grows to the same height and its rows share the extra space.

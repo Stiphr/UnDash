@@ -48,7 +48,7 @@ switch ($action) {
     if (isset($want['system'])) { $r['system'] = und_system($cfg); if (!und_api_mode() && isset($r['system']['os_update'])) api_os_autocheck($cfg, $r['system']['os_update']); }
     if (isset($want['docker'])) $r['docker'] = und_docker_live();
     if (isset($want['vms'])) $r['vms'] = und_vm_live();
-    if (isset($want['ups'])) $r['ups'] = und_ups($cfg['general']['ups_name']);
+    if (isset($want['ups'])) $r['ups'] = und_ups($cfg['general']['ups_name'], $cfg['general']['ups_watts']);
     // alerts are worked out here (one source for the page and the history); only the parts this request loaded are tracked
     if (isset($r['system'])) {
       $dk = $r['docker'] ?? null;
