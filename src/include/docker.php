@@ -180,6 +180,7 @@ function und_docker_job($name) {
   if ($j['state'] === 'done' && !is_file($log . '.recorded')) {
     @touch($log . '.recorded');
     @unlink(und_tmp('inspect.json'));
+    @unlink(und_tmp('api-containers.json'));
     $ok = $j['code'] === 0 && !preg_match('/\b(error|failed|denied)\b/i', $j['out']);
     und_history_add('docker', $name, 'update', $ok, $ok ? 'finished' : und_clip(trim(substr($j['out'], -300)), 300));
     $j['ok'] = $ok;

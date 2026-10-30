@@ -958,6 +958,24 @@ $err2 = ''; try { und_icon_search('plex'); } catch (Exception $e) { $err2 = $e->
 t('a failed download is not retried at once', strpos($err2, 'Try again in a few minutes') !== false, $err2);
 unset($GLOBALS['UND_HTTP_MOCK']);
 
+group('background jobs');
+$mock = $GLOBALS['UND_SPAWN_MOCK']; unset($GLOBALS['UND_SPAWN_MOCK']);
+$log = und_tmp('job-test.log');
+und_spawn([PHP_BINARY, '-r', 'echo "hello\n"; exit(3);'], $log);
+for ($n = 0; $n < 100 && und_job($log)['state'] === 'running'; $n++) usleep(50000);
+$j = und_job($log);
+t('a real job runs and reports its exit code', $j['state'] === 'done' && $j['code'] === 3 && trim($j['out']) === 'hello', json_encode($j));
+und_spawn(['/bin/sleep', '5'], $log);
+for ($n = 0; $n < 100 && !is_file("$log.pid"); $n++) usleep(20000);
+t('a job in progress is running', und_job($log)['state'] === 'running');
+exec('kill -9 ' . (int)file_get_contents("$log.pid"));
+for ($n = 0; $n < 100 && und_job($log)['state'] === 'running'; $n++) usleep(50000);
+$j = und_job($log);
+t('a job whose process died ends as failed', $j['state'] === 'done' && $j['code'] === 1 && strpos($j['out'], 'without a result') !== false, json_encode($j));
+@unlink("$log.done"); @unlink("$log.pid"); file_put_contents($log, ''); touch($log, time() - 60);
+t('a job that never started ends as failed', und_job($log)['state'] === 'done');
+$GLOBALS['UND_SPAWN_MOCK'] = $mock;
+
 rmrf($SANDBOX);
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

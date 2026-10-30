@@ -1,3 +1,8 @@
+###0.9.5
+- Docker version: container updates work. They never started, because the background job needed bash and the image has none, so the update window waited for ever. Nothing was changed on the server.
+- Updates show a small status bar at the bottom right instead of a large window, and the page stays usable. It closes by itself after a success and stays open with the error after a failure. Details shows the output. After a page reload the bar comes back for an update that is still running.
+- A background job that never starts, or stops without a result, now ends as failed instead of showing "updating" for ever.
+
 ###0.9.4
 - Arr Stack: problems are grouped. A season pack that is blocked for 16 episodes is one row "The Mentalist · Season 3" with ×16 (the releases are in its tooltip). Health checks get a short tag (Indexer, Series removed, Import, Caution…) instead of the raw check name. The list scrolls inside a box of at most 260 px, and a long release name opens in full on click.
 - Media: episodes of one show added the same day (or airing at the same time) are one row, "S01E08–E12" with "5 eps".
