@@ -38,6 +38,9 @@ t('the search box looks through everything by default', $sn([])['search_in'] ===
 t('search sources keep only known ones, in a fixed order', $sn(['search_in' => ['seerr', 'evil', 'apps']])['search_in'] === ['apps', 'seerr']);
 t('the old engine "none" turns web search off', ($x = $sn(['search' => 'none'])) && $x['search_in'] === ['apps', 'seerr'] && $x['search'] === 'duckduckgo');
 t('all search sources can be turned off', $sn(['search_in' => []])['search_in'] === []);
+$dn = und_normalize(['groups' => [], 'docker' => ['items' => ['plex' => ['no_update' => 1], 'sonarr' => ['no_update' => false]]]])['docker'];
+t('container update checks are on by default', $dn['update_check'] === true && und_normalize(['groups' => [], 'docker' => ['update_check' => false]])['docker']['update_check'] === false);
+t('a container can skip the update check', ($dn['items']['plex']['no_update'] ?? null) === true && !isset(((array)$dn['items'])['sonarr']));
 t('unknown themes fall back to default', und_normalize(['groups' => [], 'appearance' => ['theme' => 'midnight']])['appearance']['theme'] === 'default');
 t('the new themes are accepted', und_normalize(['groups' => [], 'appearance' => ['theme' => 'catppuccin', 'mode' => 'system']])['appearance'] ['theme'] === 'catppuccin'
   && und_normalize(['groups' => [], 'appearance' => ['theme' => 'fluent']])['appearance']['theme'] === 'fluent');

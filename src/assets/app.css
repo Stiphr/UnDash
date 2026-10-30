@@ -576,7 +576,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .ci .cn{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;line-height:1.25}
 .und .ci .cname{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13.5px;color:var(--title)}
 .und .ci .cname svg{width:12px;height:12px;color:var(--warn);flex:none}
-.und .ci .cs{display:flex;gap:10px;font-size:12px;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}
+.und .ci .cs{display:flex;gap:10px;font-size:12px;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}.und .ci .cs:empty{display:none}
 .und .ci .badge{flex:none}
 .und .ci .acts{gap:2px;flex:none}
 .und .ci .acts .btn.ic.sm{width:30px;min-width:30px!important;min-height:30px!important}
@@ -585,6 +585,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und a.wl,.und span.wl{color:inherit;text-decoration:none!important;display:inline-flex;align-items:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .und a.wl:hover{color:var(--accent-text)}.und a.wl:hover img{filter:brightness(1.15)}.und a.wl:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 .und .btn.gear{background:transparent!important;border-color:transparent!important;color:var(--muted)!important}.und .btn.gear:hover{background:var(--bar)!important;border-color:var(--line-2)!important;color:var(--title)!important}
+/* an update is waiting: the gear turns orange (whatever the theme's accent) */
+.und .btn.gear.has-upd{color:#f97316!important;background:rgba(249,115,22,.12)!important;border-color:rgba(249,115,22,.45)!important}.und .btn.gear.has-upd:hover{background:rgba(249,115,22,.22)!important;color:#fb923c!important}
+.und .menu button.upd{color:#f97316}.und .upd-t{color:#f97316}
 .und .ci.st-exited .cname,.und .ci.st-created .cname,.und .ci.st-dead .cname{color:var(--muted);font-weight:500}
 
 /* apps: compact cards in one grid */

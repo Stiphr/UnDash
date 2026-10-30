@@ -60,7 +60,7 @@ function und_default_config() {
     'downloads' => ['items' => 4],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
     'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
-    'docker' => ['layout' => 'grid', 'view' => 'compact', 'filter' => 'running', 'selected' => [], 'columns' => 0, 'sort' => 'name', 'show' => ['cpu', 'memory', 'update'], 'hide_stopped' => false, 'items' => new stdClass()],
+    'docker' => ['layout' => 'grid', 'view' => 'compact', 'filter' => 'running', 'selected' => [], 'columns' => 0, 'sort' => 'name', 'show' => ['cpu', 'memory', 'update'], 'hide_stopped' => false, 'update_check' => true, 'items' => new stdClass()],
     'vms' => ['layout' => 'list', 'show' => ['status', 'cpus', 'memory'], 'items' => new stdClass()],
     'groups' => [
       ['id' => und_id(), 'name' => 'Apps', 'columns' => 4, 'header' => true, 'services' => []],
@@ -361,7 +361,8 @@ function und_normalize(array $c) {
       if (!is_array($p) || !is_string($name) || $name === '' || strlen($name) > 200 || preg_match('/[\x00-\x1f]/', $name)) continue;
       $row = ['label' => und_clip(trim((string)($p['label'] ?? '')), 60), 'icon' => und_clip((string)($p['icon'] ?? ''), 300), 'description' => und_clip(trim((string)($p['description'] ?? '')), 200),
               'hidden' => !empty($p['hidden']), 'favorite' => !empty($p['favorite'])];
-      if ($row['label'] === '' && $row['icon'] === '' && $row['description'] === '' && !$row['hidden'] && !$row['favorite']) continue;
+      if (!empty($p['no_update'])) $row['no_update'] = true;          // containers only: no update check for this one
+      if ($row['label'] === '' && $row['icon'] === '' && $row['description'] === '' && !$row['hidden'] && !$row['favorite'] && empty($row['no_update'])) continue;
       $out[$name] = $row;
     }
     return $out ? $out : new stdClass();
@@ -385,7 +386,7 @@ function und_normalize(array $c) {
              'filter' => in_array($dk['filter'], ['running', 'all', 'selected'], true) ? $dk['filter'] : 'running', 'selected' => array_keys($sel), 'columns' => max(0, min(4, (int)$dk['columns'])),
              'sort' => in_array($dk['sort'], ['name', 'status', 'cpu', 'memory'], true) ? $dk['sort'] : 'name',
              'show' => array_values(array_intersect((array)$dk['show'], ['status', 'cpu', 'memory', 'uptime', 'image', 'update', 'ports', 'restarts', 'network'])),
-             'hide_stopped' => !empty($dk['hide_stopped']), 'items' => $items($dk['items'] ?? [])];
+             'hide_stopped' => !empty($dk['hide_stopped']), 'update_check' => !empty($dk['update_check']), 'items' => $items($dk['items'] ?? [])];
   $ap = (isset($c['apps']) && is_array($c['apps']) ? $c['apps'] : []) + $d['apps'];
   $apps = ['columns' => max(0, min(6, (int)$ap['columns'])), 'links' => !empty($ap['links']), 'headers' => !empty($ap['headers'])];
   $vm = (isset($c['vms']) && is_array($c['vms']) ? $c['vms'] : []) + $d['vms'];

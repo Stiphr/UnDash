@@ -1,3 +1,7 @@
+###0.7.3
+- Containers: the grid no longer repeats "running" or "stopped" (the coloured dot already says it) and drops the "update" badge. When a container has an update, its gear turns orange and the menu's first Update line says so.
+- Update checks can be turned off: for every container in Settings > Sections & apps > Containers, or for one container from its gear menu or the arrow next to it in that list. A container that is not checked never turns orange and is left out of "Update all".
+
 ###0.7.2
 - UPS in the Docker version: a UPS run by NUT (the NUT plugin) now shows. The Unraid API only knows apcupsd, so UnDash reads NUT straight from the server (port 3493), using the UPS name in Settings > Refresh & display (NAME@HOST for another NUT server).
 
