@@ -102,7 +102,7 @@ function und_env_text(array $env) {
   ksort($env);
   foreach ($env as $k => $v) {
     $v = (string)$v;
-    $out .= $k . '=' . ($v === '' || preg_match('/^[A-Za-z0-9_.\/:@+,-]*$/', $v) ? $v : '"' . strtr($v, ['\\' => '\\\\', '"' => '\\"', "\n" => '\\n']) . '"') . "\n";
+    $out .= $k . '=' . ($v === '' || preg_match('/^[A-Za-z0-9_.\/:@+,-]*$/', $v) ? $v : '"' . strtr($v, ['\\' => '\\\\', '"' => '\\"', "\n" => '\\n', "\r" => '\\r']) . '"') . "\n";
   }
   return $out;
 }
@@ -111,7 +111,7 @@ function und_env_read($text) {
   foreach (preg_split('/\r\n|\r|\n/', (string)$text) as $l) {
     if (!preg_match('/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $l, $m)) continue;
     $v = trim($m[2]);
-    if ($v !== '' && $v[0] === '"' && substr($v, -1) === '"' && strlen($v) > 1) $v = strtr(substr($v, 1, -1), ['\\n' => "\n", '\\"' => '"', '\\\\' => '\\']);
+    if ($v !== '' && $v[0] === '"' && substr($v, -1) === '"' && strlen($v) > 1) $v = strtr(substr($v, 1, -1), ['\\n' => "\n", '\\r' => "\r", '\\"' => '"', '\\\\' => '\\']);
     elseif ($v !== '' && $v[0] === "'" && substr($v, -1) === "'" && strlen($v) > 1) $v = substr($v, 1, -1);
     elseif (($p = strpos($v, ' #')) !== false) $v = rtrim(substr($v, 0, $p));
     $out[strtoupper($m[1])] = $v;

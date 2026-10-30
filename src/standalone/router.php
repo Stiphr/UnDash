@@ -60,6 +60,11 @@ if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
   readfile($uri === '/favicon.png' ? UND_ROOT . '/images/undash.png' : UND_ROOT . $uri); exit;
 }
 
+/* ---- without a password, only known host names (see und_host_allowed: DNS rebinding) ---- */
+if (und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true) && !und_host_allowed())
+  sa_deny(421, "UnDash has no password yet, so it only answers at the server's IP address or name (http://<server IP>:<port>).\n"
+    . "To use the name " . (und_req_host() ?: 'in the address bar') . ": set a password in Settings > Connection, or add the name to UNDASH_ALLOWED_HOSTS in the container settings.");
+
 /* ---- sign-in ---- */
 $sess = und_sess_get();
 if (!$sess && und_api_mode()) {

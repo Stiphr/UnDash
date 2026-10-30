@@ -5,7 +5,7 @@ $SB = sys_get_temp_dir() . '/undash-da-' . getmypid();
 foreach (["$SB/flash", "$SB/tmp", "$SB/php", "$SB/fs/var/local/emhttp"] as $d) @mkdir($d, 0777, true);
 $port = 9800 + getmypid() % 150;
 $proc = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/router_harness.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, null,
-  ['UND_SANDBOX' => $SB, 'UNDASH_MODE' => 'api', 'PATH' => getenv('PATH')]);
+  ['UND_SANDBOX' => $SB, 'UNDASH_MODE' => 'api', 'HOST_HOSTNAME' => 'nas', 'UNDASH_ALLOWED_HOSTS' => 'dash.example.com, *.home.example.net', 'PATH' => getenv('PATH')]);
 usleep(600000);
 $pass = 0; $fail = 0;
 function t($n, $c, $d = '') { global $pass, $fail; if ($c) $pass++; else { $fail++; echo "FAIL $n" . ($d !== '' ? " -- $d" : '') . "\n"; } }
@@ -14,7 +14,8 @@ $JAR = [];
 function req($method, $path, $form = null, $headers = []) {
   global $port, $JAR;
   $ck = []; foreach ($JAR as $k => $v) $ck[] = "$k=$v";
-  $h = array_merge(['Host: nas.local:9099'], $ck ? ['Cookie: ' . implode('; ', $ck)] : [], $form !== null ? ['Content-Type: application/x-www-form-urlencoded'] : [], $headers);
+  $own = (bool)preg_grep('/^Host:/i', $headers);
+  $h = array_merge($own ? [] : ['Host: nas.local:9099'], $ck ? ['Cookie: ' . implode('; ', $ck)] : [], $form !== null ? ['Content-Type: application/x-www-form-urlencoded'] : [], $headers);
   $ctx = stream_context_create(['http' => ['method' => $method, 'header' => implode("\r\n", $h), 'content' => $form === null ? null : http_build_query($form), 'ignore_errors' => true, 'follow_location' => 0]]);
   $out = @file_get_contents("http://127.0.0.1:$port$path", false, $ctx);
   $hh = $http_response_header ?? []; preg_match('#HTTP/\S+ (\d+)#', $hh[0] ?? '', $m);
@@ -52,6 +53,15 @@ t('boot reports that there is no password', (apicall('boot')['j']['auth'] ?? '')
 $mine = $JAR; $JAR = [];
 t('without a password any browser gets in', req('GET', '/')['code'] === 200);
 $other = $JAR; $JAR = $mine;
+$JAR = [];
+t('without a password a host name of someone else\'s is refused (DNS rebinding)', req('GET', '/', null, ['Host: evil.example:9099'])['code'] === 421 && !isset($JAR['undash_sid']));
+t('... and so is the API, even with a session cookie', (function () use ($mine) { global $JAR; $JAR = $mine; return req('POST', '/api', ['action' => 'boot'], ['Host: tower.evil.example'])['code'] === 421; })());
+$JAR = [];
+t('the server\'s IP address, its name and the allowed names still work', req('GET', '/', null, ['Host: 192.168.1.10:9099'])['code'] === 200 && req('GET', '/', null, ['Host: nas:9099'])['code'] === 200
+  && req('GET', '/', null, ['Host: dash.example.com'])['code'] === 200 && req('GET', '/', null, ['Host: ui.home.example.net'])['code'] === 200 && req('GET', '/', null, ['Host: home.example.net'])['code'] === 421);
+t('the health check answers on any name', req('GET', '/health', null, ['Host: evil.example'])['code'] === 200);
+t('without a password the .env (every key) cannot be downloaded', (function () use ($mine) { global $JAR; $JAR = $mine; $r = apicall('export', ['kind' => 'env']); return $r['code'] === 403 && strpos($r['j']['error'], 'password') !== false; })());
+$JAR = $mine;
 t('/setup and /login lead to the dashboard once signed in', req('GET', '/setup')['loc'] === '/' && req('GET', '/login')['loc'] === '/');
 
 // add a password later from Settings
@@ -60,6 +70,8 @@ t('mismatched passwords are refused', apicall('password_set', ['password' => 'a 
 $r = apicall('password_set', ['password' => 'correct horse battery', 'password2' => 'correct horse battery']);
 t('a password can be added without the setup code', $r['code'] === 200 && $r['j']['kind'] === 'file' && und_password_ok('correct horse battery'));
 t('this browser stays signed in', req('GET', '/')['code'] === 200);
+t('with a password any host name may ask (it still has to sign in)', (function () use ($mine) { global $JAR; $JAR = []; $c = req('GET', '/', null, ['Host: undash.example.org'])['code']; $JAR = $mine; return $c === 303; })());
+t('with a password the .env can be downloaded', apicall('export', ['kind' => 'env'])['code'] === 200);
 $JAR = $other;
 $r = req('GET', '/');
 t('the other browser that came in without a password is signed out', $r['code'] === 303 && $r['loc'] === '/login');
