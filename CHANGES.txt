@@ -1,5 +1,6 @@
 ###0.8.0
 - Icon picker: "Browse" next to an app's Icon field, and a click on a container's or VM's icon in Settings, searches about 5,000 icons from selfh.st icons and dashboard-icons by name. The server downloads the two name lists once a week; the images load from the same CDN as before.
+- New apps: Scrutiny (disks passed / failed, hottest disk, failed disks listed), Tdarr (queue, processed, errored, space saved), Unmanic (workers, pending), Uptime Kuma (a status page's monitors up and down, uptime, down monitors listed), Speedtest Tracker (latest download, upload and ping; old and new API), Gluetun (VPN public IP, location, forwarded port) and Home Assistant (chosen entities, or people home, lights and switches on). Each is also found among your containers.
 - Fixed: on PHP 8.5 a deprecation notice could break an answer from the server (curl_close).
 
 ###0.7.6
