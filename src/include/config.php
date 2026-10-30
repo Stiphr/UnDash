@@ -430,6 +430,8 @@ function und_save_config(array $c, $backup = true) {
   $n = json_decode(json_encode(und_normalize($c)), true); unset($n['schema']);
   foreach ($n['groups'] as &$g) $g['services'] = array_map('und_compact_service', $g['services']);
   unset($g);
+  // container / VM entries: only what differs from the default (a hidden one is just "hidden: true")
+  foreach (['docker', 'vms'] as $k) foreach ($n[$k]['items'] as $name => $row) $n[$k]['items'][$name] = array_filter($row, function ($v) { return $v !== '' && $v !== false; });
   return und_doc_write(['version' => UND_SCHEMA] + $n);
 }
 

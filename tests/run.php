@@ -151,6 +151,14 @@ $lean = und_load_config()['groups'][0]['services'];
 $lean = $lean[count($lean) - 1];
 t('apps are written without their empty fields', strpos($yaml, 'description: ""') === false && strpos($yaml, 'favorite: false') === false && strpos($yaml, 'password: ""') === false);
 t('and read back with every field filled in', $lean['name'] === 'Lean' && $lean['href'] === '' && $lean['span'] === 1 && $lean['favorite'] === false && $lean['key'] === '{{LEAN_KEY}}' && $lean['username'] === '');
+$cfg = und_load_config();
+$cfg['docker']['items'] = ['plex' => ['hidden' => true], 'sonarr' => ['label' => 'TV', 'no_update' => true]];
+$cfg['vms']['items'] = ['Win11' => ['hidden' => true]];
+und_save_config($cfg, false);
+$yaml = (string)file_get_contents(und_file('config.yaml'));
+$back = und_load_config();
+t('containers and VMs picked in Settings are written as one line each', strpos($yaml, "plex:\n      hidden: true\n") !== false && strpos($yaml, "Win11:\n      hidden: true\n") !== false && strpos($yaml, 'label: ""') === false);
+t('and read back complete', $back['docker']['items']['plex']['hidden'] === true && $back['docker']['items']['plex']['label'] === '' && $back['docker']['items']['sonarr']['no_update'] === true && $back['vms']['items']['Win11']['hidden'] === true);
 
 group('custom css');
 $css = und_sanitize_css("@import url(http://evil/x.css);\n.card{background:url(http://evil/t.png)}\n</style><script>alert(1)</script>\n.a{width:expression(alert(1))}\n.b{background:url(javascript:alert(1))}\n.ok{background:url(data:image/png;base64,AAA)}");
