@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.7.0">
+<!ENTITY version "0.7.1">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.7.1
+- Check configuration and the app list no longer say a Custom API app has no API key: its key is optional (it can sit in the address, as with Tautulli, or not be needed at all).
+- Title bar: the server's name is a pill like the Unraid and UnDash versions, and the IP address is gone (hover the name to see it).
+
 ###0.7.0
 - Search no longer hides the dashboard. Type in the search box and a list opens under it: your apps, containers and VMs (open their web page, logs or details), a web search, and movies and series to request in Overseerr / Jellyseerr. Arrow keys and Enter work. Choose what it searches in Settings &gt; Refresh &amp; display &gt; Search; turn everything off to hide the box.
 - Settings: Layout, Media &amp; downloads, Containers &amp; VMs and Apps are now one page, Sections &amp; apps. Each section is a line you can tick, reorder and set to half width; open it for its own options and the apps that show in it. "Find an app" opens every section with a match.
@@ -173,7 +177,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.7.0');
+define('UND_VERSION', '0.7.1');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -347,7 +351,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>4620ba3eb70eaa24e889a6004d70d00e217cfa43fd4bef8a32f5a993669b1244</SHA256>
+<SHA256>97adb8e37bbcc049fd35ec53e62e7e67ab7cec213c78dfd3c647b91d28e3f458</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -920,7 +924,7 @@ function und_validate(array $cfg) {
     $where = '"' . $s['name'] . '" in "' . $g['name'] . '"';
     if (!empty($types[$s['type']][2]) && trim($s['url']) === '') $issues[] = ['level' => 'warn', 'msg' => "$where has no address."];
     $kr = und_ref_name($s['key'] ?? '');
-    if (in_array('key', $types[$s['type']][1] ?? [], true) && $s['type'] !== 'peanut' && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Sections & apps)."];
+    if (in_array('key', $types[$s['type']][1] ?? [], true) && !in_array($s['type'], ['peanut', 'customapi'], true) && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Sections & apps)."];
     foreach (['url', 'href'] as $f) if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s[$f], $m)) foreach ($m[1] as $n) {
       $n = strtoupper($n);
       if (!isset($vars[$n]) && $n !== 'UNRAID_IP') $issues[] = ['level' => 'bad', 'msg' => "$where uses {{" . $n . '}}, which is not defined.'];
@@ -932,7 +936,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>f810a72588dac68e2ada4fb4d47bd6052a420ea605d7ad9c45af80bd525952f0</SHA256>
+<SHA256>ec97babea1f344b60988d5f0521d09a03c97efd58911b509e98523960e89137e</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -5901,7 +5905,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var sig = JSON.stringify([name, ip, os, ou.available, ou.latest, ou.staged, me.newer, me.latest]);
     if (R.sub._sig === sig) return; R.sub._sig = sig;
     clear(R.sub);
-    R.sub.appendChild(h('span', { class: 'ell', title: ip }, name + (ip && ip !== name ? ' · ' + ip : '')));
+    if (name) R.sub.appendChild(h('span', { class: 'vchip', title: ip && ip !== name ? ip : null }, name));
     if (os) {
       var osUp = ou.staged ? ['restart for ' + ou.staged, 'Unraid ' + ou.staged + ' is installed; it becomes active after a restart'] : ou.available ? [ou.latest + ' available', 'Unraid ' + ou.latest + ' is available'] : null;
       R.sub.appendChild(h('span', { class: 'vchip' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { if (S.boot.caps.os_update) osDialog(); else window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
@@ -7994,7 +7998,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     function swap(a, c) { var ia = a.g.services.indexOf(a.s), ic2 = c.g.services.indexOf(c.s); a.g.services[ia] = c.s; c.g.services[ic2] = a.s; dirty(); redraw(); }
     function row(x, list) {
       var s = x.s, T = D.types[s.type] || [s.type, [], false], c = D.creds[s.id] || {}, i = list.indexOf(x);
-      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && s.type !== 'peanut' && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
+      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && s.type !== 'peanut' && s.type !== 'customapi' && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
       var edit = function () { editService(D, s, x.g, false, redraw, dirty); };
       return h('div', { class: 'oi ae-row' + (s.hidden ? ' off' : '') },
         img(iconUrl(s.icon), '', 'web'),
@@ -8428,7 +8432,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>ccbaa9452169e396c0c50679bd1a44c6541ca3665c827c99993878688b0da35d</SHA256>
+<SHA256>13754c9ab93e3c833103cfa9b244ef752e48658ce0bfff5059d4ce049dd22181</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
