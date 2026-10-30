@@ -426,8 +426,17 @@ function und_config_lock() {
 
 function und_save_config(array $c, $backup = true) {
   if ($backup) und_backup('before saving');
-  $n = und_normalize($c); unset($n['schema']);
-  return und_doc_write(['version' => UND_SCHEMA] + json_decode(json_encode($n), true));
+  $n = json_decode(json_encode(und_normalize($c)), true); unset($n['schema']);
+  foreach ($n['groups'] as &$g) $g['services'] = array_map('und_compact_service', $g['services']);
+  unset($g);
+  return und_doc_write(['version' => UND_SCHEMA] + $n);
+}
+
+/** An app as written to config.yaml: fields left at their default are left out (und_normalize fills them in again). */
+function und_compact_service(array $s) {
+  $def = ['icon' => '', 'href' => '', 'url' => '', 'description' => '', 'hidden' => false, 'favorite' => false, 'span' => 1, 'fields' => [], 'options' => []] + array_fill_keys(array_keys(UND_CRED_FIELDS), '');
+  foreach ($def as $k => $v) if (array_key_exists($k, $s) && $s[$k] === $v) unset($s[$k]);
+  return $s;
 }
 
 /** Every widget id in a config (used to drop credentials of widgets that were removed). */
@@ -567,7 +576,7 @@ function und_validate(array $cfg) {
     $where = '"' . $s['name'] . '" in "' . $g['name'] . '"';
     if (!empty($types[$s['type']][2]) && trim($s['url']) === '') $issues[] = ['level' => 'warn', 'msg' => "$where has no address."];
     $kr = und_ref_name($s['key'] ?? '');
-    if (in_array('key', $types[$s['type']][1] ?? [], true) && $s['type'] !== 'peanut' && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Sections & apps)."];
+    if (in_array('key', $types[$s['type']][1] ?? [], true) && !in_array($s['type'], ['peanut', 'customapi'], true) && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Sections & apps)."];
     foreach (['url', 'href'] as $f) if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s[$f], $m)) foreach ($m[1] as $n) {
       $n = strtoupper($n);
       if (!isset($vars[$n]) && $n !== 'UNRAID_IP') $issues[] = ['level' => 'bad', 'msg' => "$where uses {{" . $n . '}}, which is not defined.'];
