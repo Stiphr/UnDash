@@ -61,6 +61,7 @@ function und_default_config() {
     'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
+    'requests' => ['style' => 'art'],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
     'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
     'docker' => ['layout' => 'grid', 'view' => 'compact', 'filter' => 'running', 'selected' => [], 'columns' => 0, 'sort' => 'name', 'show' => ['cpu', 'memory', 'update'], 'hide_stopped' => false, 'update_check' => true, 'items' => new stdClass()],
@@ -382,6 +383,7 @@ function und_normalize(array $c) {
   }, und_media_ids());
   $dl = (isset($c['downloads']) && is_array($c['downloads']) ? $c['downloads'] : []) + $d['downloads'];
   $downloads = ['items' => max(0, min(20, (int)$dl['items']))];
+  $requests = ['style' => (($c['requests']['style'] ?? '') === 'text') ? 'text' : 'art'];
   $dk = (isset($c['docker']) && is_array($c['docker']) ? $c['docker'] : []) + $d['docker'];
   $sel = [];
   foreach ((array)$dk['selected'] as $n) if (is_string($n) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/', $n) && count($sel) < 500) $sel[$n] = 1;
@@ -413,7 +415,7 @@ function und_normalize(array $c) {
     }
     $groups[] = $out;
   }
-  return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics], 'media' => $media, 'downloads' => $downloads, 'apps' => $apps,
+  return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics], 'media' => $media, 'downloads' => $downloads, 'requests' => $requests, 'apps' => $apps,
           'docker' => $docker, 'vms' => $vms, 'groups' => $groups];
 }
 

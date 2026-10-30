@@ -5,7 +5,7 @@
  *   ['blocks' => [['key','label','value','fmt'], ...]]           fmt: n | bytes | rate | ms | pct | text
  *   ['list'   => [['title','sub','right','ts'], ...]]             ts: unix time shown as a relative date
  *   ['calendar' => [['ts','title','sub','done'], ...]]
- *   ['streams' => [['title','user','state','pos','dur'], ...]]   (can be combined with blocks)
+ *   ['streams' => [['title','user','state','pos','dur'], ...]]   (can be combined with blocks; sub, device, method, quality, bandwidth, location optional)
  *   ['error' => 'message']
  * Each app's numbers come from its own documented API.
  */
@@ -223,15 +223,7 @@ function und_emby_like($s, $pre) {
   if ($pre !== '' && und_ends($base, $pre)) $pre = '';
   $h = ['headers' => ['X-Emby-Token' => $s['key'], 'Accept' => 'application/json']];
   $c = und_get($base . $pre . '/Items/Counts', $h);
-  $sess = und_get($base . $pre . '/Sessions', $h);
-  $streams = [];
-  foreach ((array)$sess as $x) {
-    if (empty($x['NowPlayingItem'])) continue;
-    $n = $x['NowPlayingItem'];
-    $t = !empty($n['SeriesName']) ? $n['SeriesName'] . ': S' . sprintf('%02d', (int)($n['ParentIndexNumber'] ?? 0)) . ' · E' . sprintf('%02d', (int)($n['IndexNumber'] ?? 0)) . ' - ' . ($n['Name'] ?? '') : (string)($n['Name'] ?? '');
-    $streams[] = ['title' => $t, 'user' => (string)($x['UserName'] ?? ''), 'state' => !empty($x['PlayState']['IsPaused']) ? 'paused' : 'playing',
-                  'pos' => (int)(($x['PlayState']['PositionTicks'] ?? 0) / 10000000), 'dur' => (int)(($n['RunTimeTicks'] ?? 0) / 10000000)];
-  }
+  $streams = und_streams_emby(und_get($base . $pre . '/Sessions', $h));
   $b = [und_b('movies', 'Movies', (int)($c['MovieCount'] ?? 0)), und_b('series', 'Series', (int)($c['SeriesCount'] ?? 0)), und_b('episodes', 'Episodes', (int)($c['EpisodeCount'] ?? 0)), und_b('songs', 'Songs', (int)($c['SongCount'] ?? 0))];
   return ['blocks' => empty($s['options']['hide_blocks']) ? $b : [], 'streams' => $streams, 'empty' => 'No active streams'];
 }
@@ -260,16 +252,7 @@ function und_tautulli($s, array $q) {
 }
 
 function und_w_tautulli($s) {
-  $d = und_tautulli($s, ['cmd' => 'get_activity']);
-  $streams = [];
-  foreach ((array)($d['sessions'] ?? []) as $x) {
-    $t = ($x['media_type'] ?? '') === 'episode'
-      ? $x['grandparent_title'] . ': S' . sprintf('%02d', (int)$x['parent_media_index']) . ' · E' . sprintf('%02d', (int)$x['media_index']) . ' - ' . $x['title']
-      : (string)($x['full_title'] ?? $x['title'] ?? '');
-    $streams[] = ['title' => $t, 'user' => (string)($x['friendly_name'] ?? $x['user'] ?? ''), 'state' => (string)($x['state'] ?? ''),
-                  'pos' => (int)((int)($x['view_offset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000), 'transcode' => (string)($x['transcode_decision'] ?? '')];
-  }
-  return ['streams' => $streams, 'empty' => 'No active streams'];
+  return ['streams' => und_streams_tautulli(und_tautulli($s, ['cmd' => 'get_activity'])), 'empty' => 'No active streams'];
 }
 
 function und_w_tautulli_recent($s) {

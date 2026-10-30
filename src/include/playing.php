@@ -24,45 +24,57 @@ function und_playing_ep($series, $season, $ep, $name) { return [$series, 'S' . s
 function und_playing_one(array $cfg, $id) {
   $s = und_service_full($cfg, $id);
   if (trim($s['url']) === '' || und_has($s['url'], '{{')) return ['error' => $s['name'] . ' has no API URL yet.'];
+  if ($s['type'] === 'tautulli') return ['streams' => und_streams_tautulli(und_tautulli($s, ['cmd' => 'get_activity']))];
+  if ($s['type'] === 'plex') return ['streams' => und_streams_plex(und_get(und_u($s['url'], '/status/sessions'), ['headers' => ['X-Plex-Token' => $s['key'], 'Accept' => 'application/json']]))];
+  $base = rtrim($s['url'], '/'); $pre = $s['type'] === 'emby' && !und_ends($base, '/emby') ? '/emby' : '';
+  return ['streams' => und_streams_emby(und_get($base . $pre . '/Sessions', ['headers' => ['X-Emby-Token' => $s['key'], 'Accept' => 'application/json']]))];
+}
+
+/* The streams of one answer, the same shape for every server (also used by the app cards):
+   title, sub (episode or year), user, device, state, pos, dur (seconds), method, quality, bandwidth (bit/s), location. */
+function und_streams_tautulli($d) {
   $out = [];
-  if ($s['type'] === 'tautulli') {
-    foreach ((array)(und_tautulli($s, ['cmd' => 'get_activity'])['sessions'] ?? []) as $x) {
-      $ep = ($x['media_type'] ?? '') === 'episode';
-      [$t, $sub] = $ep ? und_playing_ep($x['grandparent_title'] ?? '', $x['parent_media_index'] ?? 0, $x['media_index'] ?? 0, (string)($x['title'] ?? ''))
-                       : [(string)($x['title'] ?? $x['full_title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
-      $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['friendly_name'] ?? $x['user'] ?? ''), 'device' => trim(($x['player'] ?? '') . (isset($x['product']) && $x['product'] !== ($x['player'] ?? '') ? ' · ' . $x['product'] : '')),
-        'state' => (string)($x['state'] ?? 'playing'), 'pos' => (int)((int)($x['view_offset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
-        'method' => und_playing_method($x['transcode_decision'] ?? ''), 'quality' => (string)($x['quality_profile'] ?? $x['stream_video_full_resolution'] ?? ''),
-        'bandwidth' => isset($x['bandwidth']) && $x['bandwidth'] !== '' ? (int)$x['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['location'] ?? ''))];
-    }
-  } elseif ($s['type'] === 'plex') {
-    $j = und_get(und_u($s['url'], '/status/sessions'), ['headers' => ['X-Plex-Token' => $s['key'], 'Accept' => 'application/json']]);
-    foreach ((array)($j['MediaContainer']['Metadata'] ?? []) as $x) {
-      $ep = ($x['type'] ?? '') === 'episode';
-      [$t, $sub] = $ep ? und_playing_ep($x['grandparentTitle'] ?? '', $x['parentIndex'] ?? 0, $x['index'] ?? 0, (string)($x['title'] ?? ''))
-                       : [(string)($x['title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
-      $ts = $x['TranscodeSession'] ?? null;
-      $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['User']['title'] ?? ''), 'device' => trim(($x['Player']['title'] ?? '') . (!empty($x['Player']['product']) ? ' · ' . $x['Player']['product'] : '')),
-        'state' => (string)($x['Player']['state'] ?? 'playing'), 'pos' => (int)((int)($x['viewOffset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
-        'method' => $ts ? und_playing_method($ts['videoDecision'] ?? 'transcode') : 'direct play', 'quality' => (string)($x['Media'][0]['videoResolution'] ?? ''),
-        'bandwidth' => isset($x['Session']['bandwidth']) ? (int)$x['Session']['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['Session']['location'] ?? ''))];
-    }
-  } else {
-    $base = rtrim($s['url'], '/'); $pre = $s['type'] === 'emby' && !und_ends($base, '/emby') ? '/emby' : '';
-    $j = und_get($base . $pre . '/Sessions', ['headers' => ['X-Emby-Token' => $s['key'], 'Accept' => 'application/json']]);
-    foreach ((array)$j as $x) {
-      if (empty($x['NowPlayingItem'])) continue;
-      $n = $x['NowPlayingItem'];
-      [$t, $sub] = !empty($n['SeriesName']) ? und_playing_ep($n['SeriesName'], $n['ParentIndexNumber'] ?? 0, $n['IndexNumber'] ?? 0, (string)($n['Name'] ?? ''))
-                                           : [(string)($n['Name'] ?? ''), !empty($n['ProductionYear']) ? (string)$n['ProductionYear'] : ''];
-      $w = (int)($n['Width'] ?? 0);
-      $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['UserName'] ?? ''), 'device' => trim(($x['DeviceName'] ?? '') . (!empty($x['Client']) ? ' · ' . $x['Client'] : '')),
-        'state' => !empty($x['PlayState']['IsPaused']) ? 'paused' : 'playing', 'pos' => (int)(($x['PlayState']['PositionTicks'] ?? 0) / 10000000), 'dur' => (int)(($n['RunTimeTicks'] ?? 0) / 10000000),
-        'method' => und_playing_method($x['PlayState']['PlayMethod'] ?? ''), 'quality' => $w >= 3800 ? '4K' : ($w >= 1900 ? '1080p' : ($w >= 1260 ? '720p' : ($w ? 'SD' : ''))),
-        'bandwidth' => isset($x['TranscodingInfo']['Bitrate']) ? (int)$x['TranscodingInfo']['Bitrate'] : null, 'location' => ''];
-    }
+  foreach ((array)($d['sessions'] ?? []) as $x) {
+    $ep = ($x['media_type'] ?? '') === 'episode';
+    [$t, $sub] = $ep ? und_playing_ep($x['grandparent_title'] ?? '', $x['parent_media_index'] ?? 0, $x['media_index'] ?? 0, (string)($x['title'] ?? ''))
+                     : [(string)($x['title'] ?? $x['full_title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
+    $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['friendly_name'] ?? $x['user'] ?? ''), 'device' => trim(($x['player'] ?? '') . (isset($x['product']) && $x['product'] !== ($x['player'] ?? '') ? ' · ' . $x['product'] : '')),
+      'state' => (string)($x['state'] ?? 'playing'), 'pos' => (int)((int)($x['view_offset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
+      'method' => und_playing_method($x['transcode_decision'] ?? ''), 'quality' => (string)($x['quality_profile'] ?? $x['stream_video_full_resolution'] ?? ''),
+      'bandwidth' => isset($x['bandwidth']) && $x['bandwidth'] !== '' ? (int)$x['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['location'] ?? ''))];
   }
-  return ['streams' => $out];
+  return $out;
+}
+
+function und_streams_plex($j) {
+  $out = [];
+  foreach ((array)($j['MediaContainer']['Metadata'] ?? []) as $x) {
+    $ep = ($x['type'] ?? '') === 'episode';
+    [$t, $sub] = $ep ? und_playing_ep($x['grandparentTitle'] ?? '', $x['parentIndex'] ?? 0, $x['index'] ?? 0, (string)($x['title'] ?? ''))
+                     : [(string)($x['title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
+    $ts = $x['TranscodeSession'] ?? null;
+    $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['User']['title'] ?? ''), 'device' => trim(($x['Player']['title'] ?? '') . (!empty($x['Player']['product']) ? ' · ' . $x['Player']['product'] : '')),
+      'state' => (string)($x['Player']['state'] ?? 'playing'), 'pos' => (int)((int)($x['viewOffset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
+      'method' => $ts ? und_playing_method($ts['videoDecision'] ?? 'transcode') : 'direct play', 'quality' => (string)($x['Media'][0]['videoResolution'] ?? ''),
+      'bandwidth' => isset($x['Session']['bandwidth']) ? (int)$x['Session']['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['Session']['location'] ?? ''))];
+  }
+  return $out;
+}
+
+function und_streams_emby($j) {
+  $out = [];
+  foreach ((array)$j as $x) {
+    if (empty($x['NowPlayingItem'])) continue;
+    $n = $x['NowPlayingItem'];
+    [$t, $sub] = !empty($n['SeriesName']) ? und_playing_ep($n['SeriesName'], $n['ParentIndexNumber'] ?? 0, $n['IndexNumber'] ?? 0, (string)($n['Name'] ?? ''))
+                                         : [(string)($n['Name'] ?? ''), !empty($n['ProductionYear']) ? (string)$n['ProductionYear'] : ''];
+    $w = (int)($n['Width'] ?? 0);
+    $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['UserName'] ?? ''), 'device' => trim(($x['DeviceName'] ?? '') . (!empty($x['Client']) ? ' · ' . $x['Client'] : '')),
+      'state' => !empty($x['PlayState']['IsPaused']) ? 'paused' : 'playing', 'pos' => (int)(($x['PlayState']['PositionTicks'] ?? 0) / 10000000), 'dur' => (int)(($n['RunTimeTicks'] ?? 0) / 10000000),
+      'method' => und_playing_method($x['PlayState']['PlayMethod'] ?? ''), 'quality' => $w >= 3800 ? '4K' : ($w >= 1900 ? '1080p' : ($w >= 1260 ? '720p' : ($w ? 'SD' : ''))),
+      'bandwidth' => isset($x['TranscodingInfo']['Bitrate']) ? (int)$x['TranscodingInfo']['Bitrate'] : null, 'location' => ''];
+  }
+  return $out;
 }
 
 function und_playing(array $cfg) {
