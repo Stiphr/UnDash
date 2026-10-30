@@ -139,6 +139,16 @@ $j = und_read_json(und_backup_dir() . '/' . und_backups()[0]['id'] . '.json', []
 t('the newest backup holds the config just saved', strpos((string)($j['yaml'] ?? ''), 'title: T11') !== false);
 
 /* ---------------- custom CSS ---------------- */
+group('compact config');
+$cfg = und_load_config();
+$cfg['groups'][0]['services'][] = ['id' => 'c0000001', 'type' => 'radarr', 'name' => 'Lean', 'url' => 'http://r', 'key' => '{{LEAN_KEY}}'];
+und_save_config($cfg, false);
+$yaml = (string)file_get_contents(und_file('config.yaml'));
+$lean = und_load_config()['groups'][0]['services'];
+$lean = $lean[count($lean) - 1];
+t('apps are written without their empty fields', strpos($yaml, 'description: ""') === false && strpos($yaml, 'favorite: false') === false && strpos($yaml, 'password: ""') === false);
+t('and read back with every field filled in', $lean['name'] === 'Lean' && $lean['href'] === '' && $lean['span'] === 1 && $lean['favorite'] === false && $lean['key'] === '{{LEAN_KEY}}' && $lean['username'] === '');
+
 group('custom css');
 $css = und_sanitize_css("@import url(http://evil/x.css);\n.card{background:url(http://evil/t.png)}\n</style><script>alert(1)</script>\n.a{width:expression(alert(1))}\n.b{background:url(javascript:alert(1))}\n.ok{background:url(data:image/png;base64,AAA)}");
 t('@import removed', stripos($css, '@import url') === false);
@@ -523,9 +533,10 @@ $iv = array_column(und_validate(und_normalize(['groups' => [['id' => 'aaaaaaaa',
   ['id' => 'd0000001', 'type' => 'radarr', 'name' => 'Radarr', 'url' => 'http://r', 'href' => '', 'key' => '{{RADARR_API_KEY}}'],
   ['id' => 'd0000002', 'type' => 'sonarr', 'name' => 'Sonarr', 'url' => 'http://s', 'href' => '', 'key' => '{{SONARR_API_KEY}}'],
   ['id' => 'd0000003', 'type' => 'prowlarr', 'name' => 'Prowlarr', 'url' => '', 'href' => ''],
-  ['id' => 'd0000004', 'type' => 'link', 'name' => 'Link', 'url' => '', 'href' => 'http://l']]]]])), 'msg');
+  ['id' => 'd0000004', 'type' => 'link', 'name' => 'Link', 'url' => '', 'href' => 'http://l'],
+  ['id' => 'd0000005', 'type' => 'customapi', 'name' => 'Custom', 'url' => 'http://c/api?apikey={{RADARR_API_KEY}}', 'href' => '']]]]])), 'msg');
 unset($GLOBALS['UND_TEST_ENV']);
-t('check configuration names apps without an address or a key', count($iv) === 3 && strpos(implode('|', $iv), '"Sonarr" in "G" has no API key') !== false && strpos(implode('|', $iv), '"Prowlarr" in "G" has no address') !== false, json_encode($iv));
+t('check configuration names apps without an address or a key (a custom API needs no key of its own)', count($iv) === 3 && strpos(implode('|', $iv), '"Sonarr" in "G" has no API key') !== false && strpos(implode('|', $iv), '"Prowlarr" in "G" has no address') !== false, json_encode($iv));
 
 group('links');
 $lv = und_layout_view(und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'G', 'services' => [

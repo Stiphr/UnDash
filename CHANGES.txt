@@ -1,3 +1,8 @@
+###0.7.1
+- Check configuration and the app list no longer say a Custom API app has no API key: its key is optional (it can sit in the address, as with Tautulli, or not be needed at all).
+- config.yaml is shorter and easier to read: an app's empty and default fields (no description, not hidden, no fields of its own …) are no longer written out. Older files load as before.
+- Title bar: the server's name is a pill like the Unraid and UnDash versions, and the IP address is gone (hover the name to see it).
+
 ###0.7.0
 - Search no longer hides the dashboard. Type in the search box and a list opens under it: your apps, containers and VMs (open their web page, logs or details), a web search, and movies and series to request in Overseerr / Jellyseerr. Arrow keys and Enter work. Choose what it searches in Settings > Refresh & display > Search; turn everything off to hide the box.
 - Settings: Layout, Media & downloads, Containers & VMs and Apps are now one page, Sections & apps. Each section is a line you can tick, reorder and set to half width; open it for its own options and the apps that show in it. "Find an app" opens every section with a match.
