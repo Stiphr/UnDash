@@ -450,7 +450,7 @@
   function hasSeerr() { var f = null; S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (!f && s.type === 'overseerr') f = s; }); }); return f; }
   function searchIn(k) { var g = S.L.general; return (g.search_in || []).indexOf(k) >= 0 && (k !== 'web' || !!ENGINES[g.search]) && (k !== 'seerr' || !!hasSeerr()); }
   function searchPlaceholder() {
-    var p = [searchIn('apps') ? 'apps, containers' : '', searchIn('seerr') ? 'movies, series' : '', searchIn('web') ? 'the web' : ''].filter(Boolean);
+    var p = [searchIn('apps') ? 'apps' : '', searchIn('seerr') ? 'movies' : '', searchIn('web') ? 'the web' : ''].filter(Boolean);
     return p.length ? 'Search ' + p.join(', ').replace(/, ([^,]+)$/, ' or $1') : '';
   }
   function searchClose(reset) {
@@ -1494,7 +1494,7 @@
 
   /* ---- media: four equal columns (4 / 2 / 1 by the section's width), each a compact list refreshed on its own ---- */
   var MEDIA = { upcoming_movies: ['Upcoming movies', 'Nothing scheduled in the coming weeks.'], upcoming_episodes: ['Upcoming episodes', 'No episodes airing soon.'],
-                recent_movies: ['Recently added movies', 'No movies imported recently.'], recent_episodes: ['Recently added episodes', 'No episodes imported recently.'] };
+                recent_movies: ['Recent movies', 'No movies imported recently.'], recent_episodes: ['Recent episodes', 'No episodes imported recently.'] };
   var MEDIA_ORDER = ['upcoming_movies', 'upcoming_episodes', 'recent_movies', 'recent_episodes'];
   BUILD.media = function (r) {
     r.grid = h('div', { class: 'media' }); r.w = {};
@@ -1537,7 +1537,7 @@
       // only what Radarr / Sonarr reported: no year, episode or quality line when they did not send one
       var sub = it.sub || (it.year ? String(it.year) : '');
       var tags = [upcoming && it.when && it.when !== 'Airs' ? h('span', { class: 'badge plain' }, it.when) : null, it.quality ? h('span', { class: 'badge plain' }, it.quality) : null,
-        it.done ? h('span', { class: 'badge ok', title: 'Already downloaded' }, 'Downloaded') : null].filter(Boolean);
+        it.done ? h('span', { class: 'badge plain', title: 'Already downloaded' }, 'Downloaded') : null].filter(Boolean);
       x.row.appendChild(h(it.href ? 'a' : 'div', { class: 'mi', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: it.href ? 'noopener' : null,
           title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.sub ? '\n' + it.sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') },
         h('span', { class: 'mimg' }, it.poster ? h('img', { src: it.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
@@ -2169,7 +2169,7 @@
 
   /* Settings > Sections & apps: the dashboard's sections in order, each with its own options folded under it.
      Apps are listed in the section they show in; "Find an app" opens every section that has a match. */
-  var SEC_OPTS = { overview: 'Tiles and apps', media: 'Columns and apps', arr: 'Apps', downloads: 'Clients', apps: 'Groups and apps', docker: 'View and names', vms: 'View and names' };
+  var SEC_OPTS = { overview: 'Tiles and apps', media: 'Columns and apps', arr: 'Apps', downloads: 'Clients', apps: 'Groups and apps', docker: 'Containers and view', vms: 'VMs and view' };
   function tabDashboard(b, D, dirty) {
     var c = D.cfg, open = D.open || (D.open = {}), panels = {}, chevs = {};
     var ed = appsEditor(D, dirty, function () { paint(); });
@@ -2206,8 +2206,8 @@
           h('div', { class: 'hint', style: { 'margin-bottom': '10px' } }, 'Rename a group in its name box. "Show name" hides one group\'s name and keeps its apps together. On the dashboard, the gear next to a group name does the same.'),
           ed.groups()];
       },
-      docker: function () { return [dockerOpts(c, dirty), sub('Names, icons and visibility', 'Kept by name, so they survive updates and re-created containers. Star = favorite, crossed eye = hidden from the dashboard, arrow = checked for updates.'), namesList(c, dirty, 'docker')]; },
-      vms: function () { return [h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']]))), sub('Names, icons and visibility', 'VMs are found automatically through libvirt.'), namesList(c, dirty, 'vms')]; }
+      docker: function () { return [dockerOpts(c, dirty), sub('Containers on the dashboard', 'Tick the containers to show; new ones show until you untick them. Kept by name, so they survive updates and re-created containers. Star = favorite, arrow = checked for updates.'), namesList(c, dirty, 'docker')]; },
+      vms: function () { return [h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']]))), sub('VMs on the dashboard', 'Tick the VMs to show; new ones show until you untick them. Star = favorite.'), namesList(c, dirty, 'vms')]; }
     };
     function sub(t, hint) { return h('div', { class: 'sub-h' }, h('b', null, t), hint ? h('span', { class: 'hint' }, hint) : null); }
     b.appendChild(h('div', { class: 'ae-bar' }, filter, h('span', { class: 'grow' }),
@@ -2232,58 +2232,53 @@
       return h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D2.show.indexOf(x[0]) >= 0, onchange: function (e) {
         D2.show = D2.show.filter(function (k) { return k !== x[0]; }); if (e.target.checked) D2.show.push(x[0]); dirty(); } }), x[1]);
     }));
-    var all = ((S.live || {}).docker || {}).containers || [];
-    var pick = h('div', { class: 'picks' }), pf = h('input', { type: 'search', placeholder: 'Filter…', 'aria-label': 'Filter containers', oninput: function () { drawPick(); } });
-    function drawPick() {
-      clear(pick);
-      var q = pf.value.toLowerCase();
-      all.filter(function (x) { return !q || x.name.toLowerCase().indexOf(q) >= 0; }).forEach(function (x) {
-        pick.appendChild(h('label', { class: 'switch pk' }, h('input', { type: 'checkbox', checked: D2.selected.indexOf(x.name) >= 0, onchange: function (e) {
-          D2.selected = D2.selected.filter(function (n) { return n !== x.name; }); if (e.target.checked) D2.selected.push(x.name); txt(selCount, D2.selected.length + ' selected'); dirty(); } }),
-          h('span', { class: 'sdot ' + (x.state === 'running' ? 'ok' : 'na') }), h('span', { class: 'ell' }, x.name)));
-      });
-      if (!all.length) pick.appendChild(h('div', { class: 'muted sm' }, 'Containers appear here once the dashboard has loaded them.'));
-    }
-    var selCount = h('span', { class: 'muted sm' }, D2.selected.length + ' selected');
-    drawPick();
     return h('div', null,
       h('div', { class: 'grid2' },
-        F('Show by default', sIn(D2, 'filter', dirty, [['running', 'Running containers'], ['selected', 'Selected containers (below)'], ['all', 'All containers']])),
+        F('Show by default', sIn(D2, 'filter', dirty, [['running', 'Running containers'], ['selected', 'Selected containers'], ['all', 'All containers']]), 'Selected: gear > Show in "Selected" on the dashboard.'),
         F('Layout', sIn(D2, 'layout', dirty, [['grid', 'Compact grid'], ['list', 'Table'], ['cards', 'Cards']])),
         F('Grid columns', sIn(D2, 'columns', dirty, [[0, 'Automatic (fits the width)'], [1, '1'], [2, '2'], [3, '3'], [4, '4']])),
         F('Sort by', sIn(D2, 'sort', dirty, [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']]))),
       cIn(D2, 'update_check', dirty, 'Check for container updates: the gear turns orange when a container has one'),
-      F('Details on each container', showBox, S.boot.caps.docker_stats ? null : 'CPU and memory are not available through the Unraid API (Docker version).'),
-      h('div', { class: 'fld' }, h('label', null, 'Selected containers ', selCount),
-        h('div', { class: 'inl', style: { 'margin-bottom': '6px' } }, pf,
-          btn('Select running', function () { D2.selected = all.filter(function (x) { return x.state === 'running'; }).map(function (x) { return x.name; }); txt(selCount, D2.selected.length + ' selected'); drawPick(); dirty(); }, 'sm'),
-          btn('Clear', function () { D2.selected = []; txt(selCount, '0 selected'); drawPick(); dirty(); }, 'sm ghost')),
-        pick, h('div', { class: 'hint' }, 'Also from the dashboard: gear > Show in "Selected". Containers are found automatically.')));
+      F('Details on each container', showBox, S.boot.caps.docker_stats ? null : 'CPU and memory are not available through the Unraid API (Docker version).'));
   }
-  /* display name, icon, favorite and hidden for each container (or VM), kept by name */
+  /* which containers (or VMs) the dashboard shows, plus display name, icon, favorite and update check, kept by name */
   function namesList(c, dirty, kind) {
-    var y = S.live || {}, items = kind === 'docker' ? ((y.docker && y.docker.containers) || []) : ((y.vms && y.vms.vms) || []);
-    var filter = h('input', { type: 'search', placeholder: 'Filter…', 'aria-label': 'Filter ' + (kind === 'docker' ? 'containers' : 'VMs'), oninput: function () { draw(); } });
-    var list = h('div', { class: 'olist' });
+    var y = S.live || {}, dk = kind === 'docker', items = dk ? ((y.docker && y.docker.containers) || []) : ((y.vms && y.vms.vms) || []);
+    var what = dk ? 'containers' : 'VMs';
+    var filter = h('input', { type: 'search', placeholder: 'Filter ' + what + '…', 'aria-label': 'Filter ' + what, oninput: function () { draw(); } });
+    var list = h('div', { class: 'olist pick-list' }), count = h('span', { class: 'muted sm' });
+    var bag = function () { return c[kind].items; };
+    var get = function (n) { return bag()[n] || { label: '', icon: '', description: '', favorite: false, hidden: false }; };
+    var counted = function () { txt(count, items.filter(function (it) { return !get(it.name).hidden; }).length + ' of ' + items.length + ' shown'); };
+    function listed() { var q = filter.value.toLowerCase(); return items.filter(function (it) { return !q || it.name.toLowerCase().indexOf(q) >= 0 || (get(it.name).label || '').toLowerCase().indexOf(q) >= 0; }); }
+    // the bulk buttons act on what the filter lists
+    function setAll(test) { listed().forEach(function (it) { var p = get(it.name); p.hidden = !test(it); bag()[it.name] = p; }); dirty(); draw(); }
     function draw() {
-      clear(list);
-      var q = filter.value.toLowerCase();
-      items.filter(function (it) { return !q || it.name.toLowerCase().indexOf(q) >= 0; }).slice(0, 300).forEach(function (it) {
-        var bag = c[kind].items;
-        var p = bag[it.name] || { label: '', icon: '', description: '', favorite: false, hidden: false };
-        var put = function () { bag[it.name] = p; dirty(); };
-        list.appendChild(h('div', { class: 'oi' }, img(iconUrl(p.icon || it.icon), '', kind === 'docker' ? 'box' : 'vm'),
-          h('span', { class: 't' }, h('b', null, it.name)),
+      clear(list); counted();
+      listed().slice(0, 300).forEach(function (it) {
+        var p = get(it.name), row;
+        var put = function () { bag()[it.name] = p; dirty(); };
+        row = h('div', { class: 'oi' + (p.hidden ? ' off' : '') },
+          h('label', { class: 'switch', title: 'Show on the dashboard' }, h('input', { type: 'checkbox', checked: !p.hidden, 'aria-label': 'Show ' + it.name + ' on the dashboard', onchange: function (e) {
+            p.hidden = !e.target.checked; row.classList.toggle('off', p.hidden); put(); counted(); } })),
+          img(iconUrl(p.icon || it.icon), '', dk ? 'box' : 'vm'),
+          h('span', { class: 't' }, h('span', { class: 'sdot ' + (it.state === 'running' ? 'ok' : 'na'), title: it.state || '' }), h('b', null, it.name)),
           h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
-          h('label', { class: 'switch', title: 'Favorite' }, h('input', { type: 'checkbox', checked: !!p.favorite, 'aria-label': 'Favorite ' + it.name, onchange: function (e) { p.favorite = e.target.checked; put(); } }), ic('star')),
-          h('label', { class: 'switch', title: 'Hidden from the dashboard' }, h('input', { type: 'checkbox', checked: !!p.hidden, 'aria-label': 'Hide ' + it.name, onchange: function (e) { p.hidden = e.target.checked; put(); } }), ic('eyeoff')),
-          kind === 'docker' ? h('label', { class: 'switch', title: 'Check for updates' }, h('input', { type: 'checkbox', checked: !p.no_update, 'aria-label': 'Check ' + it.name + ' for updates', onchange: function (e) { p.no_update = !e.target.checked; put(); } }), ic('up')) : null));
+          h('label', { class: 'switch ico-t', title: 'Favorite' }, h('input', { type: 'checkbox', checked: !!p.favorite, 'aria-label': 'Favorite ' + it.name, onchange: function (e) { p.favorite = e.target.checked; put(); } }), ic('star')),
+          dk ? h('label', { class: 'switch ico-t', title: 'Check for updates' }, h('input', { type: 'checkbox', checked: !p.no_update, 'aria-label': 'Check ' + it.name + ' for updates', onchange: function (e) { p.no_update = !e.target.checked; put(); } }), ic('up')) : null);
+        list.appendChild(row);
       });
-      if (!list.childNodes.length) list.appendChild(h('div', { class: 'empty' }, items.length ? 'Nothing matches.' : kind === 'docker' ? 'No containers found yet.' : 'No VMs found yet.'));
+      if (!list.childNodes.length) list.appendChild(h('div', { class: 'empty' }, items.length ? 'Nothing matches.'
+        : ((dk ? y.docker : y.vms) || {}).error || ('No ' + what + ' found yet.' + (S.boot.caps.mode === 'api' ? ' They are listed here once the Unraid API is connected (Server > Connection).' : ''))));
     }
     draw();
-    return h('div', null, items.length > 8 ? h('div', { style: { 'margin-bottom': '8px' } }, filter) : null, list);
+    return h('div', null,
+      items.length ? h('div', { class: 'inl pick-bar' }, filter, count, h('span', { class: 'grow' }), h('span', { class: 'pick-btns' },
+        btn('Select all', function () { setAll(function () { return true; }); }, 'sm'),
+        btn('Running only', function () { setAll(function (it) { return it.state === 'running'; }); }, 'sm'),
+        btn('None', function () { setAll(function () { return false; }); }, 'sm'))) : null,
+      list);
   }
 
   function tabSystem(b, D, dirty) {

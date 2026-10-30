@@ -237,7 +237,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .blk .l{font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .lst{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
 .und .lst .r{display:flex;justify-content:flex-end;gap:8px;align-items:baseline;min-width:0}
-.und .lst .r .t{color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.und .lst .r .when{color:var(--accent-text);white-space:nowrap;font-size:12px}
+.und .lst .r .t{color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.und .lst .r .when{color:var(--muted);white-space:nowrap;font-size:12px}
 .und .lst .r .lab{color:var(--muted);margin-right:auto}
 .und .cal{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:5px 14px;font-size:12.5px;align-items:center}
 .und .cal .d{color:var(--muted);white-space:nowrap}.und .cal .ti{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -486,7 +486,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .mi .pt{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .mi .ps{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .mi .pm{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:2px}
-.und .mi .pd{font-size:11.5px;color:var(--accent-text);white-space:nowrap}
+.und .mi .pd{font-size:11.5px;color:var(--muted);white-space:nowrap}
 .und .mi .badge{font-size:10.5px;line-height:15px;padding:0 6px}
 .und[data-density=compact] .mimg{width:32px;height:48px}.und[data-density=compact] .mi{padding:4px 6px}
 .und[data-density=expanded] .mimg{width:52px;height:78px}.und[data-density=expanded] .mlist{--media-h:460px}
@@ -619,8 +619,13 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .cgrid,.und .agrid{grid-template-columns:1fr}
   .und .ci .acts .btn.ic.sm{width:34px;min-width:34px!important;min-height:34px!important}
 }
-.und .picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:2px 12px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);padding:6px 10px;background:var(--panel-2)}
-.und .switch.pk{margin:3px 0;font-size:13px;min-width:0}
+.und .pick-bar{margin-bottom:8px;align-items:center;gap:6px}.und .pick-bar input[type=search]{flex:1 1 160px;max-width:240px;min-width:0}.und .pick-bar .pick-btns{display:flex;gap:4px;flex:none}
+.und .pick-list{max-height:460px;overflow:auto}.und .pick-list .oi{flex:none;flex-wrap:nowrap;gap:6px}.und .pick-list .oi input[type=text]{flex:1 1 0;min-width:0}
+.und .pick-list .oi.off>:not(.switch:first-child){opacity:.45}.und .pick-list .oi .switch{flex:none;margin:0}
+.und .switch.ico-t{position:relative;padding:4px;border-radius:6px;cursor:pointer;color:var(--faint)}.und .switch.ico-t input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.und .switch.ico-t:has(input:checked){color:var(--accent-text)}.und .switch.ico-t:hover{background:var(--panel-2)}.und .switch.ico-t:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:1px}
+.und .pick-list .oi .t{display:flex;align-items:center;gap:6px;flex:1.3 1 0;min-width:70px}
+@media (max-width:600px){.und .pick-list .oi input[type=text]{display:none}}.und .pick-list .oi .t b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ---------- Fluent Dark: frosted glass with blue accents ---------- */
 .und[data-theme=fluent]{background:radial-gradient(1100px 600px at 0% -10%,rgba(59,130,246,.14),transparent 60%),radial-gradient(900px 520px at 100% 0%,rgba(99,102,241,.10),transparent 60%),var(--bg)}
