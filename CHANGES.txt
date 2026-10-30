@@ -1,3 +1,8 @@
+###0.9.3
+- Arr Stack: roomier rows. When it sits beside Media (or another section) at the top of the half-width columns, it grows to the same height and its rows share the extra space.
+- New setting: Settings > Theme > Section names. Off hides the names above the sections (System, Media, Arr Stack…); their buttons stay, and a collapsed section still shows its name.
+- Alerts: with nothing wrong the Alerts section is hidden, instead of showing "No problems found". Alert history now also opens from Settings > Ignored alerts.
+
 ###0.9.2
 - Requests: new "Show as" option (Settings > Sections & apps > Requests). Text only shows each request on one line, with Approve and Decline still there.
 - Plex, Tautulli, Emby and Jellyfin app cards show what is playing the same way as Now playing: title, episode, who and on what, progress, direct play or transcode, quality and bandwidth.
