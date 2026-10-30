@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.9.4">
+<!ENTITY version "0.9.5">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.9.5
+- Docker version: container updates work. They never started, because the background job needed bash and the image has none, so the update window waited for ever. Nothing was changed on the server.
+- Updates show a small status bar at the bottom right instead of a large window, and the page stays usable. It closes by itself after a success and stays open with the error after a failure. Details shows the output. After a page reload the bar comes back for an update that is still running.
+- A background job that never starts, or stops without a result, now ends as failed instead of showing "updating" for ever.
+
 ###0.9.4
 - Arr Stack: problems are grouped. A season pack that is blocked for 16 episodes is one row "The Mentalist · Season 3" with ×16 (the releases are in its tooltip). Health checks get a short tag (Indexer, Series removed, Import, Caution…) instead of the raw check name. The list scrolls inside a box of at most 260 px, and a long release name opens in full on click.
 - Media: episodes of one show added the same day (or airing at the same time) are one row, "S01E08–E12" with "5 eps".
@@ -244,7 +249,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.9.4');
+define('UND_VERSION', '0.9.5');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -337,22 +342,41 @@ function und_bin($name) {
 function und_spawn(array $argv, $log) {
   if (isset($GLOBALS['UND_SPAWN_MOCK'])) { call_user_func($GLOBALS['UND_SPAWN_MOCK'], $argv, $log); return true; }
   @unlink($log . '.done');
+  @unlink($log . '.pid');
   @file_put_contents($log, '');
   $cmd = '';
   foreach ($argv as $a) $cmd .= ($cmd === '' ? '' : ' ') . escapeshellarg($a);
-  $sh = $cmd . ' >> ' . escapeshellarg($log) . ' 2>&1; echo $? > ' . escapeshellarg($log . '.done');
-  exec('nohup setsid /bin/bash -c ' . escapeshellarg($sh) . ' > /dev/null 2>&1 &');
+  // /bin/sh, not bash: the Docker image is Alpine and has no bash
+  $sh = 'echo $$ > ' . escapeshellarg($log . '.pid') . '; ' . $cmd . ' >> ' . escapeshellarg($log) . ' 2>&1; echo $? > ' . escapeshellarg($log . '.done');
+  exec('nohup setsid /bin/sh -c ' . escapeshellarg($sh) . ' > /dev/null 2>&1 &');
   return true;
 }
 
-/** State of a background job started with und_spawn: idle | running | done (with exit code and output tail). */
+function und_pid_alive($pid) {
+  if (function_exists('posix_kill')) return posix_kill($pid, 0) || posix_get_last_error() === 1;   // 1 = EPERM: alive, another user's
+  return !is_dir('/proc/self') || is_dir('/proc/' . $pid);
+}
+
+/** State of a background job started with und_spawn: idle | running | done (with exit code and output tail).
+ *  A job that never started, or whose process is gone (container restarted) without a result, ends as failed instead of running for ever. */
 function und_job($log, $tail = 16000) {
   clearstatcache();
   if (!is_file($log)) return ['state' => 'idle', 'code' => null, 'out' => ''];
+  $done = is_file($log . '.done');
+  if (!$done) {
+    $pid = (int)@file_get_contents($log . '.pid');
+    if ($pid > 0 ? !und_pid_alive($pid) : time() - (int)@filemtime($log) > 15) {
+      clearstatcache();
+      if (!is_file($log . '.done')) {
+        @file_put_contents($log, "\nerror: the job stopped without a result.\n", FILE_APPEND);
+        @file_put_contents($log . '.done', "1\n");
+      }
+      $done = true;
+    }
+  }
   $out = (string)@file_get_contents($log);
   if (strlen($out) > $tail) $out = substr($out, -$tail);
   $out = preg_replace('/\x1b\[[0-9;]*[A-Za-z]/', '', $out);
-  $done = is_file($log . '.done');
   return ['state' => $done ? 'done' : 'running', 'code' => $done ? (int)trim((string)@file_get_contents($log . '.done')) : null, 'out' => und_redact($out), 'at' => (int)@filemtime($log)];
 }
 
@@ -418,7 +442,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>3d7a8a734d51427519905daba1e0c1208dc3ebfb822fe9d73afe23b30a213837</SHA256>
+<SHA256>6c7800b2eb3a796d8b0ee415ca203395e76a2946183fe92f7ecae995556c7e2e</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -1512,6 +1536,7 @@ function und_docker_job($name) {
   if ($j['state'] === 'done' && !is_file($log . '.recorded')) {
     @touch($log . '.recorded');
     @unlink(und_tmp('inspect.json'));
+    @unlink(und_tmp('api-containers.json'));
     $ok = $j['code'] === 0 && !preg_match('/\b(error|failed|denied)\b/i', $j['out']);
     und_history_add('docker', $name, 'update', $ok, $ok ? 'finished' : und_clip(trim(substr($j['out'], -300)), 300));
     $j['ok'] = $ok;
@@ -1578,7 +1603,7 @@ function und_docker_summary() {
   return $s;
 }
 ]]></INLINE>
-<SHA256>eb66f2178b391f206841caa5eef775664f0801e165e6c7fd2f72b962c3c2e666</SHA256>
+<SHA256>d727efa6ad74fe772d152d872f23e02a761aaf18926b5d3227f1afa0ca37b76a</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/vm.php" Mode="0644">
@@ -5843,6 +5868,13 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .toasts{position:fixed;right:16px;bottom:16px;z-index:10003;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
 .und .toast{background:var(--panel);color:var(--text);border:1px solid var(--line-2);border-left:3px solid var(--ok);padding:9px 14px;border-radius:6px;max-width:420px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:13px;pointer-events:auto}
 .und .toast.bad{border-left-color:var(--bad)}
+.und .upbar{width:320px;max-width:calc(100vw - 32px);pointer-events:auto;background:var(--panel);color:var(--text);border:1px solid var(--line-2);border-left:3px solid var(--accent);border-radius:6px;padding:9px 12px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:13px}
+.und .upbar.ok{border-left-color:var(--ok)}.und .upbar.bad{border-left-color:var(--bad)}
+.und .upbar-h{display:flex;align-items:center;gap:8px;min-height:22px}.und .upbar-h>b{flex:1;min-width:0}
+.und .upbar .progress{margin:6px 0 2px}.und .upbar .chips{margin-top:6px}.und .upbar .chips:empty{display:none}
+.und .upbar pre.log{min-height:0;max-height:180px;margin-top:8px;font-size:11px}
+.und .upbar-f{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.und .upbar [hidden]{display:none}
 .und .toast.act{display:flex;align-items:center;gap:12px}.und .toast.act>span{flex:1;min-width:0}
 .und .ign-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.und .ign-bar input{flex:1 1 220px;min-width:0}
 .und .olist.ign-list{border:0;border-radius:0}.und .ign-list .oi.ign{border:1px solid var(--line);border-radius:var(--radius);margin-bottom:6px}
@@ -5893,6 +5925,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .drawer .dt .dg{display:none}
   .und .drawer .dt button{white-space:nowrap;flex:none}.und .drawer .dt button.on{box-shadow:inset 0 -2px 0 var(--accent)}
   .und .toasts{left:12px;right:12px;bottom:12px;align-items:stretch}.und .toast{max-width:none}
+  .und .upbar{width:auto;max-width:none}
   .und .tiles,.und .favs{grid-template-columns:1fr}
   .und .sec-h .tools{margin-left:0;width:100%}
   .und .top .acts .btn.focus{display:none!important}
@@ -6248,7 +6281,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
 }
 ]]></INLINE>
-<SHA256>0a3c98c0eb1518dd605b2cfede823e151108d5fcfaa1ce6b45e754e9a029ea27</SHA256>
+<SHA256>ac58a79b6c0cc49d0da121b1236e9d1550a01225528a05aa1f0530826df83ee8</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -6429,8 +6462,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 
   var toastBox = null;
   /* undo: optional [label, fn], a button in the toast (it stays up longer so there is time to press it) */
-  function toast(msg, bad, undo) {
+  function toastHost() {
     if (!toastBox || !toastBox.parentNode) { toastBox = h('div', { class: 'toasts', 'aria-live': 'polite' }); root.appendChild(toastBox); }
+    return toastBox;
+  }
+  function toast(msg, bad, undo) {
+    toastHost();
     var t = h('div', { class: 'toast' + (bad ? ' bad' : '') + (undo ? ' act' : ''), role: bad ? 'alert' : 'status' }, h('span', null, msg),
       undo ? h('button', { type: 'button', class: 'btn sm', onclick: function () { if (t.parentNode) t.parentNode.removeChild(t); undo[1](); } }, undo[0]) : null);
     toastBox.appendChild(t);
@@ -6958,7 +6995,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
         S.connErr = r.error;
         if (R.alerts) paintAlerts(S.live || {});
       } else {
-        S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r; paintIdent();
+        S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r; resumeUpdates(); paintIdent();
         if (r.power && !S.power) powerOverlay(r.power);
         paintAll();
       }
@@ -7648,7 +7685,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       })();
     });
   }
-  /* updates run one at a time, each through Unraid's update_container; the dialog shows each one's output */
+  /* updates run one at a time, each through Unraid's update_container */
+  var updBar = null;
   function updateMany(names) {
     names = (names || []).filter(function (n) { return !S.busy['d:' + n]; });
     if (!names.length) return;
@@ -7657,41 +7695,66 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       h('div', null, h('p', null, 'Each container is stopped, its newest image is pulled and it is recreated from its Unraid template (the same as Unraid\'s Docker tab). Its service is unavailable meanwhile. They are updated one after the other.'), list),
       names.length === 1 ? 'Update' : 'Update all ' + names.length).then(function (y) { if (y) runUpdates(names); });
   }
-  function runUpdates(names) {
-    var pre = h('pre', { class: 'log wrap' }), prog = h('div', { class: 'progress' }, h('i')), status = h('div', { class: 'sm', role: 'status', 'aria-live': 'polite' });
-    var results = h('div', { class: 'chips', style: { margin: '8px 0' } });
-    var stop = false;
-    var stopB = btn('Stop after this one', function () { stop = true; stopB.disabled = true; });
-    var m = modal('Updating ' + (names.length === 1 ? label('docker', names[0]) : names.length + ' containers'), h('div', null, status, prog, results, pre),
-      [names.length > 1 ? stopB : null, btn('Close', function () { m.close(); })].filter(Boolean), true);
-    var i = 0, out = '', ok = 0, bad = 0;
+  /* a small status bar at the bottom right; the page stays usable. resume = jobs already running on the server (page was reloaded). */
+  function runUpdates(names, resume) {
+    if (updBar) { updBar.add(names); return; }
+    var running = resume ? names.slice() : [];
+    var title = h('b', { class: 'ell' }), status = h('div', { class: 'muted xs ell', role: 'status', 'aria-live': 'polite' }), prog = h('div', { class: 'progress' }, h('i'));
+    var pre = h('pre', { class: 'log wrap', hidden: true }), results = h('div', { class: 'chips' });
+    var stop = false, i = 0, out = '', ok = 0, bad = 0, gone = 0;
+    var stopB = btn('Stop after this one', function () { stop = true; stopB.disabled = true; }, 'sm');
+    var moreB = btn('Details', function () { pre.hidden = !pre.hidden; moreB.textContent = pre.hidden ? 'Details' : 'Hide details'; if (!pre.hidden) pre.scrollTop = pre.scrollHeight; }, 'sm');
+    var closeB = btn('', closeBar, 'sm', 'x', 'Close'); closeB.hidden = true;
+    var bar = h('div', { class: 'upbar', role: 'group', 'aria-label': 'Container updates' }, h('div', { class: 'upbar-h' }, title, closeB), status, prog, results, pre, h('div', { class: 'upbar-f' }, stopB, moreB));
+    function closeBar() { if (bar.parentNode) bar.parentNode.removeChild(bar); }
+    names = names.slice();
+    updBar = { add: function (more) { more.forEach(function (n) { if (names.indexOf(n) < 0) { names.push(n); S.busy['d:' + n] = 'queued'; } }); updBar.paint(); paintAll(); }, paint: function () {
+      var cur = names[Math.max(0, i - 1)];
+      title.textContent = names.length === 1 ? 'Updating ' + label('docker', cur) : 'Updating ' + label('docker', cur) + ' (' + Math.max(1, i) + ' of ' + names.length + ')';
+      stopB.hidden = names.length < 2;
+    } };
+    toastHost().insertBefore(bar, toastBox.firstChild);
     names.forEach(function (n) { S.busy['d:' + n] = 'queued'; });
     paintAll();
+    function result(n, good, text) {
+      delete S.busy['d:' + n]; gone = 0;
+      if (good) ok++; else { bad++; results.appendChild(h('span', { class: 'badge bad', title: text || '' }, label('docker', n))); }
+      next();
+    }
     function next() {
       if (i >= names.length || stop) {
         names.slice(i).forEach(function (n) { delete S.busy['d:' + n]; });
-        prog.style.display = 'none'; stopB.disabled = true;
-        status.textContent = 'Finished: ' + ok + ' updated' + (bad ? ', ' + bad + ' failed' : '') + (stop && i < names.length ? ', ' + (names.length - i) + ' not started' : '') + '.';
-        if (!m.parentNode) toast(status.textContent, bad > 0);
+        updBar = null;
+        bar.classList.add(bad ? 'bad' : 'ok'); prog.hidden = true; stopB.hidden = true; closeB.hidden = false;
+        title.textContent = bad ? (names.length === 1 ? 'Update failed' : 'Updates finished with errors') : names.length === 1 ? label('docker', names[0]) + ' updated' : 'Updates finished';
+        status.textContent = ok + ' updated' + (bad ? ', ' + bad + ' failed' : '') + (stop && i < names.length ? ', ' + (names.length - i) + ' not started' : '');
+        if (bad) { pre.hidden = false; moreB.textContent = 'Hide details'; pre.scrollTop = pre.scrollHeight; } else setTimeout(function () { if (pre.hidden) closeBar(); }, 6000);
         refreshNow(); return;
       }
-      var n = names[i++];
-      S.busy['d:' + n] = 'updating'; paintAll();
-      status.textContent = 'Updating ' + label('docker', n) + ' (' + i + ' of ' + names.length + ')…';
-      api('docker_action', { name: n, op: 'update' }, 30000).then(function (j) {
-        if (j.error) { delete S.busy['d:' + n]; bad++; results.appendChild(h('span', { class: 'badge bad' }, n)); out += '[' + n + '] ' + j.error + '\n\n'; pre.textContent = out; return next(); }
-        (function poll() {
-          api('docker_job', { name: n }).then(function (k) {
-            if (!k.error) { pre.textContent = out + '[' + n + ']\n' + (k.out || ''); pre.scrollTop = pre.scrollHeight; }
-            if (k.state === 'running' || k.error) { setTimeout(poll, 1500); return; }
-            delete S.busy['d:' + n];
-            if (k.ok) { ok++; results.appendChild(h('span', { class: 'badge ok' }, n)); } else { bad++; results.appendChild(h('span', { class: 'badge bad' }, n)); }
-            out = pre.textContent + '\n'; next();
-          });
-        })();
-      });
+      var n = names[i++], nice = label('docker', n);
+      S.busy['d:' + n] = 'updating'; updBar.paint(); paintAll();
+      status.textContent = 'Pulling the new image and recreating the container…';
+      function fail(msg) { out += '[' + n + '] ' + msg + '\n\n'; pre.textContent = out; result(n, false, msg); }
+      function poll() {
+        api('docker_job', { name: n }).then(function (k) {
+          if (k.error) { if (++gone > 80) return fail('UnDash lost contact with this update for two minutes. Check the container in Unraid\'s Docker tab.'); setTimeout(poll, 1500); return; }
+          gone = 0;
+          pre.textContent = out + '[' + nice + ']\n' + (k.out || ''); pre.scrollTop = pre.scrollHeight;
+          if (k.state === 'running') { var l = (k.out || '').trim().split('\n').pop(); if (l) status.textContent = l; setTimeout(poll, 1500); return; }
+          if (k.state === 'idle') return fail('UnDash has no record of this update (it may have restarted). Check the container in Unraid\'s Docker tab.');
+          out = pre.textContent + '\n'; result(n, !!k.ok, (k.out || '').trim().split('\n').pop());
+        });
+      }
+      if (running.indexOf(n) >= 0) { poll(); return; }
+      api('docker_action', { name: n, op: 'update' }, 30000).then(function (j) { if (j.error) fail(j.error); else poll(); });
     }
     next();
+  }
+  /* an update keeps running on the server when the page is reloaded: show its bar again */
+  function resumeUpdates() {
+    if (updBar || !S.live || !S.live.docker) return;
+    var names = (S.live.docker.containers || []).filter(function (c) { return c.job === 'updating' && !S.busy['d:' + c.name]; }).map(function (c) { return c.name; });
+    if (names.length) runUpdates(names, true);
   }
 
   function logs(name) {
@@ -9440,7 +9503,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>2b038316e26e255d48fa7c032299dba191bead1961d283e02107e9ca4521259e</SHA256>
+<SHA256>471fee67f9d79ada7f86c99884ebd022cf3d54a460c525764db6e5a7b11f559e</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">

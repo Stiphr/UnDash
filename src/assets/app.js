@@ -175,8 +175,12 @@
 
   var toastBox = null;
   /* undo: optional [label, fn], a button in the toast (it stays up longer so there is time to press it) */
-  function toast(msg, bad, undo) {
+  function toastHost() {
     if (!toastBox || !toastBox.parentNode) { toastBox = h('div', { class: 'toasts', 'aria-live': 'polite' }); root.appendChild(toastBox); }
+    return toastBox;
+  }
+  function toast(msg, bad, undo) {
+    toastHost();
     var t = h('div', { class: 'toast' + (bad ? ' bad' : '') + (undo ? ' act' : ''), role: bad ? 'alert' : 'status' }, h('span', null, msg),
       undo ? h('button', { type: 'button', class: 'btn sm', onclick: function () { if (t.parentNode) t.parentNode.removeChild(t); undo[1](); } }, undo[0]) : null);
     toastBox.appendChild(t);
@@ -704,7 +708,7 @@
         S.connErr = r.error;
         if (R.alerts) paintAlerts(S.live || {});
       } else {
-        S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r; paintIdent();
+        S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r; resumeUpdates(); paintIdent();
         if (r.power && !S.power) powerOverlay(r.power);
         paintAll();
       }
@@ -1394,7 +1398,8 @@
       })();
     });
   }
-  /* updates run one at a time, each through Unraid's update_container; the dialog shows each one's output */
+  /* updates run one at a time, each through Unraid's update_container */
+  var updBar = null;
   function updateMany(names) {
     names = (names || []).filter(function (n) { return !S.busy['d:' + n]; });
     if (!names.length) return;
@@ -1403,41 +1408,66 @@
       h('div', null, h('p', null, 'Each container is stopped, its newest image is pulled and it is recreated from its Unraid template (the same as Unraid\'s Docker tab). Its service is unavailable meanwhile. They are updated one after the other.'), list),
       names.length === 1 ? 'Update' : 'Update all ' + names.length).then(function (y) { if (y) runUpdates(names); });
   }
-  function runUpdates(names) {
-    var pre = h('pre', { class: 'log wrap' }), prog = h('div', { class: 'progress' }, h('i')), status = h('div', { class: 'sm', role: 'status', 'aria-live': 'polite' });
-    var results = h('div', { class: 'chips', style: { margin: '8px 0' } });
-    var stop = false;
-    var stopB = btn('Stop after this one', function () { stop = true; stopB.disabled = true; });
-    var m = modal('Updating ' + (names.length === 1 ? label('docker', names[0]) : names.length + ' containers'), h('div', null, status, prog, results, pre),
-      [names.length > 1 ? stopB : null, btn('Close', function () { m.close(); })].filter(Boolean), true);
-    var i = 0, out = '', ok = 0, bad = 0;
+  /* a small status bar at the bottom right; the page stays usable. resume = jobs already running on the server (page was reloaded). */
+  function runUpdates(names, resume) {
+    if (updBar) { updBar.add(names); return; }
+    var running = resume ? names.slice() : [];
+    var title = h('b', { class: 'ell' }), status = h('div', { class: 'muted xs ell', role: 'status', 'aria-live': 'polite' }), prog = h('div', { class: 'progress' }, h('i'));
+    var pre = h('pre', { class: 'log wrap', hidden: true }), results = h('div', { class: 'chips' });
+    var stop = false, i = 0, out = '', ok = 0, bad = 0, gone = 0;
+    var stopB = btn('Stop after this one', function () { stop = true; stopB.disabled = true; }, 'sm');
+    var moreB = btn('Details', function () { pre.hidden = !pre.hidden; moreB.textContent = pre.hidden ? 'Details' : 'Hide details'; if (!pre.hidden) pre.scrollTop = pre.scrollHeight; }, 'sm');
+    var closeB = btn('', closeBar, 'sm', 'x', 'Close'); closeB.hidden = true;
+    var bar = h('div', { class: 'upbar', role: 'group', 'aria-label': 'Container updates' }, h('div', { class: 'upbar-h' }, title, closeB), status, prog, results, pre, h('div', { class: 'upbar-f' }, stopB, moreB));
+    function closeBar() { if (bar.parentNode) bar.parentNode.removeChild(bar); }
+    names = names.slice();
+    updBar = { add: function (more) { more.forEach(function (n) { if (names.indexOf(n) < 0) { names.push(n); S.busy['d:' + n] = 'queued'; } }); updBar.paint(); paintAll(); }, paint: function () {
+      var cur = names[Math.max(0, i - 1)];
+      title.textContent = names.length === 1 ? 'Updating ' + label('docker', cur) : 'Updating ' + label('docker', cur) + ' (' + Math.max(1, i) + ' of ' + names.length + ')';
+      stopB.hidden = names.length < 2;
+    } };
+    toastHost().insertBefore(bar, toastBox.firstChild);
     names.forEach(function (n) { S.busy['d:' + n] = 'queued'; });
     paintAll();
+    function result(n, good, text) {
+      delete S.busy['d:' + n]; gone = 0;
+      if (good) ok++; else { bad++; results.appendChild(h('span', { class: 'badge bad', title: text || '' }, label('docker', n))); }
+      next();
+    }
     function next() {
       if (i >= names.length || stop) {
         names.slice(i).forEach(function (n) { delete S.busy['d:' + n]; });
-        prog.style.display = 'none'; stopB.disabled = true;
-        status.textContent = 'Finished: ' + ok + ' updated' + (bad ? ', ' + bad + ' failed' : '') + (stop && i < names.length ? ', ' + (names.length - i) + ' not started' : '') + '.';
-        if (!m.parentNode) toast(status.textContent, bad > 0);
+        updBar = null;
+        bar.classList.add(bad ? 'bad' : 'ok'); prog.hidden = true; stopB.hidden = true; closeB.hidden = false;
+        title.textContent = bad ? (names.length === 1 ? 'Update failed' : 'Updates finished with errors') : names.length === 1 ? label('docker', names[0]) + ' updated' : 'Updates finished';
+        status.textContent = ok + ' updated' + (bad ? ', ' + bad + ' failed' : '') + (stop && i < names.length ? ', ' + (names.length - i) + ' not started' : '');
+        if (bad) { pre.hidden = false; moreB.textContent = 'Hide details'; pre.scrollTop = pre.scrollHeight; } else setTimeout(function () { if (pre.hidden) closeBar(); }, 6000);
         refreshNow(); return;
       }
-      var n = names[i++];
-      S.busy['d:' + n] = 'updating'; paintAll();
-      status.textContent = 'Updating ' + label('docker', n) + ' (' + i + ' of ' + names.length + ')…';
-      api('docker_action', { name: n, op: 'update' }, 30000).then(function (j) {
-        if (j.error) { delete S.busy['d:' + n]; bad++; results.appendChild(h('span', { class: 'badge bad' }, n)); out += '[' + n + '] ' + j.error + '\n\n'; pre.textContent = out; return next(); }
-        (function poll() {
-          api('docker_job', { name: n }).then(function (k) {
-            if (!k.error) { pre.textContent = out + '[' + n + ']\n' + (k.out || ''); pre.scrollTop = pre.scrollHeight; }
-            if (k.state === 'running' || k.error) { setTimeout(poll, 1500); return; }
-            delete S.busy['d:' + n];
-            if (k.ok) { ok++; results.appendChild(h('span', { class: 'badge ok' }, n)); } else { bad++; results.appendChild(h('span', { class: 'badge bad' }, n)); }
-            out = pre.textContent + '\n'; next();
-          });
-        })();
-      });
+      var n = names[i++], nice = label('docker', n);
+      S.busy['d:' + n] = 'updating'; updBar.paint(); paintAll();
+      status.textContent = 'Pulling the new image and recreating the container…';
+      function fail(msg) { out += '[' + n + '] ' + msg + '\n\n'; pre.textContent = out; result(n, false, msg); }
+      function poll() {
+        api('docker_job', { name: n }).then(function (k) {
+          if (k.error) { if (++gone > 80) return fail('UnDash lost contact with this update for two minutes. Check the container in Unraid\'s Docker tab.'); setTimeout(poll, 1500); return; }
+          gone = 0;
+          pre.textContent = out + '[' + nice + ']\n' + (k.out || ''); pre.scrollTop = pre.scrollHeight;
+          if (k.state === 'running') { var l = (k.out || '').trim().split('\n').pop(); if (l) status.textContent = l; setTimeout(poll, 1500); return; }
+          if (k.state === 'idle') return fail('UnDash has no record of this update (it may have restarted). Check the container in Unraid\'s Docker tab.');
+          out = pre.textContent + '\n'; result(n, !!k.ok, (k.out || '').trim().split('\n').pop());
+        });
+      }
+      if (running.indexOf(n) >= 0) { poll(); return; }
+      api('docker_action', { name: n, op: 'update' }, 30000).then(function (j) { if (j.error) fail(j.error); else poll(); });
     }
     next();
+  }
+  /* an update keeps running on the server when the page is reloaded: show its bar again */
+  function resumeUpdates() {
+    if (updBar || !S.live || !S.live.docker) return;
+    var names = (S.live.docker.containers || []).filter(function (c) { return c.job === 'updating' && !S.busy['d:' + c.name]; }).map(function (c) { return c.name; });
+    if (names.length) runUpdates(names, true);
   }
 
   function logs(name) {

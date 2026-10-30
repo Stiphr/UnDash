@@ -105,22 +105,41 @@ function und_bin($name) {
 function und_spawn(array $argv, $log) {
   if (isset($GLOBALS['UND_SPAWN_MOCK'])) { call_user_func($GLOBALS['UND_SPAWN_MOCK'], $argv, $log); return true; }
   @unlink($log . '.done');
+  @unlink($log . '.pid');
   @file_put_contents($log, '');
   $cmd = '';
   foreach ($argv as $a) $cmd .= ($cmd === '' ? '' : ' ') . escapeshellarg($a);
-  $sh = $cmd . ' >> ' . escapeshellarg($log) . ' 2>&1; echo $? > ' . escapeshellarg($log . '.done');
-  exec('nohup setsid /bin/bash -c ' . escapeshellarg($sh) . ' > /dev/null 2>&1 &');
+  // /bin/sh, not bash: the Docker image is Alpine and has no bash
+  $sh = 'echo $$ > ' . escapeshellarg($log . '.pid') . '; ' . $cmd . ' >> ' . escapeshellarg($log) . ' 2>&1; echo $? > ' . escapeshellarg($log . '.done');
+  exec('nohup setsid /bin/sh -c ' . escapeshellarg($sh) . ' > /dev/null 2>&1 &');
   return true;
 }
 
-/** State of a background job started with und_spawn: idle | running | done (with exit code and output tail). */
+function und_pid_alive($pid) {
+  if (function_exists('posix_kill')) return posix_kill($pid, 0) || posix_get_last_error() === 1;   // 1 = EPERM: alive, another user's
+  return !is_dir('/proc/self') || is_dir('/proc/' . $pid);
+}
+
+/** State of a background job started with und_spawn: idle | running | done (with exit code and output tail).
+ *  A job that never started, or whose process is gone (container restarted) without a result, ends as failed instead of running for ever. */
 function und_job($log, $tail = 16000) {
   clearstatcache();
   if (!is_file($log)) return ['state' => 'idle', 'code' => null, 'out' => ''];
+  $done = is_file($log . '.done');
+  if (!$done) {
+    $pid = (int)@file_get_contents($log . '.pid');
+    if ($pid > 0 ? !und_pid_alive($pid) : time() - (int)@filemtime($log) > 15) {
+      clearstatcache();
+      if (!is_file($log . '.done')) {
+        @file_put_contents($log, "\nerror: the job stopped without a result.\n", FILE_APPEND);
+        @file_put_contents($log . '.done', "1\n");
+      }
+      $done = true;
+    }
+  }
   $out = (string)@file_get_contents($log);
   if (strlen($out) > $tail) $out = substr($out, -$tail);
   $out = preg_replace('/\x1b\[[0-9;]*[A-Za-z]/', '', $out);
-  $done = is_file($log . '.done');
   return ['state' => $done ? 'done' : 'running', 'code' => $done ? (int)trim((string)@file_get_contents($log . '.done')) : null, 'out' => und_redact($out), 'at' => (int)@filemtime($log)];
 }
 
