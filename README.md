@@ -58,6 +58,7 @@ docker run -d --name UnDash --restart unless-stopped -p 9099:9099 \
 **4. First start.** Open `http://YOUR_SERVER_IP:9099`.
 - **Set a password (recommended):** enter the one-time setup code from the container log (**Docker > UnDash > Logs**) and choose a password of 10+ characters.
 - **Continue without a password:** skips the code. Anyone who can reach the port can then use the dashboard. You can add a password later in **Settings > Connection**.
+  Without a password UnDash only answers at the server's IP address or name (`tower`, `tower.local`), so another web page cannot reach it through a host name of its own. Opening it through another name, such as a reverse proxy's, needs a password or that name in `UNDASH_ALLOWED_HOSTS`.
 
 To update, use **Update** in the Docker tab. UnDash shows a badge next to its version when a new release is out.
 
@@ -88,7 +89,7 @@ Everything is set up in **Settings** (the gear at the top right, or press `,`); 
    | Network and tools | AdGuard Home, Pi-hole, Nginx Proxy Manager, Gluetun, Immich, Home Assistant, PeaNUT |
    | Monitoring | Scrutiny, Uptime Kuma, Speedtest Tracker |
    | Server | Storage, Docker summary, VM summary, UPS |
-   | Widgets | Weather (Open-Meteo, no key), GitHub releases, Bookmarks |
+   | Widgets | Weather (Open-Meteo, no key), GitHub releases (with *Add from my containers*), Bookmarks |
    | Other | Custom API (JSON) for most other apps, Link for a plain shortcut |
 
 3. Fill in the form:

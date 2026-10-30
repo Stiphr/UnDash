@@ -56,6 +56,30 @@ function und_req_host() {
   return preg_match('/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/', $h) ? $h : '';
 }
 
+/**
+ * May this host name reach a dashboard that has no password (Docker version, before or without one)?
+ * Without a password anyone who reaches the port is signed in, so a web page could point a host name of its own at the
+ * server's address (DNS rebinding) and drive the dashboard from the visitor's browser. Allowed: IP addresses, localhost,
+ * the server's own name (alone or with a local suffix) and the names in UNDASH_ALLOWED_HOSTS (tower.example.com, *.example.com).
+ * A password makes this moot: a rebound page has no session and cannot sign in.
+ */
+function und_host_allowed($host = null) {
+  $h = $host === null ? und_req_host() : strtolower((string)$host);
+  if ($h === '') return false;
+  if ($h === 'localhost' || filter_var(trim($h, '[]'), FILTER_VALIDATE_IP)) return true;
+  foreach (preg_split('/[\s,]+/', strtolower((string)getenv('UNDASH_ALLOWED_HOSTS')), -1, PREG_SPLIT_NO_EMPTY) as $a) {
+    $a = preg_replace('/:\d+$/', '', $a);
+    if ($a === $h || (strpos($a, '*.') === 0 && substr($h, -strlen($a) + 1) === substr($a, 1) && strlen($h) > strlen($a) - 1)) return true;
+  }
+  $names = [strtolower((string)getenv('HOST_HOSTNAME'))];
+  if (function_exists('und_server_identity')) { $id = und_server_identity(); $names[] = strtolower((string)($id['name'] ?? '')); }
+  foreach (array_unique(array_filter($names)) as $n) {
+    if ($h === $n) return true;
+    foreach (['.local', '.lan', '.home', '.internal', '.localdomain', '.home.arpa'] as $sfx) if ($h === $n . $sfx) return true;
+  }
+  return false;
+}
+
 /** Is this browser logged in to Unraid? Reads Unraid's PHP session file (read-only, so Unraid's session is never touched). */
 function und_unraid_logged_in() {
   if (und_api_mode()) return false;            // a container cannot see Unraid's sessions
@@ -145,14 +169,14 @@ function und_setup_code_ensure() {
   return $c;
 }
 
-/** At most 5 wrong passwords per address in 15 minutes. */
+/** At most 5 wrong passwords per address in 15 minutes, and 30 from all addresses together (a guess spread over many
+ *  addresses, or every user behind one reverse proxy, is slowed down too). */
+function und_login_recent($f) { return array_values(array_filter(und_read_json($f, []), function ($t) { return $t > time() - 900; })); }
 function und_login_throttled($ip) {
-  $f = und_tmp('login-' . hash('sha256', (string)$ip) . '.json');
-  $a = array_values(array_filter(und_read_json($f, []), function ($t) { return $t > time() - 900; }));
-  return count($a) >= 5;
+  return count(und_login_recent(und_tmp('login-' . hash('sha256', (string)$ip) . '.json'))) >= 5 || count(und_login_recent(und_tmp('login-all.json'))) >= 30;
 }
 function und_login_failed($ip) {
-  $f = und_tmp('login-' . hash('sha256', (string)$ip) . '.json');
-  $a = array_values(array_filter(und_read_json($f, []), function ($t) { return $t > time() - 900; }));
-  $a[] = time(); und_write_json($f, $a, true);
+  foreach ([und_tmp('login-' . hash('sha256', (string)$ip) . '.json'), und_tmp('login-all.json')] as $f) {
+    $a = und_login_recent($f); $a[] = time(); und_write_json($f, array_slice($a, -100), true);
+  }
 }

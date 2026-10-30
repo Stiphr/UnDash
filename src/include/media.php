@@ -40,6 +40,7 @@ function und_media(array $cfg, $kind) {
     $s = und_service_full($cfg, $id);
     if (trim($s['url']) === '' || und_has($s['url'], '{{')) return ['items' => [], 'unconfigured' => true, 'error' => $s['name'] . ' has no API URL yet.'];
     $base = rtrim($s['url'], '/'); $link = rtrim($s['href'] ?: $s['url'], '/');
+    if (!preg_match('#^https?://#i', $link)) $link = '';        // links only to web addresses
     $h = und_arr_h($s);
     try {
       $items = [];
@@ -88,6 +89,8 @@ function und_media(array $cfg, $kind) {
                       'quality' => (string)($r['quality']['quality']['name'] ?? '')];
         }
       }
+      if ($link === '') foreach ($items as &$it) $it['href'] = '';
+      unset($it);
       return ['items' => array_slice($items, 0, $count), 'app' => ['name' => $s['name'], 'href' => preg_match('#^https?://#', $link) ? $link : '']];
     } catch (Throwable $e) {
       return ['items' => [], 'error' => $s['name'] . ': ' . und_redact($e->getMessage(), [$s['key']])];

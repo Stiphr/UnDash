@@ -578,6 +578,15 @@ t('user-defined bridge with published ports: server address and the port as writ
 t('user-defined bridge: [PORT:container port] becomes the host port', $det['dashbrr']['webui'] === "http://$sip:5456/", $det['dashbrr']['webui']);
 t('br0 / macvlan without published ports: the container\'s own LAN address', $det['adguard']['webui'] === 'http://192.168.50.10:3000/', $det['adguard']['webui']);
 t('default bridge: server address and host port', $det['radarr']['webui'] === "http://$sip:7979/", $det['radarr']['webui']);
+$GLOBALS['MOCK2'] = $GLOBALS['MOCK'];
+$GLOBALS['MOCK'] = function ($argv) {
+  if ($argv[1] !== 'inspect') return ['code' => 1];
+  return ['out' => json_encode([['Name' => '/radarr', 'Config' => ['Image' => 'lscr.io/linuxserver/radarr', 'Labels' => ['org.opencontainers.image.source' => 'https://github.com/linuxserver/docker-radarr']], 'HostConfig' => [], 'State' => []]])];
+};
+t('the image\'s source label is kept with the container', und_docker_details(['radarr' => ['id' => 'a4', 'state' => 'running']], true)['radarr']['source'] === 'https://github.com/linuxserver/docker-radarr');
+$GLOBALS['MOCK'] = $GLOBALS['MOCK2'];
+t('GitHub repositories from source addresses', und_github_repo_of('https://github.com/linuxserver/docker-radarr') === 'linuxserver/docker-radarr' && und_github_repo_of('git@github.com:immich-app/immich.git') === 'immich-app/immich'
+  && und_github_repo_of('https://github.com/autobrr/qui/tree/main') === 'autobrr/qui' && und_github_repo_of('https://gitlab.com/a/b') === '' && und_github_repo_of('https://github.com/a/..') === '');
 unset($GLOBALS['MOCK']);
 reset_store();
 
@@ -787,6 +796,25 @@ t('Home Assistant: an entity with its name and unit, token sent', $r['blocks'] =
 t('Home Assistant: people home, lights and switches by default', array_column(und_w_homeassistant($sv('homeassistant', ['key' => 'tok']))['blocks'], 'value') === ['2 / 3', '0 / 4', '0 / 4']);
 $e = ''; try { und_w_homeassistant($sv('homeassistant', ['key' => 'tok', 'options' => ['entities' => '../../api/config']])); } catch (Exception $x) { $e = $x->getMessage(); }
 t('Home Assistant: only entity ids are asked for', strpos($e, 'Not an entity id') !== false);
+$cfgSm = und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'Disks', 'services' => [['id' => '5c000001', 'type' => 'scrutiny', 'name' => 'Scrutiny', 'url' => 'http://app.lan:1', 'fields' => [], 'options' => []]]]]]);
+@unlink(und_tmp('smart-5c000001.json'));
+t('alerts: nothing is known about the disks before Scrutiny is read', und_smart_failures($cfgSm) === ['checked' => false, 'failed' => []]);
+$n = count($GLOBALS['SEEN']);
+$sm = und_smart_failures($cfgSm, true);
+t('the background check reads Scrutiny and keeps the failed disks', $sm['checked'] && count($sm['failed']) === 1 && $sm['failed'][0]['disk'] === 'sdb' && count($GLOBALS['SEEN']) > $n);
+$n = count($GLOBALS['SEEN']);
+und_smart_failures($cfgSm, true); und_smart_failures($cfgSm);
+t('... and does not ask again within 5 minutes; the refresh never asks', count($GLOBALS['SEEN']) === $n);
+$al = array_values(array_filter(und_alerts($cfgSm, null, null, $sm), function ($x) { return $x['cat'] === 'disk.smart'; }));
+t('a failed disk is a red alert naming the disk, the model and the app', count($al) === 1 && $al[0]['lv'] === 'bad' && $al[0]['res'] === 'sdb' && strpos($al[0]['msg'], 'sdb (WD) failed its SMART check in Scrutiny') === 0, json_encode($al));
+t('the alert category can be ignored like the others', isset(und_alert_categories()['disk.smart']));
+und_alerts_track($al, ['system', 'smart'], 1000);
+und_alerts_track([], ['system', 'docker'], 1100);
+t('the alert stays open while Scrutiny was not asked', isset(und_alert_history()['active'][0]) && und_alert_history()['active'][0]['cat'] === 'disk.smart');
+und_alerts_track([], ['system', 'smart'], 1200);
+t('... and ends once Scrutiny says the disk is fine', !und_alert_history()['active']);
+$st = json_decode(file_get_contents(und_tmp('smart-5c000001.json')), true); $st['at'] -= 3600; file_put_contents(und_tmp('smart-5c000001.json'), json_encode($st));
+t('an hour-old Scrutiny result counts as not checked', und_smart_failures($cfgSm)['checked'] === false);
 t('the new apps show in Apps', und_zone(['type' => 'scrutiny']) === 'apps' && und_zone(['type' => 'homeassistant']) === 'apps');
 unset($GLOBALS['UND_HTTP_MOCK']);
 
@@ -829,6 +857,8 @@ t('releases: a repository with only pre-releases shows its latest one', $rl['lis
 $e = ''; try { und_w_releases($sv('releases', ['repos' => 'a/limited'])); } catch (Exception $x) { $e = $x->getMessage(); }
 t('releases: the GitHub limit says to add a token', strpos($e, 'GitHub token') !== false, $e);
 $e = ''; try { und_w_releases($sv('releases', ['repos' => '../../etc'])); } catch (Exception $x) { $e = $x->getMessage(); }
+$rl = und_w_releases($sv('releases', ['repos' => "autobrr/qui\na/missing"]));
+t('releases: a repository that cannot be read is its own row; the others still show', count($rl['list']) === 2 && $rl['list'][1]['title'] === 'missing' && strpos($rl['list'][1]['sub'], 'no repository') !== false, json_encode($rl['list']));
 t('releases: only owner/repo names', strpos($e, 'Not a GitHub repository') !== false);
 $bk = und_w_bookmarks($sv('bookmarks', ['links' => "Router | http://192.168.1.1\nhttps://selfh.st/apps/\nEvil | javascript:alert(1)\nData | data:text/html,x\n\n"]));
 t('bookmarks: title and link, or the host name; only http and https', $bk['list'] === [['title' => 'Router', 'href' => 'http://192.168.1.1'], ['title' => 'selfh.st', 'href' => 'https://selfh.st/apps/']], json_encode($bk['list']));
@@ -853,6 +883,23 @@ $r = $ca(['mappings' => [['template' => '{data.up} / {data.total}', 'label' => '
 t('blocks: a template and a plain field side by side', $r['blocks'][0]['value'] === '7 / 9' && $r['blocks'][0]['fmt'] === 'text' && $r['blocks'][1]['value'] === 9);
 t('templates: true reads yes, a list counts its items, unknown fields are empty', und_tpl('{a}|{b}|{c}', ['a' => true, 'b' => [1, 2]]) === 'yes|2|');
 unset($GLOBALS['UND_HTTP_MOCK']);
+
+/* ---------------- security ---------------- */
+group('security');
+reset_store();
+$evil = "abc\rUNDASH_PASSWORD_HASH=x\r\nUNDASH_AUTH=open\nZ=1";
+$back = und_env_read(und_env_text(['RADARR_API_KEY' => $evil, 'B' => "q\"\\r"]));
+t('.env: line breaks inside a value cannot add settings', $back === ['B' => "q\"\\r", 'RADARR_API_KEY' => $evil], json_encode($back));
+for ($i = 0; $i < 4; $i++) und_login_failed('10.0.0.' . $i);
+t('5 wrong passwords per address', !und_login_throttled('10.0.0.1'));
+for ($i = 0; $i < 30; $i++) und_login_failed('10.9.' . intdiv($i, 4) . '.' . $i);
+t('30 wrong passwords from all addresses together slow everyone down', und_login_throttled('10.200.0.1'));
+putenv('HOST_HOSTNAME=Tower'); putenv('UNDASH_ALLOWED_HOSTS=dash.example.com,*.lan.example.net');
+t('host names: IPs, localhost, the server name and local suffixes', und_host_allowed('192.168.1.10') && und_host_allowed('[fd00::1]') && und_host_allowed('localhost') && und_host_allowed('tower') && und_host_allowed('tower.local') && und_host_allowed('tower.home.arpa'));
+t('host names: the allowed list, with wildcards', und_host_allowed('dash.example.com') && und_host_allowed('a.lan.example.net') && !und_host_allowed('lan.example.net') && !und_host_allowed('xlan.example.net'));
+t('host names: anything else is refused', !und_host_allowed('tower.evil.example') && !und_host_allowed('evil.example') && !und_host_allowed(''));
+putenv('HOST_HOSTNAME'); putenv('UNDASH_ALLOWED_HOSTS');
+reset_store();
 
 /* ---------------- icon picker ---------------- */
 group('icons');

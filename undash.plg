@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.8.0">
+<!ENTITY version "0.9.0">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,16 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.9.0
+- Alerts: a disk that Scrutiny marks as failed is a red alert ("sdb (WD…) failed its SMART check"), kept in the alert history and can be ignored like any other. The background check asks Scrutiny every 5 minutes; the alert ends only when Scrutiny has been asked again and says the disk is fine.
+- GitHub releases: "Add from my containers" lists your containers with the GitHub repository each comes from (the image's source label, or a ghcr.io image name) to follow with a tick. A repository that cannot be read now shows as its own row instead of hiding the others.
+- Security: while the Docker version has no password, it only answers at the server's IP address or name (tower, tower.local) and the names in the new UNDASH_ALLOWED_HOSTS setting. Before, a web page could point a host name of its own at your server (DNS rebinding) and use the dashboard through your browser. With a password nothing changes.
+- Security: wrong passwords are also counted for all addresses together (30 in 15 minutes), on top of 5 per address.
+- Security: a value with a carriage return (a pasted key, for example) could add a line to .env. Line breaks are now always escaped.
+- Security: changing the Unraid API address to another server asks for the API key again, so the saved key is never sent to a new address.
+- Security: without a dashboard password, the .env file (every key) cannot be downloaded from Settings &gt; Backup.
+- Media links only point to web addresses.
+
 ###0.8.0
 - Icon picker: "Browse" next to an app's Icon field, and a click on a container's or VM's icon in Settings, searches about 5,000 icons from selfh.st icons and dashboard-icons by name. The server downloads the two name lists once a week; the images load from the same CDN as before.
 - New apps: Scrutiny (disks passed / failed, hottest disk, failed disks listed), Tdarr (queue, processed, errored, space saved), Unmanic (workers, pending), Uptime Kuma (a status page's monitors up and down, uptime, down monitors listed), Speedtest Tracker (latest download, upload and ping; old and new API), Gluetun (VPN public IP, location, forwarded port) and Home Assistant (chosen entities, or people home, lights and switches on). Each is also found among your containers.
@@ -211,7 +221,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.8.0');
+define('UND_VERSION', '0.9.0');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -385,7 +395,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>6ee7ec4d0dbb2407e0fba1adc442578769a19f749a4768831709d957195d5b2f</SHA256>
+<SHA256>1e641eab7431d554405d76e3ad338f65d8e9d5d4c5daf032ce61d640808b5c12</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -1345,7 +1355,8 @@ function und_docker_details(array $ps, $force = false) {
         'webui' => preg_match('#^https?://#', $webui) ? $webui : '', 'network' => $net, 'ip' => $cip, 'ports' => $ports, 'autostart' => isset($auto[$name]),
         'managed' => ($labels['net.unraid.docker.managed'] ?? '') === 'dockerman', 'restarts' => (int)($x['RestartCount'] ?? 0),
         'started' => strtotime((string)($x['State']['StartedAt'] ?? '')) ?: null, 'exit' => (int)($x['State']['ExitCode'] ?? 0),
-        'created' => strtotime((string)($x['Created'] ?? '')) ?: null, 'cfg_image' => (string)($x['Config']['Image'] ?? '')];
+        'created' => strtotime((string)($x['Created'] ?? '')) ?: null, 'cfg_image' => (string)($x['Config']['Image'] ?? ''),
+        'source' => und_clip((string)($labels['org.opencontainers.image.source'] ?? ''), 300)];
     }
   }
   und_write_json($f, ['sig' => $sig, 'at' => time(), 'd' => $d]);
@@ -1525,7 +1536,7 @@ function und_docker_summary() {
   return $s;
 }
 ]]></INLINE>
-<SHA256>0a94e01cbd4ccebbf15c7374dc8e00b6c1df404e381699d2dc49bdbafea3c903</SHA256>
+<SHA256>eb66f2178b391f206841caa5eef775664f0801e165e6c7fd2f72b962c3c2e666</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/vm.php" Mode="0644">
@@ -1979,25 +1990,53 @@ function und_w_peanut($s) {
 
 /* ---------- monitoring and tools ---------- */
 
-/** Scrutiny: disks by SMART result. A disk counts as failed by the same rule as Scrutiny's own page (its status threshold setting). */
-function und_w_scrutiny($s) {
+/** Scrutiny's disks by SMART result. A disk counts as failed by the same rule as Scrutiny's own page (its status threshold
+ *  setting). The failed ones are also kept in the temp folder for Alerts (und_smart_failures). */
+function und_scrutiny_disks($s) {
   $j = und_get(und_u($s['url'], '/api/summary'));
   try { $thr = (int)(und_get(und_u($s['url'], '/api/settings'))['settings']['metrics']['status_threshold'] ?? 3); } catch (Exception $e) { $thr = 3; }
-  $pass = 0; $bad = 0; $unk = 0; $hot = null; $list = [];
+  $r = ['passed' => 0, 'failed' => [], 'unknown' => 0, 'hottest' => null];
   foreach ((array)($j['data']['summary'] ?? []) as $d) {
     if (!is_array($d) || !empty($d['device']['archived'])) continue;
     $st = (int)($d['device']['device_status'] ?? -1);
-    if ($st < 0 || $st > 3) $unk++;
-    elseif ($st > 0 && ($thr === 3 || $st === $thr || $st === 3)) {
-      $bad++;
-      $list[] = ['title' => trim(($d['device']['device_name'] ?? '') . ' ' . ($d['device']['model_name'] ?? '')) ?: 'Disk', 'right' => $st === 1 ? 'SMART failed' : ($st === 2 ? 'Scrutiny failed' : 'Failed')];
-    } else $pass++;
+    if ($st < 0 || $st > 3) $r['unknown']++;
+    elseif ($st > 0 && ($thr === 3 || $st === $thr || $st === 3))
+      $r['failed'][] = ['disk' => und_clip((string)($d['device']['device_name'] ?? ''), 60) ?: 'disk', 'model' => und_clip((string)($d['device']['model_name'] ?? ''), 80), 'status' => $st];
+    else $r['passed']++;
     $t = (int)($d['smart']['temp'] ?? 0);
-    if ($t > 0 && ($hot === null || $t > $hot)) $hot = $t;
+    if ($t > 0 && ($r['hottest'] === null || $t > $r['hottest'])) $r['hottest'] = $t;
   }
-  $r = ['blocks' => [und_b('passed', 'Passed', $pass), und_b('failed', 'Failed', $bad), und_b('unknown', 'Unknown', $unk), und_b('hottest', 'Hottest', $hot === null ? null : $hot . ' °C', 'text')]];
-  if ($list) $r['list'] = $list;
+  und_write_json(und_tmp('smart-' . $s['id'] . '.json'), ['at' => time(), 'app' => (string)($s['name'] ?? 'Scrutiny'), 'failed' => $r['failed']]);
   return $r;
+}
+function und_w_scrutiny($s) {
+  $d = und_scrutiny_disks($s);
+  $why = [1 => 'SMART failed', 2 => 'Scrutiny failed', 3 => 'Failed'];
+  $r = ['blocks' => [und_b('passed', 'Passed', $d['passed']), und_b('failed', 'Failed', count($d['failed'])), und_b('unknown', 'Unknown', $d['unknown']),
+                     und_b('hottest', 'Hottest', $d['hottest'] === null ? null : $d['hottest'] . ' °C', 'text')]];
+  if ($d['failed']) $r['list'] = array_map(function ($f) use ($why) { return ['title' => trim($f['disk'] . ' ' . $f['model']), 'right' => $why[$f['status']] ?? 'Failed']; }, $d['failed']);
+  return $r;
+}
+
+/**
+ * Failed disks from every Scrutiny app, for Alerts. Reads what the last check left behind; $refresh (the background
+ * check) asks Scrutiny again when that is older than 5 minutes. checked = at least one answer from the last 30 minutes,
+ * so a disk's alert only ends when Scrutiny has actually been asked again.
+ */
+function und_smart_failures(array $cfg, $refresh = false) {
+  $out = ['checked' => false, 'failed' => []];
+  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $sv) {
+    if ($sv['type'] !== 'scrutiny' || !empty($sv['hidden'])) continue;
+    $f = und_tmp('smart-' . $sv['id'] . '.json');
+    $st = und_read_json($f, []);
+    if ($refresh && time() - (int)($st['at'] ?? 0) > 300 && ($full = und_service_full($cfg, $sv['id'])) && trim($full['url']) !== '') {
+      try { und_scrutiny_disks($full); $st = und_read_json($f, []); } catch (Exception $e) { /* Scrutiny did not answer: the last result stands until it is too old */ }
+    }
+    if (time() - (int)($st['at'] ?? 0) > 1800) continue;
+    $out['checked'] = true;
+    foreach ((array)($st['failed'] ?? []) as $d) if (is_array($d)) $out['failed'][] = $d + ['app' => (string)($st['app'] ?? 'Scrutiny')];
+  }
+  return $out;
 }
 
 /** Tdarr: transcode and health-check queues (tables 1-3 transcode, 4-6 health check), counted like Tdarr's own tables. */
@@ -2158,9 +2197,10 @@ function und_w_releases($s) {
   }
   if (!$repos) throw new Exception('List the repositories to follow, like immich-app/immich.');
   $h = ['headers' => ['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => '2022-11-28'] + ($s['key'] !== '' ? ['Authorization' => 'Bearer ' . $s['key']] : [])];
-  $list = [];
+  $list = []; $errs = [];
   foreach (array_slice(array_values($repos), 0, 20) as $repo) {
-    $rel = und_cached('gh-' . md5(strtolower($repo)) . '.json', 3600, function () use ($repo, $h) {
+    // one repository that cannot be read shows as its own row; the others still show
+    try { $rel = und_cached('gh-' . md5(strtolower($repo)) . '.json', 3600, function () use ($repo, $h) {
       $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases/latest', $h);
       if ($r['code'] === 404) {      // only pre-releases, or no releases at all
         $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases?per_page=1', $h);
@@ -2172,15 +2212,52 @@ function und_w_releases($s) {
       if ($r['code'] === 404) throw new Exception('GitHub has no repository ' . $repo . '.');
       if ($r['code'] !== 200 || !is_array($r['json'])) throw new Exception('HTTP ' . $r['code'] . ' from GitHub.');
       return $r['json'];
-    });
+    }); }
+    catch (Exception $e) { $errs[] = $e->getMessage(); $list[] = ['title' => explode('/', $repo)[1], 'sub' => und_clip($e->getMessage(), 120), 'href' => 'https://github.com/' . $repo]; continue; }
     $name = explode('/', $repo)[1];
     if (!empty($rel['none'])) { $list[] = ['title' => $name, 'sub' => 'no releases yet', 'href' => 'https://github.com/' . $repo]; continue; }
     $url = (string)($rel['html_url'] ?? '');
     $list[] = ['title' => $name, 'sub' => und_clip((string)($rel['tag_name'] ?? ''), 40) . (!empty($rel['prerelease']) ? ' (pre-release)' : ''),
                'ts' => strtotime((string)($rel['published_at'] ?? '')) ?: null, 'href' => preg_match('#^https://github\.com/#', $url) ? $url : 'https://github.com/' . $repo];
   }
+  if (count($errs) === count($list)) throw new Exception($errs[0]);
   usort($list, function ($a, $b) { return ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0); });
   return ['list' => $list];
+}
+
+/** "owner/repo" from a GitHub address (https://github.com/owner/repo, git@github.com:owner/repo.git …), or ''. */
+function und_github_repo_of($u) {
+  if (!preg_match('#github\.com[/:]([A-Za-z0-9_.-]{1,100})/([A-Za-z0-9_.-]{1,100}?)(?:\.git)?(?:[/?\#].*)?$#i', trim((string)$u), $m) || $m[2] === '.' || $m[2] === '..') return '';
+  return $m[1] . '/' . $m[2];
+}
+
+/**
+ * Each container with the GitHub repository it comes from, for "Add from my containers" in the releases widget:
+ * the image's org.opencontainers.image.source label, else a ghcr.io/owner/name image (marked as a guess).
+ * The Docker version asks the Unraid API for the labels separately, so an API without that field only loses the labels.
+ */
+function und_container_sources() {
+  $rows = [];
+  if (und_api_mode()) {
+    $r = und_gql('query { docker { containers { names image labels } } }', [], 15);
+    $list = (array)($r['data']['docker']['containers'] ?? []);
+    if (!$list) { $r = und_gql('query { docker { containers { names image } } }', [], 15); $list = (array)($r['data']['docker']['containers'] ?? []); }
+    if (!$list && isset($r['error'])) return ['error' => $r['error']];
+    foreach ($list as $c) $rows[] = ['name' => ltrim((string)($c['names'][0] ?? ''), '/'), 'image' => (string)($c['image'] ?? ''), 'source' => (string)(((array)($c['labels'] ?? []))['org.opencontainers.image.source'] ?? '')];
+  } else {
+    $dk = und_docker_live();
+    if (isset($dk['error'])) return ['error' => $dk['error']];
+    foreach ((array)($dk['containers'] ?? []) as $c) $rows[] = ['name' => $c['name'], 'image' => (string)$c['image'], 'source' => (string)($c['source'] ?? '')];
+  }
+  $out = [];
+  foreach ($rows as $c) {
+    if ($c['name'] === '') continue;
+    $repo = und_github_repo_of($c['source']); $guess = false;
+    if ($repo === '' && preg_match('#^ghcr\.io/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:[:@].*)?$#i', $c['image'], $m)) { $repo = $m[1] . '/' . $m[2]; $guess = true; }
+    $out[] = ['name' => und_clip($c['name'], 128), 'image' => und_clip($c['image'], 200), 'repo' => $repo, 'guess' => $guess];
+  }
+  usort($out, function ($a, $b) { return ($a['repo'] === '') <=> ($b['repo'] === '') ?: strcasecmp($a['name'], $b['name']); });
+  return ['containers' => $out];
 }
 
 /** Links you keep on the dashboard: "Title | https://…" per line, or just the address. Nothing is fetched. */
@@ -2327,7 +2404,7 @@ function und_w_customapi($s) {
   return ['blocks' => $b];
 }
 ]]></INLINE>
-<SHA256>7e00498cef47e25cd94a237c32931e3ba2c3b5068e63d2b83036ebc09cd72427</SHA256>
+<SHA256>65c26a7ea28779e813ac8c4ea074b07275f591a7749735ae21d0a34dc03713a3</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/import.php" Mode="0644">
@@ -2865,6 +2942,30 @@ function und_req_host() {
   return preg_match('/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/', $h) ? $h : '';
 }
 
+/**
+ * May this host name reach a dashboard that has no password (Docker version, before or without one)?
+ * Without a password anyone who reaches the port is signed in, so a web page could point a host name of its own at the
+ * server's address (DNS rebinding) and drive the dashboard from the visitor's browser. Allowed: IP addresses, localhost,
+ * the server's own name (alone or with a local suffix) and the names in UNDASH_ALLOWED_HOSTS (tower.example.com, *.example.com).
+ * A password makes this moot: a rebound page has no session and cannot sign in.
+ */
+function und_host_allowed($host = null) {
+  $h = $host === null ? und_req_host() : strtolower((string)$host);
+  if ($h === '') return false;
+  if ($h === 'localhost' || filter_var(trim($h, '[]'), FILTER_VALIDATE_IP)) return true;
+  foreach (preg_split('/[\s,]+/', strtolower((string)getenv('UNDASH_ALLOWED_HOSTS')), -1, PREG_SPLIT_NO_EMPTY) as $a) {
+    $a = preg_replace('/:\d+$/', '', $a);
+    if ($a === $h || (strpos($a, '*.') === 0 && substr($h, -strlen($a) + 1) === substr($a, 1) && strlen($h) > strlen($a) - 1)) return true;
+  }
+  $names = [strtolower((string)getenv('HOST_HOSTNAME'))];
+  if (function_exists('und_server_identity')) { $id = und_server_identity(); $names[] = strtolower((string)($id['name'] ?? '')); }
+  foreach (array_unique(array_filter($names)) as $n) {
+    if ($h === $n) return true;
+    foreach (['.local', '.lan', '.home', '.internal', '.localdomain', '.home.arpa'] as $sfx) if ($h === $n . $sfx) return true;
+  }
+  return false;
+}
+
 /** Is this browser logged in to Unraid? Reads Unraid's PHP session file (read-only, so Unraid's session is never touched). */
 function und_unraid_logged_in() {
   if (und_api_mode()) return false;            // a container cannot see Unraid's sessions
@@ -2954,19 +3055,19 @@ function und_setup_code_ensure() {
   return $c;
 }
 
-/** At most 5 wrong passwords per address in 15 minutes. */
+/** At most 5 wrong passwords per address in 15 minutes, and 30 from all addresses together (a guess spread over many
+ *  addresses, or every user behind one reverse proxy, is slowed down too). */
+function und_login_recent($f) { return array_values(array_filter(und_read_json($f, []), function ($t) { return $t > time() - 900; })); }
 function und_login_throttled($ip) {
-  $f = und_tmp('login-' . hash('sha256', (string)$ip) . '.json');
-  $a = array_values(array_filter(und_read_json($f, []), function ($t) { return $t > time() - 900; }));
-  return count($a) >= 5;
+  return count(und_login_recent(und_tmp('login-' . hash('sha256', (string)$ip) . '.json'))) >= 5 || count(und_login_recent(und_tmp('login-all.json'))) >= 30;
 }
 function und_login_failed($ip) {
-  $f = und_tmp('login-' . hash('sha256', (string)$ip) . '.json');
-  $a = array_values(array_filter(und_read_json($f, []), function ($t) { return $t > time() - 900; }));
-  $a[] = time(); und_write_json($f, $a, true);
+  foreach ([und_tmp('login-' . hash('sha256', (string)$ip) . '.json'), und_tmp('login-all.json')] as $f) {
+    $a = und_login_recent($f); $a[] = time(); und_write_json($f, array_slice($a, -100), true);
+  }
 }
 ]]></INLINE>
-<SHA256>7c7e99adf390939a0bab85114a93e908e8761374ff25cb2eccfccbe5b6089e01</SHA256>
+<SHA256>a33bc90ba04a73615efb82869f93a0c6c78798785a64333511422f2155c1cad0</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/unraid_api.php" Mode="0644">
@@ -3374,6 +3475,7 @@ function und_media(array $cfg, $kind) {
     $s = und_service_full($cfg, $id);
     if (trim($s['url']) === '' || und_has($s['url'], '{{')) return ['items' => [], 'unconfigured' => true, 'error' => $s['name'] . ' has no API URL yet.'];
     $base = rtrim($s['url'], '/'); $link = rtrim($s['href'] ?: $s['url'], '/');
+    if (!preg_match('#^https?://#i', $link)) $link = '';        // links only to web addresses
     $h = und_arr_h($s);
     try {
       $items = [];
@@ -3422,6 +3524,8 @@ function und_media(array $cfg, $kind) {
                       'quality' => (string)($r['quality']['quality']['name'] ?? '')];
         }
       }
+      if ($link === '') foreach ($items as &$it) $it['href'] = '';
+      unset($it);
       return ['items' => array_slice($items, 0, $count), 'app' => ['name' => $s['name'], 'href' => preg_match('#^https?://#', $link) ? $link : '']];
     } catch (Throwable $e) {
       return ['items' => [], 'error' => $s['name'] . ': ' . und_redact($e->getMessage(), [$s['key']])];
@@ -3429,7 +3533,7 @@ function und_media(array $cfg, $kind) {
   });
 }
 ]]></INLINE>
-<SHA256>3fd976d5255459409a51edde08d8a41676dc7f5cf85ad4b9d510aa14d5b3e336</SHA256>
+<SHA256>cc122828a8337e5ba1919bcde1d181c9af6bba43bd09c0bb5568cd58874d73dd</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/arr.php" Mode="0644">
@@ -3698,7 +3802,7 @@ function und_dl_action(array $cfg, $id, $op) {
 function und_alert_categories() {
   return ['docker.unhealthy' => 'Container unhealthy', 'docker.restarting' => 'Container restarting', 'docker.exited' => 'Container stopped with an error',
           'docker.update_failed' => 'Container update failed', 'array.state' => 'Array not started', 'array.resync' => 'Parity operation running',
-          'disk.bad' => 'Disk disabled or missing', 'disk.errors' => 'Disk read/write errors', 'disk.hot' => 'Disk temperature',
+          'disk.bad' => 'Disk disabled or missing', 'disk.errors' => 'Disk read/write errors', 'disk.hot' => 'Disk temperature', 'disk.smart' => 'Disk failed SMART (Scrutiny)',
           'os.staged' => 'Unraid update waiting for restart', 'os.available' => 'Unraid update available', 'os.check_failed' => 'Unraid update check failed',
           'api.error' => 'Unraid API problem', 'auth.open' => 'No dashboard password'];
 }
@@ -3796,7 +3900,7 @@ function und_ignore_purge_expired() {
   });
 }
 ]]></INLINE>
-<SHA256>4b1da94442a2a5aa4dca1b9a8a71ab2aa4c7bceee9ba84bbf430f90b6693c46f</SHA256>
+<SHA256>fd72fcd26b7a9bf32fffef76ab38f3f1f703aaec0a9b5af420c7a768da509331</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/store.php" Mode="0644">
@@ -3904,7 +4008,7 @@ function und_env_text(array $env) {
   ksort($env);
   foreach ($env as $k => $v) {
     $v = (string)$v;
-    $out .= $k . '=' . ($v === '' || preg_match('/^[A-Za-z0-9_.\/:@+,-]*$/', $v) ? $v : '"' . strtr($v, ['\\' => '\\\\', '"' => '\\"', "\n" => '\\n']) . '"') . "\n";
+    $out .= $k . '=' . ($v === '' || preg_match('/^[A-Za-z0-9_.\/:@+,-]*$/', $v) ? $v : '"' . strtr($v, ['\\' => '\\\\', '"' => '\\"', "\n" => '\\n', "\r" => '\\r']) . '"') . "\n";
   }
   return $out;
 }
@@ -3913,7 +4017,7 @@ function und_env_read($text) {
   foreach (preg_split('/\r\n|\r|\n/', (string)$text) as $l) {
     if (!preg_match('/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $l, $m)) continue;
     $v = trim($m[2]);
-    if ($v !== '' && $v[0] === '"' && substr($v, -1) === '"' && strlen($v) > 1) $v = strtr(substr($v, 1, -1), ['\\n' => "\n", '\\"' => '"', '\\\\' => '\\']);
+    if ($v !== '' && $v[0] === '"' && substr($v, -1) === '"' && strlen($v) > 1) $v = strtr(substr($v, 1, -1), ['\\n' => "\n", '\\r' => "\r", '\\"' => '"', '\\\\' => '\\']);
     elseif ($v !== '' && $v[0] === "'" && substr($v, -1) === "'" && strlen($v) > 1) $v = substr($v, 1, -1);
     elseif (($p = strpos($v, ' #')) !== false) $v = rtrim(substr($v, 0, $p));
     $out[strtoupper($m[1])] = $v;
@@ -4136,7 +4240,7 @@ function und_shared_apply(array $env, array $old, array $new, array $list) {
   return $env;
 }
 ]]></INLINE>
-<SHA256>32aff55159e49ebc632ccf657eeb82a2a4a04a5aeee1d7cbea74ab2b4d4824f7</SHA256>
+<SHA256>51287dd63cb89ef017ab98808c15b7ec8796748bffdc097eece2099a515cec1c</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/alerts.php" Mode="0644">
@@ -4150,8 +4254,9 @@ function und_shared_apply(array $env, array $old, array $new, array $list) {
  * and act (the button the page shows: logs | settings | restart | os, or '').
  */
 
-/** The alerts for one snapshot. $sys = und_system(), $dk = und_docker_live() (either may be null when not loaded). */
-function und_alerts(array $cfg, $sys, $dk) {
+/** The alerts for one snapshot. $sys = und_system(), $dk = und_docker_live() (either may be null when not loaded),
+ *  $smart = und_smart_failures() (Scrutiny; null when not read). */
+function und_alerts(array $cfg, $sys, $dk, $smart = null) {
   $out = [];
   $add = function ($lv, $msg, $cat, $res, $act = '') use (&$out) { $out[] = ['lv' => $lv, 'msg' => $msg, 'cat' => $cat, 'res' => (string)$res, 'act' => $act]; };
   if (is_array($sys) && isset($sys['error'])) {
@@ -4180,6 +4285,11 @@ function und_alerts(array $cfg, $sys, $dk) {
       elseif (($c['state'] ?? '') === 'exited' && !empty($c['exit']) && !empty($c['autostart'])) $add('warn', $nm . ' stopped with exit code ' . $c['exit'] . '.', 'docker.exited', $c['name'], 'logs');
       if (($c['job'] ?? '') === 'update_failed') $add('bad', 'The update of ' . $nm . ' failed.', 'docker.update_failed', $c['name'], 'logs');
     }
+  }
+  $why = [1 => 'failed its SMART check', 2 => 'failed Scrutiny\'s checks', 3 => 'failed its SMART and Scrutiny checks'];
+  foreach ((array)($smart['failed'] ?? []) as $d) {
+    $res = trim(preg_replace('/[^A-Za-z0-9_.+@ -]/', '', (string)$d['disk'])) ?: 'disk';
+    $add('bad', $d['disk'] . ($d['model'] !== '' ? ' (' . $d['model'] . ')' : '') . ' ' . ($why[(int)$d['status']] ?? 'failed') . ' in ' . $d['app'] . '. Back up its data and plan a replacement.', 'disk.smart', $res);
   }
   return $out;
 }
@@ -4211,7 +4321,7 @@ function und_alerts_track(array $alerts, array $scopes, $now = null) {
   }
   foreach ($act as $k => $a) {
     if (isset($seen[$k])) continue;
-    $scope = strpos((string)$a['cat'], 'docker.') === 0 ? 'docker' : 'system';
+    $scope = strpos((string)$a['cat'], 'docker.') === 0 ? 'docker' : ($a['cat'] === 'disk.smart' ? 'smart' : 'system');
     if (!in_array($scope, $scopes, true)) continue;
     $log[] = $a + ['end' => $now];
     unset($act[$k]); $changed = true;
@@ -4243,13 +4353,15 @@ function und_alerts_check() {
   $dk = und_docker_live();
   $scopes = isset($sys['error']) ? [] : ['system'];
   if (is_array($dk) && !isset($dk['error'])) $scopes[] = 'docker';
-  $alerts = und_alerts($cfg, $sys, $dk);
+  $smart = und_smart_failures($cfg, true);
+  if ($smart['checked']) $scopes[] = 'smart';
+  $alerts = und_alerts($cfg, $sys, $dk, $smart);
   und_alerts_track($alerts, $scopes);
   @file_put_contents(und_tmp('alertcheck.at'), (string)time());
   return count($alerts);
 }
 ]]></INLINE>
-<SHA256>355bc5e53113f8be5812023f2cef4478cdfca8d5c71c0ad78db360d9c3ac092f</SHA256>
+<SHA256>b7ecf94eea5c02c6ece94061ee7c4159df8e4f136aae7c6c9ef3ab00771bf3c8</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/health.php" Mode="0644">
@@ -4752,9 +4864,11 @@ switch ($action) {
     // alerts are worked out here (one source for the page and the history); only the parts this request loaded are tracked
     if (isset($r['system'])) {
       $dk = $r['docker'] ?? null;
-      $r['alerts'] = und_alerts($cfg, $r['system'], $dk);
+      $smart = und_smart_failures($cfg);          // what the last Scrutiny read left behind: no network call here
+      $r['alerts'] = und_alerts($cfg, $r['system'], $dk, $smart);
       $scopes = isset($r['system']['error']) ? [] : ['system'];
       if (is_array($dk) && !isset($dk['error'])) $scopes[] = 'docker';
+      if ($smart['checked']) $scopes[] = 'smart';
       und_alerts_track($dk === null ? array_values(array_filter($r['alerts'], function ($a) { return strpos($a['cat'], 'docker.') !== 0; })) : $r['alerts'], $scopes);
     }
     // the rules in force now, by the server's clock, so every open tab hides the same alerts
@@ -4846,6 +4960,7 @@ switch ($action) {
   case 'os_check':      out(und_os_check());
   case 'os_update':     { $r = und_os_update(); if (isset($r['error'])) fail($r['error']); und_history_add('server', 'Unraid OS', 'update', true, 'install started'); out($r); }
   case 'storage':       out(und_storage());
+  case 'container_sources': out(und_container_sources());
   case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'))); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
 
   /* ---- settings ---- */
@@ -4927,6 +5042,10 @@ switch ($action) {
     $url = trim($P('url')); $key = $P('key');
     if ($url !== '' && !preg_match('#^https?://[^\s"\'<>]+$#i', $url)) fail('The address must start with http:// or https://, e.g. http://192.168.1.10/graphql');
     $sec = und_secrets();
+    // the saved key is only ever sent to the address it was entered for: a new server address needs the key again
+    $was = parse_url((string)und_api_conf()['url']); $now = parse_url($url);
+    if ($key === UND_KEEP && und_api_conf()['key'] !== '' && $url !== '' && strtolower(($was['host'] ?? '') . ':' . ($was['port'] ?? '')) !== strtolower(($now['host'] ?? '') . ':' . ($now['port'] ?? '')))
+      fail('Enter the API key again: it is only sent to the server it was saved for.');
     $sec['unraid']['url'] = und_clip($url, 300);
     if ($key !== UND_KEEP) $sec['unraid']['key'] = und_clip(trim($key), 300);
     und_save_secrets($sec);
@@ -4962,7 +5081,10 @@ switch ($action) {
   }
 
   /* ---- import / export / backups ---- */
-  case 'export':        out(und_export($P('kind') === 'env' ? 'env' : 'config'));
+  case 'export': {
+    if ($P('kind') === 'env' && und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true)) fail('Set a dashboard password first (Settings > Connection): without one, anyone on your network could download every key.', 403);
+    out(und_export($P('kind') === 'env' ? 'env' : 'config'));
+  }
   case 'import_check':  { $r = und_import_parse($P('file')); if (isset($r['error'])) fail($r['error']); out(['summary' => $r['summary']]); }
   case 'import_file':   { $r = und_import_apply($P('file')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'backups':       out(['backups' => und_backups()]);
@@ -4994,7 +5116,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>2205154da1e64bec3ca9c500a6d1f66e5fc610062c770c165a549a297a833d54</SHA256>
+<SHA256>80278aaf62a41f606d374dd9d70a978c1b511a5b27f3427205257f3a31abafa8</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -5077,6 +5199,11 @@ if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
   header('Cache-Control: no-cache');
   readfile($uri === '/favicon.png' ? UND_ROOT . '/images/undash.png' : UND_ROOT . $uri); exit;
 }
+
+/* ---- without a password, only known host names (see und_host_allowed: DNS rebinding) ---- */
+if (und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true) && !und_host_allowed())
+  sa_deny(421, "UnDash has no password yet, so it only answers at the server's IP address or name (http://<server IP>:<port>).\n"
+    . "To use the name " . (und_req_host() ?: 'in the address bar') . ": set a password in Settings > Connection, or add the name to UNDASH_ALLOWED_HOSTS in the container settings.");
 
 /* ---- sign-in ---- */
 $sess = und_sess_get();
@@ -5190,7 +5317,7 @@ if ($uri === '/' || $uri === '/index.html') {
 }
 sa_deny(404, 'Not found');
 ]]></INLINE>
-<SHA256>f6f214361e772eca9e72d738c52bf326129a0b36c0395f7984f2ff021ba2dc3d</SHA256>
+<SHA256>60fa9d83b4e6119e75a6b4d7930d3de1f28f97f4ab5ffcf1dcaf574e81af58a2</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/scripts/oscheck.php" Mode="0755">
@@ -6863,7 +6990,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   /* Alert ids are "<category>:<resource>" (see include/ignores.php); an alert without a category cannot be ignored. */
   var ALERT_CAT = {
     'docker.unhealthy': 'Container unhealthy', 'docker.restarting': 'Container restarting', 'docker.exited': 'Container stopped with an error', 'docker.update_failed': 'Container update failed',
-    'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature',
+    'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature', 'disk.smart': 'Disk failed SMART (Scrutiny)',
     'auth.open': 'No dashboard password', 'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
   };
   /* the rules in force, by the server's clock (live.at), plus this tab's own changes until the next refresh confirms them */
@@ -8563,6 +8690,28 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     look();
   }
 
+  /* the releases widget: tick containers to follow the GitHub repository each comes from (its image's source label) */
+  function followPicker(cur, done) {
+    var have = {}, picked = {}, m, list = h('div', { class: 'olist pick-list' }, h('div', { class: 'progress' }, h('i')));
+    cur.split(/[\s,]+/).forEach(function (x) { if (x) have[x.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/\/$/, '').toLowerCase()] = 1; });
+    api('container_sources').then(function (r) {
+      clear(list);
+      if (r.error) { list.appendChild(h('div', { class: 'banner bad' }, r.error)); return; }
+      r.containers.forEach(function (c) {
+        var on = !!have[c.repo.toLowerCase()];
+        list.appendChild(h('div', { class: 'oi' + (c.repo ? '' : ' off') },
+          h('label', { class: 'switch t' }, h('input', { type: 'checkbox', checked: on, disabled: !c.repo || on, onchange: function (e) { if (e.target.checked) picked[c.repo] = 1; else delete picked[c.repo]; } }),
+            h('span', null, h('b', null, c.name), h('span', { class: 'muted sm' }, ' · ' + (c.repo ? c.repo + (c.guess ? ' (from the image name)' : '') + (on ? ' · already followed' : '') : 'no GitHub source in the image'))))));
+      });
+      if (!r.containers.length) list.appendChild(h('div', { class: 'empty' }, 'No containers found.'));
+    });
+    m = modal('Follow the apps you run', h('div', null, h('p', { class: 'muted sm' }, 'The repository comes from each image\'s source label. For linuxserver.io images that is their Docker repository (docker-radarr), whose releases follow the app\'s.'), list),
+      [btn('Cancel', function () { m.close(); }), btn('Add', function () {
+        var add = Object.keys(picked);
+        m.close(); if (add.length) done((cur.trim() ? cur.replace(/\s+$/, '') + '\n' : '') + add.join('\n'));
+      }, 'pri')], true);
+  }
+
   /* containers that look like an app type UnDash reads, and are not added yet. Matched on the image name
      (lscr.io/linuxserver/radarr, binhex/arch-qbittorrentvpn …), then on the container name */
   var FOUND_RE = [['overseerr', /^(overseerr|jellyseerr|seerr)$/], ['plex', /^(plex|pms-docker|plex-media-server|plexmediaserver)$/], ['emby', /^(emby|embyserver)$/],
@@ -8699,7 +8848,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       if (s.type === 'weather') form.appendChild(h('div', { class: 'grid2' }, F('Place', tIn(s.options, 'location', noop, 'Amsterdam'), 'A town or city, or latitude, longitude. From Open-Meteo, no key needed.'),
         F('Units', sIn(s.options, 'units', noop, [['metric', '°C, km/h'], ['imperial', '°F, mph']]))));
       var lines = function (k, ph, lab, hint) { return F(lab, h('textarea', { rows: 5, spellcheck: 'false', placeholder: ph, oninput: function (e) { s.options[k] = e.target.value; } }, s.options[k] || ''), hint); };
-      if (s.type === 'releases') form.appendChild(lines('repos', 'immich-app/immich\nautobrr/qui', 'Repositories', 'One per line: owner/repo or its GitHub address, up to 20. Each is checked at most once an hour.'));
+      if (s.type === 'releases') {
+        form.appendChild(lines('repos', 'immich-app/immich\nautobrr/qui', 'Repositories', 'One per line: owner/repo or its GitHub address, up to 20. Each is checked at most once an hour.'));
+        form.appendChild(h('div', { style: { 'margin-top': '-4px', 'margin-bottom': '10px' } }, btn('Add from my containers', function () {
+          followPicker(s.options.repos || '', function (txt) { s.options.repos = txt; draw(); });
+        }, 'sm', 'box')));
+      }
       if (s.type === 'bookmarks') form.appendChild(lines('links', 'Router | http://192.168.1.1\nhttps://selfh.st', 'Links', 'One per line: Title | https://… or just the address. Only http and https links are kept.'));
       if (s.type === 'uptimekuma') form.appendChild(F('Status page slug', tIn(s.options, 'slug', noop, 'home'), 'Uptime Kuma reads a status page: the end of its address, /status/NAME. Make one under Status Pages first.'));
       if (s.type === 'homeassistant') form.appendChild(F('Entities', h('textarea', { rows: 3, spellcheck: 'false', placeholder: 'sensor.living_room_temperature\nlight.kitchen', oninput: function (e) { s.options.entities = e.target.value; } }, s.options.entities || ''),
@@ -8998,7 +9152,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>39b41c00386a19a9f1eeb309b1a67e4620b95c17067c025662b5cc9e3892de4a</SHA256>
+<SHA256>d4185e6633f109466df88aa6815a24760da3a495a7fda809b4806e64e90189ff</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
