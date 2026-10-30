@@ -31,6 +31,7 @@ function und_types() {
     'immich' => ['Immich', ['key'], true], 'peanut' => ['PeaNUT', ['key', 'username', 'password'], true],
     'scrutiny' => ['Scrutiny', [], true], 'tdarr' => ['Tdarr', ['key'], true], 'unmanic' => ['Unmanic', [], true], 'uptimekuma' => ['Uptime Kuma', [], true],
     'speedtest' => ['Speedtest Tracker', ['key'], true], 'gluetun' => ['Gluetun', ['key'], true], 'homeassistant' => ['Home Assistant', ['key'], true],
+    'weather' => ['Weather', [], false], 'releases' => ['GitHub releases', ['key'], false], 'bookmarks' => ['Bookmarks', [], false],
     'customapi' => ['Custom API (JSON)', ['key'], true], 'link' => ['Link only', [], false],
   ];
 }

@@ -238,7 +238,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .lst{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
 .und .lst .r{display:flex;justify-content:flex-end;gap:8px;align-items:baseline;min-width:0}
 .und .lst .r .t{color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.und .lst .r .when{color:var(--muted);white-space:nowrap;font-size:12px}
-.und .lst .r .lab{color:var(--muted);margin-right:auto}
+.und .lst .r .lab{color:var(--muted);margin-right:auto}.und .lst .r .t:first-child{margin-right:auto}.und .lst .r a.t{text-decoration:none}.und .lst .r a.t:hover{color:var(--accent);text-decoration:underline}.und .lst .r .t .muted{font-weight:400}
 .und .cal{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:5px 14px;font-size:12.5px;align-items:center}
 .und .cal .d{color:var(--muted);white-space:nowrap}.und .cal .ti{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .cal .ok{color:var(--ok);width:14px;height:14px}.und .cal .ok svg{width:14px;height:14px}
