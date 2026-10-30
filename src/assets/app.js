@@ -1795,6 +1795,9 @@
     var A = S.L.apps, closed = LS.get('closed', {});
     var groups = S.L.groups.map(function (g) { return { g: g, s: g.services.filter(function (s) { return s.zone === 'apps' && !s.hidden && (A.links || s.type !== 'link'); }) }; }).filter(function (x) { return x.s.length; });
     if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No other apps to show. Add Plex, Immich, AdGuard… in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Sections & apps'), '.')); return; }
+    if (groups.length > 1) r.tools.appendChild(h('div', { class: 'seg', role: 'group', 'aria-label': 'Grouping' },
+      h('button', { type: 'button', class: A.headers ? 'on' : '', title: 'Apps in their groups, with the group names', 'aria-pressed': A.headers ? 'true' : 'false', onclick: function () { setAppGroups(true); } }, 'Groups'),
+      h('button', { type: 'button', class: A.headers ? '' : 'on', title: 'All apps in one grid', 'aria-pressed': A.headers ? 'false' : 'true', onclick: function () { setAppGroups(false); } }, 'One grid')));
     var grid = function () { var g = h('div', { class: 'agrid' + (A.columns ? ' fixed' : ''), role: 'list' }); if (A.columns) g.style.setProperty('--ac', String(A.columns)); return g; };
     if (!A.headers) {
       var all = grid(), links = h('div', { class: 'alinks' });
@@ -1803,8 +1806,8 @@
       if (links.childNodes.length) r.body.appendChild(links);
     } else groups.forEach(function (x) {
       var gr = x.g, shut = gr.header && closed[gr.id], wrap = h('div', { class: 'grp' + (shut ? ' closed' : '') }), gd = grid(), links = h('div', { class: 'alinks' });
-      if (gr.header) wrap.appendChild(h('h3', null, h('button', { type: 'button', 'aria-expanded': shut ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name),
-        gear('group ' + gr.name, function () { return [['Rename group…', 'edit', function () { renameGroup(gr); }], ['Hide the group name', 'eyeoff', function () { groupPref(gr, { header: false }, 'Group name hidden. Show it again in Settings > Sections & apps > Apps.'); }]]; })));
+      if (gr.header) wrap.appendChild(h('h3', null, h('button', { type: 'button', class: 'gt', 'aria-expanded': shut ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name),
+        gear('group ' + gr.name, function () { return [['Rename group…', 'edit', function () { renameGroup(gr); }], ['Hide the group name', 'eyeoff', function () { groupPref(gr, { header: false }, 'Group name hidden. Show it again in Settings > Sections & apps > Apps.'); }], 'hr', ['Show all apps in one grid', 'grid', function () { setAppGroups(false); }]]; })));
       x.s.forEach(function (s) { (s.type === 'link' ? links : gd).appendChild(widget(s)); });
       if (gd.childNodes.length) wrap.appendChild(gd);
       if (links.childNodes.length) wrap.appendChild(links);
@@ -1814,6 +1817,11 @@
     clearTimeout(S.svcTimer); S.svcRun = false;
     setTimeout(pollServices, 0);
   };
+  function setAppGroups(on) {
+    if (!!S.L.apps.headers === on) return;
+    S.L.apps.headers = on; shell();
+    api('prefs', { kind: 'apps_view', value: { headers: on } }).then(function (j) { if (j.error) toast(j.error, true); });
+  }
   function groupPref(gr, val, msg) {
     Object.assign(gr, val); shell();
     return api('prefs', { kind: 'group', key: gr.id, value: val }).then(function (j) { if (j.error) { toast(j.error, true); return; } S.L = j.layout; shell(); if (msg) toast(msg); });
@@ -2216,7 +2224,7 @@
       orderList(c.dashboard.sections, function (s) {
         var o = SEC_OPTS[s.id];
         if (o) chevs[s.id] = h('button', { type: 'button', class: 'btn sm ghost sec-opt', 'aria-controls': 'und-so-' + s.id, onclick: function () { open[s.id] = !open[s.id]; if (ed.q) { ed.q = ''; filter.value = ''; ed.draw(); } else paint(); } }, h('span', { class: 'lbl' }, o), ic('chev'));
-        return [h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: s.visible, onchange: function (e) { s.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, TITLES[s.id]), h('span', { class: 'muted sm' }, ' · ' + SEC_DESC[s.id]))),
+        return [h('label', { class: 'switch t sec-sw', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: s.visible, onchange: function (e) { s.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, TITLES[s.id]), h('span', { class: 'muted sm' }, ' · ' + SEC_DESC[s.id]))),
           sIn(s, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']]), chevs[s.id] || h('span', { class: 'sec-opt-x' })];
       }, dirty, D.render, function (s) {
         if (!opts[s.id]) return null;

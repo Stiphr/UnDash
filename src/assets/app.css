@@ -133,9 +133,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.glass .card,.und.glass .panel,.und.glass .metric,.und.glass .tile,.und.glass button.stat,.und.glass .ci,.und.glass .alert,.und.glass .olist,.und.glass .fav,.und.glass .pl,.und.glass .rq,.und.glass .detail,.und.glass .htab{
   background:color-mix(in srgb,var(--panel) 62%,transparent);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.15);backdrop-filter:blur(var(--glass-blur)) saturate(1.15)}
 /* text that sits straight on a wallpaper (title bar, section headings, their tools) gets a frosted chip behind it */
-.und.has-bg .top .brand,.und.has-bg .sec-h h2,.und.has-bg .sec-h .tools>.muted,.und.has-bg .sec-h .tools>span:not(:empty){background:color-mix(in srgb,var(--panel) 72%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:8px;padding:3px 10px}
+.und.has-bg .top .brand,.und.has-bg .sec-h h2,.und.has-bg .sec-h .tools>.muted,.und.has-bg .sec-h .tools>span:not(:empty),.und.has-bg .grp>h3 .gt{background:color-mix(in srgb,var(--panel) 72%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:8px;padding:3px 10px}
 .und.has-bg .top .brand{padding:6px 12px 6px 6px;border-radius:var(--radius)}
-.und.has-bg .sec-h .tools .btn.ghost{background:color-mix(in srgb,var(--panel) 72%,transparent)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.und.has-bg .sec-h .tools .btn.ghost,.und.has-bg .sec-h .tools .seg,.und.has-bg .grp>h3 .btn.gear{background:color-mix(in srgb,var(--panel) 72%,transparent)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 .und .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);min-width:0;overflow:hidden}
 .und .empty{color:var(--muted);font-size:13px;padding:16px;text-align:center}
 
@@ -214,8 +214,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 /* service widgets */
 .und .grp{margin-bottom:16px}.und .grp:last-child{margin-bottom:0}
 .und .grp>h3{margin:0 0 8px;padding:0;border:0;background:none;font:600 12px/1.3 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.und .grp>h3 button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-.und .grp>h3 button svg{width:13px;height:13px;transition:transform .15s}.und .grp.closed>h3 button svg{transform:rotate(-90deg)}.und .grp.closed>.agrid,.und .grp.closed>.alinks{display:none}
+.und .grp>h3 .gt{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.und .grp>h3 .gt svg{width:13px;height:13px;transition:transform .15s}.und .grp.closed>h3 .gt svg{transform:rotate(-90deg)}.und .grp>h3 .gt:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:4px}.und .grp.closed>.agrid,.und .grp.closed>.alinks{display:none}
 .und .grp>h3{display:flex;align-items:center;gap:4px}.und .grp>h3 .gear{opacity:0;transition:opacity .15s}.und .grp>h3:hover .gear,.und .grp>h3 .gear:focus-visible,.und .grp>h3 .gear[aria-expanded=true]{opacity:1}
 @media (hover:none){.und .grp>h3 .gear{opacity:1}}
 .und .grid{display:grid;grid-template-columns:repeat(var(--cols,4),minmax(0,1fr));gap:var(--gap)}
@@ -663,7 +663,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .sec-opts>*+*{margin-top:14px}.und .sec-opts .olist .oi{background:var(--panel)}
 .und .sub-h{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}.und .sub-h>b{font-size:13px;color:var(--title)}.und .sub-h .hint{margin:0}
 .und .ae-sec.noname .ae-h input[type=text]{opacity:.6;text-decoration:line-through}
-@media (max-width:640px){.und .sec-opts{padding:10px}.und .sec-opt .lbl{display:none}.und .btn.sec-opt{min-width:0!important}.und .sec-opt-x{width:32px}}
+@media (max-width:640px){.und .sec-opts{padding:10px}.und .btn.sec-opt{min-width:0!important;margin-left:auto;padding-left:4px!important;padding-right:4px!important}.und .sec-opt-x{margin-left:auto}
+  /* section rows: name and move buttons on the first line, width and options on the second */
+  .und .olist .oi:has(.sec-sw)>*{order:2}.und .olist .oi .sec-sw{order:0;flex:1 1 calc(100% - 110px)}.und .olist .oi:has(.sec-sw)>select{width:auto;flex:none}.und .olist .oi:has(.sec-sw)>.btn:not(.sec-opt){order:1}.und .olist .oi:has(.sec-sw)>.grip{display:none}}
 .und .ae-sec{margin-bottom:14px}.und .ae-sec:last-child{margin-bottom:0}
 .und .ae-h{display:flex;align-items:center;gap:8px;margin:0 0 6px;flex-wrap:wrap;min-height:30px}.und .ae-h>b{font-size:13px;color:var(--title)}
 .und .ae-h input[type=text]{flex:0 1 220px;min-width:100px;padding:3px 8px}

@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.7.4">
+<!ENTITY version "0.7.5">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,12 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.7.5
+- Apps: a Groups / One grid switch in the section header turns the groups (sub-categories) on or off right from the dashboard. The gear next to a group name also has "Show all apps in one grid".
+- The gear next to a group name is centred in its button again.
+- With a wallpaper, the switches in section headers (Apps grouping, container filters, VM layout), group names and group gears get the same frosted backdrop as other buttons, so they stay readable.
+- Settings &gt; Sections &amp; apps on a phone: each section takes two tidy lines (name and move arrows, then width and options), and the options button shows its label again ("Tiles and apps", "Containers and view"…).
+
 ###0.7.4
 - Settings &gt; Sections &amp; apps &gt; Containers (and Virtual machines) lists every container and VM UnDash finds, through the Unraid API in the Docker version. Tick the ones to show on the dashboard, or use Select all, Running only or None (they act on what the filter lists). New containers show until you untick them.
 - The star (favorite) and arrow (update check) in that list are icons you click, and the list fits a phone screen.
@@ -192,7 +198,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.7.4');
+define('UND_VERSION', '0.7.5');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -366,7 +372,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>afb5c9032107eb1f93623dac6e1c0b1decd7cceb456daa7feaa259bec8c2587a</SHA256>
+<SHA256>432e0b7033a44c660e80122851d799c4c6fc7baeb84d7d4408d5d752548640c5</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -4521,6 +4527,8 @@ switch ($action) {
     } elseif ($kind === 'docker_view' || $kind === 'vms_view') {
       $k = $kind === 'docker_view' ? 'docker' : 'vms';
       $cfg[$k] = array_merge($cfg[$k], array_intersect_key($val, ['layout' => 1, 'sort' => 1, 'hide_stopped' => 1, 'view' => 1, 'filter' => 1, 'selected' => 1, 'columns' => 1]));
+    } elseif ($kind === 'apps_view') {
+      if (isset($val['headers'])) $cfg['apps']['headers'] = (bool)$val['headers'];
     } elseif ($kind === 'group') {
       if (isset($val['name'])) $val['name'] = trim((string)$val['name']);
       if (isset($val['name']) && ($val['name'] === '' || strlen($val['name']) > 60)) fail('Give the group a name of up to 60 characters.');
@@ -4621,7 +4629,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>fecef7b98dfcfb97665b69a5ce5a8af669d487e9cac49906617055168c829cbd</SHA256>
+<SHA256>1854dfb50d9cbf66152ff9c6316467f6777148300953c1e048d6b09fb34ff105</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -5046,9 +5054,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.glass .card,.und.glass .panel,.und.glass .metric,.und.glass .tile,.und.glass button.stat,.und.glass .ci,.und.glass .alert,.und.glass .olist,.und.glass .fav,.und.glass .pl,.und.glass .rq,.und.glass .detail,.und.glass .htab{
   background:color-mix(in srgb,var(--panel) 62%,transparent);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.15);backdrop-filter:blur(var(--glass-blur)) saturate(1.15)}
 /* text that sits straight on a wallpaper (title bar, section headings, their tools) gets a frosted chip behind it */
-.und.has-bg .top .brand,.und.has-bg .sec-h h2,.und.has-bg .sec-h .tools>.muted,.und.has-bg .sec-h .tools>span:not(:empty){background:color-mix(in srgb,var(--panel) 72%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:8px;padding:3px 10px}
+.und.has-bg .top .brand,.und.has-bg .sec-h h2,.und.has-bg .sec-h .tools>.muted,.und.has-bg .sec-h .tools>span:not(:empty),.und.has-bg .grp>h3 .gt{background:color-mix(in srgb,var(--panel) 72%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:8px;padding:3px 10px}
 .und.has-bg .top .brand{padding:6px 12px 6px 6px;border-radius:var(--radius)}
-.und.has-bg .sec-h .tools .btn.ghost{background:color-mix(in srgb,var(--panel) 72%,transparent)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.und.has-bg .sec-h .tools .btn.ghost,.und.has-bg .sec-h .tools .seg,.und.has-bg .grp>h3 .btn.gear{background:color-mix(in srgb,var(--panel) 72%,transparent)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 .und .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);min-width:0;overflow:hidden}
 .und .empty{color:var(--muted);font-size:13px;padding:16px;text-align:center}
 
@@ -5127,8 +5135,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 /* service widgets */
 .und .grp{margin-bottom:16px}.und .grp:last-child{margin-bottom:0}
 .und .grp>h3{margin:0 0 8px;padding:0;border:0;background:none;font:600 12px/1.3 var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.und .grp>h3 button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-.und .grp>h3 button svg{width:13px;height:13px;transition:transform .15s}.und .grp.closed>h3 button svg{transform:rotate(-90deg)}.und .grp.closed>.agrid,.und .grp.closed>.alinks{display:none}
+.und .grp>h3 .gt{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.und .grp>h3 .gt svg{width:13px;height:13px;transition:transform .15s}.und .grp.closed>h3 .gt svg{transform:rotate(-90deg)}.und .grp>h3 .gt:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:4px}.und .grp.closed>.agrid,.und .grp.closed>.alinks{display:none}
 .und .grp>h3{display:flex;align-items:center;gap:4px}.und .grp>h3 .gear{opacity:0;transition:opacity .15s}.und .grp>h3:hover .gear,.und .grp>h3 .gear:focus-visible,.und .grp>h3 .gear[aria-expanded=true]{opacity:1}
 @media (hover:none){.und .grp>h3 .gear{opacity:1}}
 .und .grid{display:grid;grid-template-columns:repeat(var(--cols,4),minmax(0,1fr));gap:var(--gap)}
@@ -5576,7 +5584,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .sec-opts>*+*{margin-top:14px}.und .sec-opts .olist .oi{background:var(--panel)}
 .und .sub-h{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}.und .sub-h>b{font-size:13px;color:var(--title)}.und .sub-h .hint{margin:0}
 .und .ae-sec.noname .ae-h input[type=text]{opacity:.6;text-decoration:line-through}
-@media (max-width:640px){.und .sec-opts{padding:10px}.und .sec-opt .lbl{display:none}.und .btn.sec-opt{min-width:0!important}.und .sec-opt-x{width:32px}}
+@media (max-width:640px){.und .sec-opts{padding:10px}.und .btn.sec-opt{min-width:0!important;margin-left:auto;padding-left:4px!important;padding-right:4px!important}.und .sec-opt-x{margin-left:auto}
+  /* section rows: name and move buttons on the first line, width and options on the second */
+  .und .olist .oi:has(.sec-sw)>*{order:2}.und .olist .oi .sec-sw{order:0;flex:1 1 calc(100% - 110px)}.und .olist .oi:has(.sec-sw)>select{width:auto;flex:none}.und .olist .oi:has(.sec-sw)>.btn:not(.sec-opt){order:1}.und .olist .oi:has(.sec-sw)>.grip{display:none}}
 .und .ae-sec{margin-bottom:14px}.und .ae-sec:last-child{margin-bottom:0}
 .und .ae-h{display:flex;align-items:center;gap:8px;margin:0 0 6px;flex-wrap:wrap;min-height:30px}.und .ae-h>b{font-size:13px;color:var(--title)}
 .und .ae-h input[type=text]{flex:0 1 220px;min-width:100px;padding:3px 8px}
@@ -5603,7 +5613,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
 }
 ]]></INLINE>
-<SHA256>f74ebbd1ef124d3e27a515aeffa1d1dae667a3a8a66d350a1497c3274708367b</SHA256>
+<SHA256>dde947ab387ef1abe3eb052bb0800e8e1dcf8559baf8fdfe9cafbd8514786b8f</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -7404,6 +7414,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var A = S.L.apps, closed = LS.get('closed', {});
     var groups = S.L.groups.map(function (g) { return { g: g, s: g.services.filter(function (s) { return s.zone === 'apps' && !s.hidden && (A.links || s.type !== 'link'); }) }; }).filter(function (x) { return x.s.length; });
     if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No other apps to show. Add Plex, Immich, AdGuard… in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Sections & apps'), '.')); return; }
+    if (groups.length > 1) r.tools.appendChild(h('div', { class: 'seg', role: 'group', 'aria-label': 'Grouping' },
+      h('button', { type: 'button', class: A.headers ? 'on' : '', title: 'Apps in their groups, with the group names', 'aria-pressed': A.headers ? 'true' : 'false', onclick: function () { setAppGroups(true); } }, 'Groups'),
+      h('button', { type: 'button', class: A.headers ? '' : 'on', title: 'All apps in one grid', 'aria-pressed': A.headers ? 'false' : 'true', onclick: function () { setAppGroups(false); } }, 'One grid')));
     var grid = function () { var g = h('div', { class: 'agrid' + (A.columns ? ' fixed' : ''), role: 'list' }); if (A.columns) g.style.setProperty('--ac', String(A.columns)); return g; };
     if (!A.headers) {
       var all = grid(), links = h('div', { class: 'alinks' });
@@ -7412,8 +7425,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       if (links.childNodes.length) r.body.appendChild(links);
     } else groups.forEach(function (x) {
       var gr = x.g, shut = gr.header && closed[gr.id], wrap = h('div', { class: 'grp' + (shut ? ' closed' : '') }), gd = grid(), links = h('div', { class: 'alinks' });
-      if (gr.header) wrap.appendChild(h('h3', null, h('button', { type: 'button', 'aria-expanded': shut ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name),
-        gear('group ' + gr.name, function () { return [['Rename group…', 'edit', function () { renameGroup(gr); }], ['Hide the group name', 'eyeoff', function () { groupPref(gr, { header: false }, 'Group name hidden. Show it again in Settings > Sections & apps > Apps.'); }]]; })));
+      if (gr.header) wrap.appendChild(h('h3', null, h('button', { type: 'button', class: 'gt', 'aria-expanded': shut ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name),
+        gear('group ' + gr.name, function () { return [['Rename group…', 'edit', function () { renameGroup(gr); }], ['Hide the group name', 'eyeoff', function () { groupPref(gr, { header: false }, 'Group name hidden. Show it again in Settings > Sections & apps > Apps.'); }], 'hr', ['Show all apps in one grid', 'grid', function () { setAppGroups(false); }]]; })));
       x.s.forEach(function (s) { (s.type === 'link' ? links : gd).appendChild(widget(s)); });
       if (gd.childNodes.length) wrap.appendChild(gd);
       if (links.childNodes.length) wrap.appendChild(links);
@@ -7423,6 +7436,11 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     clearTimeout(S.svcTimer); S.svcRun = false;
     setTimeout(pollServices, 0);
   };
+  function setAppGroups(on) {
+    if (!!S.L.apps.headers === on) return;
+    S.L.apps.headers = on; shell();
+    api('prefs', { kind: 'apps_view', value: { headers: on } }).then(function (j) { if (j.error) toast(j.error, true); });
+  }
   function groupPref(gr, val, msg) {
     Object.assign(gr, val); shell();
     return api('prefs', { kind: 'group', key: gr.id, value: val }).then(function (j) { if (j.error) { toast(j.error, true); return; } S.L = j.layout; shell(); if (msg) toast(msg); });
@@ -7825,7 +7843,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       orderList(c.dashboard.sections, function (s) {
         var o = SEC_OPTS[s.id];
         if (o) chevs[s.id] = h('button', { type: 'button', class: 'btn sm ghost sec-opt', 'aria-controls': 'und-so-' + s.id, onclick: function () { open[s.id] = !open[s.id]; if (ed.q) { ed.q = ''; filter.value = ''; ed.draw(); } else paint(); } }, h('span', { class: 'lbl' }, o), ic('chev'));
-        return [h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: s.visible, onchange: function (e) { s.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, TITLES[s.id]), h('span', { class: 'muted sm' }, ' · ' + SEC_DESC[s.id]))),
+        return [h('label', { class: 'switch t sec-sw', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: s.visible, onchange: function (e) { s.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, TITLES[s.id]), h('span', { class: 'muted sm' }, ' · ' + SEC_DESC[s.id]))),
           sIn(s, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']]), chevs[s.id] || h('span', { class: 'sec-opt-x' })];
       }, dirty, D.render, function (s) {
         if (!opts[s.id]) return null;
@@ -8495,7 +8513,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>c506713d4e902d2cc76a12a676435b84b2b5faa46a71d14a9bcfbad1d6b70520</SHA256>
+<SHA256>6ccd97042629eeb482c9b2e382a024f283dc3e929f5f4356c3c8b55de25e2e0e</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
