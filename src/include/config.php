@@ -567,7 +567,7 @@ function und_validate(array $cfg) {
     $where = '"' . $s['name'] . '" in "' . $g['name'] . '"';
     if (!empty($types[$s['type']][2]) && trim($s['url']) === '') $issues[] = ['level' => 'warn', 'msg' => "$where has no address."];
     $kr = und_ref_name($s['key'] ?? '');
-    if (in_array('key', $types[$s['type']][1] ?? [], true) && $s['type'] !== 'peanut' && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Sections & apps)."];
+    if (in_array('key', $types[$s['type']][1] ?? [], true) && !in_array($s['type'], ['peanut', 'customapi'], true) && (!$kr || (string)($vars[$kr] ?? '') === '')) $issues[] = ['level' => 'warn', 'msg' => "$where has no API key yet (Settings > Sections & apps)."];
     foreach (['url', 'href'] as $f) if (preg_match_all('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', $s[$f], $m)) foreach ($m[1] as $n) {
       $n = strtoupper($n);
       if (!isset($vars[$n]) && $n !== 'UNRAID_IP') $issues[] = ['level' => 'bad', 'msg' => "$where uses {{" . $n . '}}, which is not defined.'];

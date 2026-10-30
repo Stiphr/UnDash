@@ -355,7 +355,7 @@
     var sig = JSON.stringify([name, ip, os, ou.available, ou.latest, ou.staged, me.newer, me.latest]);
     if (R.sub._sig === sig) return; R.sub._sig = sig;
     clear(R.sub);
-    R.sub.appendChild(h('span', { class: 'ell', title: ip }, name + (ip && ip !== name ? ' · ' + ip : '')));
+    if (name) R.sub.appendChild(h('span', { class: 'vchip', title: ip && ip !== name ? ip : null }, name));
     if (os) {
       var osUp = ou.staged ? ['restart for ' + ou.staged, 'Unraid ' + ou.staged + ' is installed; it becomes active after a restart'] : ou.available ? [ou.latest + ' available', 'Unraid ' + ou.latest + ' is available'] : null;
       R.sub.appendChild(h('span', { class: 'vchip' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { if (S.boot.caps.os_update) osDialog(); else window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
@@ -2448,7 +2448,7 @@
     function swap(a, c) { var ia = a.g.services.indexOf(a.s), ic2 = c.g.services.indexOf(c.s); a.g.services[ia] = c.s; c.g.services[ic2] = a.s; dirty(); redraw(); }
     function row(x, list) {
       var s = x.s, T = D.types[s.type] || [s.type, [], false], c = D.creds[s.id] || {}, i = list.indexOf(x);
-      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && s.type !== 'peanut' && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
+      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && s.type !== 'peanut' && s.type !== 'customapi' && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
       var edit = function () { editService(D, s, x.g, false, redraw, dirty); };
       return h('div', { class: 'oi ae-row' + (s.hidden ? ' off' : '') },
         img(iconUrl(s.icon), '', 'web'),

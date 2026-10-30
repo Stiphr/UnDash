@@ -523,9 +523,10 @@ $iv = array_column(und_validate(und_normalize(['groups' => [['id' => 'aaaaaaaa',
   ['id' => 'd0000001', 'type' => 'radarr', 'name' => 'Radarr', 'url' => 'http://r', 'href' => '', 'key' => '{{RADARR_API_KEY}}'],
   ['id' => 'd0000002', 'type' => 'sonarr', 'name' => 'Sonarr', 'url' => 'http://s', 'href' => '', 'key' => '{{SONARR_API_KEY}}'],
   ['id' => 'd0000003', 'type' => 'prowlarr', 'name' => 'Prowlarr', 'url' => '', 'href' => ''],
-  ['id' => 'd0000004', 'type' => 'link', 'name' => 'Link', 'url' => '', 'href' => 'http://l']]]]])), 'msg');
+  ['id' => 'd0000004', 'type' => 'link', 'name' => 'Link', 'url' => '', 'href' => 'http://l'],
+  ['id' => 'd0000005', 'type' => 'customapi', 'name' => 'Custom', 'url' => 'http://c/api?apikey={{RADARR_API_KEY}}', 'href' => '']]]]])), 'msg');
 unset($GLOBALS['UND_TEST_ENV']);
-t('check configuration names apps without an address or a key', count($iv) === 3 && strpos(implode('|', $iv), '"Sonarr" in "G" has no API key') !== false && strpos(implode('|', $iv), '"Prowlarr" in "G" has no address') !== false, json_encode($iv));
+t('check configuration names apps without an address or a key (a custom API needs no key of its own)', count($iv) === 3 && strpos(implode('|', $iv), '"Sonarr" in "G" has no API key') !== false && strpos(implode('|', $iv), '"Prowlarr" in "G" has no address') !== false, json_encode($iv));
 
 group('links');
 $lv = und_layout_view(und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'G', 'services' => [
