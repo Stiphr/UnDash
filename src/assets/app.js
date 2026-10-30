@@ -1885,8 +1885,11 @@
     if (r.blocks && r.blocks.length) cb.appendChild(blocks(r.blocks));
     if (r.list) {
       var l = h('div', { class: 'lst' });
-      r.list.forEach(function (x) { l.appendChild(h('div', { class: 'r' }, x.label ? h('span', { class: 'lab' }, x.label) : null, h('span', { class: 't', title: x.title }, x.title), x.ts ? h('span', { class: 'when' }, rel(x.ts)) : (x.right ? h('span', { class: 'when' }, x.right) : null))); });
-      if (!r.list.length) l.appendChild(h('div', { class: 'muted sm' }, 'Nothing yet'));
+      r.list.forEach(function (x) {
+        var tt = x.title + (x.sub ? ' · ' + x.sub : ''), body = [x.title, x.sub ? h('span', { class: 'muted' }, ' ' + x.sub) : null];
+        l.appendChild(h('div', { class: 'r' }, x.label ? h('span', { class: 'lab' }, x.label) : null,
+          /^https?:\/\//i.test(x.href || '') ? h('a', { class: 't', href: x.href, target: '_blank', rel: 'noopener noreferrer', title: tt }, body) : h('span', { class: 't', title: tt }, body), x.ts ? h('span', { class: 'when' }, rel(x.ts)) : (x.right ? h('span', { class: 'when' }, x.right) : null))); });
+      if (!r.list.length) l.appendChild(h('div', { class: 'muted sm' }, r.empty || 'Nothing yet'));
       cb.appendChild(l);
     }
     if (r.calendar) {
@@ -2017,7 +2020,9 @@
     autobrr: 'approvedPushes, rejectedPushes, filters, indexers', wizarr: 'users, invites, pending, expired', qbittorrent: 'leech, download, seed, upload', qui: 'downloading, seeding, idle, crossseed, download, upload, instances', sabnzbd: 'rate, queue, timeleft',
     emby: 'movies, series, episodes, songs', jellyfin: 'movies, series, episodes, songs', plex: 'streams, albums, movies, tv', adguard: 'queries, blocked, filtered, latency',
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
-    ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
+    ups: 'battery_charge, ups_load, ups_status, runtime',
+    scrutiny: 'passed, failed, unknown, hottest', tdarr: 'queue, processed, errored, saved', unmanic: 'active, workers, pending', uptimekuma: 'up, down, uptime',
+    speedtest: 'download, upload, ping', weather: 'now, today, humidity, wind', gluetun: 'public_ip, country, region, city, port', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
   var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', playing: 'Active Plex, Emby, Jellyfin and Tautulli streams', requests: 'Overseerr / Jellyseerr requests, approve or decline', health: 'Every app and container web UI: status and latency', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
@@ -2279,7 +2284,8 @@
         row = h('div', { class: 'oi' + (p.hidden ? ' off' : '') },
           h('label', { class: 'switch', title: 'Show on the dashboard' }, h('input', { type: 'checkbox', checked: !p.hidden, 'aria-label': 'Show ' + it.name + ' on the dashboard', onchange: function (e) {
             p.hidden = !e.target.checked; row.classList.toggle('off', p.hidden); put(); counted(); } })),
-          img(iconUrl(p.icon || it.icon), '', dk ? 'box' : 'vm'),
+          h('button', { type: 'button', class: 'ico-btn', title: 'Pick an icon for ' + it.name, 'aria-label': 'Pick an icon for ' + it.name, onclick: function () { iconPicker(p.label || it.name, function (v) { p.icon = v; put(); draw(); }); } },
+            img(iconUrl(p.icon || it.icon), '', dk ? 'box' : 'vm')),
           h('span', { class: 't' }, h('span', { class: 'sdot ' + (it.state === 'running' ? 'ok' : 'na'), title: it.state || '' }), h('b', null, it.name)),
           h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
@@ -2446,18 +2452,23 @@
 
   /* ---- Apps: every app is added, changed, hidden and removed here. Addresses go to config.yaml, keys and passwords to .env (server side) ---- */
   var APP_CATS = [['Arr Stack', ['radarr', 'sonarr', 'lidarr', 'readarr', 'prowlarr', 'bazarr', 'autobrr', 'overseerr', 'wizarr']],
-    ['Downloads', ['qbittorrent', 'qui', 'sabnzbd']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar']],
-    ['Network and tools', ['adguard', 'pihole', 'npm', 'immich', 'peanut']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Other', ['customapi', 'link']]];
+    ['Downloads', ['qbittorrent', 'qui', 'sabnzbd']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar', 'tdarr', 'unmanic']],
+    ['Network and tools', ['adguard', 'pihole', 'npm', 'gluetun', 'immich', 'homeassistant', 'peanut']], ['Monitoring', ['scrutiny', 'uptimekuma', 'speedtest']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Widgets', ['weather', 'releases', 'bookmarks']], ['Other', ['customapi', 'link']]];
   var APP_PORT = { radarr: 7878, sonarr: 8989, lidarr: 8686, readarr: 8787, prowlarr: 9696, bazarr: 6767, autobrr: 7474, overseerr: 5055, wizarr: 5690, qbittorrent: 8080, qui: 7476, sabnzbd: 8080,
-    plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80 };
-  var APP_ICON = { adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
+    plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80,
+    scrutiny: 8080, tdarr: 8265, unmanic: 8888, uptimekuma: 3001, speedtest: 80, gluetun: 8000, homeassistant: 8123 };
+  var APP_ICON = { weather: '', releases: 'github', bookmarks: '', tdarr: 'tdarr.png', unmanic: 'unmanic.png', uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
   var KEY_WHERE = { radarr: 'Radarr: Settings > General', sonarr: 'Sonarr: Settings > General', lidarr: 'Lidarr: Settings > General', readarr: 'Readarr: Settings > General', prowlarr: 'Prowlarr: Settings > General',
     bazarr: 'Bazarr: Settings > General', overseerr: 'Overseerr / Jellyseerr: Settings > General', sabnzbd: 'SABnzbd: Config > General', qui: 'qui: Settings > API Keys', autobrr: 'autobrr: Settings > API Keys',
-    tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys' };
+    tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys',
+    tdarr: 'Tdarr: Tools > API keys (only when its login is on; else leave it empty)', speedtest: 'Speedtest Tracker: API Tokens (v1 and later; older versions need none)',
+    gluetun: 'Gluetun\'s control server settings (only if you set one; else leave it empty)', homeassistant: 'Home Assistant: your profile > Security > Long-lived access tokens',
+    releases: 'GitHub: Settings > Developer settings > Personal access tokens, with no scopes (optional: without one GitHub allows 60 checks an hour)' };
+  var KEY_OPT = { peanut: 1, customapi: 1, tdarr: 1, speedtest: 1, gluetun: 1, releases: 1 };     // apps that work without a key
   var ZONE_NAME = { arr: 'Arr Stack', downloads: 'Downloads', media: 'Media', overview: 'System overview', apps: 'Apps' };
   function appIcon(t) { var n = APP_ICON[t] !== undefined ? APP_ICON[t] : t; return n ? 'sh-' + n : ''; }
   function appZone(D, s) { return s.type === 'customapi' && /get_recently_added/.test(s.url || '') ? 'media' : (D.zones || {})[s.type] || 'apps'; }
-  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : 'API key', username: 'Username', password: 'Password' }[k]; }
+  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : t === 'homeassistant' ? 'Access token' : t === 'speedtest' ? 'API token' : t === 'releases' ? 'GitHub token' : 'API key', username: 'Username', password: 'Password' }[k]; }
 
   /* the app lists in Settings > Sections & apps: one per section (zone), plus the groups of the Apps section.
      Every list redraws together, so moving or finding an app updates all of them. */
@@ -2470,7 +2481,7 @@
     function swap(a, c) { var ia = a.g.services.indexOf(a.s), ic2 = c.g.services.indexOf(c.s); a.g.services[ia] = c.s; c.g.services[ic2] = a.s; dirty(); redraw(); }
     function row(x, list) {
       var s = x.s, T = D.types[s.type] || [s.type, [], false], c = D.creds[s.id] || {}, i = list.indexOf(x);
-      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && s.type !== 'peanut' && s.type !== 'customapi' && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
+      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && !KEY_OPT[s.type] && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
       var edit = function () { editService(D, s, x.g, false, redraw, dirty); };
       return h('div', { class: 'oi ae-row' + (s.hidden ? ' off' : '') },
         img(iconUrl(s.icon), '', 'web'),
@@ -2538,12 +2549,36 @@
     return E;
   }
 
+  /* search selfh.st and dashboard-icons (the server keeps their name lists) and pick one; onpick gets the Icon field value */
+  function iconPicker(q0, onpick) {
+    var grid = h('div', { class: 'ipick' }), note = h('div', { class: 'muted sm', role: 'status' }), t = null, seq = 0, m;
+    var find = h('input', { type: 'search', value: q0 || '', placeholder: 'Search icons… (plex, nas, home)', 'aria-label': 'Search icons', oninput: function () { clearTimeout(t); t = setTimeout(look, 250); } });
+    function look() {
+      var q = find.value.trim(), my = ++seq;
+      if (!q) { clear(grid); txt(note, 'Type a name to search about 5,000 icons.'); return; }
+      txt(note, 'Searching…');
+      api('icons', { q: q, max: 80 }).then(function (r) {
+        if (my !== seq) return;
+        clear(grid);
+        if (r.error) { txt(note, r.error); return; }
+        txt(note, r.icons.length ? (r.more ? 'The first ' + r.icons.length + ' matches. Type more to narrow it down.' : r.icons.length + ' match' + (r.icons.length > 1 ? 'es' : '')) : 'No icon matches. An image URL works too.');
+        r.icons.forEach(function (x) {
+          grid.appendChild(h('button', { type: 'button', title: x.n + ' (' + x.s + ': ' + x.v + ')', onclick: function () { m.close(); onpick(x.v); } },
+            img(iconUrl(x.v), '', 'web'), h('span', { class: 'ell' }, x.n)));
+        });
+      });
+    }
+    m = modal('Pick an icon', h('div', null, h('div', { style: { 'margin-bottom': '8px' } }, find), note, grid), [btn('Cancel', function () { m.close(); })], true);
+    look();
+  }
+
   /* containers that look like an app type UnDash reads, and are not added yet. Matched on the image name
      (lscr.io/linuxserver/radarr, binhex/arch-qbittorrentvpn …), then on the container name */
   var FOUND_RE = [['overseerr', /^(overseerr|jellyseerr|seerr)$/], ['plex', /^(plex|pms-docker|plex-media-server|plexmediaserver)$/], ['emby', /^(emby|embyserver)$/],
     ['immich', /^immich(-server)?$/], ['adguard', /^adguard-?home$/], ['pihole', /^pi-?hole$/], ['npm', /^nginx-proxy-manager$/], ['peanut', /^peanut$/],
     ['qbittorrent', /^qbittorrent$/], ['qui', /^qui$/], ['sabnzbd', /^sabnzbd$/], ['jellyfin', /^jellyfin$/], ['tautulli', /^tautulli$/], ['radarr', /^radarr$/],
-    ['sonarr', /^sonarr$/], ['lidarr', /^lidarr$/], ['readarr', /^readarr$/], ['bazarr', /^bazarr$/], ['prowlarr', /^prowlarr$/], ['autobrr', /^autobrr$/], ['wizarr', /^wizarr$/]];
+    ['sonarr', /^sonarr$/], ['scrutiny', /^scrutiny(-web)?$/], ['tdarr', /^tdarr$/], ['unmanic', /^unmanic$/], ['uptimekuma', /^uptime-?kuma$/],
+    ['speedtest', /^speedtest-tracker$/], ['gluetun', /^gluetun$/], ['homeassistant', /^home-?assistant$/], ['lidarr', /^lidarr$/], ['readarr', /^readarr$/], ['bazarr', /^bazarr$/], ['prowlarr', /^prowlarr$/], ['autobrr', /^autobrr$/], ['wizarr', /^wizarr$/]];
   function foundType(c) {
     var norm = function (v) { return String(v || '').toLowerCase().replace(/^(arch-|docker-)/, '').replace(/-?vpn$/, ''); };
     var img0 = norm(String(c.image || '').split('@')[0].split('/').pop().split(':')[0]), nm = norm(c.name);
@@ -2562,7 +2597,8 @@
       var url = origin(c.webui), ports = c.ports || {};
       if (!url) {
         var hp = 0;
-        Object.keys(ports).forEach(function (k) { if (parseInt(k, 10) === APP_PORT[t] || !hp) hp = ports[k]; });
+        // Gluetun publishes the ports of the apps behind it: only its control server port is its own
+        Object.keys(ports).forEach(function (k) { if (parseInt(k, 10) === APP_PORT[t] || (!hp && t !== 'gluetun')) hp = ports[k]; });
         if (hp) url = 'http://' + location.hostname + ':' + hp;
       }
       var label = D.types[t][0].replace(/ \(.*\)$/, '');
@@ -2626,6 +2662,7 @@
       var typeSel = h('select', { onchange: function (e) { var was = s.type; s.type = e.target.value; s.fields = []; s.options = {}; if (!s.icon || s.icon === appIcon(was)) s.icon = appIcon(s.type); draw(); } },
         Object.keys(D.types).map(function (k) { return h('option', { value: k, selected: k === s.type }, D.types[k][0]); }));
       var icoPrev = h('span', { class: 'ae-ico' }, img(iconUrl(s.icon), '', 'web'));
+      var icoBtn = btn('Browse', function () { iconPicker(s.name || T[0].replace(/ \(.*\)$/, ''), function (v) { s.icon = v; draw(); }); }, 'sm', 'search', 'Search icons for ' + (s.name || 'this app'));
       form.appendChild(h('div', { class: 'grid2' }, F('Name', tIn(s, 'name', noop, T[0])), F('Type', typeSel, 'Shows in ' + (z === 'apps' ? 'Apps' : ZONE_NAME[z]) + '.')));
       if (T[2]) form.appendChild(F('Address', tIn(s, 'url', noop, 'http://192.168.1.10:' + port), 'Where UnDash reaches ' + T[0].replace(/ \(.*\)$/, '') + ', from the server: the IP or host name and the port, e.g. http://192.168.1.10:' + port + '.'));
       if ((T[1] || []).length) {
@@ -2644,7 +2681,7 @@
       form.appendChild(h('div', { class: 'ae-sub' }, 'On the dashboard'));
       form.appendChild(h('div', { class: 'grid2' },
         F('Link (opens on click)', tIn(s, 'href', noop, T[2] ? 'Same as the address' : 'https://…'), T[2] ? 'Leave empty to open the address. Use it for a public or HTTPS address.' : null),
-        F('Icon', h('div', { class: 'sec-in' }, icoPrev, tIn(s, 'icon', function () { clear(icoPrev).appendChild(img(iconUrl(s.icon), '', 'web')); }, 'sh-radarr')), 'sh-NAME (selfh.st icons), NAME.png (dashboard-icons) or an image URL.'),
+        F('Icon', h('div', { class: 'sec-in' }, icoPrev, tIn(s, 'icon', function () { clear(icoPrev).appendChild(img(iconUrl(s.icon), '', 'web')); }, 'sh-radarr'), icoBtn), 'Browse to search, or type sh-NAME (selfh.st icons), NAME.png (dashboard-icons) or an image URL.'),
         z === 'apps' && D.cfg.groups.length > 1 ? F('Group', h('select', { onchange: function (e) { gid = e.target.value; } }, D.cfg.groups.map(function (g) { return h('option', { value: g.id, selected: g.id === gid }, g.name); }))) : null,
         z === 'apps' ? F('Description', tIn(s, 'description', noop, 'Optional')) : null,
         z === 'apps' ? F('Card width', sIn(s, 'span', noop, [[1, 'Normal'], [2, 'Double']])) : null));
@@ -2668,16 +2705,32 @@
       }
       if (s.type === 'tautulli_recent') adv.appendChild(h('div', { class: 'grid2' }, F('Media type', tIn(s.options, 'media_type', noop, 'movie, episode, track…')), F('Library section id', tIn(s.options, 'section_id', noop, 'optional')), F('Count', tIn(s.options, 'count', noop, '6'))));
       if (s.type === 'ups') form.appendChild(F('UPS name', tIn(s.options, 'ups', noop, D.cfg.general.ups_name)));
+      if (s.type === 'weather') form.appendChild(h('div', { class: 'grid2' }, F('Place', tIn(s.options, 'location', noop, 'Amsterdam'), 'A town or city, or latitude, longitude. From Open-Meteo, no key needed.'),
+        F('Units', sIn(s.options, 'units', noop, [['metric', '°C, km/h'], ['imperial', '°F, mph']]))));
+      var lines = function (k, ph, lab, hint) { return F(lab, h('textarea', { rows: 5, spellcheck: 'false', placeholder: ph, oninput: function (e) { s.options[k] = e.target.value; } }, s.options[k] || ''), hint); };
+      if (s.type === 'releases') form.appendChild(lines('repos', 'immich-app/immich\nautobrr/qui', 'Repositories', 'One per line: owner/repo or its GitHub address, up to 20. Each is checked at most once an hour.'));
+      if (s.type === 'bookmarks') form.appendChild(lines('links', 'Router | http://192.168.1.1\nhttps://selfh.st', 'Links', 'One per line: Title | https://… or just the address. Only http and https links are kept.'));
+      if (s.type === 'uptimekuma') form.appendChild(F('Status page slug', tIn(s.options, 'slug', noop, 'home'), 'Uptime Kuma reads a status page: the end of its address, /status/NAME. Make one under Status Pages first.'));
+      if (s.type === 'homeassistant') form.appendChild(F('Entities', h('textarea', { rows: 3, spellcheck: 'false', placeholder: 'sensor.living_room_temperature\nlight.kitchen', oninput: function (e) { s.options.entities = e.target.value; } }, s.options.entities || ''),
+        'Entity ids, one per line, up to 8 (Developer tools > States lists them). Empty shows people home, lights on and switches on.'));
       if (s.type === 'emby' || s.type === 'jellyfin') adv.appendChild(cIn(s.options, 'hide_blocks', noop, 'Only show the streams (hide the library counts)'));
       if (s.type === 'customapi') {
         var js = function (k, def, lab) { var t = h('textarea', { rows: 6, spellcheck: 'false', 'aria-label': lab, oninput: function (e) { try { s.options[k] = JSON.parse(e.target.value || def); e.target.style.borderColor = ''; } catch (x) { e.target.style.borderColor = 'var(--bad)'; } } }); t.value = JSON.stringify(s.options[k] || JSON.parse(def), null, 2); return t; };
-        form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Blocks'], ['list', 'List']])), F('Method', tIn(s.options, 'method', noop, 'GET'))));
+        form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Numbers (blocks)'], ['items', 'A row for each item of a list'], ['list', 'Fixed rows']], draw)), F('Method', tIn(s.options, 'method', noop, 'GET'))));
         form.appendChild(F('Headers (JSON)', js('headers', '{}', 'Headers'), '{{KEY}} is replaced by the API key above, e.g. {"X-Api-Key": "{{KEY}}"}.'));
-        form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}]. Formats: number, text, bytes, rate, percent; lists can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
+        if (s.options.display === 'items') {
+          form.appendChild(h('div', { class: 'grid2' },
+            F('List in the answer', tIn(s.options, 'items', noop, 'data.results'), 'Where the list is, as a path. Empty: the answer itself is the list.'),
+            F('Rows', tIn(s.options, 'limit', noop, '10', 'number', { min: 1, max: 50 })),
+            F('Title', tIn(s.options, 'title', noop, '{name}')), F('Second line', tIn(s.options, 'sub', noop, '{status} · {size|bytes}')),
+            F('Right side', tIn(s.options, 'right', noop, '{progress|percent}'), 'Not shown when there is a date.'), F('Date field', tIn(s.options, 'date', noop, 'added'), 'Shown as "2 h ago". ISO dates, seconds or milliseconds.'),
+            F('Link', tIn(s.options, 'link', noop, 'https://example.com/item/{id}'), 'Optional; opens when the row is clicked.')));
+          form.appendChild(h('div', { class: 'hint' }, 'In the boxes, {field} is replaced by that field of each item (a path like {user.name} works). Add a format after a bar: {size|bytes}, {speed|rate}, {done|percent}, {count|number}, {value|round}, {when|date}, {state|upper}.'));
+        } else form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}] or a template: {"template": "{data.up} / {data.total}", "label": "Up"}. Formats: number, text, bytes, rate, percent; fixed rows can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
       }
       if (adv.childNodes.length) form.appendChild(h('details', { class: 'ae-adv' }, h('summary', null, 'More options'), adv));
       var res = h('div', { role: 'status' });
-      if (T[2] || s.type === 'calendar' || s.type === 'customapi' || s.type === 'ups') form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
+      if (T[2] || /^(calendar|customapi|ups|weather|releases|bookmarks)$/.test(s.type)) form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
         clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
         var cfg = JSON.parse(JSON.stringify(D.cfg)), creds = JSON.parse(JSON.stringify(D.creds));
         var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0] || cfg.groups[0];
@@ -2686,7 +2739,7 @@
         api('test', { config: cfg, creds: creds, shared: sharedOut(D), id: s.id }).then(function (r) {
           clear(res);
           if (r.error) res.appendChild(h('div', { class: 'banner bad' }, r.error));
-          else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' items' : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
+          else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' rows' + (r.list.length ? ': ' + r.list.slice(0, 3).map(function (x) { return x.title + (x.sub ? ' (' + x.sub + ')' : ''); }).join(', ') + (r.list.length > 3 ? '…' : '') : '') : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
         });
       }, '', 'check'), h('span', { class: 'muted sm' }, 'Tries it with what is filled in here; nothing is saved.')));
       form.appendChild(res);

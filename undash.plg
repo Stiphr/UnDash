@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.7.6">
+<!ENTITY version "0.8.0">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,15 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.8.0
+- Icon picker: "Browse" next to an app's Icon field, and a click on a container's or VM's icon in Settings, searches about 5,000 icons from selfh.st icons and dashboard-icons by name. The server downloads the two name lists once a week; the images load from the same CDN as before.
+- New apps: Scrutiny (disks passed / failed, hottest disk, failed disks listed), Tdarr (queue, processed, errored, space saved), Unmanic (workers, pending), Uptime Kuma (a status page's monitors up and down, uptime, down monitors listed), Speedtest Tracker (latest download, upload and ping; old and new API), Gluetun (VPN public IP, location, forwarded port) and Home Assistant (chosen entities, or people home, lights and switches on). Each is also found among your containers.
+- New widgets (Add app &gt; Widgets): Weather from Open-Meteo (no key; a town or coordinates, °C or °F) with today and the next three days; GitHub releases, the latest release of the repositories you list, newest first, checked at most once an hour (a GitHub token is optional); Bookmarks, a list of links (Title | https://…).
+- Lists in app cards can link their rows and show a second, quieter line.
+- Custom API: a new display, "A row for each item of a list", turns any JSON list into rows: where the list is, then Title, Second line, Right side, Date and Link written with fields in braces ({name}, {size|bytes}, {user.name}). Formats: bytes, rate, percent, number, round, date, upper, lower. Number blocks can use a template too ({"template": "{up} / {total}"}). Test shows the first rows.
+- Tdarr and Unmanic get their icons (selfh.st has them as PNG only).
+- Fixed: on PHP 8.5 a deprecation notice could break an answer from the server (curl_close).
+
 ###0.7.6
 - Add apps from your containers: UnDash spots containers it can read (Radarr, Sonarr, qBittorrent, Plex, Immich, AdGuard Home and the other supported apps), matched on the image name, then the container name. They are listed under "Found on your server" in Settings &gt; Sections &amp; apps and at the top of the Add app window. Pick one and the name, type, icon and address (from the container's web UI or published port) are filled in; only the key or login is left to paste.
 - Containers whose app is already added (same address, same port or same name) are not listed. The x hides the list until Settings is opened again.
@@ -202,7 +211,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.7.6');
+define('UND_VERSION', '0.8.0');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -370,13 +379,13 @@ unset($__ident);
 
 } // UND_LIB_LOADED
 
-foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'health', 'playing', 'requests'] as $__m) {
+foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'health', 'playing', 'requests', 'icons'] as $__m) {
   $__f = __DIR__ . '/' . $__m . '.php';
   if (is_file($__f)) require_once $__f;
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>6dad621b1cfc2700aa8252519d70f0f2f08043d9a36f1c979f2a002464a9b5c4</SHA256>
+<SHA256>6ee7ec4d0dbb2407e0fba1adc442578769a19f749a4768831709d957195d5b2f</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -411,6 +420,9 @@ function und_types() {
     'emby' => ['Emby', ['key'], true], 'jellyfin' => ['Jellyfin', ['key'], true], 'plex' => ['Plex', ['key'], true], 'tautulli' => ['Tautulli', ['key'], true],
     'adguard' => ['AdGuard Home', ['username', 'password'], true], 'pihole' => ['Pi-hole', ['key'], true], 'npm' => ['Nginx Proxy Manager', ['username', 'password'], true],
     'immich' => ['Immich', ['key'], true], 'peanut' => ['PeaNUT', ['key', 'username', 'password'], true],
+    'scrutiny' => ['Scrutiny', [], true], 'tdarr' => ['Tdarr', ['key'], true], 'unmanic' => ['Unmanic', [], true], 'uptimekuma' => ['Uptime Kuma', [], true],
+    'speedtest' => ['Speedtest Tracker', ['key'], true], 'gluetun' => ['Gluetun', ['key'], true], 'homeassistant' => ['Home Assistant', ['key'], true],
+    'weather' => ['Weather', [], false], 'releases' => ['GitHub releases', ['key'], false], 'bookmarks' => ['Bookmarks', [], false],
     'customapi' => ['Custom API (JSON)', ['key'], true], 'link' => ['Link only', [], false],
   ];
 }
@@ -973,7 +985,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>8cd2fa449e9745f07c6121e38361944520eda32c9ee8fb62b5f28c9b4aad2574</SHA256>
+<SHA256>3ed7ee18a49d9e2eadf879c349f2b05216882b08144b5c6eaebb0be75e991631</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -1661,7 +1673,7 @@ function und_http($method, $url, array $o = []) {
   $body = curl_exec($ch);
   $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
   $err = $body === false ? curl_error($ch) : '';
-  curl_close($ch);
+  if (PHP_VERSION_ID < 80000) curl_close($ch);      // a no-op since PHP 8.0, deprecated in 8.5
   $body = $body === false ? '' : $body;
   return ['code' => $code, 'body' => $body, 'json' => json_decode($body, true), 'err' => $err, 'headers' => $resp];
 }
@@ -1965,6 +1977,227 @@ function und_w_peanut($s) {
                        und_b('ups_status', 'UPS status', und_ups_status((string)($j['ups.status'] ?? '')), 'text')]];
 }
 
+/* ---------- monitoring and tools ---------- */
+
+/** Scrutiny: disks by SMART result. A disk counts as failed by the same rule as Scrutiny's own page (its status threshold setting). */
+function und_w_scrutiny($s) {
+  $j = und_get(und_u($s['url'], '/api/summary'));
+  try { $thr = (int)(und_get(und_u($s['url'], '/api/settings'))['settings']['metrics']['status_threshold'] ?? 3); } catch (Exception $e) { $thr = 3; }
+  $pass = 0; $bad = 0; $unk = 0; $hot = null; $list = [];
+  foreach ((array)($j['data']['summary'] ?? []) as $d) {
+    if (!is_array($d) || !empty($d['device']['archived'])) continue;
+    $st = (int)($d['device']['device_status'] ?? -1);
+    if ($st < 0 || $st > 3) $unk++;
+    elseif ($st > 0 && ($thr === 3 || $st === $thr || $st === 3)) {
+      $bad++;
+      $list[] = ['title' => trim(($d['device']['device_name'] ?? '') . ' ' . ($d['device']['model_name'] ?? '')) ?: 'Disk', 'right' => $st === 1 ? 'SMART failed' : ($st === 2 ? 'Scrutiny failed' : 'Failed')];
+    } else $pass++;
+    $t = (int)($d['smart']['temp'] ?? 0);
+    if ($t > 0 && ($hot === null || $t > $hot)) $hot = $t;
+  }
+  $r = ['blocks' => [und_b('passed', 'Passed', $pass), und_b('failed', 'Failed', $bad), und_b('unknown', 'Unknown', $unk), und_b('hottest', 'Hottest', $hot === null ? null : $hot . ' °C', 'text')]];
+  if ($list) $r['list'] = $list;
+  return $r;
+}
+
+/** Tdarr: transcode and health-check queues (tables 1-3 transcode, 4-6 health check), counted like Tdarr's own tables. */
+function und_w_tdarr($s) {
+  $h = ['Content-Type' => 'application/json'];
+  if ($s['key'] !== '') $h['x-api-key'] = $s['key'];
+  $j = und_get(und_u($s['url'], '/api/v2/cruddb'), ['method' => 'POST', 'headers' => $h, 'body' => json_encode(['data' => ['collection' => 'StatisticsJSONDB', 'mode' => 'getById', 'docID' => 'statistics']])]);
+  $n = function ($i) use ($j) { return (int)($j['table' . $i . 'ViewableCount'] ?? 0) ?: (int)($j['table' . $i . 'Count'] ?? 0); };
+  return ['blocks' => [und_b('queue', 'Queue', $n(1) + $n(4)), und_b('processed', 'Processed', $n(2) + $n(5)), und_b('errored', 'Errored', $n(3) + $n(6)),
+                       und_b('saved', 'Saved', (float)($j['sizeDiff'] ?? 0) * 1e9, 'bytes')]];
+}
+
+function und_w_unmanic($s) {
+  $w = und_get(und_u($s['url'], '/unmanic/api/v2/workers/status'));
+  $p = und_get(und_u($s['url'], '/unmanic/api/v2/pending/tasks'), ['method' => 'POST', 'body' => '{}', 'headers' => ['Content-Type' => 'application/json']]);
+  $all = (array)($w['workers_status'] ?? []);
+  $busy = count(array_filter($all, function ($x) { return is_array($x) && empty($x['idle']); }));
+  return ['blocks' => [und_b('active', 'Active', $busy), und_b('workers', 'Workers', count($all)), und_b('pending', 'Pending', (int)($p['recordsTotal'] ?? 0))]];
+}
+
+/** Uptime Kuma: a status page's monitors (Kuma's API needs no key for a published status page). */
+function und_w_uptimekuma($s) {
+  $slug = trim((string)($s['options']['slug'] ?? ''));
+  if ($slug === '') throw new Exception('Set the status page slug: the end of its address, /status/NAME.');
+  if (!preg_match('/^[A-Za-z0-9_-]{1,100}$/', $slug)) throw new Exception('The status page slug can only have letters, numbers, - and _.');
+  $page = und_get(und_u($s['url'], '/api/status-page/' . $slug));
+  $hb = und_get(und_u($s['url'], '/api/status-page/heartbeat/' . $slug));
+  $names = [];
+  foreach ((array)($page['publicGroupList'] ?? []) as $g) foreach ((array)($g['monitorList'] ?? []) as $m) if (isset($m['id'])) $names[(string)$m['id']] = (string)($m['name'] ?? '');
+  $up = 0; $down = 0; $list = [];
+  foreach ((array)($hb['heartbeatList'] ?? []) as $id => $beats) {
+    $last = is_array($beats) && $beats ? end($beats) : null;
+    $st = is_array($last) ? (int)($last['status'] ?? 0) : 0;
+    if ($st === 1) $up++;
+    elseif ($st !== 3) { $down++; $list[] = ['title' => $names[(string)$id] ?? ('Monitor ' . $id), 'right' => $st === 2 ? 'pending' : 'down']; }   // 3 = maintenance
+  }
+  $ups = array_filter((array)($hb['uptimeList'] ?? []), 'is_numeric');
+  $r = ['blocks' => [und_b('up', 'Up', $up), und_b('down', 'Down', $down), und_b('uptime', 'Uptime', $ups ? round(array_sum($ups) / count($ups) * 100, 1) : null, 'pct')]];
+  if ($list) $r['list'] = $list;
+  if (!empty($page['incident']['title'])) $r['list'] = array_merge([['title' => (string)$page['incident']['title'], 'right' => 'incident']], $r['list'] ?? []);
+  return $r;
+}
+
+/** Speedtest Tracker: the latest result. v1 and later answer /api/v1 with an API token (bytes/s); older versions /api/speedtest/latest (Mbit/s). */
+function und_w_speedtest($s) {
+  $d = null;
+  if ($s['key'] !== '') {
+    $r = und_http('GET', und_u($s['url'], '/api/v1/results/latest'), ['headers' => ['Authorization' => 'Bearer ' . $s['key'], 'Accept' => 'application/json']]);
+    if ($r['code'] === 401 || $r['code'] === 403) throw new Exception('Not authorised (HTTP ' . $r['code'] . '): check the API token and that it may read results.');
+    if ($r['code'] === 200 && isset($r['json']['data'])) $d = ['down' => (float)($r['json']['data']['download'] ?? 0), 'up' => (float)($r['json']['data']['upload'] ?? 0), 'ping' => $r['json']['data']['ping'] ?? null];
+  }
+  if ($d === null) {
+    $j = und_get(und_u($s['url'], '/api/speedtest/latest'), ['headers' => ['Accept' => 'application/json']]);
+    if (!isset($j['data'])) throw new Exception('No speed test result yet.');
+    $d = ['down' => (float)($j['data']['download'] ?? 0) * 125000, 'up' => (float)($j['data']['upload'] ?? 0) * 125000, 'ping' => $j['data']['ping'] ?? null];
+  }
+  return ['blocks' => [und_b('download', 'Download', $d['down'], 'rate'), und_b('upload', 'Upload', $d['up'], 'rate'), und_b('ping', 'Ping', $d['ping'] === null ? null : (float)$d['ping'], 'ms')]];
+}
+
+/** Gluetun: the VPN's public address, from its control server (port 8000). The forwarded port only when there is one. */
+function und_w_gluetun($s) {
+  $o = $s['key'] !== '' ? ['headers' => ['X-API-Key' => $s['key']]] : [];
+  $j = und_get(und_u($s['url'], '/v1/publicip/ip'), $o);
+  $b = [und_b('public_ip', 'Public IP', (string)($j['public_ip'] ?? ''), 'text'), und_b('country', 'Country', (string)($j['country'] ?? ''), 'text'),
+        und_b('region', 'Region', (string)($j['region'] ?? ''), 'text'), und_b('city', 'City', (string)($j['city'] ?? ''), 'text')];
+  foreach (['/v1/portforward', '/v1/openvpn/portforwarded'] as $p) {
+    $r = und_http('GET', und_u($s['url'], $p), $o);
+    if ($r['code'] === 200 && !empty($r['json']['port'])) { $b[] = und_b('port', 'Port', (int)$r['json']['port'], 'text'); break; }
+  }
+  return ['blocks' => $b];
+}
+
+/** Home Assistant: chosen entities' states, or people home, lights on and switches on. Needs a long-lived access token. */
+function und_w_homeassistant($s) {
+  $h = ['headers' => ['Authorization' => 'Bearer ' . $s['key'], 'Content-Type' => 'application/json']];
+  $ids = preg_split('/[\s,]+/', (string)($s['options']['entities'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
+  $b = [];
+  if ($ids) {
+    foreach (array_slice($ids, 0, 8) as $id) {
+      if (!preg_match('/^[a-z0-9_]+\.[a-z0-9_]+$/', $id)) throw new Exception('Not an entity id: ' . und_clip($id, 60) . ' (like sensor.living_room_temperature).');
+      $j = und_get(und_u($s['url'], '/api/states/' . $id), $h);
+      $unit = (string)($j['attributes']['unit_of_measurement'] ?? '');
+      $b[] = und_b(str_replace('.', '_', $id), und_clip((string)($j['attributes']['friendly_name'] ?? $id), 40), trim((string)($j['state'] ?? '') . ' ' . $unit), 'text');
+    }
+    return ['blocks' => $b];
+  }
+  foreach (['people_home' => ['People home', 'person', 'home'], 'lights_on' => ['Lights on', 'light', 'on'], 'switches_on' => ['Switches on', 'switch', 'on']] as $k => $q) {
+    $tpl = "{{ states.$q[1]|selectattr('state','equalto','$q[2]')|list|length }} / {{ states.$q[1]|list|length }}";
+    $r = und_get(und_u($s['url'], '/api/template'), $h + ['method' => 'POST', 'body' => json_encode(['template' => $tpl]), 'raw' => true]);
+    $b[] = und_b($k, $q[0], und_clip(trim($r['body']), 20), 'text');
+  }
+  return ['blocks' => $b];
+}
+
+/* ---------- widgets that need no app of your own ---------- */
+
+/** A JSON file in the temp folder, reused while younger than $ttl seconds; $fetch fills it. Stale data is better than none when the fetch fails. */
+function und_cached($name, $ttl, callable $fetch) {
+  $f = und_tmp($name);
+  $old = und_read_json($f, null);
+  if (is_array($old) && time() - (int)($old['at'] ?? 0) < $ttl) return $old['data'];
+  try { $data = $fetch(); }
+  catch (Exception $e) { if (is_array($old)) return $old['data']; throw $e; }
+  und_write_json($f, ['at' => time(), 'data' => $data]);
+  return $data;
+}
+
+/** WMO weather codes, as Open-Meteo reports them. */
+function und_wmo($c) {
+  $c = (int)$c;
+  $t = [0 => 'Clear', 1 => 'Mostly clear', 2 => 'Partly cloudy', 3 => 'Cloudy', 45 => 'Fog', 48 => 'Freezing fog', 51 => 'Light drizzle', 53 => 'Drizzle', 55 => 'Heavy drizzle',
+        56 => 'Freezing drizzle', 57 => 'Freezing drizzle', 61 => 'Light rain', 63 => 'Rain', 65 => 'Heavy rain', 66 => 'Freezing rain', 67 => 'Freezing rain', 71 => 'Light snow', 73 => 'Snow',
+        75 => 'Heavy snow', 77 => 'Snow grains', 80 => 'Showers', 81 => 'Showers', 82 => 'Heavy showers', 85 => 'Snow showers', 86 => 'Snow showers', 95 => 'Thunderstorm', 96 => 'Thunderstorm, hail', 99 => 'Thunderstorm, hail'];
+  return $t[$c] ?? 'Weather ' . $c;
+}
+
+/** Weather from Open-Meteo (no key). The place is a name (looked up once) or "latitude, longitude". */
+function und_w_weather($s) {
+  $o = $s['options'];
+  $place = trim((string)($o['location'] ?? ''));
+  if ($place === '') throw new Exception('Set a place: a town or city, or latitude, longitude.');
+  if (preg_match('/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/', $place, $m)) { $lat = (float)$m[1]; $lon = (float)$m[2]; }
+  else {
+    $g = und_cached('geo-' . md5(strtolower($place)) . '.json', 30 * 86400, function () use ($place) {
+      $j = und_get('https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=' . rawurlencode(und_clip($place, 100)));
+      if (empty($j['results'][0])) throw new Exception('No place called "' . und_clip($place, 60) . '" was found. Try the city name alone, or latitude, longitude.');
+      return ['lat' => (float)$j['results'][0]['latitude'], 'lon' => (float)$j['results'][0]['longitude']];
+    });
+    $lat = $g['lat']; $lon = $g['lon'];
+  }
+  $imp = ($o['units'] ?? '') === 'imperial';
+  $q = 'latitude=' . round($lat, 3) . '&longitude=' . round($lon, 3) . '&timezone=auto&forecast_days=4'
+     . '&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m'
+     . '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' . ($imp ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '');
+  $j = und_cached('weather-' . md5($q) . '.json', 600, function () use ($q) { return und_get('https://api.open-meteo.com/v1/forecast?' . $q); });
+  $c = (array)($j['current'] ?? []); $d = (array)($j['daily'] ?? []);
+  $deg = function ($v) { return $v === null ? '-' : round((float)$v) . '°'; };
+  $r = ['blocks' => [und_b('now', und_wmo($c['weather_code'] ?? -1), $deg($c['temperature_2m'] ?? null), 'text'),
+    und_b('today', 'Today', $deg($d['temperature_2m_max'][0] ?? null) . ' / ' . $deg($d['temperature_2m_min'][0] ?? null), 'text'),
+    und_b('humidity', 'Humidity', isset($c['relative_humidity_2m']) ? (float)$c['relative_humidity_2m'] : null, 'pct'),
+    und_b('wind', 'Wind', isset($c['wind_speed_10m']) ? round((float)$c['wind_speed_10m']) . ($imp ? ' mph' : ' km/h') : null, 'text')], 'list' => []];
+  for ($i = 1; $i < count((array)($d['time'] ?? [])); $i++) {
+    $rain = $d['precipitation_probability_max'][$i] ?? null;
+    $r['list'][] = ['title' => date('l', strtotime((string)$d['time'][$i])), 'sub' => und_wmo($d['weather_code'][$i] ?? -1) . ($rain ? ' · ' . (int)$rain . '% rain' : ''),
+                    'right' => $deg($d['temperature_2m_max'][$i] ?? null) . ' / ' . $deg($d['temperature_2m_min'][$i] ?? null)];
+  }
+  return $r;
+}
+
+/** The latest release of each GitHub repository listed ("owner/repo" or its address). Each is asked at most once an hour:
+ *  without a token GitHub allows 60 requests an hour per address. */
+function und_w_releases($s) {
+  $repos = [];
+  foreach (preg_split('/[\s,]+/', (string)($s['options']['repos'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) as $x) {
+    $x = preg_replace('#^(https?://)?(www\.)?github\.com/#i', '', rtrim($x, '/'));
+    if (!preg_match('#^([A-Za-z0-9_.-]{1,100})/([A-Za-z0-9_.-]{1,100})$#', $x, $m) || $m[2] === '.' || $m[2] === '..') throw new Exception('Not a GitHub repository: ' . und_clip($x, 80) . ' (write owner/repo).');
+    $repos[strtolower($x)] = $x;
+  }
+  if (!$repos) throw new Exception('List the repositories to follow, like immich-app/immich.');
+  $h = ['headers' => ['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => '2022-11-28'] + ($s['key'] !== '' ? ['Authorization' => 'Bearer ' . $s['key']] : [])];
+  $list = [];
+  foreach (array_slice(array_values($repos), 0, 20) as $repo) {
+    $rel = und_cached('gh-' . md5(strtolower($repo)) . '.json', 3600, function () use ($repo, $h) {
+      $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases/latest', $h);
+      if ($r['code'] === 404) {      // only pre-releases, or no releases at all
+        $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases?per_page=1', $h);
+        if ($r['code'] === 200) return is_array($r['json'][0] ?? null) ? $r['json'][0] : ['none' => true];
+      }
+      if ($r['err'] !== '') throw new Exception(und_redact($r['err']));
+      if ($r['code'] === 403 || $r['code'] === 429) throw new Exception('GitHub\'s limit of checks was reached. Add a GitHub token, or wait an hour.');
+      if ($r['code'] === 401) throw new Exception('GitHub refused the token.');
+      if ($r['code'] === 404) throw new Exception('GitHub has no repository ' . $repo . '.');
+      if ($r['code'] !== 200 || !is_array($r['json'])) throw new Exception('HTTP ' . $r['code'] . ' from GitHub.');
+      return $r['json'];
+    });
+    $name = explode('/', $repo)[1];
+    if (!empty($rel['none'])) { $list[] = ['title' => $name, 'sub' => 'no releases yet', 'href' => 'https://github.com/' . $repo]; continue; }
+    $url = (string)($rel['html_url'] ?? '');
+    $list[] = ['title' => $name, 'sub' => und_clip((string)($rel['tag_name'] ?? ''), 40) . (!empty($rel['prerelease']) ? ' (pre-release)' : ''),
+               'ts' => strtotime((string)($rel['published_at'] ?? '')) ?: null, 'href' => preg_match('#^https://github\.com/#', $url) ? $url : 'https://github.com/' . $repo];
+  }
+  usort($list, function ($a, $b) { return ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0); });
+  return ['list' => $list];
+}
+
+/** Links you keep on the dashboard: "Title | https://…" per line, or just the address. Nothing is fetched. */
+function und_w_bookmarks($s) {
+  $list = [];
+  foreach (preg_split('/\r?\n/', (string)($s['options']['links'] ?? '')) as $line) {
+    $line = trim($line);
+    if ($line === '') continue;
+    $p = array_map('trim', explode('|', $line, 2));
+    $url = count($p) === 2 ? $p[1] : $p[0];
+    if (!preg_match('#^https?://[^\s<>"]+$#i', $url)) continue;          // only web addresses: no javascript: or data: links
+    $list[] = ['title' => und_clip(count($p) === 2 && $p[0] !== '' ? $p[0] : (parse_url($url, PHP_URL_HOST) ?: $url), 60), 'href' => $url];
+    if (count($list) >= 50) break;
+  }
+  return ['list' => $list, 'empty' => 'Add links in Settings: one per line, Title | https://…'];
+}
+
 /* ---------- calendar (Radarr + Sonarr) ---------- */
 
 function und_w_calendar($s, $cfg) {
@@ -2011,6 +2244,34 @@ function und_jpath($data, $path) {
   return $data;
 }
 
+/** Fills "{field.path}" or "{field|format}" from one JSON item. Formats: bytes, rate, percent, round, number, date, upper, lower.
+ *  Single braces, so they never meet the {{SHARED}} values filled in before. */
+function und_tpl($tpl, $item) {
+  return preg_replace_callback('/\{([A-Za-z0-9_.\-]*)(?:\|([a-z]+))?\}/', function ($m) use ($item) {
+    $v = $m[1] === '' ? $item : und_jpath($item, $m[1]);
+    if (is_bool($v)) $v = $v ? 'yes' : 'no';
+    if ($v === null || !is_scalar($v)) return is_array($v) ? (string)count($v) : '';
+    $f = $m[2] ?? '';
+    if (in_array($f, ['bytes', 'rate'], true) && is_numeric($v)) {
+      $u = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']; $n = (float)$v; $i = 0;
+      while (abs($n) >= 1024 && $i < 5) { $n /= 1024; $i++; }
+      return ($i ? number_format($n, $n >= 100 ? 0 : 1) : (string)(int)$n) . ' ' . $u[$i] . ($f === 'rate' ? '/s' : '');
+    }
+    if ($f === 'percent' && is_numeric($v)) return round((float)$v, 1) . '%';
+    if ($f === 'round' && is_numeric($v)) return (string)round((float)$v);
+    if ($f === 'number' && is_numeric($v)) return number_format((float)$v, floor((float)$v) == (float)$v ? 0 : 1);
+    if ($f === 'date') { $t = und_ts($v); return $t ? date('Y-m-d H:i', $t) : (string)$v; }
+    if ($f === 'upper') return strtoupper((string)$v);
+    if ($f === 'lower') return strtolower((string)$v);
+    return (string)$v;
+  }, (string)$tpl);
+}
+/** A date as unix seconds: ISO text, seconds or milliseconds. */
+function und_ts($v) {
+  if (is_numeric($v)) { $n = (float)$v; return (int)($n > 1e11 ? $n / 1000 : $n); }
+  return strtotime((string)$v) ?: null;
+}
+
 function und_w_customapi($s) {
   $o = $s['options'];
   $h = isset($o['headers']) && is_array($o['headers']) ? array_map('strval', $o['headers']) : [];
@@ -2018,6 +2279,23 @@ function und_w_customapi($s) {
   $opts = ['headers' => $h, 'method' => strtoupper((string)($o['method'] ?? 'GET'))];
   if ($s['username'] !== '') $opts['basic'] = [$s['username'], $s['password']];
   $j = und_get(str_replace('{{KEY}}', rawurlencode($s['key']), $s['url']), $opts);
+  // one row per element of an array, each row written with templates
+  if (($o['display'] ?? 'block') === 'items') {
+    $arr = trim((string)($o['items'] ?? '')) === '' ? $j : und_jpath($j, $o['items']);
+    if (!is_array($arr)) throw new Exception('Nothing is at "' . und_clip((string)($o['items'] ?? ''), 80) . '" in the answer.');
+    if ($arr && !isset($arr[0])) $arr = array_values($arr);      // an object of objects counts as a list too
+    $title = (string)($o['title'] ?? '') ?: '{name}';
+    $list = [];
+    foreach (array_slice($arr, 0, max(1, min(50, (int)($o['limit'] ?? 10) ?: 10))) as $it) {
+      $row = ['title' => und_clip(trim(und_tpl($title, $it)), 200)];
+      if (trim((string)($o['sub'] ?? '')) !== '') $row['sub'] = und_clip(trim(und_tpl($o['sub'], $it)), 200);
+      if (trim((string)($o['date'] ?? '')) !== '') { $t = und_ts(und_jpath($it, $o['date'])); if ($t) $row['ts'] = $t; }
+      if (!isset($row['ts']) && trim((string)($o['right'] ?? '')) !== '') $row['right'] = und_clip(trim(und_tpl($o['right'], $it)), 60);
+      if (trim((string)($o['link'] ?? '')) !== '') { $u = trim(und_tpl($o['link'], $it)); if (preg_match('#^https?://[^\s<>"]+$#i', $u)) $row['href'] = $u; }
+      $list[] = $row;
+    }
+    return ['list' => $list, 'empty' => 'The list is empty'];
+  }
   $maps = (array)($o['mappings'] ?? []);
   if (($o['display'] ?? 'block') === 'list') {
     $list = [];
@@ -2037,6 +2315,7 @@ function und_w_customapi($s) {
   }
   $b = [];
   foreach ($maps as $i => $m) {
+    if (isset($m['template'])) { $b[] = und_b('t' . $i, (string)($m['label'] ?? ''), und_clip(und_tpl($m['template'], $j), 60), 'text'); continue; }
     $v = und_jpath($j, $m['field'] ?? '');
     $fmt = (string)($m['format'] ?? 'n');
     if ($fmt === 'number') $fmt = 'n';
@@ -2048,7 +2327,7 @@ function und_w_customapi($s) {
   return ['blocks' => $b];
 }
 ]]></INLINE>
-<SHA256>5fc62b24156db3b4160ed4710be17a24ef16ad8b72600686bad9d33567904cf0</SHA256>
+<SHA256>7e00498cef47e25cd94a237c32931e3ba2c3b5068e63d2b83036ebc09cd72427</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/import.php" Mode="0644">
@@ -4042,7 +4321,7 @@ function und_health_probe(array $targets) {
     // aborting the body on purpose shows up as a write error; anything else with no status is a real failure
     $err = $code > 0 ? '' : ($errno === 28 ? 'No answer (timed out)' : ($errno === 7 ? 'Connection refused' : (curl_error($ch) ?: 'No answer')));
     $res[$i] = ['code' => $code, 'ms' => $code > 0 ? $ms : null, 'err' => $err];
-    curl_multi_remove_handle($mh, $ch); curl_close($ch);
+    curl_multi_remove_handle($mh, $ch); if (PHP_VERSION_ID < 80000) curl_close($ch);
   }
   curl_multi_close($mh);
   return $res;
@@ -4075,7 +4354,7 @@ function und_health(array $cfg, $force = false) {
   return $out;
 }
 ]]></INLINE>
-<SHA256>db1a5cdc450a87b6b007295da407da9d93911f5f5496229e1fd125f5cffbdb76</SHA256>
+<SHA256>d5db63a33e6ad3076c30f797b1479430c095b3596354ffe4b2fa9e1aa8ec9972</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/playing.php" Mode="0644">
@@ -4337,6 +4616,87 @@ function und_seerr_request(array $cfg, $app, $type, $tmdb) {
 <SHA256>d6acffedfb4329916763219c619fbccf7578f85cde0ab053d2b1b2cfadf98841</SHA256>
 </FILE>
 
+<FILE Name="&emhttp;/include/icons.php" Mode="0644">
+<INLINE><![CDATA[<?php
+/*
+ * UnDash - icon search for the icon picker. The browser may only talk to UnDash (connect-src 'self'),
+ * so the two icon lists are fetched here, kept for a week and searched on the server:
+ *   selfh.st icons     index.json   -> sh-NAME (sh-NAME.png when there is no SVG)
+ *   dashboard-icons    tree.json    -> NAME.svg / NAME.png
+ * Only names are kept; the images themselves load from the CDN as before.
+ */
+
+define('UND_ICON_SH', 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/index.json');
+define('UND_ICON_DI', 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/tree.json');
+
+/** ['sh' => [[ref, name, tags, svg], ...], 'di' => [[name, ext], ...]], fetched at most once a week. */
+function und_icon_index() {
+  $f = und_tmp('icon-index.json');
+  $old = und_read_json($f, []);
+  if (!empty($old['at']) && time() - (int)$old['at'] < 7 * 86400 && !empty($old['sh'])) return $old;
+  $lock = und_tmp('icon-index.lock');
+  // a failed download is not retried for 10 minutes; the old list (if any) is used meanwhile
+  if (is_file($lock) && time() - filemtime($lock) < 600) { if ($old) return $old; throw new Exception('The icon list could not be downloaded. Try again in a few minutes.'); }
+  @touch($lock);
+  $sh = []; $di = [];
+  try {
+    foreach ((array)und_get(UND_ICON_SH, ['timeout' => 20]) as $x) {
+      $ref = (string)($x['Reference'] ?? '');
+      if (!preg_match('/^[a-z0-9][a-z0-9._-]{0,80}$/', $ref)) continue;
+      $sh[] = [$ref, und_clip((string)($x['Name'] ?? $ref), 80), und_clip(strtolower((string)($x['Tags'] ?? '')), 200), ($x['SVG'] ?? '') === 'Yes' ? 1 : 0];
+    }
+    $t = (array)und_get(UND_ICON_DI, ['timeout' => 20]);
+    $svg = array_flip(array_map(function ($n) { return preg_replace('/\.svg$/', '', (string)$n); }, (array)($t['svg'] ?? [])));
+    foreach ((array)($t['png'] ?? []) as $n) {
+      $n = preg_replace('/\.png$/', '', (string)$n);
+      if (preg_match('/^[a-z0-9][a-z0-9._-]{0,80}$/', $n)) $di[] = [$n, isset($svg[$n]) ? 'svg' : 'png'];
+    }
+  } catch (Exception $e) {
+    if ($old) return $old;
+    throw new Exception('The icon list could not be downloaded: ' . $e->getMessage());
+  }
+  if (!$sh && !$di) { if ($old) return $old; throw new Exception('The icon list came back empty.'); }
+  $idx = ['at' => time(), 'sh' => $sh, 'di' => $di];
+  und_write_json($f, $idx);
+  @unlink($lock);
+  return $idx;
+}
+
+/** Up to $max icons for a search: [['v' => value for the Icon field, 'n' => name, 's' => source], ...], best matches first. */
+function und_icon_search($q, $max = 60) {
+  $q = strtolower(trim((string)$q));
+  $q = preg_replace('/[^a-z0-9 ._-]/', '', $q);
+  if ($q === '') return ['icons' => []];
+  $idx = und_icon_index();
+  $key = str_replace([' ', '_', '.'], '-', $q);
+  $score = function ($ref, $name, $tags) use ($q, $key) {
+    $n = strtolower($name);
+    if ($ref === $key || $n === $q) return 0;
+    if (strpos($ref, $key) === 0 || strpos($n, $q) === 0) return 1;
+    if (strpos($ref, $key) !== false || strpos($n, $q) !== false) return 2;
+    if ($tags !== '' && strpos($tags, $q) !== false) return 3;
+    return -1;
+  };
+  $hits = []; $seen = [];
+  foreach ($idx['sh'] as $x) {
+    $s = $score($x[0], $x[1], $x[2]);
+    if ($s < 0) continue;
+    $seen[$x[0]] = 1;
+    $hits[] = [$s, strlen($x[0]), ['v' => 'sh-' . $x[0] . ($x[3] ? '' : '.png'), 'n' => $x[1], 's' => 'selfh.st']];
+  }
+  foreach ($idx['di'] as $x) {
+    if (isset($seen[$x[0]])) continue;           // the same icon is already listed from selfh.st
+    $s = $score($x[0], $x[0], '');
+    if ($s < 0) continue;
+    $hits[] = [$s + 0.5, strlen($x[0]), ['v' => $x[0] . '.' . $x[1], 'n' => $x[0], 's' => 'dashboard-icons']];
+  }
+  usort($hits, function ($a, $b) { return $a[0] <=> $b[0] ?: $a[1] <=> $b[1] ?: strcmp($a[2]['v'], $b[2]['v']); });
+  return ['icons' => array_column(array_slice($hits, 0, max(1, min(200, (int)$max))), 2), 'more' => count($hits) > $max];
+}
+]]></INLINE>
+<SHA256>e1c3da84f07fa95cffcbc17112dab6c0fcff5d0e8a64a88bfaa7928ab0ce7b2b</SHA256>
+</FILE>
+
 <FILE Name="&emhttp;/include/api.php" Mode="0644">
 <INLINE><![CDATA[<?php
 /*
@@ -4486,6 +4846,7 @@ switch ($action) {
   case 'os_check':      out(und_os_check());
   case 'os_update':     { $r = und_os_update(); if (isset($r['error'])) fail($r['error']); und_history_add('server', 'Unraid OS', 'update', true, 'install started'); out($r); }
   case 'storage':       out(und_storage());
+  case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'))); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
 
   /* ---- settings ---- */
   case 'settings': {
@@ -4633,7 +4994,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>1854dfb50d9cbf66152ff9c6316467f6777148300953c1e048d6b09fb34ff105</SHA256>
+<SHA256>2205154da1e64bec3ca9c500a6d1f66e5fc610062c770c165a549a297a833d54</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -5163,7 +5524,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .lst{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
 .und .lst .r{display:flex;justify-content:flex-end;gap:8px;align-items:baseline;min-width:0}
 .und .lst .r .t{color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.und .lst .r .when{color:var(--muted);white-space:nowrap;font-size:12px}
-.und .lst .r .lab{color:var(--muted);margin-right:auto}
+.und .lst .r .lab{color:var(--muted);margin-right:auto}.und .lst .r .t:first-child{margin-right:auto}.und .lst .r a.t{text-decoration:none}.und .lst .r a.t:hover{color:var(--accent);text-decoration:underline}.und .lst .r .t .muted{font-weight:400}
 .und .cal{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:5px 14px;font-size:12.5px;align-items:center}
 .und .cal .d{color:var(--muted);white-space:nowrap}.und .cal .ti{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .und .cal .ok{color:var(--ok);width:14px;height:14px}.und .cal .ok svg{width:14px;height:14px}
@@ -5604,6 +5965,10 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .tpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
 .und .tpick button{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;text-align:left;font:inherit;font-size:13px;min-width:0}
 .und .tpick button:hover,.und .tpick button:focus-visible{border-color:var(--accent);background:var(--accent-soft)}
+.und .ipick{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;margin-top:8px;max-height:min(60vh,520px);overflow:auto}
+.und .ipick button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;font:inherit;font-size:12px;min-width:0}
+.und .ipick button:hover,.und .ipick button:focus-visible{border-color:var(--accent);background:var(--accent-soft)}.und .ipick img,.und .ipick .ph{width:36px;height:36px;object-fit:contain}.und .ipick .ell{max-width:100%}
+.und .ico-btn{all:unset;cursor:pointer;display:inline-flex;border-radius:6px;flex:none}.und .ico-btn:hover{outline:1px solid var(--accent)}.und .ico-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .und .tpick.found{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}.und .tpick.found button .muted{margin-left:auto;flex:0 1 auto;max-width:45%}
 .und .found-bar{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-bottom:14px}.und .found-bar .ae-h{margin-bottom:8px}.und .found-bar .ae-h>.muted{order:3;flex-basis:100%}
 .und .tpick img,.und .tpick .ph{width:22px;height:22px;object-fit:contain;flex:none}
@@ -5620,7 +5985,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
 }
 ]]></INLINE>
-<SHA256>1f5ec6b11e23bc8cca705dc1a5bee2ddcc1f5fc02fc51082a5c6d40073b89a29</SHA256>
+<SHA256>57a0062633a56a9f4284822528c1601cc4057522c3e579154eee4a045e60b2d3</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -7511,8 +7876,11 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     if (r.blocks && r.blocks.length) cb.appendChild(blocks(r.blocks));
     if (r.list) {
       var l = h('div', { class: 'lst' });
-      r.list.forEach(function (x) { l.appendChild(h('div', { class: 'r' }, x.label ? h('span', { class: 'lab' }, x.label) : null, h('span', { class: 't', title: x.title }, x.title), x.ts ? h('span', { class: 'when' }, rel(x.ts)) : (x.right ? h('span', { class: 'when' }, x.right) : null))); });
-      if (!r.list.length) l.appendChild(h('div', { class: 'muted sm' }, 'Nothing yet'));
+      r.list.forEach(function (x) {
+        var tt = x.title + (x.sub ? ' · ' + x.sub : ''), body = [x.title, x.sub ? h('span', { class: 'muted' }, ' ' + x.sub) : null];
+        l.appendChild(h('div', { class: 'r' }, x.label ? h('span', { class: 'lab' }, x.label) : null,
+          /^https?:\/\//i.test(x.href || '') ? h('a', { class: 't', href: x.href, target: '_blank', rel: 'noopener noreferrer', title: tt }, body) : h('span', { class: 't', title: tt }, body), x.ts ? h('span', { class: 'when' }, rel(x.ts)) : (x.right ? h('span', { class: 'when' }, x.right) : null))); });
+      if (!r.list.length) l.appendChild(h('div', { class: 'muted sm' }, r.empty || 'Nothing yet'));
       cb.appendChild(l);
     }
     if (r.calendar) {
@@ -7643,7 +8011,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     autobrr: 'approvedPushes, rejectedPushes, filters, indexers', wizarr: 'users, invites, pending, expired', qbittorrent: 'leech, download, seed, upload', qui: 'downloading, seeding, idle, crossseed, download, upload, instances', sabnzbd: 'rate, queue, timeleft',
     emby: 'movies, series, episodes, songs', jellyfin: 'movies, series, episodes, songs', plex: 'streams, albums, movies, tv', adguard: 'queries, blocked, filtered, latency',
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
-    ups: 'battery_charge, ups_load, ups_status, runtime', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
+    ups: 'battery_charge, ups_load, ups_status, runtime',
+    scrutiny: 'passed, failed, unknown, hottest', tdarr: 'queue, processed, errored, saved', unmanic: 'active, workers, pending', uptimekuma: 'up, down, uptime',
+    speedtest: 'download, upload, ping', weather: 'now, today, humidity, wind', gluetun: 'public_ip, country, region, city, port', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
   var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', playing: 'Active Plex, Emby, Jellyfin and Tautulli streams', requests: 'Overseerr / Jellyseerr requests, approve or decline', health: 'Every app and container web UI: status and latency', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
@@ -7905,7 +8275,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
         row = h('div', { class: 'oi' + (p.hidden ? ' off' : '') },
           h('label', { class: 'switch', title: 'Show on the dashboard' }, h('input', { type: 'checkbox', checked: !p.hidden, 'aria-label': 'Show ' + it.name + ' on the dashboard', onchange: function (e) {
             p.hidden = !e.target.checked; row.classList.toggle('off', p.hidden); put(); counted(); } })),
-          img(iconUrl(p.icon || it.icon), '', dk ? 'box' : 'vm'),
+          h('button', { type: 'button', class: 'ico-btn', title: 'Pick an icon for ' + it.name, 'aria-label': 'Pick an icon for ' + it.name, onclick: function () { iconPicker(p.label || it.name, function (v) { p.icon = v; put(); draw(); }); } },
+            img(iconUrl(p.icon || it.icon), '', dk ? 'box' : 'vm')),
           h('span', { class: 't' }, h('span', { class: 'sdot ' + (it.state === 'running' ? 'ok' : 'na'), title: it.state || '' }), h('b', null, it.name)),
           h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
@@ -8072,18 +8443,23 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 
   /* ---- Apps: every app is added, changed, hidden and removed here. Addresses go to config.yaml, keys and passwords to .env (server side) ---- */
   var APP_CATS = [['Arr Stack', ['radarr', 'sonarr', 'lidarr', 'readarr', 'prowlarr', 'bazarr', 'autobrr', 'overseerr', 'wizarr']],
-    ['Downloads', ['qbittorrent', 'qui', 'sabnzbd']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar']],
-    ['Network and tools', ['adguard', 'pihole', 'npm', 'immich', 'peanut']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Other', ['customapi', 'link']]];
+    ['Downloads', ['qbittorrent', 'qui', 'sabnzbd']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar', 'tdarr', 'unmanic']],
+    ['Network and tools', ['adguard', 'pihole', 'npm', 'gluetun', 'immich', 'homeassistant', 'peanut']], ['Monitoring', ['scrutiny', 'uptimekuma', 'speedtest']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Widgets', ['weather', 'releases', 'bookmarks']], ['Other', ['customapi', 'link']]];
   var APP_PORT = { radarr: 7878, sonarr: 8989, lidarr: 8686, readarr: 8787, prowlarr: 9696, bazarr: 6767, autobrr: 7474, overseerr: 5055, wizarr: 5690, qbittorrent: 8080, qui: 7476, sabnzbd: 8080,
-    plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80 };
-  var APP_ICON = { adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
+    plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80,
+    scrutiny: 8080, tdarr: 8265, unmanic: 8888, uptimekuma: 3001, speedtest: 80, gluetun: 8000, homeassistant: 8123 };
+  var APP_ICON = { weather: '', releases: 'github', bookmarks: '', tdarr: 'tdarr.png', unmanic: 'unmanic.png', uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
   var KEY_WHERE = { radarr: 'Radarr: Settings > General', sonarr: 'Sonarr: Settings > General', lidarr: 'Lidarr: Settings > General', readarr: 'Readarr: Settings > General', prowlarr: 'Prowlarr: Settings > General',
     bazarr: 'Bazarr: Settings > General', overseerr: 'Overseerr / Jellyseerr: Settings > General', sabnzbd: 'SABnzbd: Config > General', qui: 'qui: Settings > API Keys', autobrr: 'autobrr: Settings > API Keys',
-    tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys' };
+    tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys',
+    tdarr: 'Tdarr: Tools > API keys (only when its login is on; else leave it empty)', speedtest: 'Speedtest Tracker: API Tokens (v1 and later; older versions need none)',
+    gluetun: 'Gluetun\'s control server settings (only if you set one; else leave it empty)', homeassistant: 'Home Assistant: your profile > Security > Long-lived access tokens',
+    releases: 'GitHub: Settings > Developer settings > Personal access tokens, with no scopes (optional: without one GitHub allows 60 checks an hour)' };
+  var KEY_OPT = { peanut: 1, customapi: 1, tdarr: 1, speedtest: 1, gluetun: 1, releases: 1 };     // apps that work without a key
   var ZONE_NAME = { arr: 'Arr Stack', downloads: 'Downloads', media: 'Media', overview: 'System overview', apps: 'Apps' };
   function appIcon(t) { var n = APP_ICON[t] !== undefined ? APP_ICON[t] : t; return n ? 'sh-' + n : ''; }
   function appZone(D, s) { return s.type === 'customapi' && /get_recently_added/.test(s.url || '') ? 'media' : (D.zones || {})[s.type] || 'apps'; }
-  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : 'API key', username: 'Username', password: 'Password' }[k]; }
+  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : t === 'homeassistant' ? 'Access token' : t === 'speedtest' ? 'API token' : t === 'releases' ? 'GitHub token' : 'API key', username: 'Username', password: 'Password' }[k]; }
 
   /* the app lists in Settings > Sections & apps: one per section (zone), plus the groups of the Apps section.
      Every list redraws together, so moving or finding an app updates all of them. */
@@ -8096,7 +8472,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     function swap(a, c) { var ia = a.g.services.indexOf(a.s), ic2 = c.g.services.indexOf(c.s); a.g.services[ia] = c.s; c.g.services[ic2] = a.s; dirty(); redraw(); }
     function row(x, list) {
       var s = x.s, T = D.types[s.type] || [s.type, [], false], c = D.creds[s.id] || {}, i = list.indexOf(x);
-      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && s.type !== 'peanut' && s.type !== 'customapi' && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
+      var warn = T[2] && !String(s.url || '').trim() ? 'no address' : (T[1] || []).indexOf('key') >= 0 && !KEY_OPT[s.type] && !c.key ? 'no ' + credLabel(s.type, 'key').toLowerCase() : '';
       var edit = function () { editService(D, s, x.g, false, redraw, dirty); };
       return h('div', { class: 'oi ae-row' + (s.hidden ? ' off' : '') },
         img(iconUrl(s.icon), '', 'web'),
@@ -8164,12 +8540,36 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     return E;
   }
 
+  /* search selfh.st and dashboard-icons (the server keeps their name lists) and pick one; onpick gets the Icon field value */
+  function iconPicker(q0, onpick) {
+    var grid = h('div', { class: 'ipick' }), note = h('div', { class: 'muted sm', role: 'status' }), t = null, seq = 0, m;
+    var find = h('input', { type: 'search', value: q0 || '', placeholder: 'Search icons… (plex, nas, home)', 'aria-label': 'Search icons', oninput: function () { clearTimeout(t); t = setTimeout(look, 250); } });
+    function look() {
+      var q = find.value.trim(), my = ++seq;
+      if (!q) { clear(grid); txt(note, 'Type a name to search about 5,000 icons.'); return; }
+      txt(note, 'Searching…');
+      api('icons', { q: q, max: 80 }).then(function (r) {
+        if (my !== seq) return;
+        clear(grid);
+        if (r.error) { txt(note, r.error); return; }
+        txt(note, r.icons.length ? (r.more ? 'The first ' + r.icons.length + ' matches. Type more to narrow it down.' : r.icons.length + ' match' + (r.icons.length > 1 ? 'es' : '')) : 'No icon matches. An image URL works too.');
+        r.icons.forEach(function (x) {
+          grid.appendChild(h('button', { type: 'button', title: x.n + ' (' + x.s + ': ' + x.v + ')', onclick: function () { m.close(); onpick(x.v); } },
+            img(iconUrl(x.v), '', 'web'), h('span', { class: 'ell' }, x.n)));
+        });
+      });
+    }
+    m = modal('Pick an icon', h('div', null, h('div', { style: { 'margin-bottom': '8px' } }, find), note, grid), [btn('Cancel', function () { m.close(); })], true);
+    look();
+  }
+
   /* containers that look like an app type UnDash reads, and are not added yet. Matched on the image name
      (lscr.io/linuxserver/radarr, binhex/arch-qbittorrentvpn …), then on the container name */
   var FOUND_RE = [['overseerr', /^(overseerr|jellyseerr|seerr)$/], ['plex', /^(plex|pms-docker|plex-media-server|plexmediaserver)$/], ['emby', /^(emby|embyserver)$/],
     ['immich', /^immich(-server)?$/], ['adguard', /^adguard-?home$/], ['pihole', /^pi-?hole$/], ['npm', /^nginx-proxy-manager$/], ['peanut', /^peanut$/],
     ['qbittorrent', /^qbittorrent$/], ['qui', /^qui$/], ['sabnzbd', /^sabnzbd$/], ['jellyfin', /^jellyfin$/], ['tautulli', /^tautulli$/], ['radarr', /^radarr$/],
-    ['sonarr', /^sonarr$/], ['lidarr', /^lidarr$/], ['readarr', /^readarr$/], ['bazarr', /^bazarr$/], ['prowlarr', /^prowlarr$/], ['autobrr', /^autobrr$/], ['wizarr', /^wizarr$/]];
+    ['sonarr', /^sonarr$/], ['scrutiny', /^scrutiny(-web)?$/], ['tdarr', /^tdarr$/], ['unmanic', /^unmanic$/], ['uptimekuma', /^uptime-?kuma$/],
+    ['speedtest', /^speedtest-tracker$/], ['gluetun', /^gluetun$/], ['homeassistant', /^home-?assistant$/], ['lidarr', /^lidarr$/], ['readarr', /^readarr$/], ['bazarr', /^bazarr$/], ['prowlarr', /^prowlarr$/], ['autobrr', /^autobrr$/], ['wizarr', /^wizarr$/]];
   function foundType(c) {
     var norm = function (v) { return String(v || '').toLowerCase().replace(/^(arch-|docker-)/, '').replace(/-?vpn$/, ''); };
     var img0 = norm(String(c.image || '').split('@')[0].split('/').pop().split(':')[0]), nm = norm(c.name);
@@ -8188,7 +8588,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       var url = origin(c.webui), ports = c.ports || {};
       if (!url) {
         var hp = 0;
-        Object.keys(ports).forEach(function (k) { if (parseInt(k, 10) === APP_PORT[t] || !hp) hp = ports[k]; });
+        // Gluetun publishes the ports of the apps behind it: only its control server port is its own
+        Object.keys(ports).forEach(function (k) { if (parseInt(k, 10) === APP_PORT[t] || (!hp && t !== 'gluetun')) hp = ports[k]; });
         if (hp) url = 'http://' + location.hostname + ':' + hp;
       }
       var label = D.types[t][0].replace(/ \(.*\)$/, '');
@@ -8252,6 +8653,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       var typeSel = h('select', { onchange: function (e) { var was = s.type; s.type = e.target.value; s.fields = []; s.options = {}; if (!s.icon || s.icon === appIcon(was)) s.icon = appIcon(s.type); draw(); } },
         Object.keys(D.types).map(function (k) { return h('option', { value: k, selected: k === s.type }, D.types[k][0]); }));
       var icoPrev = h('span', { class: 'ae-ico' }, img(iconUrl(s.icon), '', 'web'));
+      var icoBtn = btn('Browse', function () { iconPicker(s.name || T[0].replace(/ \(.*\)$/, ''), function (v) { s.icon = v; draw(); }); }, 'sm', 'search', 'Search icons for ' + (s.name || 'this app'));
       form.appendChild(h('div', { class: 'grid2' }, F('Name', tIn(s, 'name', noop, T[0])), F('Type', typeSel, 'Shows in ' + (z === 'apps' ? 'Apps' : ZONE_NAME[z]) + '.')));
       if (T[2]) form.appendChild(F('Address', tIn(s, 'url', noop, 'http://192.168.1.10:' + port), 'Where UnDash reaches ' + T[0].replace(/ \(.*\)$/, '') + ', from the server: the IP or host name and the port, e.g. http://192.168.1.10:' + port + '.'));
       if ((T[1] || []).length) {
@@ -8270,7 +8672,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       form.appendChild(h('div', { class: 'ae-sub' }, 'On the dashboard'));
       form.appendChild(h('div', { class: 'grid2' },
         F('Link (opens on click)', tIn(s, 'href', noop, T[2] ? 'Same as the address' : 'https://…'), T[2] ? 'Leave empty to open the address. Use it for a public or HTTPS address.' : null),
-        F('Icon', h('div', { class: 'sec-in' }, icoPrev, tIn(s, 'icon', function () { clear(icoPrev).appendChild(img(iconUrl(s.icon), '', 'web')); }, 'sh-radarr')), 'sh-NAME (selfh.st icons), NAME.png (dashboard-icons) or an image URL.'),
+        F('Icon', h('div', { class: 'sec-in' }, icoPrev, tIn(s, 'icon', function () { clear(icoPrev).appendChild(img(iconUrl(s.icon), '', 'web')); }, 'sh-radarr'), icoBtn), 'Browse to search, or type sh-NAME (selfh.st icons), NAME.png (dashboard-icons) or an image URL.'),
         z === 'apps' && D.cfg.groups.length > 1 ? F('Group', h('select', { onchange: function (e) { gid = e.target.value; } }, D.cfg.groups.map(function (g) { return h('option', { value: g.id, selected: g.id === gid }, g.name); }))) : null,
         z === 'apps' ? F('Description', tIn(s, 'description', noop, 'Optional')) : null,
         z === 'apps' ? F('Card width', sIn(s, 'span', noop, [[1, 'Normal'], [2, 'Double']])) : null));
@@ -8294,16 +8696,32 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       }
       if (s.type === 'tautulli_recent') adv.appendChild(h('div', { class: 'grid2' }, F('Media type', tIn(s.options, 'media_type', noop, 'movie, episode, track…')), F('Library section id', tIn(s.options, 'section_id', noop, 'optional')), F('Count', tIn(s.options, 'count', noop, '6'))));
       if (s.type === 'ups') form.appendChild(F('UPS name', tIn(s.options, 'ups', noop, D.cfg.general.ups_name)));
+      if (s.type === 'weather') form.appendChild(h('div', { class: 'grid2' }, F('Place', tIn(s.options, 'location', noop, 'Amsterdam'), 'A town or city, or latitude, longitude. From Open-Meteo, no key needed.'),
+        F('Units', sIn(s.options, 'units', noop, [['metric', '°C, km/h'], ['imperial', '°F, mph']]))));
+      var lines = function (k, ph, lab, hint) { return F(lab, h('textarea', { rows: 5, spellcheck: 'false', placeholder: ph, oninput: function (e) { s.options[k] = e.target.value; } }, s.options[k] || ''), hint); };
+      if (s.type === 'releases') form.appendChild(lines('repos', 'immich-app/immich\nautobrr/qui', 'Repositories', 'One per line: owner/repo or its GitHub address, up to 20. Each is checked at most once an hour.'));
+      if (s.type === 'bookmarks') form.appendChild(lines('links', 'Router | http://192.168.1.1\nhttps://selfh.st', 'Links', 'One per line: Title | https://… or just the address. Only http and https links are kept.'));
+      if (s.type === 'uptimekuma') form.appendChild(F('Status page slug', tIn(s.options, 'slug', noop, 'home'), 'Uptime Kuma reads a status page: the end of its address, /status/NAME. Make one under Status Pages first.'));
+      if (s.type === 'homeassistant') form.appendChild(F('Entities', h('textarea', { rows: 3, spellcheck: 'false', placeholder: 'sensor.living_room_temperature\nlight.kitchen', oninput: function (e) { s.options.entities = e.target.value; } }, s.options.entities || ''),
+        'Entity ids, one per line, up to 8 (Developer tools > States lists them). Empty shows people home, lights on and switches on.'));
       if (s.type === 'emby' || s.type === 'jellyfin') adv.appendChild(cIn(s.options, 'hide_blocks', noop, 'Only show the streams (hide the library counts)'));
       if (s.type === 'customapi') {
         var js = function (k, def, lab) { var t = h('textarea', { rows: 6, spellcheck: 'false', 'aria-label': lab, oninput: function (e) { try { s.options[k] = JSON.parse(e.target.value || def); e.target.style.borderColor = ''; } catch (x) { e.target.style.borderColor = 'var(--bad)'; } } }); t.value = JSON.stringify(s.options[k] || JSON.parse(def), null, 2); return t; };
-        form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Blocks'], ['list', 'List']])), F('Method', tIn(s.options, 'method', noop, 'GET'))));
+        form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Numbers (blocks)'], ['items', 'A row for each item of a list'], ['list', 'Fixed rows']], draw)), F('Method', tIn(s.options, 'method', noop, 'GET'))));
         form.appendChild(F('Headers (JSON)', js('headers', '{}', 'Headers'), '{{KEY}} is replaced by the API key above, e.g. {"X-Api-Key": "{{KEY}}"}.'));
-        form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}]. Formats: number, text, bytes, rate, percent; lists can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
+        if (s.options.display === 'items') {
+          form.appendChild(h('div', { class: 'grid2' },
+            F('List in the answer', tIn(s.options, 'items', noop, 'data.results'), 'Where the list is, as a path. Empty: the answer itself is the list.'),
+            F('Rows', tIn(s.options, 'limit', noop, '10', 'number', { min: 1, max: 50 })),
+            F('Title', tIn(s.options, 'title', noop, '{name}')), F('Second line', tIn(s.options, 'sub', noop, '{status} · {size|bytes}')),
+            F('Right side', tIn(s.options, 'right', noop, '{progress|percent}'), 'Not shown when there is a date.'), F('Date field', tIn(s.options, 'date', noop, 'added'), 'Shown as "2 h ago". ISO dates, seconds or milliseconds.'),
+            F('Link', tIn(s.options, 'link', noop, 'https://example.com/item/{id}'), 'Optional; opens when the row is clicked.')));
+          form.appendChild(h('div', { class: 'hint' }, 'In the boxes, {field} is replaced by that field of each item (a path like {user.name} works). Add a format after a bar: {size|bytes}, {speed|rate}, {done|percent}, {count|number}, {value|round}, {when|date}, {state|upper}.'));
+        } else form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}] or a template: {"template": "{data.up} / {data.total}", "label": "Up"}. Formats: number, text, bytes, rate, percent; fixed rows can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
       }
       if (adv.childNodes.length) form.appendChild(h('details', { class: 'ae-adv' }, h('summary', null, 'More options'), adv));
       var res = h('div', { role: 'status' });
-      if (T[2] || s.type === 'calendar' || s.type === 'customapi' || s.type === 'ups') form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
+      if (T[2] || /^(calendar|customapi|ups|weather|releases|bookmarks)$/.test(s.type)) form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
         clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
         var cfg = JSON.parse(JSON.stringify(D.cfg)), creds = JSON.parse(JSON.stringify(D.creds));
         var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0] || cfg.groups[0];
@@ -8312,7 +8730,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
         api('test', { config: cfg, creds: creds, shared: sharedOut(D), id: s.id }).then(function (r) {
           clear(res);
           if (r.error) res.appendChild(h('div', { class: 'banner bad' }, r.error));
-          else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' items' : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
+          else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' rows' + (r.list.length ? ': ' + r.list.slice(0, 3).map(function (x) { return x.title + (x.sub ? ' (' + x.sub + ')' : ''); }).join(', ') + (r.list.length > 3 ? '…' : '') : '') : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
         });
       }, '', 'check'), h('span', { class: 'muted sm' }, 'Tries it with what is filled in here; nothing is saved.')));
       form.appendChild(res);
@@ -8580,7 +8998,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>4a2ec8fabc0f10b6631a4e0ff7d95f925b1715d049de6ed28a82d6b599c67962</SHA256>
+<SHA256>39b41c00386a19a9f1eeb309b1a67e4620b95c17067c025662b5cc9e3892de4a</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">

@@ -32,7 +32,7 @@ function und_http($method, $url, array $o = []) {
   $body = curl_exec($ch);
   $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
   $err = $body === false ? curl_error($ch) : '';
-  curl_close($ch);
+  if (PHP_VERSION_ID < 80000) curl_close($ch);      // a no-op since PHP 8.0, deprecated in 8.5
   $body = $body === false ? '' : $body;
   return ['code' => $code, 'body' => $body, 'json' => json_decode($body, true), 'err' => $err, 'headers' => $resp];
 }
@@ -336,6 +336,227 @@ function und_w_peanut($s) {
                        und_b('ups_status', 'UPS status', und_ups_status((string)($j['ups.status'] ?? '')), 'text')]];
 }
 
+/* ---------- monitoring and tools ---------- */
+
+/** Scrutiny: disks by SMART result. A disk counts as failed by the same rule as Scrutiny's own page (its status threshold setting). */
+function und_w_scrutiny($s) {
+  $j = und_get(und_u($s['url'], '/api/summary'));
+  try { $thr = (int)(und_get(und_u($s['url'], '/api/settings'))['settings']['metrics']['status_threshold'] ?? 3); } catch (Exception $e) { $thr = 3; }
+  $pass = 0; $bad = 0; $unk = 0; $hot = null; $list = [];
+  foreach ((array)($j['data']['summary'] ?? []) as $d) {
+    if (!is_array($d) || !empty($d['device']['archived'])) continue;
+    $st = (int)($d['device']['device_status'] ?? -1);
+    if ($st < 0 || $st > 3) $unk++;
+    elseif ($st > 0 && ($thr === 3 || $st === $thr || $st === 3)) {
+      $bad++;
+      $list[] = ['title' => trim(($d['device']['device_name'] ?? '') . ' ' . ($d['device']['model_name'] ?? '')) ?: 'Disk', 'right' => $st === 1 ? 'SMART failed' : ($st === 2 ? 'Scrutiny failed' : 'Failed')];
+    } else $pass++;
+    $t = (int)($d['smart']['temp'] ?? 0);
+    if ($t > 0 && ($hot === null || $t > $hot)) $hot = $t;
+  }
+  $r = ['blocks' => [und_b('passed', 'Passed', $pass), und_b('failed', 'Failed', $bad), und_b('unknown', 'Unknown', $unk), und_b('hottest', 'Hottest', $hot === null ? null : $hot . ' °C', 'text')]];
+  if ($list) $r['list'] = $list;
+  return $r;
+}
+
+/** Tdarr: transcode and health-check queues (tables 1-3 transcode, 4-6 health check), counted like Tdarr's own tables. */
+function und_w_tdarr($s) {
+  $h = ['Content-Type' => 'application/json'];
+  if ($s['key'] !== '') $h['x-api-key'] = $s['key'];
+  $j = und_get(und_u($s['url'], '/api/v2/cruddb'), ['method' => 'POST', 'headers' => $h, 'body' => json_encode(['data' => ['collection' => 'StatisticsJSONDB', 'mode' => 'getById', 'docID' => 'statistics']])]);
+  $n = function ($i) use ($j) { return (int)($j['table' . $i . 'ViewableCount'] ?? 0) ?: (int)($j['table' . $i . 'Count'] ?? 0); };
+  return ['blocks' => [und_b('queue', 'Queue', $n(1) + $n(4)), und_b('processed', 'Processed', $n(2) + $n(5)), und_b('errored', 'Errored', $n(3) + $n(6)),
+                       und_b('saved', 'Saved', (float)($j['sizeDiff'] ?? 0) * 1e9, 'bytes')]];
+}
+
+function und_w_unmanic($s) {
+  $w = und_get(und_u($s['url'], '/unmanic/api/v2/workers/status'));
+  $p = und_get(und_u($s['url'], '/unmanic/api/v2/pending/tasks'), ['method' => 'POST', 'body' => '{}', 'headers' => ['Content-Type' => 'application/json']]);
+  $all = (array)($w['workers_status'] ?? []);
+  $busy = count(array_filter($all, function ($x) { return is_array($x) && empty($x['idle']); }));
+  return ['blocks' => [und_b('active', 'Active', $busy), und_b('workers', 'Workers', count($all)), und_b('pending', 'Pending', (int)($p['recordsTotal'] ?? 0))]];
+}
+
+/** Uptime Kuma: a status page's monitors (Kuma's API needs no key for a published status page). */
+function und_w_uptimekuma($s) {
+  $slug = trim((string)($s['options']['slug'] ?? ''));
+  if ($slug === '') throw new Exception('Set the status page slug: the end of its address, /status/NAME.');
+  if (!preg_match('/^[A-Za-z0-9_-]{1,100}$/', $slug)) throw new Exception('The status page slug can only have letters, numbers, - and _.');
+  $page = und_get(und_u($s['url'], '/api/status-page/' . $slug));
+  $hb = und_get(und_u($s['url'], '/api/status-page/heartbeat/' . $slug));
+  $names = [];
+  foreach ((array)($page['publicGroupList'] ?? []) as $g) foreach ((array)($g['monitorList'] ?? []) as $m) if (isset($m['id'])) $names[(string)$m['id']] = (string)($m['name'] ?? '');
+  $up = 0; $down = 0; $list = [];
+  foreach ((array)($hb['heartbeatList'] ?? []) as $id => $beats) {
+    $last = is_array($beats) && $beats ? end($beats) : null;
+    $st = is_array($last) ? (int)($last['status'] ?? 0) : 0;
+    if ($st === 1) $up++;
+    elseif ($st !== 3) { $down++; $list[] = ['title' => $names[(string)$id] ?? ('Monitor ' . $id), 'right' => $st === 2 ? 'pending' : 'down']; }   // 3 = maintenance
+  }
+  $ups = array_filter((array)($hb['uptimeList'] ?? []), 'is_numeric');
+  $r = ['blocks' => [und_b('up', 'Up', $up), und_b('down', 'Down', $down), und_b('uptime', 'Uptime', $ups ? round(array_sum($ups) / count($ups) * 100, 1) : null, 'pct')]];
+  if ($list) $r['list'] = $list;
+  if (!empty($page['incident']['title'])) $r['list'] = array_merge([['title' => (string)$page['incident']['title'], 'right' => 'incident']], $r['list'] ?? []);
+  return $r;
+}
+
+/** Speedtest Tracker: the latest result. v1 and later answer /api/v1 with an API token (bytes/s); older versions /api/speedtest/latest (Mbit/s). */
+function und_w_speedtest($s) {
+  $d = null;
+  if ($s['key'] !== '') {
+    $r = und_http('GET', und_u($s['url'], '/api/v1/results/latest'), ['headers' => ['Authorization' => 'Bearer ' . $s['key'], 'Accept' => 'application/json']]);
+    if ($r['code'] === 401 || $r['code'] === 403) throw new Exception('Not authorised (HTTP ' . $r['code'] . '): check the API token and that it may read results.');
+    if ($r['code'] === 200 && isset($r['json']['data'])) $d = ['down' => (float)($r['json']['data']['download'] ?? 0), 'up' => (float)($r['json']['data']['upload'] ?? 0), 'ping' => $r['json']['data']['ping'] ?? null];
+  }
+  if ($d === null) {
+    $j = und_get(und_u($s['url'], '/api/speedtest/latest'), ['headers' => ['Accept' => 'application/json']]);
+    if (!isset($j['data'])) throw new Exception('No speed test result yet.');
+    $d = ['down' => (float)($j['data']['download'] ?? 0) * 125000, 'up' => (float)($j['data']['upload'] ?? 0) * 125000, 'ping' => $j['data']['ping'] ?? null];
+  }
+  return ['blocks' => [und_b('download', 'Download', $d['down'], 'rate'), und_b('upload', 'Upload', $d['up'], 'rate'), und_b('ping', 'Ping', $d['ping'] === null ? null : (float)$d['ping'], 'ms')]];
+}
+
+/** Gluetun: the VPN's public address, from its control server (port 8000). The forwarded port only when there is one. */
+function und_w_gluetun($s) {
+  $o = $s['key'] !== '' ? ['headers' => ['X-API-Key' => $s['key']]] : [];
+  $j = und_get(und_u($s['url'], '/v1/publicip/ip'), $o);
+  $b = [und_b('public_ip', 'Public IP', (string)($j['public_ip'] ?? ''), 'text'), und_b('country', 'Country', (string)($j['country'] ?? ''), 'text'),
+        und_b('region', 'Region', (string)($j['region'] ?? ''), 'text'), und_b('city', 'City', (string)($j['city'] ?? ''), 'text')];
+  foreach (['/v1/portforward', '/v1/openvpn/portforwarded'] as $p) {
+    $r = und_http('GET', und_u($s['url'], $p), $o);
+    if ($r['code'] === 200 && !empty($r['json']['port'])) { $b[] = und_b('port', 'Port', (int)$r['json']['port'], 'text'); break; }
+  }
+  return ['blocks' => $b];
+}
+
+/** Home Assistant: chosen entities' states, or people home, lights on and switches on. Needs a long-lived access token. */
+function und_w_homeassistant($s) {
+  $h = ['headers' => ['Authorization' => 'Bearer ' . $s['key'], 'Content-Type' => 'application/json']];
+  $ids = preg_split('/[\s,]+/', (string)($s['options']['entities'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
+  $b = [];
+  if ($ids) {
+    foreach (array_slice($ids, 0, 8) as $id) {
+      if (!preg_match('/^[a-z0-9_]+\.[a-z0-9_]+$/', $id)) throw new Exception('Not an entity id: ' . und_clip($id, 60) . ' (like sensor.living_room_temperature).');
+      $j = und_get(und_u($s['url'], '/api/states/' . $id), $h);
+      $unit = (string)($j['attributes']['unit_of_measurement'] ?? '');
+      $b[] = und_b(str_replace('.', '_', $id), und_clip((string)($j['attributes']['friendly_name'] ?? $id), 40), trim((string)($j['state'] ?? '') . ' ' . $unit), 'text');
+    }
+    return ['blocks' => $b];
+  }
+  foreach (['people_home' => ['People home', 'person', 'home'], 'lights_on' => ['Lights on', 'light', 'on'], 'switches_on' => ['Switches on', 'switch', 'on']] as $k => $q) {
+    $tpl = "{{ states.$q[1]|selectattr('state','equalto','$q[2]')|list|length }} / {{ states.$q[1]|list|length }}";
+    $r = und_get(und_u($s['url'], '/api/template'), $h + ['method' => 'POST', 'body' => json_encode(['template' => $tpl]), 'raw' => true]);
+    $b[] = und_b($k, $q[0], und_clip(trim($r['body']), 20), 'text');
+  }
+  return ['blocks' => $b];
+}
+
+/* ---------- widgets that need no app of your own ---------- */
+
+/** A JSON file in the temp folder, reused while younger than $ttl seconds; $fetch fills it. Stale data is better than none when the fetch fails. */
+function und_cached($name, $ttl, callable $fetch) {
+  $f = und_tmp($name);
+  $old = und_read_json($f, null);
+  if (is_array($old) && time() - (int)($old['at'] ?? 0) < $ttl) return $old['data'];
+  try { $data = $fetch(); }
+  catch (Exception $e) { if (is_array($old)) return $old['data']; throw $e; }
+  und_write_json($f, ['at' => time(), 'data' => $data]);
+  return $data;
+}
+
+/** WMO weather codes, as Open-Meteo reports them. */
+function und_wmo($c) {
+  $c = (int)$c;
+  $t = [0 => 'Clear', 1 => 'Mostly clear', 2 => 'Partly cloudy', 3 => 'Cloudy', 45 => 'Fog', 48 => 'Freezing fog', 51 => 'Light drizzle', 53 => 'Drizzle', 55 => 'Heavy drizzle',
+        56 => 'Freezing drizzle', 57 => 'Freezing drizzle', 61 => 'Light rain', 63 => 'Rain', 65 => 'Heavy rain', 66 => 'Freezing rain', 67 => 'Freezing rain', 71 => 'Light snow', 73 => 'Snow',
+        75 => 'Heavy snow', 77 => 'Snow grains', 80 => 'Showers', 81 => 'Showers', 82 => 'Heavy showers', 85 => 'Snow showers', 86 => 'Snow showers', 95 => 'Thunderstorm', 96 => 'Thunderstorm, hail', 99 => 'Thunderstorm, hail'];
+  return $t[$c] ?? 'Weather ' . $c;
+}
+
+/** Weather from Open-Meteo (no key). The place is a name (looked up once) or "latitude, longitude". */
+function und_w_weather($s) {
+  $o = $s['options'];
+  $place = trim((string)($o['location'] ?? ''));
+  if ($place === '') throw new Exception('Set a place: a town or city, or latitude, longitude.');
+  if (preg_match('/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/', $place, $m)) { $lat = (float)$m[1]; $lon = (float)$m[2]; }
+  else {
+    $g = und_cached('geo-' . md5(strtolower($place)) . '.json', 30 * 86400, function () use ($place) {
+      $j = und_get('https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=' . rawurlencode(und_clip($place, 100)));
+      if (empty($j['results'][0])) throw new Exception('No place called "' . und_clip($place, 60) . '" was found. Try the city name alone, or latitude, longitude.');
+      return ['lat' => (float)$j['results'][0]['latitude'], 'lon' => (float)$j['results'][0]['longitude']];
+    });
+    $lat = $g['lat']; $lon = $g['lon'];
+  }
+  $imp = ($o['units'] ?? '') === 'imperial';
+  $q = 'latitude=' . round($lat, 3) . '&longitude=' . round($lon, 3) . '&timezone=auto&forecast_days=4'
+     . '&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m'
+     . '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' . ($imp ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '');
+  $j = und_cached('weather-' . md5($q) . '.json', 600, function () use ($q) { return und_get('https://api.open-meteo.com/v1/forecast?' . $q); });
+  $c = (array)($j['current'] ?? []); $d = (array)($j['daily'] ?? []);
+  $deg = function ($v) { return $v === null ? '-' : round((float)$v) . '°'; };
+  $r = ['blocks' => [und_b('now', und_wmo($c['weather_code'] ?? -1), $deg($c['temperature_2m'] ?? null), 'text'),
+    und_b('today', 'Today', $deg($d['temperature_2m_max'][0] ?? null) . ' / ' . $deg($d['temperature_2m_min'][0] ?? null), 'text'),
+    und_b('humidity', 'Humidity', isset($c['relative_humidity_2m']) ? (float)$c['relative_humidity_2m'] : null, 'pct'),
+    und_b('wind', 'Wind', isset($c['wind_speed_10m']) ? round((float)$c['wind_speed_10m']) . ($imp ? ' mph' : ' km/h') : null, 'text')], 'list' => []];
+  for ($i = 1; $i < count((array)($d['time'] ?? [])); $i++) {
+    $rain = $d['precipitation_probability_max'][$i] ?? null;
+    $r['list'][] = ['title' => date('l', strtotime((string)$d['time'][$i])), 'sub' => und_wmo($d['weather_code'][$i] ?? -1) . ($rain ? ' · ' . (int)$rain . '% rain' : ''),
+                    'right' => $deg($d['temperature_2m_max'][$i] ?? null) . ' / ' . $deg($d['temperature_2m_min'][$i] ?? null)];
+  }
+  return $r;
+}
+
+/** The latest release of each GitHub repository listed ("owner/repo" or its address). Each is asked at most once an hour:
+ *  without a token GitHub allows 60 requests an hour per address. */
+function und_w_releases($s) {
+  $repos = [];
+  foreach (preg_split('/[\s,]+/', (string)($s['options']['repos'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) as $x) {
+    $x = preg_replace('#^(https?://)?(www\.)?github\.com/#i', '', rtrim($x, '/'));
+    if (!preg_match('#^([A-Za-z0-9_.-]{1,100})/([A-Za-z0-9_.-]{1,100})$#', $x, $m) || $m[2] === '.' || $m[2] === '..') throw new Exception('Not a GitHub repository: ' . und_clip($x, 80) . ' (write owner/repo).');
+    $repos[strtolower($x)] = $x;
+  }
+  if (!$repos) throw new Exception('List the repositories to follow, like immich-app/immich.');
+  $h = ['headers' => ['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => '2022-11-28'] + ($s['key'] !== '' ? ['Authorization' => 'Bearer ' . $s['key']] : [])];
+  $list = [];
+  foreach (array_slice(array_values($repos), 0, 20) as $repo) {
+    $rel = und_cached('gh-' . md5(strtolower($repo)) . '.json', 3600, function () use ($repo, $h) {
+      $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases/latest', $h);
+      if ($r['code'] === 404) {      // only pre-releases, or no releases at all
+        $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases?per_page=1', $h);
+        if ($r['code'] === 200) return is_array($r['json'][0] ?? null) ? $r['json'][0] : ['none' => true];
+      }
+      if ($r['err'] !== '') throw new Exception(und_redact($r['err']));
+      if ($r['code'] === 403 || $r['code'] === 429) throw new Exception('GitHub\'s limit of checks was reached. Add a GitHub token, or wait an hour.');
+      if ($r['code'] === 401) throw new Exception('GitHub refused the token.');
+      if ($r['code'] === 404) throw new Exception('GitHub has no repository ' . $repo . '.');
+      if ($r['code'] !== 200 || !is_array($r['json'])) throw new Exception('HTTP ' . $r['code'] . ' from GitHub.');
+      return $r['json'];
+    });
+    $name = explode('/', $repo)[1];
+    if (!empty($rel['none'])) { $list[] = ['title' => $name, 'sub' => 'no releases yet', 'href' => 'https://github.com/' . $repo]; continue; }
+    $url = (string)($rel['html_url'] ?? '');
+    $list[] = ['title' => $name, 'sub' => und_clip((string)($rel['tag_name'] ?? ''), 40) . (!empty($rel['prerelease']) ? ' (pre-release)' : ''),
+               'ts' => strtotime((string)($rel['published_at'] ?? '')) ?: null, 'href' => preg_match('#^https://github\.com/#', $url) ? $url : 'https://github.com/' . $repo];
+  }
+  usort($list, function ($a, $b) { return ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0); });
+  return ['list' => $list];
+}
+
+/** Links you keep on the dashboard: "Title | https://…" per line, or just the address. Nothing is fetched. */
+function und_w_bookmarks($s) {
+  $list = [];
+  foreach (preg_split('/\r?\n/', (string)($s['options']['links'] ?? '')) as $line) {
+    $line = trim($line);
+    if ($line === '') continue;
+    $p = array_map('trim', explode('|', $line, 2));
+    $url = count($p) === 2 ? $p[1] : $p[0];
+    if (!preg_match('#^https?://[^\s<>"]+$#i', $url)) continue;          // only web addresses: no javascript: or data: links
+    $list[] = ['title' => und_clip(count($p) === 2 && $p[0] !== '' ? $p[0] : (parse_url($url, PHP_URL_HOST) ?: $url), 60), 'href' => $url];
+    if (count($list) >= 50) break;
+  }
+  return ['list' => $list, 'empty' => 'Add links in Settings: one per line, Title | https://…'];
+}
+
 /* ---------- calendar (Radarr + Sonarr) ---------- */
 
 function und_w_calendar($s, $cfg) {
@@ -382,6 +603,34 @@ function und_jpath($data, $path) {
   return $data;
 }
 
+/** Fills "{field.path}" or "{field|format}" from one JSON item. Formats: bytes, rate, percent, round, number, date, upper, lower.
+ *  Single braces, so they never meet the {{SHARED}} values filled in before. */
+function und_tpl($tpl, $item) {
+  return preg_replace_callback('/\{([A-Za-z0-9_.\-]*)(?:\|([a-z]+))?\}/', function ($m) use ($item) {
+    $v = $m[1] === '' ? $item : und_jpath($item, $m[1]);
+    if (is_bool($v)) $v = $v ? 'yes' : 'no';
+    if ($v === null || !is_scalar($v)) return is_array($v) ? (string)count($v) : '';
+    $f = $m[2] ?? '';
+    if (in_array($f, ['bytes', 'rate'], true) && is_numeric($v)) {
+      $u = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']; $n = (float)$v; $i = 0;
+      while (abs($n) >= 1024 && $i < 5) { $n /= 1024; $i++; }
+      return ($i ? number_format($n, $n >= 100 ? 0 : 1) : (string)(int)$n) . ' ' . $u[$i] . ($f === 'rate' ? '/s' : '');
+    }
+    if ($f === 'percent' && is_numeric($v)) return round((float)$v, 1) . '%';
+    if ($f === 'round' && is_numeric($v)) return (string)round((float)$v);
+    if ($f === 'number' && is_numeric($v)) return number_format((float)$v, floor((float)$v) == (float)$v ? 0 : 1);
+    if ($f === 'date') { $t = und_ts($v); return $t ? date('Y-m-d H:i', $t) : (string)$v; }
+    if ($f === 'upper') return strtoupper((string)$v);
+    if ($f === 'lower') return strtolower((string)$v);
+    return (string)$v;
+  }, (string)$tpl);
+}
+/** A date as unix seconds: ISO text, seconds or milliseconds. */
+function und_ts($v) {
+  if (is_numeric($v)) { $n = (float)$v; return (int)($n > 1e11 ? $n / 1000 : $n); }
+  return strtotime((string)$v) ?: null;
+}
+
 function und_w_customapi($s) {
   $o = $s['options'];
   $h = isset($o['headers']) && is_array($o['headers']) ? array_map('strval', $o['headers']) : [];
@@ -389,6 +638,23 @@ function und_w_customapi($s) {
   $opts = ['headers' => $h, 'method' => strtoupper((string)($o['method'] ?? 'GET'))];
   if ($s['username'] !== '') $opts['basic'] = [$s['username'], $s['password']];
   $j = und_get(str_replace('{{KEY}}', rawurlencode($s['key']), $s['url']), $opts);
+  // one row per element of an array, each row written with templates
+  if (($o['display'] ?? 'block') === 'items') {
+    $arr = trim((string)($o['items'] ?? '')) === '' ? $j : und_jpath($j, $o['items']);
+    if (!is_array($arr)) throw new Exception('Nothing is at "' . und_clip((string)($o['items'] ?? ''), 80) . '" in the answer.');
+    if ($arr && !isset($arr[0])) $arr = array_values($arr);      // an object of objects counts as a list too
+    $title = (string)($o['title'] ?? '') ?: '{name}';
+    $list = [];
+    foreach (array_slice($arr, 0, max(1, min(50, (int)($o['limit'] ?? 10) ?: 10))) as $it) {
+      $row = ['title' => und_clip(trim(und_tpl($title, $it)), 200)];
+      if (trim((string)($o['sub'] ?? '')) !== '') $row['sub'] = und_clip(trim(und_tpl($o['sub'], $it)), 200);
+      if (trim((string)($o['date'] ?? '')) !== '') { $t = und_ts(und_jpath($it, $o['date'])); if ($t) $row['ts'] = $t; }
+      if (!isset($row['ts']) && trim((string)($o['right'] ?? '')) !== '') $row['right'] = und_clip(trim(und_tpl($o['right'], $it)), 60);
+      if (trim((string)($o['link'] ?? '')) !== '') { $u = trim(und_tpl($o['link'], $it)); if (preg_match('#^https?://[^\s<>"]+$#i', $u)) $row['href'] = $u; }
+      $list[] = $row;
+    }
+    return ['list' => $list, 'empty' => 'The list is empty'];
+  }
   $maps = (array)($o['mappings'] ?? []);
   if (($o['display'] ?? 'block') === 'list') {
     $list = [];
@@ -408,6 +674,7 @@ function und_w_customapi($s) {
   }
   $b = [];
   foreach ($maps as $i => $m) {
+    if (isset($m['template'])) { $b[] = und_b('t' . $i, (string)($m['label'] ?? ''), und_clip(und_tpl($m['template'], $j), 60), 'text'); continue; }
     $v = und_jpath($j, $m['field'] ?? '');
     $fmt = (string)($m['format'] ?? 'n');
     if ($fmt === 'number') $fmt = 'n';
