@@ -1,3 +1,6 @@
+###0.7.2
+- UPS in the Docker version: a UPS run by NUT (the NUT plugin) now shows. The Unraid API only knows apcupsd, so UnDash reads NUT straight from the server (port 3493), using the UPS name in Settings > Refresh & display (NAME@HOST for another NUT server).
+
 ###0.7.1
 - Check configuration and the app list no longer say a Custom API app has no API key: its key is optional (it can sit in the address, as with Tautulli, or not be needed at all).
 - config.yaml is shorter and easier to read: an app's empty and default fields (no description, not hidden, no fields of its own …) are no longer written out. Older files load as before.

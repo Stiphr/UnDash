@@ -713,6 +713,18 @@ t('glances is left to the built-in overview', $hc['config']['groups'][1]['servic
 t('appearance survives a Homepage import', $hc['config']['appearance']['theme'] === und_load_config()['appearance']['theme']);
 t('.env values picked up', $hc['vars']['HOMEPAGE_VAR_IP'] === '10.0.0.9');
 
+group('nut');
+// a one-shot NUT daemon on a free local port, answering LIST VAR the way upsd does
+$srv = stream_socket_server('tcp://127.0.0.1:0'); $port = (int)substr(strrchr(stream_socket_get_name($srv, false), ':'), 1); fclose($srv);
+$fake = proc_open([PHP_BINARY, '-r', '$s = stream_socket_server("tcp://127.0.0.1:' . $port . '"); $c = stream_socket_accept($s, 5); fgets($c);'
+  . ' fwrite($c, "BEGIN LIST VAR ups\nVAR ups battery.charge \"87\"\nVAR ups battery.runtime \"1800\"\nVAR ups ups.load \"12\"\nVAR ups ups.status \"OB DISCHRG\"\nVAR ups ups.model \"Back-UPS\"\nEND LIST VAR ups\n"); fclose($c);'], [], $pipes);
+usleep(300000);
+$u = und_nut_tcp('127.0.0.1:' . $port, 'ups');
+proc_close($fake);
+t('a NUT UPS is read over TCP', is_array($u) && $u['charge'] === 87.0 && $u['load'] === 12.0 && $u['runtime'] === 1800 && $u['status'] === 'On battery, Discharging' && $u['model'] === 'Back-UPS', json_encode($u));
+t('no NUT daemon means no UPS', und_nut_tcp('127.0.0.1:' . $port, 'ups') === null);
+t('odd UPS names are refused', und_nut_tcp('127.0.0.1', "ups\nFSD") === null);
+
 rmrf($SANDBOX);
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);
