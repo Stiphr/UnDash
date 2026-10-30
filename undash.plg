@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.9.2">
+<!ENTITY version "0.9.3">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.9.3
+- Arr Stack: roomier rows. When it sits beside Media (or another section) at the top of the half-width columns, it grows to the same height and its rows share the extra space.
+- New setting: Settings &gt; Theme &gt; Section names. Off hides the names above the sections (System, Media, Arr Stack…); their buttons stay, and a collapsed section still shows its name.
+- Alerts: with nothing wrong the Alerts section is hidden, instead of showing "No problems found". Alert history now also opens from Settings &gt; Ignored alerts.
+
 ###0.9.2
 - Requests: new "Show as" option (Settings &gt; Sections &amp; apps &gt; Requests). Text only shows each request on one line, with Approve and Decline still there.
 - Plex, Tautulli, Emby and Jellyfin app cards show what is playing the same way as Now playing: title, episode, who and on what, progress, direct play or transcode, quality and bandwidth.
@@ -229,7 +234,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.9.2');
+define('UND_VERSION', '0.9.3');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -403,7 +408,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>1fa71a6c51888c22ae3b62e712fdf7f30181cdce15846bdf2fd32fe932bfd647</SHA256>
+<SHA256>bf77a0ee12fdac8f2ecada7692b7c4d743f1c6894a4c5775e768635792e3b17b</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -467,7 +472,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -737,6 +742,7 @@ function und_normalize(array $c) {
   foreach (['safe_x', 'safe_y'] as $k) $a[$k] = (int)$a[$k] < 0 ? -1 : min(200, (int)$a[$k]);
   $a['blur_target'] = in_array($a['blur_target'], ['wallpaper', 'cards'], true) ? $a['blur_target'] : 'wallpaper';   // blur the whole picture, or only what is behind the cards
   $a['css_enabled'] = !empty($a['css_enabled']);
+  $a['sec_names'] = !empty($a['sec_names']);
 
   // sections and metrics: keep the user's order, drop unknown ids, append new ones at the end
   $db = isset($c['dashboard']) && is_array($c['dashboard']) ? $c['dashboard'] : [];
@@ -1005,7 +1011,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>531a75c95c5431c2fba20650f4d6409c309f5d0e90553e07106a576b31d3acfe</SHA256>
+<SHA256>b951b5b611fa2684fba8746477fd3e21333801ce7a6a5f319eff57b4648adf27</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -5545,6 +5551,10 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .sec-h h2 button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .und .sec-h h2 button svg{width:15px;height:15px;color:var(--faint);transition:transform .15s}
 .und .sec.closed .sec-h h2 button svg{transform:rotate(-90deg)}.und .sec.closed .sec-b{display:none}
+.und .sec[hidden]{display:none}
+/* Settings > Theme > Section names off: no names; a header with buttons keeps them, an empty one goes; collapsed sections keep theirs */
+.und.no-sec-names .sec:not(.closed)>.sec-h>h2{display:none}
+.und.no-sec-names .sec:not(.closed)>.sec-h:not(:has(.tools>:not(:empty):not([hidden]))){display:none}
 .und .sec-h .count{color:var(--muted);font-weight:400;font-size:13px}
 .und .sec-h .tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto;max-width:100%}
 .und .sec-h .tools .seg{max-width:100%;overflow-x:auto;scrollbar-width:none}.und .sec-h .tools .seg::-webkit-scrollbar{display:none}.und .seg button{flex:none}
@@ -5931,7 +5941,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .arr{display:flex;flex-direction:column}
 .und .aitem{border-bottom:1px solid var(--line)}.und .aitem:last-child{border-bottom:0}
 .und .aline{display:flex;align-items:center;gap:6px;padding:0 8px 0 0}
-.und button.arow{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;min-height:38px}
+.und button.arow{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;min-height:44px}
 .und button.arow:hover{background:var(--panel-2)}.und button.arow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .und .aico{width:20px;height:20px;object-fit:contain;flex:none;border-radius:4px}
 .und span.aico{display:flex;align-items:center;justify-content:center;color:var(--faint)}.und span.aico svg{width:14px;height:14px}
@@ -5943,6 +5953,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .ax{flex:none}
 .und .adet{padding:4px 12px 12px 38px;display:flex;flex-direction:column;gap:6px}
 .und .adet .blocks{margin:0}
+/* stretched to match the section beside it: the rows share the extra height */
+.und .sec.fill .arr>.aitem{flex:1 0 auto;display:flex;flex-direction:column;justify-content:center}.und .sec.fill .arr>.aitem>.aline{flex:1 0 auto}
+.und[data-density=compact] button.arow{padding:6px 10px;min-height:36px}.und[data-density=expanded] button.arow{padding:12px 14px;min-height:52px}
 
 /* download clients */
 .und .dls{display:flex;flex-direction:column;gap:var(--gap)}
@@ -6135,7 +6148,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
 }
 ]]></INLINE>
-<SHA256>9c6405b16a884b61f5fc218a61eff4ff2ab596ac57056666d40177f6c4909971</SHA256>
+<SHA256>c89762b1de9fb82c5519e3b822790709b40d9dff0f2cf41edb2de38e603e6780</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -6402,6 +6415,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     root.setAttribute('data-mode', mode);
     root.style.colorScheme = mode;          // native controls, dropdown lists and scrollbars follow the theme
     root.setAttribute('data-density', a.density);
+    root.classList.toggle('no-sec-names', a.sec_names === false);
     var set = function (k, v) { root.style.setProperty(k, v); };
     [['--bg', 'bg'], ['--panel', 'panel'], ['--panel-2', 'p2'], ['--bar', 'bar'], ['--field', 'field'], ['--line', 'line'], ['--line-2', 'l2'], ['--text', 'text'], ['--muted', 'muted'], ['--faint', 'faint'], ['--title', 'title']]
       .forEach(function (x) { set(x[0], p[x[1]]); });
@@ -6550,7 +6564,32 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       if (Math.max(hh[0], hh[1]) > Math.max(cur[0], cur[1]) - 40) move = false;
     }
     if (move) p.items.forEach(function (el, i) { p.cols[want[i]].appendChild(el); });
-    if (!one) level(p);
+    if (!one) { pairTop(p); level(p); }
+  }
+  /* The first sections of the two columns sit side by side (Media beside Arr Stack, say): the shorter one grows to the
+     taller one's height, when that does not stretch it out of shape (media lists can always show more). */
+  function pairTop(p) {
+    p.paired = null;
+    var a = firstOpen(p.cols[0]), b = firstOpen(p.cols[1]); if (!a || !b) return;
+    p.paired = a.getAttribute('data-sec') === 'media' ? a : b.getAttribute('data-sec') === 'media' ? b : null;
+    var ha = a.offsetHeight, hb = b.offsetHeight, short = ha < hb ? a : b, tall = Math.max(ha, hb), diff = Math.abs(ha - hb);
+    if (diff < 4) return;
+    if (short.getAttribute('data-sec') === 'media') { if (growMedia(short, diff)) return; }
+    if (short.offsetHeight < tall * 0.55) { p.paired = null; return; }
+    short.classList.add('fill'); short.style.minHeight = tall + 'px';
+  }
+  function firstOpen(col) { return [].filter.call(col.children, function (el) { return el.offsetHeight > 0; })[0]; }
+  /* every row of media columns gets its share of the extra height; lists in a row share one height */
+  function growMedia(media, diff) {
+    var rows = {}, lists = [].slice.call(media.querySelectorAll('.mlist'));
+    lists.forEach(function (l) { var t = Math.round(l.getBoundingClientRect().top); (rows[t] = rows[t] || []).push(l); });
+    var keys = Object.keys(rows); if (!keys.length) return false;
+    var add = diff / keys.length;
+    keys.forEach(function (k) {
+      var tall = Math.max.apply(null, rows[k].map(function (l) { return l.offsetHeight; }));
+      rows[k].forEach(function (l) { l.style.maxHeight = 'none'; l.style.height = Math.round(tall + add) + 'px'; });
+    });
+    return true;
   }
   /* Smart height: the shorter column ends level with the taller one. Media in the shorter column shows more items
      (its lists grow); otherwise the column's last box stretches. */
@@ -6564,21 +6603,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var h0 = p.cols[0].offsetHeight, h1 = p.cols[1].offsetHeight, diff = Math.abs(h0 - h1);
     var short = p.cols[h0 < h1 ? 0 : 1], kids = [].slice.call(short.children);
     if (diff < 4 || !kids.length) return;
-    var media = kids.filter(function (el) { return el.getAttribute('data-sec') === 'media' && !el.classList.contains('closed'); })[0];
-    if (media) {
-      // every row of media columns gets its share of the difference; lists in a row share one height
-      var rows = {}, lists = [].slice.call(media.querySelectorAll('.mlist'));
-      lists.forEach(function (l) { var t = Math.round(l.getBoundingClientRect().top); (rows[t] = rows[t] || []).push(l); });
-      var keys = Object.keys(rows);
-      if (keys.length) {
-        var add = diff / keys.length;
-        keys.forEach(function (k) {
-          var tall = Math.max.apply(null, rows[k].map(function (l) { return l.offsetHeight; }));
-          rows[k].forEach(function (l) { l.style.maxHeight = 'none'; l.style.height = Math.round(tall + add) + 'px'; });
-        });
-        return;
-      }
-    }
+    // media matched to the section beside it keeps that height; the column's last box takes the rest
+    var media = kids.filter(function (el) { return el.getAttribute('data-sec') === 'media' && !el.classList.contains('closed') && p.paired !== el; })[0];
+    if (media && growMedia(media, diff)) return;
     var last = kids.filter(function (el) { return !el.classList.contains('closed'); }).pop();
     if (last) { last.classList.add('fill'); last.style.minHeight = last.offsetHeight + diff + 'px'; }
   }
@@ -7078,7 +7105,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     txt(r.count, out.length ? String(out.length) : '');
     r.ign.hidden = !hidden; clear(r.ign); r.ign.appendChild(ic('mute')); r.ign.appendChild(document.createTextNode(hidden + ' ignored'));
     r.ign.title = 'Alerts hidden by ignore rules. Open Settings > Ignored alerts.';
-    if (!out.length) { r.list.appendChild(h('div', { class: 'alert ok' }, ic('check'), h('span', { class: 'grow' }, !y.system ? 'Waiting for data…' : hidden ? 'No problems found apart from ignored alerts.' : 'No problems found.'))); return; }
+    // nothing wrong: the whole section steps aside (ignored alerts and the history are under Settings > Ignored alerts)
+    r.el.hidden = !out.length;
+    if (!out.length) return;
     out.forEach(function (x) {
       var mb = x.cat ? h('button', { type: 'button', class: 'btn ghost sm', 'aria-haspopup': 'menu', title: 'Ignore this alert', 'aria-label': 'Ignore: ' + x.msg, onclick: function (e) { ignoreMenu(e.currentTarget, x); } }, ic('mute'), 'Ignore') : null;
       r.list.appendChild(h('div', { class: 'alert ' + x.lv + (x.crit ? ' crit' : ''), role: x.crit ? 'alert' : null, 'data-alert': x.cat ? x.cat + ':' + x.res : null },
@@ -8500,7 +8529,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       });
     }, 'sm danger', 'restart');
     b.appendChild(set('Ignored alerts', 'Ignoring only hides an alert on the dashboard. UnDash keeps checking, and an alert comes back when its rule is restored or runs out while the problem is still there.',
-      h('div', null, h('div', { class: 'ign-bar' }, q, sev, h('span', { class: 'grow' }), purge, all), list)));
+      h('div', null, h('div', { class: 'ign-bar' }, q, sev, h('span', { class: 'grow' }), btn('History', alertHistory, 'sm', 'clock', 'When each problem started and ended'), purge, all), list)));
     function when(t) { return new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
     function row(r) {
       var expired = r.until !== null && r.until <= V.now;
@@ -8569,7 +8598,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
         a[k] = e.target.checked ? -1 : +r.value; r.disabled = e.target.checked; txt(out, e.target.checked ? 'auto' : a[k] + ' px'); dirty(); preview(); } }), 'Auto'), r, out));
     };
     b.appendChild(set('Spacing', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
-      F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)), h('span'),
+      F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
+      F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
+        'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
       margin('safe_x', 'Side margin'), margin('safe_y', 'Top and bottom margin'))));
     var pd = function () { dirty(); preview(); };
     var rng = function (k, lo, hi, unit, lab) {
@@ -9191,7 +9222,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>c010f041b6b2045732fd73ef78378991204758c7009be05b99d024a09aba4ef0</SHA256>
+<SHA256>705b5ff1d7016768638e649806786f1f6238512b09e2eb0dab2d464c466ee813</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
