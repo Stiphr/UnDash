@@ -615,6 +615,8 @@ $pl = und_playing($cfgS);
 t('Tautulli covers Plex, so Plex is not asked', !array_filter($GLOBALS['SEEN'], function ($u) { return strpos($u, ':1/status/sessions') !== false; }) && count($pl['streams']) === 2);
 t('streams carry who, what and how', $pl['streams'][0]['user'] === 'Bo' && $pl['streams'][0]['title'] === 'Dark' && $pl['streams'][0]['sub'] === 'S01E02 · Lies' && $pl['streams'][0]['method'] === 'direct play' && $pl['streams'][0]['quality'] === '1080p');
 t('playing comes before paused; transcodes and remote streams are marked', $pl['streams'][1]['state'] === 'paused' && $pl['streams'][1]['method'] === 'transcode' && $pl['streams'][1]['location'] === 'wan' && $pl['streams'][1]['bandwidth'] === 8000000);
+$tw = und_w_tautulli(und_service_full($cfgS, 'a0000002'));
+t('app cards get the same stream details as Now playing', $tw['streams'][0]['method'] === 'transcode' && $tw['streams'][0]['location'] === 'wan' && $tw['streams'][0]['bandwidth'] === 8000000 && $tw['empty'] === 'No active streams');
 t('no media server means a hint, not an error', !empty(und_playing(und_normalize(['groups' => []]))['unconfigured']));
 $rq = und_requests($cfgS);
 t('pending requests first, titles looked up', $rq['pending'] === 1 && $rq['items'][0]['title'] === 'Memento' && $rq['items'][0]['status'] === 'pending' && $rq['items'][1]['status'] === 'available' && $rq['items'][1]['seasons'] === [1]);
@@ -698,6 +700,7 @@ t('columns always in the fixed order', array_column($m['widgets'], 'id') === ['u
 t('per-column count kept and clamped', $m['widgets'][3]['count'] === 7 && $m['widgets'][0]['count'] === 50);
 t('older configs fall back to the shared count', $m['widgets'][1]['count'] === 12);
 t('style defaults to posters', $m['style'] === 'art' && und_normalize(['groups' => [], 'media' => ['style' => 'text']])['media']['style'] === 'text' && und_normalize(['groups' => [], 'media' => ['style' => 'x']])['media']['style'] === 'art');
+t('requests style defaults to posters', und_normalize(['groups' => []])['requests']['style'] === 'art' && und_normalize(['groups' => [], 'requests' => ['style' => 'text']])['requests']['style'] === 'text' && und_normalize(['groups' => [], 'requests' => 'x'])['requests']['style'] === 'art');
 t('visibility kept', $m['widgets'][3]['visible'] === false && $m['widgets'][0]['visible'] === true);
 t('default count is 15', und_load_config()['media']['widgets'][2]['count'] === 15);
 $ap = und_normalize(['groups' => [], 'appearance' => ['brightness' => 0, 'blur_target' => 'cards']])['appearance'];
