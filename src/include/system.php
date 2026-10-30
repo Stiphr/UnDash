@@ -180,15 +180,15 @@ function und_storage() {
 /* ---------- UPS: NUT (upsc) first, then apcupsd (apcaccess) ---------- */
 
 function und_ups($name = 'ups') {
-  if (und_api_mode()) return und_api_ups();
+  // the Unraid API only reads apcupsd; a NUT UPS is read straight from the server's NUT daemon (port 3493)
+  if (und_api_mode()) return und_api_ups() ?: und_api_cached('nut', 5, function () use ($name) { return und_nut_tcp((string)parse_url(und_api_conf()['url'], PHP_URL_HOST), $name); });
   $upsc = und_bin('upsc');
   if ($upsc !== 'upsc' || isset($GLOBALS['UND_EXEC_MOCK'])) {
     $r = und_run([$upsc, strpos($name, '@') === false ? $name . '@localhost' : $name], 8);
     if ($r['code'] === 0 && preg_match('/battery\.charge:/', $r['out'])) {
       $k = [];
       foreach (explode("\n", $r['out']) as $l) if (strpos($l, ':') !== false) { list($a, $b) = explode(':', $l, 2); $k[trim($a)] = trim($b); }
-      return ['source' => 'NUT', 'charge' => (float)($k['battery.charge'] ?? 0), 'load' => isset($k['ups.load']) ? (float)$k['ups.load'] : null,
-              'status' => und_ups_status($k['ups.status'] ?? ''), 'runtime' => isset($k['battery.runtime']) ? (int)$k['battery.runtime'] : null, 'model' => (string)($k['ups.model'] ?? $k['device.model'] ?? '')];
+      return und_nut_vars($k);
     }
   }
   $apc = und_bin('apcaccess');
@@ -202,6 +202,30 @@ function und_ups($name = 'ups') {
     }
   }
   return null;
+}
+
+function und_nut_vars(array $k) {
+  return ['source' => 'NUT', 'charge' => (float)($k['battery.charge'] ?? 0), 'load' => isset($k['ups.load']) ? (float)$k['ups.load'] : null,
+          'status' => und_ups_status($k['ups.status'] ?? ''), 'runtime' => isset($k['battery.runtime']) ? (int)$k['battery.runtime'] : null, 'model' => (string)($k['ups.model'] ?? $k['device.model'] ?? '')];
+}
+
+/** NUT's own protocol (LIST VAR), for a UPS name like "ups" or "ups@host[:port]"; null when there is no answer. */
+function und_nut_tcp($host, $name) {
+  if (strpos($name, '@') !== false) list($name, $host) = explode('@', $name, 2);
+  $port = 3493;
+  if (preg_match('/^(.+):(\d+)$/', $host, $m)) { $host = $m[1]; $port = (int)$m[2]; }
+  if ($host === '' || !preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $name)) return null;
+  $f = @fsockopen($host, $port, $en, $es, 1.5);
+  if (!$f) return null;
+  stream_set_timeout($f, 2);
+  fwrite($f, "LIST VAR $name\nLOGOUT\n");
+  $k = [];
+  while (($l = fgets($f)) !== false) {
+    if (preg_match('/^VAR \S+ (\S+) "(.*)"$/', rtrim($l), $m)) $k[$m[1]] = stripcslashes($m[2]);
+    elseif (strpos($l, 'END LIST') === 0 || strpos($l, 'ERR') === 0) break;
+  }
+  fclose($f);
+  return isset($k['battery.charge']) ? und_nut_vars($k) : null;
 }
 
 function und_ups_status($s) {
