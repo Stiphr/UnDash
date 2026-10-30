@@ -854,6 +854,23 @@ t('blocks: a template and a plain field side by side', $r['blocks'][0]['value'] 
 t('templates: true reads yes, a list counts its items, unknown fields are empty', und_tpl('{a}|{b}|{c}', ['a' => true, 'b' => [1, 2]]) === 'yes|2|');
 unset($GLOBALS['UND_HTTP_MOCK']);
 
+/* ---------------- security ---------------- */
+group('security');
+reset_store();
+$evil = "abc\rUNDASH_PASSWORD_HASH=x\r\nUNDASH_AUTH=open\nZ=1";
+$back = und_env_read(und_env_text(['RADARR_API_KEY' => $evil, 'B' => "q\"\\r"]));
+t('.env: line breaks inside a value cannot add settings', $back === ['B' => "q\"\\r", 'RADARR_API_KEY' => $evil], json_encode($back));
+for ($i = 0; $i < 4; $i++) und_login_failed('10.0.0.' . $i);
+t('5 wrong passwords per address', !und_login_throttled('10.0.0.1'));
+for ($i = 0; $i < 30; $i++) und_login_failed('10.9.' . intdiv($i, 4) . '.' . $i);
+t('30 wrong passwords from all addresses together slow everyone down', und_login_throttled('10.200.0.1'));
+putenv('HOST_HOSTNAME=Tower'); putenv('UNDASH_ALLOWED_HOSTS=dash.example.com,*.lan.example.net');
+t('host names: IPs, localhost, the server name and local suffixes', und_host_allowed('192.168.1.10') && und_host_allowed('[fd00::1]') && und_host_allowed('localhost') && und_host_allowed('tower') && und_host_allowed('tower.local') && und_host_allowed('tower.home.arpa'));
+t('host names: the allowed list, with wildcards', und_host_allowed('dash.example.com') && und_host_allowed('a.lan.example.net') && !und_host_allowed('lan.example.net') && !und_host_allowed('xlan.example.net'));
+t('host names: anything else is refused', !und_host_allowed('tower.evil.example') && !und_host_allowed('evil.example') && !und_host_allowed(''));
+putenv('HOST_HOSTNAME'); putenv('UNDASH_ALLOWED_HOSTS');
+reset_store();
+
 /* ---------------- icon picker ---------------- */
 group('icons');
 reset_store();

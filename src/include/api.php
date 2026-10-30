@@ -227,6 +227,10 @@ switch ($action) {
     $url = trim($P('url')); $key = $P('key');
     if ($url !== '' && !preg_match('#^https?://[^\s"\'<>]+$#i', $url)) fail('The address must start with http:// or https://, e.g. http://192.168.1.10/graphql');
     $sec = und_secrets();
+    // the saved key is only ever sent to the address it was entered for: a new server address needs the key again
+    $was = parse_url((string)und_api_conf()['url']); $now = parse_url($url);
+    if ($key === UND_KEEP && und_api_conf()['key'] !== '' && $url !== '' && strtolower(($was['host'] ?? '') . ':' . ($was['port'] ?? '')) !== strtolower(($now['host'] ?? '') . ':' . ($now['port'] ?? '')))
+      fail('Enter the API key again: it is only sent to the server it was saved for.');
     $sec['unraid']['url'] = und_clip($url, 300);
     if ($key !== UND_KEEP) $sec['unraid']['key'] = und_clip(trim($key), 300);
     und_save_secrets($sec);
@@ -262,7 +266,10 @@ switch ($action) {
   }
 
   /* ---- import / export / backups ---- */
-  case 'export':        out(und_export($P('kind') === 'env' ? 'env' : 'config'));
+  case 'export': {
+    if ($P('kind') === 'env' && und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true)) fail('Set a dashboard password first (Settings > Connection): without one, anyone on your network could download every key.', 403);
+    out(und_export($P('kind') === 'env' ? 'env' : 'config'));
+  }
   case 'import_check':  { $r = und_import_parse($P('file')); if (isset($r['error'])) fail($r['error']); out(['summary' => $r['summary']]); }
   case 'import_file':   { $r = und_import_apply($P('file')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'backups':       out(['backups' => und_backups()]);
