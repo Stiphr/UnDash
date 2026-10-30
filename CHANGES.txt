@@ -1,3 +1,6 @@
+###0.9.6
+- Docker version: a new API key with the listed permissions no longer leaves the System section empty with "The API key is missing a permission: Forbidden resource". UnDash asked for the server name through a part of the API (vars) that is not on the list; it now uses the host name from Info.
+
 ###0.9.5
 - Docker version: container updates work. They never started, because the background job needed bash and the image has none, so the update window waited for ever. Nothing was changed on the server.
 - Updates show a small status bar at the bottom right instead of a large window, and the page stays usable. It closes by itself after a success and stays open with the error after a failure. Details shows the output. After a page reload the bar comes back for an update that is still running.
