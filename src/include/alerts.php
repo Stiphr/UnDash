@@ -8,8 +8,9 @@
  * and act (the button the page shows: logs | settings | restart | os, or '').
  */
 
-/** The alerts for one snapshot. $sys = und_system(), $dk = und_docker_live() (either may be null when not loaded). */
-function und_alerts(array $cfg, $sys, $dk) {
+/** The alerts for one snapshot. $sys = und_system(), $dk = und_docker_live() (either may be null when not loaded),
+ *  $smart = und_smart_failures() (Scrutiny; null when not read). */
+function und_alerts(array $cfg, $sys, $dk, $smart = null) {
   $out = [];
   $add = function ($lv, $msg, $cat, $res, $act = '') use (&$out) { $out[] = ['lv' => $lv, 'msg' => $msg, 'cat' => $cat, 'res' => (string)$res, 'act' => $act]; };
   if (is_array($sys) && isset($sys['error'])) {
@@ -38,6 +39,11 @@ function und_alerts(array $cfg, $sys, $dk) {
       elseif (($c['state'] ?? '') === 'exited' && !empty($c['exit']) && !empty($c['autostart'])) $add('warn', $nm . ' stopped with exit code ' . $c['exit'] . '.', 'docker.exited', $c['name'], 'logs');
       if (($c['job'] ?? '') === 'update_failed') $add('bad', 'The update of ' . $nm . ' failed.', 'docker.update_failed', $c['name'], 'logs');
     }
+  }
+  $why = [1 => 'failed its SMART check', 2 => 'failed Scrutiny\'s checks', 3 => 'failed its SMART and Scrutiny checks'];
+  foreach ((array)($smart['failed'] ?? []) as $d) {
+    $res = trim(preg_replace('/[^A-Za-z0-9_.+@ -]/', '', (string)$d['disk'])) ?: 'disk';
+    $add('bad', $d['disk'] . ($d['model'] !== '' ? ' (' . $d['model'] . ')' : '') . ' ' . ($why[(int)$d['status']] ?? 'failed') . ' in ' . $d['app'] . '. Back up its data and plan a replacement.', 'disk.smart', $res);
   }
   return $out;
 }
@@ -69,7 +75,7 @@ function und_alerts_track(array $alerts, array $scopes, $now = null) {
   }
   foreach ($act as $k => $a) {
     if (isset($seen[$k])) continue;
-    $scope = strpos((string)$a['cat'], 'docker.') === 0 ? 'docker' : 'system';
+    $scope = strpos((string)$a['cat'], 'docker.') === 0 ? 'docker' : ($a['cat'] === 'disk.smart' ? 'smart' : 'system');
     if (!in_array($scope, $scopes, true)) continue;
     $log[] = $a + ['end' => $now];
     unset($act[$k]); $changed = true;
@@ -101,7 +107,9 @@ function und_alerts_check() {
   $dk = und_docker_live();
   $scopes = isset($sys['error']) ? [] : ['system'];
   if (is_array($dk) && !isset($dk['error'])) $scopes[] = 'docker';
-  $alerts = und_alerts($cfg, $sys, $dk);
+  $smart = und_smart_failures($cfg, true);
+  if ($smart['checked']) $scopes[] = 'smart';
+  $alerts = und_alerts($cfg, $sys, $dk, $smart);
   und_alerts_track($alerts, $scopes);
   @file_put_contents(und_tmp('alertcheck.at'), (string)time());
   return count($alerts);

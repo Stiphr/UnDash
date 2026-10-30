@@ -338,25 +338,53 @@ function und_w_peanut($s) {
 
 /* ---------- monitoring and tools ---------- */
 
-/** Scrutiny: disks by SMART result. A disk counts as failed by the same rule as Scrutiny's own page (its status threshold setting). */
-function und_w_scrutiny($s) {
+/** Scrutiny's disks by SMART result. A disk counts as failed by the same rule as Scrutiny's own page (its status threshold
+ *  setting). The failed ones are also kept in the temp folder for Alerts (und_smart_failures). */
+function und_scrutiny_disks($s) {
   $j = und_get(und_u($s['url'], '/api/summary'));
   try { $thr = (int)(und_get(und_u($s['url'], '/api/settings'))['settings']['metrics']['status_threshold'] ?? 3); } catch (Exception $e) { $thr = 3; }
-  $pass = 0; $bad = 0; $unk = 0; $hot = null; $list = [];
+  $r = ['passed' => 0, 'failed' => [], 'unknown' => 0, 'hottest' => null];
   foreach ((array)($j['data']['summary'] ?? []) as $d) {
     if (!is_array($d) || !empty($d['device']['archived'])) continue;
     $st = (int)($d['device']['device_status'] ?? -1);
-    if ($st < 0 || $st > 3) $unk++;
-    elseif ($st > 0 && ($thr === 3 || $st === $thr || $st === 3)) {
-      $bad++;
-      $list[] = ['title' => trim(($d['device']['device_name'] ?? '') . ' ' . ($d['device']['model_name'] ?? '')) ?: 'Disk', 'right' => $st === 1 ? 'SMART failed' : ($st === 2 ? 'Scrutiny failed' : 'Failed')];
-    } else $pass++;
+    if ($st < 0 || $st > 3) $r['unknown']++;
+    elseif ($st > 0 && ($thr === 3 || $st === $thr || $st === 3))
+      $r['failed'][] = ['disk' => und_clip((string)($d['device']['device_name'] ?? ''), 60) ?: 'disk', 'model' => und_clip((string)($d['device']['model_name'] ?? ''), 80), 'status' => $st];
+    else $r['passed']++;
     $t = (int)($d['smart']['temp'] ?? 0);
-    if ($t > 0 && ($hot === null || $t > $hot)) $hot = $t;
+    if ($t > 0 && ($r['hottest'] === null || $t > $r['hottest'])) $r['hottest'] = $t;
   }
-  $r = ['blocks' => [und_b('passed', 'Passed', $pass), und_b('failed', 'Failed', $bad), und_b('unknown', 'Unknown', $unk), und_b('hottest', 'Hottest', $hot === null ? null : $hot . ' °C', 'text')]];
-  if ($list) $r['list'] = $list;
+  und_write_json(und_tmp('smart-' . $s['id'] . '.json'), ['at' => time(), 'app' => (string)($s['name'] ?? 'Scrutiny'), 'failed' => $r['failed']]);
   return $r;
+}
+function und_w_scrutiny($s) {
+  $d = und_scrutiny_disks($s);
+  $why = [1 => 'SMART failed', 2 => 'Scrutiny failed', 3 => 'Failed'];
+  $r = ['blocks' => [und_b('passed', 'Passed', $d['passed']), und_b('failed', 'Failed', count($d['failed'])), und_b('unknown', 'Unknown', $d['unknown']),
+                     und_b('hottest', 'Hottest', $d['hottest'] === null ? null : $d['hottest'] . ' °C', 'text')]];
+  if ($d['failed']) $r['list'] = array_map(function ($f) use ($why) { return ['title' => trim($f['disk'] . ' ' . $f['model']), 'right' => $why[$f['status']] ?? 'Failed']; }, $d['failed']);
+  return $r;
+}
+
+/**
+ * Failed disks from every Scrutiny app, for Alerts. Reads what the last check left behind; $refresh (the background
+ * check) asks Scrutiny again when that is older than 5 minutes. checked = at least one answer from the last 30 minutes,
+ * so a disk's alert only ends when Scrutiny has actually been asked again.
+ */
+function und_smart_failures(array $cfg, $refresh = false) {
+  $out = ['checked' => false, 'failed' => []];
+  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $sv) {
+    if ($sv['type'] !== 'scrutiny' || !empty($sv['hidden'])) continue;
+    $f = und_tmp('smart-' . $sv['id'] . '.json');
+    $st = und_read_json($f, []);
+    if ($refresh && time() - (int)($st['at'] ?? 0) > 300 && ($full = und_service_full($cfg, $sv['id'])) && trim($full['url']) !== '') {
+      try { und_scrutiny_disks($full); $st = und_read_json($f, []); } catch (Exception $e) { /* Scrutiny did not answer: the last result stands until it is too old */ }
+    }
+    if (time() - (int)($st['at'] ?? 0) > 1800) continue;
+    $out['checked'] = true;
+    foreach ((array)($st['failed'] ?? []) as $d) if (is_array($d)) $out['failed'][] = $d + ['app' => (string)($st['app'] ?? 'Scrutiny')];
+  }
+  return $out;
 }
 
 /** Tdarr: transcode and health-check queues (tables 1-3 transcode, 4-6 health check), counted like Tdarr's own tables. */

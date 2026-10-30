@@ -52,9 +52,11 @@ switch ($action) {
     // alerts are worked out here (one source for the page and the history); only the parts this request loaded are tracked
     if (isset($r['system'])) {
       $dk = $r['docker'] ?? null;
-      $r['alerts'] = und_alerts($cfg, $r['system'], $dk);
+      $smart = und_smart_failures($cfg);          // what the last Scrutiny read left behind: no network call here
+      $r['alerts'] = und_alerts($cfg, $r['system'], $dk, $smart);
       $scopes = isset($r['system']['error']) ? [] : ['system'];
       if (is_array($dk) && !isset($dk['error'])) $scopes[] = 'docker';
+      if ($smart['checked']) $scopes[] = 'smart';
       und_alerts_track($dk === null ? array_values(array_filter($r['alerts'], function ($a) { return strpos($a['cat'], 'docker.') !== 0; })) : $r['alerts'], $scopes);
     }
     // the rules in force now, by the server's clock, so every open tab hides the same alerts

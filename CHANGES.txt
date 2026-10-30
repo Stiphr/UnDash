@@ -1,4 +1,5 @@
 ###0.9.0
+- Alerts: a disk that Scrutiny marks as failed is a red alert ("sdb (WD…) failed its SMART check"), kept in the alert history and can be ignored like any other. The background check asks Scrutiny every 5 minutes; the alert ends only when Scrutiny has been asked again and says the disk is fine.
 - Security: while the Docker version has no password, it only answers at the server's IP address or name (tower, tower.local) and the names in the new UNDASH_ALLOWED_HOSTS setting. Before, a web page could point a host name of its own at your server (DNS rebinding) and use the dashboard through your browser. With a password nothing changes.
 - Security: wrong passwords are also counted for all addresses together (30 in 15 minutes), on top of 5 per address.
 - Security: a value with a carriage return (a pasted key, for example) could add a line to .env. Line breaks are now always escaped.
