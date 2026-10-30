@@ -1,3 +1,13 @@
+###0.9.4
+- Arr Stack: problems are grouped. A season pack that is blocked for 16 episodes is one row "The Mentalist · Season 3" with ×16 (the releases are in its tooltip). Health checks get a short tag (Indexer, Series removed, Import, Caution…) instead of the raw check name. The list scrolls inside a box of at most 260 px, and a long release name opens in full on click.
+- Media: episodes of one show added the same day (or airing at the same time) are one row, "S01E08–E12" with "5 eps".
+- Container and VM icons from selfh.st, found by name or image (binhex-, linuxserver-, lscr-, hotio-, ich777- and official- are ignored). Settings > Theme > Container and VM icons: in colour, light or dark to suit the theme, light, dark, or Unraid's own. When selfh.st has none, Unraid's icon is used, and a broken icon becomes a plain one instead of a blank space. An icon picked for a container still wins.
+- Header: the server, Unraid and UnDash chips sit on the same row as the name.
+- Ctrl+K / Cmd+K opens the search. Its results can now start, stop and restart containers and VMs, and open a VM's console.
+- VMs: hovering a stopped VM's name says how to start it, instead of nothing.
+- UPS: the power draw in watts next to the load ("load 8% (48 W)"), measured by the UPS when it reports it, otherwise load × rated power. The rating comes from the UPS (apcupsd NOMPOWER, NUT ups.realpower.nominal, the Unraid API) or from the new Settings > Refresh & display > UPS rated power (W). An older Unraid API without the power fields still works.
+- Docker version: clicking a running VM opens Unraid's VMs page (the Unraid API has no VNC port to open the console directly).
+
 ###0.9.3
 - Arr Stack: roomier rows. When it sits beside Media (or another section) at the top of the half-width columns, it grows to the same height and its rows share the extra space.
 - New setting: Settings > Theme > Section names. Off hides the names above the sections (System, Media, Arr Stack…); their buttons stay, and a collapsed section still shows its name.

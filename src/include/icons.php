@@ -10,11 +10,12 @@
 define('UND_ICON_SH', 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/index.json');
 define('UND_ICON_DI', 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/tree.json');
 
-/** ['sh' => [[ref, name, tags, svg], ...], 'di' => [[name, ext], ...]], fetched at most once a week. */
+/** ['sh' => [[ref, name, tags, svg, light, dark, png], ...], 'di' => [[name, ext], ...]], fetched at most once a week. */
 function und_icon_index() {
   $f = und_tmp('icon-index.json');
   $old = und_read_json($f, []);
-  if (!empty($old['at']) && time() - (int)$old['at'] < 7 * 86400 && !empty($old['sh'])) return $old;
+  // lists saved before the light / dark / PNG flags were kept (v < 2) are fetched again
+  if (!empty($old['at']) && time() - (int)$old['at'] < 7 * 86400 && !empty($old['sh']) && (int)($old['v'] ?? 1) >= 2) return $old;
   $lock = und_tmp('icon-index.lock');
   // a failed download is not retried for 10 minutes; the old list (if any) is used meanwhile
   if (is_file($lock) && time() - filemtime($lock) < 600) { if ($old) return $old; throw new Exception('The icon list could not be downloaded. Try again in a few minutes.'); }
@@ -24,7 +25,8 @@ function und_icon_index() {
     foreach ((array)und_get(UND_ICON_SH, ['timeout' => 20]) as $x) {
       $ref = (string)($x['Reference'] ?? '');
       if (!preg_match('/^[a-z0-9][a-z0-9._-]{0,80}$/', $ref)) continue;
-      $sh[] = [$ref, und_clip((string)($x['Name'] ?? $ref), 80), und_clip(strtolower((string)($x['Tags'] ?? '')), 200), ($x['SVG'] ?? '') === 'Yes' ? 1 : 0];
+      $y = function ($k) use ($x) { return ($x[$k] ?? '') === 'Yes' ? 1 : 0; };
+      $sh[] = [$ref, und_clip((string)($x['Name'] ?? $ref), 80), und_clip(strtolower((string)($x['Tags'] ?? '')), 200), $y('SVG'), $y('Light'), $y('Dark'), $y('PNG')];
     }
     $t = (array)und_get(UND_ICON_DI, ['timeout' => 20]);
     $svg = array_flip(array_map(function ($n) { return preg_replace('/\.svg$/', '', (string)$n); }, (array)($t['svg'] ?? [])));
@@ -37,7 +39,7 @@ function und_icon_index() {
     throw new Exception('The icon list could not be downloaded: ' . $e->getMessage());
   }
   if (!$sh && !$di) { if ($old) return $old; throw new Exception('The icon list came back empty.'); }
-  $idx = ['at' => time(), 'sh' => $sh, 'di' => $di];
+  $idx = ['v' => 2, 'at' => time(), 'sh' => $sh, 'di' => $di];
   und_write_json($f, $idx);
   @unlink($lock);
   return $idx;
@@ -73,4 +75,18 @@ function und_icon_search($q, $max = 60) {
   }
   usort($hits, function ($a, $b) { return $a[0] <=> $b[0] ?: $a[1] <=> $b[1] ?: strcmp($a[2]['v'], $b[2]['v']); });
   return ['icons' => array_column(array_slice($hits, 0, max(1, min(200, (int)$max))), 2), 'more' => count($hits) > $max];
+}
+
+/** Which of these selfh.st names exist, and in which forms: ['radarr' => 'svg,light,dark,png', ...]. Names that are not
+ *  there are left out, so the browser goes straight to the next choice instead of trying URLs that do not exist. */
+function und_icon_slugs($slugs) {
+  $want = [];
+  foreach ((array)$slugs as $x) { $x = strtolower((string)$x); if (preg_match('/^[a-z0-9][a-z0-9._-]{0,80}$/', $x)) $want[$x] = 1; if (count($want) >= 300) break; }
+  if (!$want) return ['icons' => new stdClass()];
+  $out = [];
+  foreach (und_icon_index()['sh'] as $x) {
+    if (!isset($want[$x[0]])) continue;
+    $out[$x[0]] = implode(',', array_keys(array_filter(['svg' => $x[3] ?? 0, 'light' => $x[4] ?? 0, 'dark' => $x[5] ?? 0, 'png' => $x[6] ?? 0])));
+  }
+  return ['icons' => $out ?: new stdClass()];
 }

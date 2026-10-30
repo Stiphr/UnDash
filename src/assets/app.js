@@ -108,10 +108,69 @@
     if ((m = /^(.+)\.(png|svg|webp)$/.exec(i))) return 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/' + m[2] + '/' + i;
     return 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/' + i + '.png';
   }
+  /* src may be a list: when one fails to load the next is tried, and after the last the generic icon takes its place */
   function img(src, cls, fallback) {
-    if (!src) return fallback ? h('span', { class: 'ph' }, ic(fallback)) : null;
-    return h('img', { class: cls || 'ico', src: src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.style.visibility = 'hidden'; } });
+    var list = (Array.isArray(src) ? src : [src]).filter(Boolean);
+    var ph = function () { return fallback ? h('span', { class: 'ph' + (cls ? ' ' + cls : '') }, ic(fallback)) : null; };
+    if (!list.length) return ph();
+    var i = 0;
+    return h('img', { class: cls || 'ico', src: list[0], alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () {
+      if (++i < list.length) { this.src = list[i]; return; }
+      var r = ph(); if (r && this.parentNode) this.parentNode.replaceChild(r, this); else this.style.visibility = 'hidden';
+    } });
   }
+
+  /* Container and VM icons from selfh.st, by name (Settings > Theme > Icons): "binhex-qbittorrentvpn" and
+     "lscr.io/linuxserver/radarr:latest" become qbittorrentvpn / qbittorrent and radarr. The server says which names exist
+     (and in which forms), so the browser does not try URLs that are not there; Unraid's own icon is the next choice. */
+  var ICON_PRE = /^(binhex|linuxserver|lscr|hotio|ich777|official)[-_]/;
+  function iconSlugs(name, image) {
+    var out = [];
+    var add = function (v) { if (v && out.indexOf(v) < 0) out.push(v); };
+    [name, image].forEach(function (v) {
+      if (!v) return;
+      v = String(v).toLowerCase().replace(/@sha256:.*$/, '').split('/').pop().replace(/:[^:]*$/, '');
+      v = v.replace(ICON_PRE, '').replace(/^arch-/, '').replace(/[\s_.]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '');
+      var bare = v.replace(/-v?\d+(-\d+)*$/, '');                        // a version or number at the end: windows-11, app-v2
+      [v, bare, bare.replace(/-?vpn$/, ''), bare.replace(/-(server|app|web|docker)$/, '')].forEach(add);
+    });
+    return out;
+  }
+  var ICO = { map: null, want: {}, t: 0 };
+  function icoMap() {
+    if (!ICO.map) { var c = LS.get('icoSlugs', null); ICO.map = c && c.at > Date.now() - 86400000 ? c : { at: Date.now(), m: {}, no: {} }; }
+    return ICO.map;
+  }
+  function icoAsk(slugs) {
+    var m = icoMap(), n = 0;
+    slugs.forEach(function (x) { if (!(x in m.m) && !m.no[x] && !ICO.want[x]) { ICO.want[x] = 1; n++; } });
+    if (!n || ICO.t) return;
+    ICO.t = setTimeout(function () {
+      var ask = Object.keys(ICO.want); ICO.want = {}; ICO.t = 0;
+      api('icon_slugs', { slugs: ask }).then(function (j) {
+        if (j.error) return;                                            // offline: Unraid's icons stay
+        var got = 0; ask.forEach(function (x) { if (j.icons[x]) { m.m[x] = j.icons[x]; got++; } else m.no[x] = 1; });
+        LS.set('icoSlugs', m);
+        if (got && !root.querySelector('.drawer,.modal-bg')) shell();
+      });
+    }, 300);
+  }
+  function objIcon(name, image, own, cls, fb) {
+    var mode = (S.L && S.L.appearance.icon_mode) || 'color';
+    if (mode === 'off') return img(iconUrl(own), cls, fb);
+    var slugs = iconSlugs(name, image), m = icoMap().m, hit = null;
+    icoAsk(slugs);
+    slugs.some(function (x) { if (m[x]) { hit = x; return true; } return false; });
+    if (!hit) return img(iconUrl(own), cls, fb);
+    var f = m[hit].split(','), base = 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/';
+    var dark = (root.getAttribute('data-mode') || 'dark') === 'dark';
+    var v = mode === 'light' ? 'light' : mode === 'dark' ? 'dark' : mode === 'auto' ? (dark ? 'light' : 'dark') : '';
+    return img([v && f.indexOf(v) >= 0 ? base + 'svg/' + hit + '-' + v + '.svg' : '', f.indexOf('svg') >= 0 ? base + 'svg/' + hit + '.svg' : '',
+      f.indexOf('png') >= 0 ? base + 'png/' + hit + '.png' : '', iconUrl(own)], cls, fb);
+  }
+  /* an icon picked in Settings always wins */
+  function cIcon(c, p, cls) { return p.icon ? img(iconUrl(p.icon), cls, 'box') : objIcon(c.name, c.image, c.icon, cls, 'box'); }
+  function vIcon(v, p, cls) { return p.icon ? img(iconUrl(p.icon), cls, 'vm') : objIcon(v.name, '', v.icon, cls, 'vm'); }
   function meterCls(p) { return p > 90 ? 'bad' : p > 75 ? 'warn' : ''; }
 
   var toastBox = null;
@@ -508,16 +567,20 @@
     ((y.docker && y.docker.containers) || []).forEach(function (c) {
       var p = pref('docker', c.name), nm = p.label || c.name, web = dWeb(c);
       if (p.hidden || (score(nm) < 0 && score(c.name) < 0)) return;
-      put(score(nm) >= 0 ? nm : c.name, sbItem(img(iconUrl(p.icon || c.icon), 'aico', 'box'), [nm, 'Container · ' + c.state],
+      put(score(nm) >= 0 ? nm : c.name, sbItem(cIcon(c, p, 'aico'), [nm, 'Container · ' + c.state],
         function () { if (web) window.open(web, '_blank', 'noopener'); else inspect(c.name); },
         h('span', { class: 'sb-acts' }, web ? sbBtn('Open web UI', 'web', function () { window.open(web, '_blank', 'noopener'); }) : null,
+          c.state === 'running' ? sbBtn('Stop', 'stop', function () { dAct(c, 'stop'); }) : c.state === 'paused' ? null : sbBtn('Start', 'play', function () { dAct(c, 'start'); }),
+          c.state !== 'paused' ? sbBtn('Restart', 'restart', function () { dAct(c, 'restart'); }) : null,
           sbBtn('Logs', 'logs', function () { logs(c.name); }), sbBtn('Details', 'info', function () { inspect(c.name); }))));
     });
     ((y.vms && y.vms.vms) || []).forEach(function (v) {
       var p = pref('vms', v.name), nm = p.label || v.name, web = vWeb(v);
       if (p.hidden || (score(nm) < 0 && score(v.name) < 0)) return;
-      put(score(nm) >= 0 ? nm : v.name, sbItem(img(iconUrl(p.icon), 'aico', 'vm'), [nm, 'VM · ' + v.state],
-        function () { if (web) window.open(web, '_blank', 'noopener'); else sbJump('vms', v.name); }));
+      put(score(nm) >= 0 ? nm : v.name, sbItem(vIcon(v, p, 'aico'), [nm, 'VM · ' + v.state],
+        function () { if (web) window.open(web, '_blank', 'noopener'); else sbJump('vms', v.name); },
+        h('span', { class: 'sb-acts' }, web ? sbBtn(v.vnc ? 'Open console (VNC)' : 'Open Unraid\'s VMs page', 'screen', function () { window.open(web, '_blank', 'noopener'); }) : null,
+          ['start', 'resume', 'stop', 'restart'].filter(function (o) { return (v.ops || []).indexOf(o) >= 0 && VMOPS[o]; }).map(function (o) { return sbBtn(VMOPS[o][0], VMOPS[o][1], function () { vAct(v, o); }); }))));
     });
     return out.sort(function (a, c) { return a[0] - c[0] || a[1] - c[1]; }).slice(0, 8).map(function (x) { return x[2]; });
   }
@@ -777,7 +840,7 @@
     tile('disks', hot === null ? 'n/a' : hot + '°C', hot === null ? 'No disk temperatures (spun down?)' : 'hottest · ' + (a.hot ? a.hot + ' at 50°C+' : 'all below 50°C'), hot === null ? null : Math.min(100, hot / 60 * 100), hot === null ? 'na' : hot >= 55 ? 'bad' : hot >= 50 ? 'warn' : 'ok');
     tile('uptime', upt(s.uptime), s.uptime ? 'since ' + new Date((s.now - s.uptime) * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '', null, '');
     var u = y.ups;
-    if (R.overview.tiles.ups) { R.overview.tiles.ups.el.hidden = !u; if (u) tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
+    if (R.overview.tiles.ups) { R.overview.tiles.ups.el.hidden = !u; if (u) tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) + (u.watts !== null && u.watts !== undefined ? ' (' + u.watts + ' W)' : '') : u.watts ? ' · ' + u.watts + ' W' : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
     var cores = s.cpu.cores || [];
     tile('cores', cores.length ? pct(Math.max.apply(null, cores)) : 'n/a', cores.length ? 'busiest of ' + cores.length + ' cores' : '', cores.length ? Math.max.apply(null, cores) : null, cores.length ? lvl(Math.max.apply(null, cores), 90, 99) : 'na');
     tile('swap', s.mem.swap_total ? pct(100 * s.mem.swap_used / s.mem.swap_total) : 'None', s.mem.swap_total ? bytes(s.mem.swap_used) + ' of ' + bytes(s.mem.swap_total) : 'No swap configured', s.mem.swap_total ? 100 * s.mem.swap_used / s.mem.swap_total : null, s.mem.swap_total ? '' : 'na');
@@ -826,7 +889,7 @@
       var o = s.os_update || {};
       r.detail.appendChild(h('div', { class: 'kv2 sm' }, h('span', null, 'Server'), h('span', null, s.name + ' · ' + s.ip), h('span', null, 'Unraid'), h('span', null, (s.os || '-') + (o.available ? ' · ' + o.latest + ' available' : '')),
         h('span', null, 'Uptime'), h('span', null, upt(s.uptime) + ' · since ' + new Date((s.now - s.uptime) * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })),
-        y.ups ? [h('span', null, 'UPS'), h('span', null, (y.ups.model || '') + ' · ' + y.ups.status + ' · ' + pct(y.ups.charge) + (y.ups.runtime ? ' · ' + Math.round(y.ups.runtime / 60) + ' min runtime' : ''))] : null));
+        y.ups ? [h('span', null, 'UPS'), h('span', null, (y.ups.model || '') + ' · ' + y.ups.status + ' · ' + pct(y.ups.charge) + (y.ups.watts ? ' · ' + y.ups.watts + ' W' + (y.ups.nominal ? ' of ' + y.ups.nominal + ' W' : '') : '') + (y.ups.runtime ? ' · ' + Math.round(y.ups.runtime / 60) + ' min runtime' : ''))] : null));
     }
   }
   function sparkBox(vals, max) {
@@ -1029,11 +1092,11 @@
       if (x[0] === 'd') {
         var run = it.state === 'running';
         var fw = dWeb(it), ft = fw ? 'Open the web UI of ' + it.name : it.name;
-        el = h('div', { class: 'fav' }, webA(fw, ft, img(iconUrl(pref('docker', it.name).icon || it.icon), '', 'box')), h('div', { class: 't' }, webA(fw, ft, h('b', null, label('docker', it.name))), dStateBadge(it)),
+        el = h('div', { class: 'fav' }, webA(fw, ft, cIcon(it, pref('docker', it.name), '')), h('div', { class: 't' }, webA(fw, ft, h('b', null, label('docker', it.name))), dStateBadge(it)),
           dActions(it, pref('docker', it.name)));
       } else if (x[0] === 'v') {
-        var vw = vWeb(it), vt = vw ? 'Open the console of ' + it.name : it.name;
-        el = h('div', { class: 'fav' }, webA(vw, vt, img(iconUrl(pref('vms', it.name).icon || it.icon), '', 'vm')), h('div', { class: 't' }, webA(vw, vt, h('b', null, label('vms', it.name))), vStateBadge(it.state, S.busy['v:' + it.name])),
+        var vw = vWeb(it), vt = vTip(it, vw, it.name);
+        el = h('div', { class: 'fav' }, webA(vw, vt, vIcon(it, pref('vms', it.name), '')), h('div', { class: 't' }, webA(vw, vt, h('b', null, label('vms', it.name))), vStateBadge(it.state, S.busy['v:' + it.name])),
           vActions(it, pref('vms', it.name)));
       } else {
         var href = it.href_resolved;
@@ -1231,7 +1294,7 @@
   }
   function dWho(c, p) {
     var web = dWeb(c), t = web ? 'Open the web UI of ' + c.name : c.name;
-    return h('div', { class: 'who c-who' }, webA(web, t, img(iconUrl(p.icon || c.icon), '', 'box')),
+    return h('div', { class: 'who c-who' }, webA(web, t, cIcon(c, p, '')),
       h('div', { class: 'ell' }, h('div', { class: 'nm' }, webA(web, t, h('span', { class: 'ell', title: c.name }, p.label || c.name)), p.favorite ? ic('star', true) : null),
         h('div', { class: 'im ell', title: c.image }, p.description || c.image)));
   }
@@ -1251,7 +1314,7 @@
     var row = h('div', { class: 'rowi c' + (S.busy['d:' + c.name] ? ' busy' : ''), role: 'listitem', 'data-name': c.name, title: c.image });
     row._cpu = h('span', { class: 'c-cpu num' }); row._mem = h('span', { class: 'c-mem num muted' });
     var web = dWeb(c), wt = web ? 'Open the web UI of ' + c.name : c.name;
-    row.appendChild(h('div', { class: 'who c-who' }, webA(web, wt, img(iconUrl(p.icon || c.icon), '', 'box')), webA(web, wt, h('span', { class: 'nm ell' }, p.label || c.name, p.favorite ? ic('star', true) : null))));
+    row.appendChild(h('div', { class: 'who c-who' }, webA(web, wt, cIcon(c, p, '')), webA(web, wt, h('span', { class: 'nm ell' }, p.label || c.name, p.favorite ? ic('star', true) : null))));
     row.appendChild(h('div', { class: 'c-st' }, dStateBadge(c)));
     row.appendChild(row._cpu); row.appendChild(row._mem);
     row.appendChild(h('div', { class: 'c-upd' }, c.job === 'update_failed' ? dUpdBadge(c) : null));
@@ -1274,7 +1337,7 @@
       if (!/^(running|stopped|created)$/.test(st.textContent)) sub.appendChild(h('span', null, st.textContent));   // the dot says running / stopped
     }
     var web = dWeb(c), wt = web ? 'Open the web UI of ' + c.name : c.name + ' · ' + c.image;
-    cell.appendChild(webA(web, wt, img(iconUrl(p.icon || c.icon), 'cico', 'box')));
+    cell.appendChild(webA(web, wt, cIcon(c, p, 'cico')));
     cell.appendChild(h('div', { class: 'cn' }, h('span', { class: 'cname ell' }, dot, webA(web, wt, p.label || c.name), p.favorite ? ic('star', true) : null), sub));
     if (c.job === 'update_failed') cell.appendChild(dUpdBadge(c));
     cell.appendChild(dActions(c, p));
@@ -1461,9 +1524,9 @@
     if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, v.vms.length ? 'All VMs are hidden.' : 'No virtual machines.'));
     list.forEach(function (x) {
       var p = pref('vms', x.name), b = busy[x.name];
-      var a = vActions(x, p), vw = vWeb(x), vt = vw ? 'Open the console of ' + x.name : x.os || x.name;
-      var who = S.L.vms.layout === 'cards' ? h('div', { class: 'who c-who' }, webA(vw, vt, img(iconUrl(p.icon || x.icon), '', 'vm')), h('div', { class: 'ell' }, h('div', { class: 'nm' }, webA(vw, vt, h('span', { class: 'ell' }, p.label || x.name)), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')))
-        : h('div', { class: 'who c-who' }, webA(vw, vt, img(iconUrl(p.icon || x.icon), '', 'vm')), webA(vw, vt, h('span', { class: 'nm ell' }, p.label || x.name, p.favorite ? ic('star', true) : null)));
+      var a = vActions(x, p), vw = vWeb(x), vt = vTip(x, vw, x.os || x.name);
+      var who = S.L.vms.layout === 'cards' ? h('div', { class: 'who c-who' }, webA(vw, vt, vIcon(x, p, '')), h('div', { class: 'ell' }, h('div', { class: 'nm' }, webA(vw, vt, h('span', { class: 'ell' }, p.label || x.name)), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')))
+        : h('div', { class: 'who c-who' }, webA(vw, vt, vIcon(x, p, '')), webA(vw, vt, h('span', { class: 'nm ell' }, p.label || x.name, p.favorite ? ic('star', true) : null)));
       var res = x.cpus ? x.cpus + ' vCPU · ' + bytes(x.memory) : '';
       if (S.L.vms.layout === 'cards') r.rows.appendChild(h('div', { class: 'tile' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'chips' }, vStateBadge(x.state, b), x.autostart ? h('span', { class: 'badge plain' }, 'autostart') : null), h('div', { class: 'stats' }, h('span', null, res), h('span', null, x.agent ? 'guest agent' : 'no guest agent')), a));
       else r.rows.appendChild(h('div', { class: 'rowi c' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'c-st' }, vStateBadge(x.state, b)),
@@ -1474,12 +1537,20 @@
     if (focus) { var f = r.rows.querySelector('[aria-label="' + focus.replace(/"/g, '') + '"]'); if (f && !f.disabled) f.focus(); }
   }
   /* the VM's "web UI" is its VNC console */
-  function vWeb(x) { return x.state === 'running' && x.vnc ? UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=&path=' + encodeURIComponent(x.vnc) : ''; }
+  /* what clicking a VM's icon or name does, said in its tooltip */
+  function vTip(x, web, other) {
+    if (web) return x.vnc ? 'Open the console of ' + x.name + ' (VNC)' : 'Open Unraid\'s VMs page to reach the console of ' + x.name;
+    if (x.state !== 'running') return x.name + ' is ' + (x.state || 'stopped') + ': start it from its menu to open the console';
+    return other + (S.boot.caps.mode === 'api' ? ' · the console opens from Unraid\'s VMs page' : ' · this VM has no VNC console');
+  }
+  // the Unraid API gives no VNC port, so in the Docker version a running VM opens Unraid's VMs page, where the console starts
+  function vWeb(x) { if (x.state === 'running' && !x.vnc && S.boot.caps.mode === 'api' && UNRAID) return UNRAID + '/VMs';
+    return x.state === 'running' && x.vnc ? UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=&path=' + encodeURIComponent(x.vnc) : ''; }
   function vActions(x, p) {
     var a = h('div', { class: 'acts c-acts' }), web = vWeb(x);
     a.appendChild(gear(x.name, function () {
       var b = !!S.busy['v:' + x.name];
-      return [web ? ['Open console (VNC)', 'screen', function () { window.open(web, '_blank', 'noopener'); }] : null, web ? 'hr' : null]
+      return [web ? [x.vnc ? 'Open console (VNC)' : 'Open Unraid\'s VMs page (console)', 'screen', function () { window.open(web, '_blank', 'noopener'); }] : null, web ? 'hr' : null]
         .concat(x.ops.map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' || o === 'stop' ? 'danger' : '', b]; }))
         .concat([x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
           [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('vms', x.name, { favorite: !p.favorite }); }],
@@ -1543,7 +1614,7 @@
     clear(x.row); clear(x.link);
     if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
     if (j.error && !(j.items || []).length) { x.row.appendChild(h('div', { class: 'empty ' + (j.unconfigured ? '' : 'err-t') }, j.error)); txt(x.count, ''); return; }
-    var items = j.items || [];
+    var items = k.indexOf('episodes') > 0 ? groupEps(j.items || [], k.indexOf('upcoming') === 0) : j.items || [];
     txt(x.count, String(j.items.length));
     if (!j.items.length) { x.row.appendChild(h('div', { class: 'empty' }, MEDIA[k][1])); return; }
     var upcoming = k.indexOf('upcoming') === 0, text = S.L.media.style === 'text';
@@ -1553,13 +1624,35 @@
       var when = !d ? '' : upcoming ? (it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' })) : rel(it.ts);
       // only what Radarr / Sonarr reported: no year, episode or quality line when they did not send one
       var sub = it.sub || (it.year ? String(it.year) : '');
-      var tags = [upcoming && it.when && it.when !== 'Airs' ? h('span', { class: 'badge plain' }, it.when) : null, it.quality ? h('span', { class: 'badge plain' }, it.quality) : null,
+      var tags = [it.n ? h('span', { class: 'badge plain' }, it.n + ' eps') : null, upcoming && it.when && it.when !== 'Airs' ? h('span', { class: 'badge plain' }, it.when) : null, it.quality ? h('span', { class: 'badge plain' }, it.quality) : null,
         it.done ? h('span', { class: 'badge plain', title: 'Already downloaded' }, 'Downloaded') : null].filter(Boolean);
       x.row.appendChild(h(it.href ? 'a' : 'div', { class: 'mi', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: it.href ? 'noopener' : null,
-          title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.sub ? '\n' + it.sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') },
+          title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.list ? '\n' + it.list.join('\n') : it.sub ? '\n' + it.sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') },
         h('span', { class: 'mimg' }, it.poster ? h('img', { src: it.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
         h('span', { class: 'mt' }, h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null,
           h('span', { class: 'pm' }, when ? h('span', { class: 'pd' }, when) : null, tags))));
+    });
+  }
+
+  /* Episodes of one show next to each other that air at the same time (upcoming) or were added the same day (recent) become
+     one row: "S01E08–E12" and an "5 eps" badge, instead of the show five times. */
+  function groupEps(items, upcoming) {
+    var out = [];
+    var day = function (ts) { var d = new Date(ts * 1000); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); };
+    items.forEach(function (it) {
+      var g = out[out.length - 1];
+      if (g && g.title === it.title && it.ts && g.ts && (upcoming ? g.ts === it.ts : day(g.ts) === day(it.ts))) { g.eps.push(it); return; }
+      out.push(Object.assign({}, it, { eps: [it] }));
+    });
+    return out.map(function (g) {
+      if (g.eps.length < 2) return g;
+      var codes = g.eps.map(function (e) { var m = /^S(\d+)E(\d+)/.exec(e.sub || ''); return m ? [+m[1], +m[2], m[0]] : null; });
+      var ok = codes.every(Boolean) && codes.every(function (c) { return c[0] === codes[0][0]; });
+      var nums = ok ? codes.map(function (c) { return c[1]; }).sort(function (a, b) { return a - b; }) : [];
+      var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+      return Object.assign(g, { n: g.eps.length, sub: ok ? 'S' + pad(codes[0][0]) + 'E' + pad(nums[0]) + '–E' + pad(nums[nums.length - 1]) : g.eps.length + ' episodes',
+        done: g.eps.every(function (e) { return e.done; }), quality: g.eps.every(function (e) { return e.quality === g.quality; }) ? g.quality : '',
+        list: g.eps.map(function (e) { return e.sub; }).filter(Boolean) });
     });
   }
 
@@ -1567,9 +1660,9 @@
   function mediaLine(it, upcoming) {
     var d = it.ts ? new Date(it.ts * 1000) : null;
     var when = !d ? '' : !upcoming ? rel(it.ts) : it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    var sub = [it.sub || '', upcoming && it.when && it.when !== 'Airs' ? it.when : '', !upcoming && it.quality ? it.quality : ''].filter(Boolean).join(' · ');
+    var sub = [it.sub || '', it.n ? it.n + ' eps' : '', upcoming && it.when && it.when !== 'Airs' ? it.when : '', !upcoming && it.quality ? it.quality : ''].filter(Boolean).join(' · ');
     return h(it.href ? 'a' : 'div', { class: 'mi ml', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: it.href ? 'noopener' : null,
-        title: it.title + (it.year ? ' (' + it.year + ')' : '') + (sub ? '\n' + sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') + (it.done ? '\nAlready downloaded' : '') },
+        title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.list ? '\n' + it.list.join('\n') : sub ? '\n' + sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') + (it.done ? '\nAlready downloaded' : '') },
       h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null, h('span', { class: 'grow' }),
       it.done ? h('span', { class: 'ok-t', 'aria-label': 'Downloaded' }, ic('check')) : null, when ? h('span', { class: 'pd' }, when) : null);
   }
@@ -1747,14 +1840,32 @@
     clear(x.info); clear(x.extra);
     if (!j.online) x.info.appendChild(h('span', { class: j.unconfigured ? 'muted' : 't-bad' }, j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline'));
     else (j.blocks || []).slice(0, 4).forEach(function (b) { x.info.appendChild(h('span', { class: 'st' }, h('b', null, fmt(b.value, b.fmt)), ' ' + b.label.toLowerCase())); });
-    if (issues) x.extra.appendChild(h('span', { class: 'badge ' + (bad ? 'bad' : 'warn') }, issues + (issues === 1 ? ' issue' : ' issues')));
+    var raw = (j.health || []).length + (j.issues || []).reduce(function (n, z) { return n + (z.count || 1); }, 0);
+    if (issues) x.extra.appendChild(h('span', { class: 'badge ' + (bad ? 'bad' : 'warn'), title: raw > issues ? raw + ' queue items and health checks, grouped' : null }, issues + (issues === 1 ? ' issue' : ' issues')));
     else if (j.version) x.extra.appendChild(h('span', { class: 'muted xs' }, 'v' + j.version));
     clear(x.det);
     if (j.error && !j.preview) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
     if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(blk)));
-    (j.health || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, (z.source ? z.source + ': ' : '') + z.msg))); });
-    (j.issues || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, h('b', null, z.title), ' · ' + z.msg))); });
+    // one row per problem (the server groups a blocked season pack into one row with its count); long lists scroll inside the box
+    if (issues) {
+      var box = h('div', { class: 'aiss', role: 'list', tabindex: '0', 'aria-label': 'Problems' });
+      (j.health || []).forEach(function (z) { box.appendChild(arrIssue(z.level, z.tag || z.source, '', z.msg, 0, z.source ? z.source + ': ' + z.msg : z.msg)); });
+      (j.issues || []).forEach(function (z) { box.appendChild(arrIssue(z.level, z.tag, z.title, z.msg, z.count, z.title + ' · ' + z.msg + (z.releases && z.releases.length ? '\n\n' + z.releases.join('\n') + (z.count > z.releases.length ? '\n…' : '') : ''))); });
+      x.det.appendChild(box);
+    }
     if (j.online && !issues && !j.error) x.det.appendChild(h('div', { class: 'muted sm' }, 'No warnings' + (j.version ? ' · version ' + j.version : '') + '.'));
+  }
+
+  /* a problem row: tag pill, what (one line, click to show it whole), ×count, message */
+  function arrIssue(level, tag, what, msg, count, tip) {
+    var row = h('div', { class: 'ais ' + level, role: 'listitem', title: tip });
+    row.appendChild(h('span', { class: 'badge ' + level }, tag || (level === 'bad' ? 'Error' : 'Warning')));
+    var t = h('span', { class: 'ais-t', tabindex: '0', role: 'button', 'aria-expanded': 'false', onclick: function () { var o = row.classList.toggle('open'); t.setAttribute('aria-expanded', o ? 'true' : 'false'); },
+      onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t.click(); } } },
+      what ? h('b', null, what) : null, what ? ' · ' : null, h('span', { class: 'muted' }, msg));
+    row.appendChild(t);
+    if (count > 1) row.appendChild(h('span', { class: 'badge plain num', 'aria-label': count + ' items' }, '×' + count));
+    return row;
   }
 
   /* ---- download clients ---- */
@@ -2317,7 +2428,7 @@
           h('label', { class: 'switch', title: 'Show on the dashboard' }, h('input', { type: 'checkbox', checked: !p.hidden, 'aria-label': 'Show ' + it.name + ' on the dashboard', onchange: function (e) {
             p.hidden = !e.target.checked; row.classList.toggle('off', p.hidden); put(); counted(); } })),
           h('button', { type: 'button', class: 'ico-btn', title: 'Pick an icon for ' + it.name, 'aria-label': 'Pick an icon for ' + it.name, onclick: function () { iconPicker(p.label || it.name, function (v) { p.icon = v; put(); draw(); }); } },
-            img(iconUrl(p.icon || it.icon), '', dk ? 'box' : 'vm')),
+            (dk ? cIcon : vIcon)(it, p, '')),
           h('span', { class: 't' }, h('span', { class: 'sdot ' + (it.state === 'running' ? 'ok' : 'na'), title: it.state || '' }), h('b', null, it.name)),
           h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
@@ -2347,7 +2458,8 @@
     b.appendChild(set('Display', null, h('div', { class: 'grid2' },
       F('Dashboard title', tIn(g, 'title', dirty, 'UnDash')),
       F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
-      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'))));
+      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'),
+      F('UPS rated power (W)', tIn(g, 'ups_watts', dirty, 'from the UPS', 'number', { min: 0, max: 20000 }), 'For the power draw on the UPS tile (load × rated power). Leave it at 0 to use what the UPS reports (apcupsd NOMPOWER, NUT, the Unraid API); fill it in when your UPS only reports its load. The UPS label or manual gives it in watts, not VA.'))));
     if (!Array.isArray(g.search_in)) g.search_in = [];
     var src = function (k, lab, hint) {
       return h('label', { class: 'switch t' }, h('input', { type: 'checkbox', checked: g.search_in.indexOf(k) >= 0, onchange: function (e) {
@@ -2447,6 +2559,8 @@
       F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
       F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
         'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
+      F('Container and VM icons', sIn(a, 'icon_mode', function () { dirty(); }, [['color', 'selfh.st, in colour'], ['auto', 'selfh.st, light or dark to suit the theme'], ['light', 'selfh.st, light'], ['dark', 'selfh.st, dark'], ['off', 'Unraid\'s own icons']], preview),
+        'Found by the container\'s name or image (binhex-, linuxserver and similar prefixes are ignored). When selfh.st has none, Unraid\'s icon is used. An icon picked for a container in Sections & apps always wins.'),
       margin('safe_x', 'Side margin'), margin('safe_y', 'Top and bottom margin'))));
     var pd = function () { dirty(); preview(); };
     var rng = function (k, lo, hi, unit, lab) {
@@ -3033,11 +3147,15 @@
     var row = function (k, what) { return h('div', { class: 'kh' }, h('span', null, k.split(' ').map(function (x) { return h('kbd', null, x); })), h('span', null, what)); };
     var go = Object.keys(GOTO).map(function (k) { return row('g ' + k, TITLES[GOTO[k]]); });
     modal('Keyboard shortcuts', h('div', { class: 'keys' },
-      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Search'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
+      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Search'), row('Ctrl K', 'Search (⌘ K on a Mac), also while typing'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
         row(',', 'Settings'), row('?', 'This list'), row('Esc', 'Close a dialog, menu or the filter')),
       h('div', null, h('h4', { class: 'ign-h' }, 'Go to a section'), go)), null, true);
   }
   document.addEventListener('keydown', function (e) {
+    // Ctrl+K / Cmd+K: the search, which also starts, stops and opens containers, VMs and apps (works while typing too)
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key || '').toLowerCase() === 'k' && R.search && S.L && !root.querySelector('.modal-bg,.drawer')) {
+      e.preventDefault(); R.search.focus(); R.search.select(); return;
+    }
     var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || (document.activeElement && document.activeElement.isContentEditable);
     if (typing || e.ctrlKey || e.metaKey || e.altKey || !S.L || root.querySelector('.modal-bg,.drawer') || S.menu) { S.gKey = 0; return; }
     var k = e.key;
