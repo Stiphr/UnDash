@@ -578,6 +578,15 @@ t('user-defined bridge with published ports: server address and the port as writ
 t('user-defined bridge: [PORT:container port] becomes the host port', $det['dashbrr']['webui'] === "http://$sip:5456/", $det['dashbrr']['webui']);
 t('br0 / macvlan without published ports: the container\'s own LAN address', $det['adguard']['webui'] === 'http://192.168.50.10:3000/', $det['adguard']['webui']);
 t('default bridge: server address and host port', $det['radarr']['webui'] === "http://$sip:7979/", $det['radarr']['webui']);
+$GLOBALS['MOCK2'] = $GLOBALS['MOCK'];
+$GLOBALS['MOCK'] = function ($argv) {
+  if ($argv[1] !== 'inspect') return ['code' => 1];
+  return ['out' => json_encode([['Name' => '/radarr', 'Config' => ['Image' => 'lscr.io/linuxserver/radarr', 'Labels' => ['org.opencontainers.image.source' => 'https://github.com/linuxserver/docker-radarr']], 'HostConfig' => [], 'State' => []]])];
+};
+t('the image\'s source label is kept with the container', und_docker_details(['radarr' => ['id' => 'a4', 'state' => 'running']], true)['radarr']['source'] === 'https://github.com/linuxserver/docker-radarr');
+$GLOBALS['MOCK'] = $GLOBALS['MOCK2'];
+t('GitHub repositories from source addresses', und_github_repo_of('https://github.com/linuxserver/docker-radarr') === 'linuxserver/docker-radarr' && und_github_repo_of('git@github.com:immich-app/immich.git') === 'immich-app/immich'
+  && und_github_repo_of('https://github.com/autobrr/qui/tree/main') === 'autobrr/qui' && und_github_repo_of('https://gitlab.com/a/b') === '' && und_github_repo_of('https://github.com/a/..') === '');
 unset($GLOBALS['MOCK']);
 reset_store();
 
@@ -848,6 +857,8 @@ t('releases: a repository with only pre-releases shows its latest one', $rl['lis
 $e = ''; try { und_w_releases($sv('releases', ['repos' => 'a/limited'])); } catch (Exception $x) { $e = $x->getMessage(); }
 t('releases: the GitHub limit says to add a token', strpos($e, 'GitHub token') !== false, $e);
 $e = ''; try { und_w_releases($sv('releases', ['repos' => '../../etc'])); } catch (Exception $x) { $e = $x->getMessage(); }
+$rl = und_w_releases($sv('releases', ['repos' => "autobrr/qui\na/missing"]));
+t('releases: a repository that cannot be read is its own row; the others still show', count($rl['list']) === 2 && $rl['list'][1]['title'] === 'missing' && strpos($rl['list'][1]['sub'], 'no repository') !== false, json_encode($rl['list']));
 t('releases: only owner/repo names', strpos($e, 'Not a GitHub repository') !== false);
 $bk = und_w_bookmarks($sv('bookmarks', ['links' => "Router | http://192.168.1.1\nhttps://selfh.st/apps/\nEvil | javascript:alert(1)\nData | data:text/html,x\n\n"]));
 t('bookmarks: title and link, or the host name; only http and https', $bk['list'] === [['title' => 'Router', 'href' => 'http://192.168.1.1'], ['title' => 'selfh.st', 'href' => 'https://selfh.st/apps/']], json_encode($bk['list']));
