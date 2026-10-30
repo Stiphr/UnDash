@@ -32,7 +32,7 @@ function und_media_ep($season, $ep) { return 'S' . sprintf('%02d', (int)$season)
 function und_media(array $cfg, $kind) {
   $type = in_array($kind, ['upcoming_movies', 'recent_movies'], true) ? 'radarr' : 'sonarr';
   $id = und_media_source($cfg, $type);
-  if (!$id) return ['items' => [], 'unconfigured' => true, 'error' => 'Add a ' . ($type === 'radarr' ? 'Radarr' : 'Sonarr') . ' app in Settings > Apps to see this.'];
+  if (!$id) return ['items' => [], 'unconfigured' => true, 'error' => 'Add a ' . ($type === 'radarr' ? 'Radarr' : 'Sonarr') . ' app in Settings > Sections & apps to see this.'];
   $count = max(1, min(50, (int)($cfg['media']['count'] ?? 15)));
   foreach ((array)($cfg['media']['widgets'] ?? []) as $w) if (($w['id'] ?? '') === $kind && isset($w['count'])) $count = max(1, min(50, (int)$w['count']));
   $days = max(7, min(120, (int)($cfg['media']['days_ahead'] ?? 30)));

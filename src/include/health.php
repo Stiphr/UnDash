@@ -1,7 +1,7 @@
 <?php
 /*
  * UnDash - endpoint health: is every app and container web UI answering, with which HTTP status, how fast.
- * Only addresses UnDash already knows are probed: the links of the apps in Settings > Apps and the web UI labels of
+ * Only addresses UnDash already knows are probed: the links of the apps in Settings > Sections & apps and the web UI labels of
  * running containers. Nothing the browser sends becomes a URL. All probes run in parallel; results are cached 60 s.
  */
 

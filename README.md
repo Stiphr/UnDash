@@ -10,7 +10,7 @@ A compact dashboard for Unraid. System health, alerts, media, Arr apps, download
 - **Arr Stack**, **Downloads** (qBittorrent, [qui](https://github.com/autobrr/qui), SABnzbd), **Now playing** (Plex, Emby, Jellyfin, Tautulli) and **Requests** (Overseerr / Jellyseerr, with approve and decline).
 - **Containers and VMs**: start, stop, restart, update and logs from one gear menu. Click an icon or name to open its web UI.
 - **Endpoint health**: HTTP status and latency of every app and container web UI.
-- **Search**: filters the dashboard, and finds movies and series in Seerr to request.
+- **Search**: a list under the search box with your apps, containers and VMs, a web search and movies and series to request in Seerr. You choose which in Settings; the dashboard itself is never filtered.
 - Ten themes with light and dark versions, frosted-glass wallpapers, custom CSS. Works on phones too.
 
 ## Install
@@ -72,8 +72,8 @@ Open it from the **UnDash** tab in Unraid's menu, or full-window at `http://YOUR
 
 Everything is set up in **Settings**; you never have to edit a file.
 
-1. **Add your apps** in **Settings > Apps > Add app**: pick Radarr, qBittorrent, Plex and so on, enter its address and API key, press **Test**. Each app goes to the right section on its own (Arr Stack, Downloads, Apps). Edit, hide, reorder or remove any app from the same list.
-2. **Arrange the dashboard** in **Settings > Layout**: show, hide and order sections; half-width sections sit side by side.
+1. **Add your apps** in **Settings > Sections & apps > Add app**: pick Radarr, qBittorrent, Plex and so on, enter its address and API key, press **Test**. Each app goes to the right section on its own (Arr Stack, Downloads, Apps). Edit, hide, reorder or remove any app from the same list.
+2. **Arrange the dashboard** on the same page: show, hide and order sections (half-width sections sit side by side), and open a section for its own options.
 3. **Pick a look** in **Settings > Theme**: theme, light / dark / system mode, accent colour, spacing and wallpaper.
 
 Press **Preview** next to Save to see the dashboard with your changes before saving them.
@@ -83,15 +83,15 @@ Press **Preview** next to Save to see the dashboard with your changes before sav
 [`examples/config.yaml`](examples/config.yaml) is a complete working setup: 7 groups, 31 apps, all sections, Default theme, with no keys, passwords or real addresses.
 
 1. Download it, then go to **Settings > Backup & import > Import** and choose the file. You see what it contains before anything changes, and a backup is taken first.
-2. In **Settings > Apps**, change each address (`192.168.1.10` is a placeholder) and add the API keys; apps still missing one are marked. Remove the apps you don't run.
+2. In **Settings > Sections & apps**, change each address (`192.168.1.10` is a placeholder) and add the API keys; apps still missing one are marked. Remove the apps you don't run.
 
 ## Settings at a glance
 
 | Where | What |
 |---|---|
-| Settings > Layout / Media & downloads / Containers & VMs / Apps | what the dashboard shows |
+| Settings > Sections & apps | what the dashboard shows: sections, their options and your apps |
 | Settings > Theme / Custom CSS | how it looks |
-| Settings > Refresh & display | refresh interval (default 2 s), search engine, title |
+| Settings > Refresh & display | refresh interval (default 2 s), what the search box searches, search engine, title |
 | Settings > Ignored alerts | alerts you have ignored |
 | Settings > Connection | Docker: Unraid API and dashboard password. Plugin: settings folder and the 9099 port |
 | Settings > Backup & import | export and import `config.yaml` and `.env`, automatic backups, import from another dashboard |
@@ -101,9 +101,9 @@ UnDash keeps two files in its config folder (`/config` in Docker, `/mnt/user/app
 - **`config.yaml`**: everything you set in Settings. It never holds a key or password (apps refer to them by name, like `{{RADARR_API_KEY}}`), so it is safe to share.
 - **`.env`** (mode 600): the API keys, user names and passwords you enter in Settings.
 
-Both are backed up before every save, import and restore (`data/backups`). Settings from older versions are converted on first start; the old files are kept in `data/legacy`. The format is described in [docs/CONFIG.md](docs/CONFIG.md).
+Both are backed up automatically after every settings save and before an import or restore; the last 7 different versions are kept (`data/backups`). Settings from older versions are converted on first start; the old files are kept in `data/legacy`. The format is described in [docs/CONFIG.md](docs/CONFIG.md).
 
-Keyboard: `/` filter · `r` refresh · `p` pause · `,` settings · `?` all shortcuts · `g` + a letter jumps to a section.
+Keyboard: `/` search · `r` refresh · `p` pause · `,` settings · `?` all shortcuts · `g` + a letter jumps to a section.
 
 ## Security
 

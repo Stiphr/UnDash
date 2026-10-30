@@ -1,3 +1,9 @@
+###0.7.0
+- Search no longer hides the dashboard. Type in the search box and a list opens under it: your apps, containers and VMs (open their web page, logs or details), a web search, and movies and series to request in Overseerr / Jellyseerr. Arrow keys and Enter work. Choose what it searches in Settings > Refresh & display > Search; turn everything off to hide the box.
+- Settings: Layout, Media & downloads, Containers & VMs and Apps are now one page, Sections & apps. Each section is a line you can tick, reorder and set to half width; open it for its own options and the apps that show in it. "Find an app" opens every section with a match.
+- Apps groups: rename a group or hide its name in Settings, or from the gear next to the group name on the dashboard. A hidden name keeps the group's apps together. Collapsing a group on the dashboard works again.
+- Automatic backups: one after every settings save, nothing when nothing changed, and the last 7 are kept.
+
 ###0.6.1
 - Much faster loading in Docker. The page no longer waits for a full server read before it appears, and live refreshes no longer wait for the two slow parts of the Unraid API (network rates and the server's address, about 2 s each on a busy server): a background task keeps them fresh while the dashboard is open.
 - More parallel requests: the container serves 12 at a time (was 4), and the page keeps app and media reads to 4 at a time, so the live refresh and your clicks never queue behind a slow app.
