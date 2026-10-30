@@ -117,7 +117,10 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .hcols{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--gap);align-items:start;min-width:0}
 .und .hcol{display:flex;flex-direction:column;gap:16px;min-width:0}
 .und .hcols.one{grid-template-columns:minmax(0,1fr)}
-.und .sec.fill{display:flex;flex-direction:column}.und .sec.fill>.sec-b{flex:1;display:flex;flex-direction:column}.und .sec.fill>.sec-b>:last-child{flex:1}.und .hcols.one>.hcol:empty{display:none}
+.und .sec.fill{display:flex;flex-direction:column}.und .sec.fill>.sec-b{flex:1;display:flex;flex-direction:column}.und .sec.fill>.sec-b>:last-child{flex:1}
+/* lists of cards: the last card takes the extra height, so the column ends on a box, not on empty space */
+.und .sec.fill .dls>.card:last-child,.und .sec.fill .plist>.pl:last-child,.und .sec.fill .rqlist:not(.text)>.rq:last-child{flex:1}.und .sec.fill .rqlist>.rq:last-child{align-items:flex-start}
+.und .hcols.one>.hcol:empty{display:none}
 .und .sec-h{display:flex;align-items:center;gap:8px;margin:0 0 8px;min-height:30px;flex-wrap:wrap}
 .und .sec-h h2{display:flex;align-items:center;gap:8px;font:600 15px/1.3 var(--font);color:var(--title);margin:0;padding:0;border:0;background:none;text-transform:none;letter-spacing:0}
 .und .sec-h h2 button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border-radius:4px}
@@ -435,6 +438,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .pl .pl2{display:flex;align-items:center;gap:6px;min-width:0}.und .pl .pl2 svg{width:12px;height:12px;flex:none}
 .und .pl .pl3{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .und .pl .meter{height:4px}
+.und .plist.in{gap:10px;margin-top:12px}.und .plist.in:first-child{margin-top:0}
+.und .pl.in,.und.glass .pl.in{background:none;-webkit-backdrop-filter:none;backdrop-filter:none;border:0;border-radius:0;padding:0}
+.und .plist.in .pl.in+.pl.in{border-top:1px solid var(--line);padding-top:10px}
 
 /* requests */
 .und .rq{display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:6px 10px;min-width:0}
@@ -444,6 +450,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .rqt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.und .rqt b{color:var(--title);font-size:13.5px}
 .und .rqa{display:flex;gap:6px;flex:none}
 .und .rq>.badge{flex:none}
+.und .rqlist.text{gap:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:4px 0}
+.und.glass .rqlist.text{background:color-mix(in srgb,var(--panel) 62%,transparent);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.15);backdrop-filter:blur(var(--glass-blur)) saturate(1.15)}
+.und .rq.line,.und.glass .rq.line{background:none;-webkit-backdrop-filter:none;backdrop-filter:none;border:0;border-radius:0;padding:5px 12px}
+.und .rq.line+.rq.line{border-top:1px solid var(--line)}
+.und .rq.line .rqt{flex-direction:row;align-items:baseline;gap:8px}.und .rq.line .rqt b,.und .rq.line .rqt a{flex:0 1 auto;font-size:13px;min-width:4em}.und .rq.line .rqt a{color:var(--title);font-weight:600}
+.und .rq.line .rqt .muted{flex:0 100 auto;min-width:0}
 
 /* endpoint health */
 .und .htab .hrow{display:grid;grid-template-columns:minmax(180px,2.2fr) minmax(130px,1.2fr) minmax(130px,1fr) 80px;gap:12px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);min-width:0}

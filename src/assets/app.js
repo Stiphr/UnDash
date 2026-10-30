@@ -1598,18 +1598,20 @@
     if (j.streams.length) r.sum.appendChild(document.createTextNode((tc ? tc + ' transcoding · ' : '') + (bw ? rate(bw / 8) : '')));
     (j.apps || []).filter(function (a) { return a.error; }).forEach(function (a) { r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error)); });
     if (!j.streams.length) { r.list.appendChild(h('div', { class: 'empty' }, 'Nothing is playing right now.')); return; }
-    j.streams.forEach(function (x) {
-      var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
-      r.list.appendChild(h('div', { class: 'pl' + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
-        img(iconUrl(x.icon), 'aico', 'play'),
-        h('div', { class: 'pt' },
-          h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null),
-          h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [x.user, x.device, x.app].filter(Boolean).join(' · '))),
-          h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { class: 'acc', style: { width: p + '%' } })),
-          h('div', { class: 'pl3 xs' }, h('span', { class: 'num muted' }, dur(x.pos) + ' / ' + dur(x.dur)),
-            m ? h('span', { class: 'badge ' + m[1] }, m[0]) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
-            x.bandwidth ? h('span', { class: 'num muted' }, rate(x.bandwidth / 8)) : null, x.location === 'wan' ? h('span', { class: 'badge plain', title: 'Streaming outside your network' }, 'remote') : null))));
-    });
+    j.streams.forEach(function (x) { r.list.appendChild(playRow(x, true)); });
+  }
+  /* one stream, as in Now playing; app cards use it without the app icon. Custom API streams may only have title, user, pos and dur. */
+  function playRow(x, icon) {
+    var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
+    return h('div', { class: 'pl' + (icon ? '' : ' in') + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
+      icon ? img(iconUrl(x.icon), 'aico', 'play') : null,
+      h('div', { class: 'pt' },
+        h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null),
+        h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [x.user, x.device, x.app].filter(Boolean).join(' · '))),
+        x.dur ? h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { class: 'acc', style: { width: p + '%' } })) : null,
+        h('div', { class: 'pl3 xs' }, x.dur ? h('span', { class: 'num muted' }, dur(x.pos) + ' / ' + dur(x.dur)) : null,
+          m ? h('span', { class: 'badge ' + m[1] }, m[0]) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
+          x.bandwidth ? h('span', { class: 'num muted' }, rate(x.bandwidth / 8)) : null, x.location === 'wan' ? h('span', { class: 'badge plain', title: 'Streaming outside your network' }, 'remote') : null)));
   }
 
   /* ---- Requests (Overseerr / Jellyseerr) ---- */
@@ -1631,14 +1633,18 @@
       else if (a.href && j.apps.length === 1) r.link.appendChild(h('a', { class: 'btn sm ghost', href: a.href, target: '_blank', rel: 'noopener', title: 'Open ' + a.name }, h('span', { class: 'lbl' }, a.name), ic('web')));
     });
     if (!j.items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No requests yet.')); return; }
+    var text = (S.L.requests || {}).style === 'text';
+    r.list.classList.toggle('text', text);
     j.items.forEach(function (x) {
       var key = 'rq:' + x.app + ':' + x.id, busy = !!S.busy[key];
       var title = x.title + (x.year ? ' (' + x.year + ')' : '');
       var what = (x.type === 'tv' ? 'Series' + (x.seasons.length ? ' · season ' + x.seasons.join(', ') : '') : 'Movie') + (x.is4k ? ' · 4K' : '');
-      r.list.appendChild(h('div', { class: 'rq' + (x.status === 'pending' ? ' pend' : ''), role: 'listitem', 'data-name': x.title },
-        h(x.href ? 'a' : 'span', { class: 'rqp', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title },
+      var meta = [what, x.user, x.at ? rel(x.at) : ''].filter(Boolean).join(' · ');
+      r.list.appendChild(h('div', { class: 'rq' + (x.status === 'pending' ? ' pend' : '') + (text ? ' line' : ''), role: 'listitem', 'data-name': x.title },
+        text ? null : h(x.href ? 'a' : 'span', { class: 'rqp', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title },
           x.poster ? h('img', { src: x.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
-        h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs ell' }, [what, x.user, x.at ? rel(x.at) : ''].filter(Boolean).join(' · '))),
+        text ? h('div', { class: 'rqt' }, h(x.href ? 'a' : 'b', { class: 'ell', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title + '\n' + meta }, title), h('span', { class: 'muted xs ell' }, meta))
+          : h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs ell' }, meta)),
         x.status === 'pending' ? h('div', { class: 'rqa' },
           btn('Approve', function () { reqAct(x, 'approve'); }, 'sm pri', 'check', 'Approve ' + title),
           btn('', function () { confirmBox('Decline ' + title + '?', (x.user || 'The requester') + ' asked for it ' + (x.at ? rel(x.at) : '') + '. Declining tells them in ' + x.app_name + ' and cannot be undone here.', 'Decline', true).then(function (y) { if (y) reqAct(x, 'decline'); }); }, 'sm danger', 'x', 'Decline ' + title))
@@ -1919,11 +1925,7 @@
     }
     if (r.streams) {
       if (!r.streams.length) cb.appendChild(h('div', { class: 'muted sm', style: { 'margin-top': '6px' } }, r.empty || 'No active streams'));
-      else cb.appendChild(h('div', { class: 'streams' }, r.streams.map(function (x) {
-        return h('div', { class: 'stream', title: x.title + (x.user ? ' (' + x.user + ')' : '') + (x.transcode ? ' · ' + x.transcode : '') },
-          h('i', { class: 'pg', style: { width: (x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0) + '%' } }), ic(x.state === 'paused' ? 'pause' : 'play'),
-          h('span', { class: 'tt' }, x.title + (x.user ? ' (' + x.user + ')' : '')), h('span', { class: 'tm' }, x.dur ? dur(x.pos) + ' / ' + dur(x.dur) : ''));
-      })));
+      else cb.appendChild(h('div', { class: 'plist in', role: 'list' }, r.streams.map(function (x) { return playRow(x, false); })));
     }
     if (r.bars) cb.appendChild(h('div', { class: 'bars' }, r.bars.map(function (x) { var p = x.size ? 100 * x.used / x.size : 0; return h('div', null, h('div', { class: 'bt' }, h('span', null, x.title, x.sub ? h('span', { class: 'muted' }, ' · ' + x.sub) : null), h('span', null, bytes(x.size - x.used) + ' free')), h('div', { class: 'meter' }, h('i', { class: meterCls(p), style: { width: p.toFixed(1) + '%' } }))); })));
   }
@@ -2194,7 +2196,7 @@
 
   /* Settings > Sections & apps: the dashboard's sections in order, each with its own options folded under it.
      Apps are listed in the section they show in; "Find an app" opens every section that has a match. */
-  var SEC_OPTS = { overview: 'Tiles and apps', media: 'Columns and apps', arr: 'Apps', downloads: 'Clients', apps: 'Groups and apps', docker: 'Containers and view', vms: 'VMs and view' };
+  var SEC_OPTS = { overview: 'Tiles and apps', media: 'Columns and apps', arr: 'Apps', downloads: 'Clients', requests: 'View', apps: 'Groups and apps', docker: 'Containers and view', vms: 'VMs and view' };
   function tabDashboard(b, D, dirty) {
     var c = D.cfg, open = D.open || (D.open = {}), panels = {}, chevs = {};
     var ed = appsEditor(D, dirty, function () { paint(); });
@@ -2223,6 +2225,7 @@
             F('Show as', sIn(c.media, 'style', dirty, [['art', 'Posters'], ['text', 'Text only']]), 'Text only fits many more items in the same height.')),
           ed.zone('media')];
       },
+      requests: function () { return [h('div', { class: 'grid2' }, F('Show as', sIn(c.requests, 'style', dirty, [['art', 'Posters'], ['text', 'Text only']]), 'Text only puts each request on one short line.')), ed.zone('requests')]; },
       arr: function () { return [ed.zone('arr')]; },
       downloads: function () { return [h('div', { class: 'grid2' }, F('Active items shown per client', tIn(c.downloads, 'items', dirty, '4', 'number', { min: 0, max: 20 }), '0 shows the totals only.')), ed.zone('downloads')]; },
       apps: function () {

@@ -1,3 +1,8 @@
+###0.9.2
+- Requests: new "Show as" option (Settings > Sections & apps > Requests). Text only shows each request on one line, with Approve and Decline still there.
+- Plex, Tautulli, Emby and Jellyfin app cards show what is playing the same way as Now playing: title, episode, who and on what, progress, direct play or transcode, quality and bandwidth.
+- Half-width sections: when one column is shorter, its last card now grows to the end of the column, instead of leaving empty space under it, so both columns end level.
+
 ###0.9.1
 - Media: new "Show as" option (Settings > Sections & apps > Media). Text only shows one line per item, the title with its episode or release type and the date on the right, with a tick when it is already downloaded, so many more items fit. Posters stays the default.
 
