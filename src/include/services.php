@@ -489,12 +489,12 @@ function und_w_weather($s) {
   }
   $imp = ($o['units'] ?? '') === 'imperial';
   $q = 'latitude=' . round($lat, 3) . '&longitude=' . round($lon, 3) . '&timezone=auto&forecast_days=4'
-     . '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m'
+     . '&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m'
      . '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' . ($imp ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '');
   $j = und_cached('weather-' . md5($q) . '.json', 600, function () use ($q) { return und_get('https://api.open-meteo.com/v1/forecast?' . $q); });
   $c = (array)($j['current'] ?? []); $d = (array)($j['daily'] ?? []);
   $deg = function ($v) { return $v === null ? '-' : round((float)$v) . '°'; };
-  $r = ['blocks' => [und_b('now', und_wmo($c['weather_code'] ?? -1), $deg($c['temperature_2m'] ?? null), 'text'), und_b('feels', 'Feels like', $deg($c['apparent_temperature'] ?? null), 'text'),
+  $r = ['blocks' => [und_b('now', und_wmo($c['weather_code'] ?? -1), $deg($c['temperature_2m'] ?? null), 'text'),
     und_b('today', 'Today', $deg($d['temperature_2m_max'][0] ?? null) . ' / ' . $deg($d['temperature_2m_min'][0] ?? null), 'text'),
     und_b('humidity', 'Humidity', isset($c['relative_humidity_2m']) ? (float)$c['relative_humidity_2m'] : null, 'pct'),
     und_b('wind', 'Wind', isset($c['wind_speed_10m']) ? round((float)$c['wind_speed_10m']) . ($imp ? ' mph' : ' km/h') : null, 'text')], 'list' => []];
@@ -603,6 +603,34 @@ function und_jpath($data, $path) {
   return $data;
 }
 
+/** Fills "{field.path}" or "{field|format}" from one JSON item. Formats: bytes, rate, percent, round, number, date, upper, lower.
+ *  Single braces, so they never meet the {{SHARED}} values filled in before. */
+function und_tpl($tpl, $item) {
+  return preg_replace_callback('/\{([A-Za-z0-9_.\-]*)(?:\|([a-z]+))?\}/', function ($m) use ($item) {
+    $v = $m[1] === '' ? $item : und_jpath($item, $m[1]);
+    if (is_bool($v)) $v = $v ? 'yes' : 'no';
+    if ($v === null || !is_scalar($v)) return is_array($v) ? (string)count($v) : '';
+    $f = $m[2] ?? '';
+    if (in_array($f, ['bytes', 'rate'], true) && is_numeric($v)) {
+      $u = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']; $n = (float)$v; $i = 0;
+      while (abs($n) >= 1024 && $i < 5) { $n /= 1024; $i++; }
+      return ($i ? number_format($n, $n >= 100 ? 0 : 1) : (string)(int)$n) . ' ' . $u[$i] . ($f === 'rate' ? '/s' : '');
+    }
+    if ($f === 'percent' && is_numeric($v)) return round((float)$v, 1) . '%';
+    if ($f === 'round' && is_numeric($v)) return (string)round((float)$v);
+    if ($f === 'number' && is_numeric($v)) return number_format((float)$v, floor((float)$v) == (float)$v ? 0 : 1);
+    if ($f === 'date') { $t = und_ts($v); return $t ? date('Y-m-d H:i', $t) : (string)$v; }
+    if ($f === 'upper') return strtoupper((string)$v);
+    if ($f === 'lower') return strtolower((string)$v);
+    return (string)$v;
+  }, (string)$tpl);
+}
+/** A date as unix seconds: ISO text, seconds or milliseconds. */
+function und_ts($v) {
+  if (is_numeric($v)) { $n = (float)$v; return (int)($n > 1e11 ? $n / 1000 : $n); }
+  return strtotime((string)$v) ?: null;
+}
+
 function und_w_customapi($s) {
   $o = $s['options'];
   $h = isset($o['headers']) && is_array($o['headers']) ? array_map('strval', $o['headers']) : [];
@@ -610,6 +638,23 @@ function und_w_customapi($s) {
   $opts = ['headers' => $h, 'method' => strtoupper((string)($o['method'] ?? 'GET'))];
   if ($s['username'] !== '') $opts['basic'] = [$s['username'], $s['password']];
   $j = und_get(str_replace('{{KEY}}', rawurlencode($s['key']), $s['url']), $opts);
+  // one row per element of an array, each row written with templates
+  if (($o['display'] ?? 'block') === 'items') {
+    $arr = trim((string)($o['items'] ?? '')) === '' ? $j : und_jpath($j, $o['items']);
+    if (!is_array($arr)) throw new Exception('Nothing is at "' . und_clip((string)($o['items'] ?? ''), 80) . '" in the answer.');
+    if ($arr && !isset($arr[0])) $arr = array_values($arr);      // an object of objects counts as a list too
+    $title = (string)($o['title'] ?? '') ?: '{name}';
+    $list = [];
+    foreach (array_slice($arr, 0, max(1, min(50, (int)($o['limit'] ?? 10) ?: 10))) as $it) {
+      $row = ['title' => und_clip(trim(und_tpl($title, $it)), 200)];
+      if (trim((string)($o['sub'] ?? '')) !== '') $row['sub'] = und_clip(trim(und_tpl($o['sub'], $it)), 200);
+      if (trim((string)($o['date'] ?? '')) !== '') { $t = und_ts(und_jpath($it, $o['date'])); if ($t) $row['ts'] = $t; }
+      if (!isset($row['ts']) && trim((string)($o['right'] ?? '')) !== '') $row['right'] = und_clip(trim(und_tpl($o['right'], $it)), 60);
+      if (trim((string)($o['link'] ?? '')) !== '') { $u = trim(und_tpl($o['link'], $it)); if (preg_match('#^https?://[^\s<>"]+$#i', $u)) $row['href'] = $u; }
+      $list[] = $row;
+    }
+    return ['list' => $list, 'empty' => 'The list is empty'];
+  }
   $maps = (array)($o['mappings'] ?? []);
   if (($o['display'] ?? 'block') === 'list') {
     $list = [];
@@ -629,6 +674,7 @@ function und_w_customapi($s) {
   }
   $b = [];
   foreach ($maps as $i => $m) {
+    if (isset($m['template'])) { $b[] = und_b('t' . $i, (string)($m['label'] ?? ''), und_clip(und_tpl($m['template'], $j), 60), 'text'); continue; }
     $v = und_jpath($j, $m['field'] ?? '');
     $fmt = (string)($m['format'] ?? 'n');
     if ($fmt === 'number') $fmt = 'n';
