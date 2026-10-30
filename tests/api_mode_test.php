@@ -117,6 +117,7 @@ clear_cache(); @unlink(UND_TMP . '/apipoll.beat');
 $GLOBALS['SENT'] = [];
 $sys = und_system(und_load_config());
 t('without the background poller the network and CPU model are read inline', $sys['net']['rx'] === 1000.0 && $sys['cpu']['model'] === 'Test CPU' && $sys['ip'] === '10.0.0.9' && $slowSent() === 2, json_encode([$sys['net'], $slowSent()]));
+t('the name comes from Info, and vars (a permission the setup does not list) is never asked for', $sys['name'] === 'tower' && !preg_grep('/\bvars\s*\{/', array_map(function ($x) { return (string)($x['body']['query'] ?? ''); }, $GLOBALS['SENT'])));
 clear_cache(); touch(UND_TMP . '/apipoll.beat'); @unlink(UND_TMP . '/viewer');
 $GLOBALS['SENT'] = [];
 $sys = und_system(und_load_config());

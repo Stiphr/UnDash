@@ -82,13 +82,16 @@ function und_api_cached($name, $ttl, $fn) {
 }
 
 /*
+ * Every read asks only for what the documented key permissions cover: one refused field fails the whole query when it
+ * cannot be null, as vars does, so a key without that permission would leave the whole dashboard empty.
+ *
  * Two parts of the API are slow (about 2 s each on a busy server, whatever fields are asked for): the network interface
  * list and the primary interface. In Docker, scripts/apipoll.php keeps them fresh in the background while someone has the
  * dashboard open, so page loads and refreshes never wait for them. Without it (tests, dev server) they are read inline.
  * name => [refresh every N seconds, oldest copy still shown, query]
  */
 const UND_API_SLOW = [
-  'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname } versions { core { unraid } } } vars { name } }'],
+  'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname } versions { core { unraid } } } }'],
   'net'   => [2, 20, 'query { metrics { network { name rxSec txSec } } }'],
 ];
 
@@ -117,9 +120,9 @@ function und_api_poll_due() {
 /** Name, address and Unraid version for the page title, without waiting for a full system read. */
 function und_api_identity() {
   $id = und_read_json(und_tmp('api-ident.json'), null);
-  $d = is_array($id) ? ($id['v']['data'] ?? []) : (und_api_cached('name', 600, function () { return und_gql('query { info { os { hostname } versions { core { unraid } } } vars { name } }', [], 5); })['data'] ?? []);
+  $d = is_array($id) ? ($id['v']['data'] ?? []) : (und_api_cached('name', 600, function () { return und_gql('query { info { os { hostname } versions { core { unraid } } } }', [], 5); })['data'] ?? []);
   $host = (string)parse_url(und_api_conf()['url'], PHP_URL_HOST);
-  return ['name' => (string)($d['vars']['name'] ?? $d['info']['os']['hostname'] ?? '') ?: $host, 'ip' => (string)($d['info']['primaryNetwork']['ipAddress'] ?? '') ?: $host,
+  return ['name' => (string)($d['info']['os']['hostname'] ?? '') ?: $host, 'ip' => (string)($d['info']['primaryNetwork']['ipAddress'] ?? '') ?: $host,
           'os' => (string)($d['info']['versions']['core']['unraid'] ?? '')];
 }
 
@@ -138,7 +141,6 @@ function und_api_system(array $cfg) {
       parities { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
       disks { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
       caches { name device status temp numErrors fsSize fsFree fsType color isSpinning type } }
-    vars { name }
   }';
   $r = und_api_cached('system', 1, function () use ($q) { return und_gql($q); });
   if (isset($r['error']) && empty($r['data'])) return ['error' => $r['error'], 'auth' => !empty($r['auth'])];
@@ -163,7 +165,7 @@ function und_api_system(array $cfg) {
   if ($cpu && (empty($hist) || $now - (int)end($hist)[0] >= 2)) { $hist[] = [$now, round((float)$cpu['percentTotal'], 1), $memOut['used'], $net ? (float)$net['rxSec'] : null, $net ? (float)$net['txSec'] : null]; $hist = array_slice($hist, -150); und_write_json(und_tmp('hist.json'), $hist); }
   $arr = und_api_array($d['array'] ?? []);
   return [
-    'now' => $now, 'name' => (string)($d['vars']['name'] ?? $info['os']['hostname'] ?? ''), 'ip' => (string)($ident['primaryNetwork']['ipAddress'] ?? ''),
+    'now' => $now, 'name' => (string)($info['os']['hostname'] ?? ''), 'ip' => (string)($ident['primaryNetwork']['ipAddress'] ?? ''),
     'os' => (string)($info['versions']['core']['unraid'] ?? ''), 'kernel' => (string)($info['os']['kernel'] ?? ''),
     'cpu' => ['pct' => $cpu ? round((float)$cpu['percentTotal'], 1) : null, 'cores' => $cpu ? array_map(function ($c) { return round((float)$c['percentTotal'], 1); }, (array)$cpu['cpus']) : [],
               'model' => (string)($ident['cpu']['brand'] ?? ''), 'threads' => (int)($ident['cpu']['threads'] ?? 0), 'temp' => $temp, 'load' => null],
