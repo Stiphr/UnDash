@@ -121,6 +121,7 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
   $p = parse_url($url, PHP_URL_PATH) ?: '/'; parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
   $j = function ($d, $code = 200) { return ['code' => $code, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => ['set-cookie' => ['SID=dev; path=/']]]; };
   $host = parse_url($url, PHP_URL_HOST);
+  if (in_array($host, ['cdn.jsdelivr.net', 'api.open-meteo.com', 'geocoding-api.open-meteo.com', 'api.github.com'], true)) return null;   // public lists and APIs: the real thing
   if ($host === 'down.invalid') return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'Failed to connect to down.invalid port 80: Connection refused', 'headers' => []];
   $d = function ($days) { return gmdate('Y-m-d\TH:i:s\Z', time() + $days * 86400); };
   $img = function ($t) { return [['coverType' => 'poster', 'remoteUrl' => 'https://picsum.photos/seed/' . rawurlencode($t) . '/200/300']]; };

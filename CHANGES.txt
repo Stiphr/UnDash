@@ -1,3 +1,7 @@
+###0.8.0
+- Icon picker: "Browse" next to an app's Icon field, and a click on a container's or VM's icon in Settings, searches about 5,000 icons from selfh.st icons and dashboard-icons by name. The server downloads the two name lists once a week; the images load from the same CDN as before.
+- Fixed: on PHP 8.5 a deprecation notice could break an answer from the server (curl_close).
+
 ###0.7.6
 - Add apps from your containers: UnDash spots containers it can read (Radarr, Sonarr, qBittorrent, Plex, Immich, AdGuard Home and the other supported apps), matched on the image name, then the container name. They are listed under "Found on your server" in Settings > Sections & apps and at the top of the Add app window. Pick one and the name, type, icon and address (from the container's web UI or published port) are filled in; only the key or login is left to paste.
 - Containers whose app is already added (same address, same port or same name) are not listed. The x hides the list until Settings is opened again.

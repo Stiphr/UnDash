@@ -679,6 +679,10 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .tpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
 .und .tpick button{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;text-align:left;font:inherit;font-size:13px;min-width:0}
 .und .tpick button:hover,.und .tpick button:focus-visible{border-color:var(--accent);background:var(--accent-soft)}
+.und .ipick{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;margin-top:8px;max-height:min(60vh,520px);overflow:auto}
+.und .ipick button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;font:inherit;font-size:12px;min-width:0}
+.und .ipick button:hover,.und .ipick button:focus-visible{border-color:var(--accent);background:var(--accent-soft)}.und .ipick img,.und .ipick .ph{width:36px;height:36px;object-fit:contain}.und .ipick .ell{max-width:100%}
+.und .ico-btn{all:unset;cursor:pointer;display:inline-flex;border-radius:6px;flex:none}.und .ico-btn:hover{outline:1px solid var(--accent)}.und .ico-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .und .tpick.found{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}.und .tpick.found button .muted{margin-left:auto;flex:0 1 auto;max-width:45%}
 .und .found-bar{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-bottom:14px}.und .found-bar .ae-h{margin-bottom:8px}.und .found-bar .ae-h>.muted{order:3;flex-basis:100%}
 .und .tpick img,.und .tpick .ph{width:22px;height:22px;object-fit:contain;flex:none}

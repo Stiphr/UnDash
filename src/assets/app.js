@@ -2279,7 +2279,8 @@
         row = h('div', { class: 'oi' + (p.hidden ? ' off' : '') },
           h('label', { class: 'switch', title: 'Show on the dashboard' }, h('input', { type: 'checkbox', checked: !p.hidden, 'aria-label': 'Show ' + it.name + ' on the dashboard', onchange: function (e) {
             p.hidden = !e.target.checked; row.classList.toggle('off', p.hidden); put(); counted(); } })),
-          img(iconUrl(p.icon || it.icon), '', dk ? 'box' : 'vm'),
+          h('button', { type: 'button', class: 'ico-btn', title: 'Pick an icon for ' + it.name, 'aria-label': 'Pick an icon for ' + it.name, onclick: function () { iconPicker(p.label || it.name, function (v) { p.icon = v; put(); draw(); }); } },
+            img(iconUrl(p.icon || it.icon), '', dk ? 'box' : 'vm')),
           h('span', { class: 't' }, h('span', { class: 'sdot ' + (it.state === 'running' ? 'ok' : 'na'), title: it.state || '' }), h('b', null, it.name)),
           h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
@@ -2538,6 +2539,29 @@
     return E;
   }
 
+  /* search selfh.st and dashboard-icons (the server keeps their name lists) and pick one; onpick gets the Icon field value */
+  function iconPicker(q0, onpick) {
+    var grid = h('div', { class: 'ipick' }), note = h('div', { class: 'muted sm', role: 'status' }), t = null, seq = 0, m;
+    var find = h('input', { type: 'search', value: q0 || '', placeholder: 'Search icons… (plex, nas, home)', 'aria-label': 'Search icons', oninput: function () { clearTimeout(t); t = setTimeout(look, 250); } });
+    function look() {
+      var q = find.value.trim(), my = ++seq;
+      if (!q) { clear(grid); txt(note, 'Type a name to search about 5,000 icons.'); return; }
+      txt(note, 'Searching…');
+      api('icons', { q: q, max: 80 }).then(function (r) {
+        if (my !== seq) return;
+        clear(grid);
+        if (r.error) { txt(note, r.error); return; }
+        txt(note, r.icons.length ? (r.more ? 'The first ' + r.icons.length + ' matches. Type more to narrow it down.' : r.icons.length + ' match' + (r.icons.length > 1 ? 'es' : '')) : 'No icon matches. An image URL works too.');
+        r.icons.forEach(function (x) {
+          grid.appendChild(h('button', { type: 'button', title: x.n + ' (' + x.s + ': ' + x.v + ')', onclick: function () { m.close(); onpick(x.v); } },
+            img(iconUrl(x.v), '', 'web'), h('span', { class: 'ell' }, x.n)));
+        });
+      });
+    }
+    m = modal('Pick an icon', h('div', null, h('div', { style: { 'margin-bottom': '8px' } }, find), note, grid), [btn('Cancel', function () { m.close(); })], true);
+    look();
+  }
+
   /* containers that look like an app type UnDash reads, and are not added yet. Matched on the image name
      (lscr.io/linuxserver/radarr, binhex/arch-qbittorrentvpn …), then on the container name */
   var FOUND_RE = [['overseerr', /^(overseerr|jellyseerr|seerr)$/], ['plex', /^(plex|pms-docker|plex-media-server|plexmediaserver)$/], ['emby', /^(emby|embyserver)$/],
@@ -2626,6 +2650,7 @@
       var typeSel = h('select', { onchange: function (e) { var was = s.type; s.type = e.target.value; s.fields = []; s.options = {}; if (!s.icon || s.icon === appIcon(was)) s.icon = appIcon(s.type); draw(); } },
         Object.keys(D.types).map(function (k) { return h('option', { value: k, selected: k === s.type }, D.types[k][0]); }));
       var icoPrev = h('span', { class: 'ae-ico' }, img(iconUrl(s.icon), '', 'web'));
+      var icoBtn = btn('Browse', function () { iconPicker(s.name || T[0].replace(/ \(.*\)$/, ''), function (v) { s.icon = v; draw(); }); }, 'sm', 'search', 'Search icons for ' + (s.name || 'this app'));
       form.appendChild(h('div', { class: 'grid2' }, F('Name', tIn(s, 'name', noop, T[0])), F('Type', typeSel, 'Shows in ' + (z === 'apps' ? 'Apps' : ZONE_NAME[z]) + '.')));
       if (T[2]) form.appendChild(F('Address', tIn(s, 'url', noop, 'http://192.168.1.10:' + port), 'Where UnDash reaches ' + T[0].replace(/ \(.*\)$/, '') + ', from the server: the IP or host name and the port, e.g. http://192.168.1.10:' + port + '.'));
       if ((T[1] || []).length) {
@@ -2644,7 +2669,7 @@
       form.appendChild(h('div', { class: 'ae-sub' }, 'On the dashboard'));
       form.appendChild(h('div', { class: 'grid2' },
         F('Link (opens on click)', tIn(s, 'href', noop, T[2] ? 'Same as the address' : 'https://…'), T[2] ? 'Leave empty to open the address. Use it for a public or HTTPS address.' : null),
-        F('Icon', h('div', { class: 'sec-in' }, icoPrev, tIn(s, 'icon', function () { clear(icoPrev).appendChild(img(iconUrl(s.icon), '', 'web')); }, 'sh-radarr')), 'sh-NAME (selfh.st icons), NAME.png (dashboard-icons) or an image URL.'),
+        F('Icon', h('div', { class: 'sec-in' }, icoPrev, tIn(s, 'icon', function () { clear(icoPrev).appendChild(img(iconUrl(s.icon), '', 'web')); }, 'sh-radarr'), icoBtn), 'Browse to search, or type sh-NAME (selfh.st icons), NAME.png (dashboard-icons) or an image URL.'),
         z === 'apps' && D.cfg.groups.length > 1 ? F('Group', h('select', { onchange: function (e) { gid = e.target.value; } }, D.cfg.groups.map(function (g) { return h('option', { value: g.id, selected: g.id === gid }, g.name); }))) : null,
         z === 'apps' ? F('Description', tIn(s, 'description', noop, 'Optional')) : null,
         z === 'apps' ? F('Card width', sIn(s, 'span', noop, [[1, 'Normal'], [2, 'Double']])) : null));

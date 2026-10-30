@@ -32,7 +32,7 @@ function und_http($method, $url, array $o = []) {
   $body = curl_exec($ch);
   $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
   $err = $body === false ? curl_error($ch) : '';
-  curl_close($ch);
+  if (PHP_VERSION_ID < 80000) curl_close($ch);      // a no-op since PHP 8.0, deprecated in 8.5
   $body = $body === false ? '' : $body;
   return ['code' => $code, 'body' => $body, 'json' => json_decode($body, true), 'err' => $err, 'headers' => $resp];
 }
