@@ -28,7 +28,7 @@ UnDash comes as a **Docker container** (recommended) or as an Unraid **plugin**.
 
 ### Docker container
 
-**1. Create an API key.** In Unraid, go to **Settings > Management Access > API Keys > Create**. Give it read access to *Info, Array, Disk, Docker, VMs*, and update access to *Docker* and *VMs* if you want the start, stop and update buttons. Copy the key.
+**1. Create an API key.** In Unraid, go to **Settings > Management Access > API Keys > Create**. Give it read access to *Info, Array, Disk, Docker, VMs* (and *UPS* if Unraid's own UPS service runs yours), and update access to *Docker* and *VMs* if you want the start, stop and update buttons. Copy the key.
 
 **2. Add the template.** In Unraid's terminal:
 

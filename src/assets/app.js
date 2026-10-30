@@ -3018,7 +3018,7 @@
   }
   function unraidConn(b) {
     var box = h('div', null, h('div', { class: 'progress' }, h('i')));
-    b.appendChild(set('Unraid connection', 'The Docker version reads the server through the official Unraid API. Create a key in Unraid under Settings > Management Access > API Keys with read access to Info, Array, Disk, Docker and VMs, plus update access to Docker and VMs for the buttons.', box));
+    b.appendChild(set('Unraid connection', 'The Docker version reads the server through the official Unraid API. Create a key in Unraid under Settings > Management Access > API Keys with read access to Info, Array, Disk, Docker and VMs, plus update access to Docker and VMs for the buttons. Read access to UPS is optional: it is only needed for a UPS that Unraid\'s own UPS service runs.', box));
     api('unraid_conf').then(function (c) {
       clear(box);
       var u = { url: c.url || '', key: c.key_set ? S.KEEP || '__KEEP__' : '' };
