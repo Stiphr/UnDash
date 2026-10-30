@@ -736,6 +736,156 @@ t('a NUT UPS is read over TCP', is_array($u) && $u['charge'] === 87.0 && $u['loa
 t('no NUT daemon means no UPS', und_nut_tcp('127.0.0.1:' . $port, 'ups') === null);
 t('odd UPS names are refused', und_nut_tcp('127.0.0.1', "ups\nFSD") === null);
 
+/* ---------------- monitoring and tool apps ---------------- */
+group('more apps');
+reset_store();
+$GLOBALS['SEEN'] = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['SEEN'][] = [$m, $url, $o];
+  $p = parse_url($url, PHP_URL_PATH);
+  $j = function ($d, $c = 200) { return ['code' => $c, 'body' => is_string($d) ? $d : json_encode($d), 'json' => is_string($d) ? null : $d, 'err' => '', 'headers' => []]; };
+  $dev = function ($n, $st, $t, $arch = false) { return ['device' => ['device_name' => $n, 'model_name' => 'WD', 'device_status' => $st, 'archived' => $arch], 'smart' => ['temp' => $t]]; };
+  switch ($p) {
+    case '/api/summary': return $j(['data' => ['summary' => ['a' => $dev('sda', 0, 35), 'b' => $dev('sdb', 1, 44), 'c' => $dev('sdc', 2, 30), 'd' => $dev('sdd', 7, 0), 'e' => $dev('sde', 3, 61, true)]]]);
+    case '/api/settings': return $j(['settings' => ['metrics' => ['status_threshold' => 1]]]);
+    case '/api/v2/cruddb': return $j(['table1Count' => 5, 'table1ViewableCount' => 3, 'table4Count' => 2, 'table2Count' => 10, 'table5Count' => 1, 'table3Count' => 1, 'table6Count' => 0, 'sizeDiff' => 1.5]);
+    case '/unmanic/api/v2/workers/status': return $j(['workers_status' => [['idle' => true], ['idle' => false], ['idle' => false]]]);
+    case '/unmanic/api/v2/pending/tasks': return $j(['recordsTotal' => 12]);
+    case '/api/status-page/home': return $j(['publicGroupList' => [['monitorList' => [['id' => 1, 'name' => 'Plex'], ['id' => 2, 'name' => 'NAS'], ['id' => 3, 'name' => 'Old']]]], 'incident' => null]);
+    case '/api/status-page/heartbeat/home': return $j(['heartbeatList' => ['1' => [['status' => 0], ['status' => 1]], '2' => [['status' => 0]], '3' => [['status' => 3]]], 'uptimeList' => ['1_24' => 1, '2_24' => 0.5, '3_24' => 0.9]]);
+    case '/api/v1/results/latest': return ($o['headers']['Authorization'] ?? '') === 'Bearer tok' ? $j(['data' => ['download' => 12500000, 'upload' => 2500000, 'ping' => 9.4]]) : $j(['message' => 'Unauthenticated'], 401);
+    case '/api/speedtest/latest': return $j(['data' => ['download' => 100, 'upload' => 20, 'ping' => 11]]);
+    case '/v1/publicip/ip': return $j(['public_ip' => '203.0.113.9', 'country' => 'Netherlands', 'region' => 'North Holland', 'city' => 'Amsterdam']);
+    case '/v1/portforward': return $j(['error' => 'not found'], 404);
+    case '/v1/openvpn/portforwarded': return $j(['port' => 51413]);
+    case '/api/states/sensor.temp': return $j(['state' => '21.5', 'attributes' => ['friendly_name' => 'Living room', 'unit_of_measurement' => '°C']]);
+    case '/api/template': return $j(strpos($o['body'], 'person') !== false ? '2 / 3' : '0 / 4');
+  }
+  return $j(['error' => 'nope'], 404);
+};
+$sv = function ($type, $extra = []) { return $extra + ['id' => 'x', 'type' => $type, 'url' => 'http://app.lan:1', 'key' => '', 'username' => '', 'password' => '', 'options' => []]; };
+$bv = function ($r) { return array_column($r['blocks'], 'value', 'key'); };
+$r = und_w_scrutiny($sv('scrutiny'));
+t('Scrutiny: archived disks are left out, failures follow its threshold, hottest disk shown', $bv($r) === ['passed' => 2, 'failed' => 1, 'unknown' => 1, 'hottest' => '44 °C'] && $r['list'][0]['title'] === 'sdb WD', json_encode($bv($r)));
+$r = und_w_tdarr($sv('tdarr', ['key' => 'k']));
+$last = end($GLOBALS['SEEN']);
+t('Tdarr: queue counts as Tdarr does, saved space in bytes, key sent', $bv($r) === ['queue' => 5, 'processed' => 11, 'errored' => 1, 'saved' => 1.5e9] && $last[0] === 'POST' && $last[2]['headers']['x-api-key'] === 'k'
+  && json_decode($last[2]['body'], true)['data']['docID'] === 'statistics');
+t('Unmanic: busy and total workers, pending tasks', $bv(und_w_unmanic($sv('unmanic'))) === ['active' => 2, 'workers' => 3, 'pending' => 12]);
+$r = und_w_uptimekuma($sv('uptimekuma', ['options' => ['slug' => 'home']]));
+t('Uptime Kuma: last beat decides, maintenance is not down, down ones listed by name', $bv($r) === ['up' => 1, 'down' => 1, 'uptime' => 80.0] && $r['list'] === [['title' => 'NAS', 'right' => 'down']], json_encode($r));
+$e = ''; try { und_w_uptimekuma($sv('uptimekuma', ['options' => ['slug' => '../x']])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('Uptime Kuma: a slug with a path in it is refused', strpos($e, 'slug') !== false);
+t('Speedtest Tracker v1: bytes per second with the token', $bv(und_w_speedtest($sv('speedtest', ['key' => 'tok']))) === ['download' => 12500000.0, 'upload' => 2500000.0, 'ping' => 9.4]);
+t('Speedtest Tracker without a token: the old API, Mbit/s turned into bytes per second', $bv(und_w_speedtest($sv('speedtest'))) === ['download' => 12500000.0, 'upload' => 2500000.0, 'ping' => 11.0]);
+$e = ''; try { und_w_speedtest($sv('speedtest', ['key' => 'wrong'])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('Speedtest Tracker: a wrong token says so', strpos($e, 'API token') !== false);
+$r = und_w_gluetun($sv('gluetun', ['key' => 'g']));
+t('Gluetun: public address and the forwarded port (older API)', $bv($r)['public_ip'] === '203.0.113.9' && $bv($r)['port'] === 51413 && $GLOBALS['SEEN'][count($GLOBALS['SEEN']) - 3][2]['headers']['X-API-Key'] === 'g');
+$r = und_w_homeassistant($sv('homeassistant', ['key' => 'tok', 'options' => ['entities' => "sensor.temp\n"]]));
+t('Home Assistant: an entity with its name and unit, token sent', $r['blocks'] === [['key' => 'sensor_temp', 'label' => 'Living room', 'value' => '21.5 °C', 'fmt' => 'text']] && end($GLOBALS['SEEN'])[2]['headers']['Authorization'] === 'Bearer tok');
+t('Home Assistant: people home, lights and switches by default', array_column(und_w_homeassistant($sv('homeassistant', ['key' => 'tok']))['blocks'], 'value') === ['2 / 3', '0 / 4', '0 / 4']);
+$e = ''; try { und_w_homeassistant($sv('homeassistant', ['key' => 'tok', 'options' => ['entities' => '../../api/config']])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('Home Assistant: only entity ids are asked for', strpos($e, 'Not an entity id') !== false);
+t('the new apps show in Apps', und_zone(['type' => 'scrutiny']) === 'apps' && und_zone(['type' => 'homeassistant']) === 'apps');
+unset($GLOBALS['UND_HTTP_MOCK']);
+
+/* ---------------- weather, releases, bookmarks ---------------- */
+group('widgets');
+reset_store();
+$GLOBALS['SEEN'] = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['SEEN'][] = $url;
+  $host = parse_url($url, PHP_URL_HOST); $p = parse_url($url, PHP_URL_PATH); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+  $j = function ($d, $c = 200) { return ['code' => $c, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []]; };
+  if ($host === 'geocoding-api.open-meteo.com') return $j($q['name'] === 'Nowhere' ? ['generationtime_ms' => 1] : ['results' => [['latitude' => 52.374, 'longitude' => 4.8897, 'name' => 'Amsterdam']]]);
+  if ($host === 'api.open-meteo.com') return $j(['current' => ['temperature_2m' => 11.6, 'apparent_temperature' => 9.2, 'relative_humidity_2m' => 81, 'weather_code' => 3, 'wind_speed_10m' => 17.4],
+    'daily' => ['time' => ['2026-10-30', '2026-10-31', '2026-11-01'], 'weather_code' => [3, 61, 0], 'temperature_2m_max' => [13.1, 12, 10.4], 'temperature_2m_min' => [7.9, 8, 4.5], 'precipitation_probability_max' => [10, 70, 0]]]);
+  if ($host === 'api.github.com') {
+    if ($p === '/repos/immich-app/immich/releases/latest') return $j(['tag_name' => 'v2.1.0', 'published_at' => '2026-10-20T10:00:00Z', 'html_url' => 'https://github.com/immich-app/immich/releases/tag/v2.1.0']);
+    if ($p === '/repos/autobrr/qui/releases/latest') return $j(['tag_name' => 'v1.5.0', 'published_at' => '2026-10-28T10:00:00Z', 'html_url' => 'javascript:alert(1)']);
+    if ($p === '/repos/a/pre/releases/latest') return $j(['message' => 'Not Found'], 404);
+    if ($p === '/repos/a/pre/releases') return $j([['tag_name' => 'v0.1-rc1', 'prerelease' => true, 'published_at' => '2026-01-01T00:00:00Z', 'html_url' => 'https://github.com/a/pre/releases/tag/v0.1-rc1']]);
+    if ($p === '/repos/a/limited/releases/latest') return $j(['message' => 'API rate limit exceeded'], 403);
+  }
+  return $j(['error' => 'nope'], 404);
+};
+$sv = function ($type, $opt, $key = '') { return ['id' => 'x', 'type' => $type, 'url' => '', 'key' => $key, 'username' => '', 'password' => '', 'options' => $opt]; };
+$w = und_w_weather($sv('weather', ['location' => 'Amsterdam']));
+t('weather: now, today, humidity and wind', array_column($w['blocks'], 'value', 'key') === ['now' => '12°', 'today' => '13° / 8°', 'humidity' => 81.0, 'wind' => '17 km/h'] && $w['blocks'][0]['label'] === 'Cloudy', json_encode($w['blocks']));
+t('weather: the next days, with the chance of rain', $w['list'][0] === ['title' => 'Saturday', 'sub' => 'Light rain · 70% rain', 'right' => '12° / 8°'] && $w['list'][1]['sub'] === 'Clear');
+$n = count($GLOBALS['SEEN']);
+und_w_weather($sv('weather', ['location' => 'amsterdam']));
+t('weather: the place and the forecast are kept a while', count($GLOBALS['SEEN']) === $n);
+und_w_weather($sv('weather', ['location' => '52.37, 4.89', 'units' => 'imperial']));
+$last = end($GLOBALS['SEEN']);
+t('weather: coordinates skip the lookup; imperial asks for °F and mph', count($GLOBALS['SEEN']) === $n + 1 && strpos($last, 'latitude=52.37&longitude=4.89') !== false && strpos($last, 'temperature_unit=fahrenheit&wind_speed_unit=mph') !== false, $last);
+$e = ''; try { und_w_weather($sv('weather', ['location' => 'Nowhere'])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('weather: an unknown place says so', strpos($e, 'No place called "Nowhere"') !== false);
+$rl = und_w_releases($sv('releases', ['repos' => "https://github.com/immich-app/immich/\nautobrr/qui\na/pre"], 'ghp_x'));
+t('releases: newest first, with tag and date', array_column($rl['list'], 'title') === ['qui', 'immich', 'pre'] && $rl['list'][1]['sub'] === 'v2.1.0' && $rl['list'][1]['ts'] === strtotime('2026-10-20T10:00:00Z'));
+t('releases: only GitHub links', $rl['list'][0]['href'] === 'https://github.com/autobrr/qui' && $rl['list'][1]['href'] === 'https://github.com/immich-app/immich/releases/tag/v2.1.0');
+t('releases: a repository with only pre-releases shows its latest one', $rl['list'][2]['sub'] === 'v0.1-rc1 (pre-release)');
+$e = ''; try { und_w_releases($sv('releases', ['repos' => 'a/limited'])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('releases: the GitHub limit says to add a token', strpos($e, 'GitHub token') !== false, $e);
+$e = ''; try { und_w_releases($sv('releases', ['repos' => '../../etc'])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('releases: only owner/repo names', strpos($e, 'Not a GitHub repository') !== false);
+$bk = und_w_bookmarks($sv('bookmarks', ['links' => "Router | http://192.168.1.1\nhttps://selfh.st/apps/\nEvil | javascript:alert(1)\nData | data:text/html,x\n\n"]));
+t('bookmarks: title and link, or the host name; only http and https', $bk['list'] === [['title' => 'Router', 'href' => 'http://192.168.1.1'], ['title' => 'selfh.st', 'href' => 'https://selfh.st/apps/']], json_encode($bk['list']));
+unset($GLOBALS['UND_HTTP_MOCK']);
+
+/* ---------------- custom API templates ---------------- */
+group('custom api');
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $d = ['data' => ['up' => 7, 'total' => 9, 'results' => [['name' => 'Ubuntu ISO', 'size' => 4831838208, 'done' => 0.5, 'added' => 1761800000000, 'id' => 4, 'meta' => ['user' => 'al']],
+    ['name' => 'Notes', 'size' => 512, 'done' => true, 'added' => '2026-10-29T08:00:00Z', 'id' => '5" onmouseover="x']]]];
+  return ['code' => 200, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []];
+};
+$ca = function ($o) { return und_w_customapi(['id' => 'x', 'type' => 'customapi', 'url' => 'http://app.lan/api', 'key' => '', 'username' => '', 'password' => '', 'options' => $o]); };
+$r = $ca(['display' => 'items', 'items' => 'data.results', 'title' => '{name}', 'sub' => '{size|bytes} · {meta.user|upper}', 'right' => '{done|percent}', 'link' => 'https://app.lan/i/{id}']);
+t('items: a row per element, fields and formats filled in', $r['list'][0]['title'] === 'Ubuntu ISO' && $r['list'][0]['sub'] === '4.5 GiB · AL' && $r['list'][0]['right'] === '0.5%' && $r['list'][1]['sub'] === '512 B ·', json_encode($r['list']));
+t('items: a link that is not a plain web address is dropped', $r['list'][0]['href'] === 'https://app.lan/i/4' && !isset($r['list'][1]['href']));
+$r = $ca(['display' => 'items', 'items' => 'data.results', 'date' => 'added', 'right' => '{done}', 'limit' => 1]);
+t('items: a date field (milliseconds) beats the right side; the name is the default title; rows are capped', count($r['list']) === 1 && $r['list'][0]['ts'] === 1761800000 && !isset($r['list'][0]['right']) && $r['list'][0]['title'] === 'Ubuntu ISO');
+$e = ''; try { $ca(['display' => 'items', 'items' => 'data.nothing']); } catch (Exception $x) { $e = $x->getMessage(); }
+t('items: a wrong path says so', strpos($e, 'Nothing is at "data.nothing"') !== false);
+$r = $ca(['mappings' => [['template' => '{data.up} / {data.total}', 'label' => 'Up'], ['field' => 'data.total', 'label' => 'Total']]]);
+t('blocks: a template and a plain field side by side', $r['blocks'][0]['value'] === '7 / 9' && $r['blocks'][0]['fmt'] === 'text' && $r['blocks'][1]['value'] === 9);
+t('templates: true reads yes, a list counts its items, unknown fields are empty', und_tpl('{a}|{b}|{c}', ['a' => true, 'b' => [1, 2]]) === 'yes|2|');
+unset($GLOBALS['UND_HTTP_MOCK']);
+
+/* ---------------- icon picker ---------------- */
+group('icons');
+reset_store();
+$GLOBALS['ICON_GETS'] = 0;
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['ICON_GETS']++;
+  $j = function ($d) { return ['code' => 200, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []]; };
+  if (strpos($url, 'selfhst') !== false) return $j([['Name' => 'Plex', 'Reference' => 'plex', 'SVG' => 'Yes', 'Tags' => 'media'], ['Name' => 'Plexamp', 'Reference' => 'plexamp', 'SVG' => 'No', 'Tags' => ''],
+    ['Name' => 'Jellyfin', 'Reference' => 'jellyfin', 'SVG' => 'Yes', 'Tags' => 'media, plex alternative'], ['Name' => 'Bad', 'Reference' => '../etc', 'SVG' => 'Yes']]);
+  if (strpos($url, 'dashboard-icons') !== false) return $j(['png' => ['plex.png', 'plex-light.png', 'complex.png'], 'svg' => ['plex-light.svg']]);
+  return null;
+};
+$ic = und_icon_search('Plex');
+t('an exact name comes first, as a selfh.st icon', $ic['icons'][0] === ['v' => 'sh-plex', 'n' => 'Plex', 's' => 'selfh.st'], json_encode($ic));
+t('a selfh.st icon without SVG is asked for as PNG', in_array('sh-plexamp.png', array_column($ic['icons'], 'v'), true));
+t('dashboard-icons fills in, without repeating selfh.st, SVG when it has one', in_array('plex-light.svg', array_column($ic['icons'], 'v'), true) && in_array('complex.png', array_column($ic['icons'], 'v'), true)
+  && !in_array('plex.png', array_column($ic['icons'], 'v'), true));
+t('tags match last', end($ic['icons'])['v'] === 'sh-jellyfin');
+t('odd names in the lists are dropped', !array_filter(array_column($ic['icons'], 'v'), function ($v) { return strpos($v, '..') !== false; }));
+$n = $GLOBALS['ICON_GETS'];
+und_icon_search('jelly');
+t('the lists are downloaded once, then kept', $GLOBALS['ICON_GETS'] === $n && $n === 2);
+t('an empty search returns nothing without downloading', und_icon_search('  <> ')['icons'] === []);
+t('the number of results is capped', count(und_icon_search('p', 2)['icons']) === 2 && und_icon_search('p', 2)['more'] === true);
+reset_store();
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) { return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'Could not resolve host', 'headers' => []]; };
+$err = ''; try { und_icon_search('plex'); } catch (Exception $e) { $err = $e->getMessage(); }
+t('no internet gives a readable error', strpos($err, 'could not be downloaded') !== false, $err);
+$err2 = ''; try { und_icon_search('plex'); } catch (Exception $e) { $err2 = $e->getMessage(); }
+t('a failed download is not retried at once', strpos($err2, 'Try again in a few minutes') !== false, $err2);
+unset($GLOBALS['UND_HTTP_MOCK']);
+
 rmrf($SANDBOX);
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

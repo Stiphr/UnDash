@@ -66,7 +66,7 @@ function und_health_probe(array $targets) {
     // aborting the body on purpose shows up as a write error; anything else with no status is a real failure
     $err = $code > 0 ? '' : ($errno === 28 ? 'No answer (timed out)' : ($errno === 7 ? 'Connection refused' : (curl_error($ch) ?: 'No answer')));
     $res[$i] = ['code' => $code, 'ms' => $code > 0 ? $ms : null, 'err' => $err];
-    curl_multi_remove_handle($mh, $ch); curl_close($ch);
+    curl_multi_remove_handle($mh, $ch); if (PHP_VERSION_ID < 80000) curl_close($ch);
   }
   curl_multi_close($mh);
   return $res;

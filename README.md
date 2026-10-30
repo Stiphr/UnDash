@@ -78,23 +78,26 @@ Everything is set up in **Settings** (the gear at the top right, or press `,`); 
 ### Add apps
 
 1. Go to **Settings > Sections & apps** and press **Add app**.
-2. Pick the app type. Search, or browse by group:
+2. Pick the app type. Search, or browse by group. Containers UnDash recognises (Radarr, Plex, qBittorrent and so on) are listed first under **Found on your server**, with the name, address and icon already filled in:
 
    | Group | App types |
    |---|---|
    | Arr Stack | Radarr, Sonarr, Lidarr, Readarr, Prowlarr, Bazarr, autobrr, Overseerr / Jellyseerr, Wizarr |
    | Downloads | qBittorrent, qui, SABnzbd |
-   | Media | Plex, Jellyfin, Emby, Tautulli, Tautulli recently added, Calendar |
-   | Network and tools | AdGuard Home, Pi-hole, Nginx Proxy Manager, Immich, PeaNUT |
+   | Media | Plex, Jellyfin, Emby, Tautulli, Tautulli recently added, Calendar, Tdarr, Unmanic |
+   | Network and tools | AdGuard Home, Pi-hole, Nginx Proxy Manager, Gluetun, Immich, Home Assistant, PeaNUT |
+   | Monitoring | Scrutiny, Uptime Kuma, Speedtest Tracker |
    | Server | Storage, Docker summary, VM summary, UPS |
+   | Widgets | Weather (Open-Meteo, no key), GitHub releases, Bookmarks |
    | Other | Custom API (JSON) for most other apps, Link for a plain shortcut |
 
 3. Fill in the form:
    - **Address**: where UnDash reaches the app from the server, with the port, e.g. `http://192.168.1.10:7878`. Use the server's LAN IP, not `localhost`.
    - **API key**, or **Username** and **Password**: the form says where to find the key in that app (Radarr: *Settings > General*). They are saved in `.env` on the server and never sent back to the browser.
    - **Link** (optional): what opens when you click the app, if it differs from the address (a public HTTPS address, for example).
-   - **Icon**: filled in for you. Change it to `sh-NAME` ([selfh.st icons](https://selfh.st/icons/)), `NAME.png` ([dashboard-icons](https://github.com/homarr-labs/dashboard-icons)) or an image URL.
+   - **Icon**: filled in for you. **Browse** searches about 5,000 icons by name, or type `sh-NAME` ([selfh.st icons](https://selfh.st/icons/)), `NAME.png` ([dashboard-icons](https://github.com/homarr-labs/dashboard-icons)) or an image URL.
    - **More options**: which numbers to show and other settings for that app type.
+   - **Custom API**: choose *A row for each item of a list* to turn any JSON list into rows. Say where the list is (`data.results`) and write the rows with fields in braces: Title `{name}`, Second line `{status} · {size|bytes}`. Formats: `bytes`, `rate`, `percent`, `number`, `round`, `date`, `upper`, `lower`.
 4. Press **Test**. It tries the app with what you filled in and shows the numbers it got, or the error. Nothing is saved yet.
 5. Press **Add app**, then **Save**.
 
