@@ -89,7 +89,7 @@ Everything is set up in **Settings** (the gear at the top right, or press `,`); 
    | Network and tools | AdGuard Home, Pi-hole, Nginx Proxy Manager, Gluetun, Immich, Home Assistant, PeaNUT |
    | Monitoring | Scrutiny, Uptime Kuma, Speedtest Tracker |
    | Server | Storage, Docker summary, VM summary, UPS |
-   | Widgets | Weather (Open-Meteo, no key), GitHub releases, Bookmarks |
+   | Widgets | Weather (Open-Meteo, no key), GitHub releases (with *Add from my containers*), Bookmarks |
    | Other | Custom API (JSON) for most other apps, Link for a plain shortcut |
 
 3. Fill in the form:

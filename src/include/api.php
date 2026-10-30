@@ -148,6 +148,7 @@ switch ($action) {
   case 'os_check':      out(und_os_check());
   case 'os_update':     { $r = und_os_update(); if (isset($r['error'])) fail($r['error']); und_history_add('server', 'Unraid OS', 'update', true, 'install started'); out($r); }
   case 'storage':       out(und_storage());
+  case 'container_sources': out(und_container_sources());
   case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'))); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
 
   /* ---- settings ---- */

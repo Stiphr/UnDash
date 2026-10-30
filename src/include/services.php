@@ -545,9 +545,10 @@ function und_w_releases($s) {
   }
   if (!$repos) throw new Exception('List the repositories to follow, like immich-app/immich.');
   $h = ['headers' => ['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => '2022-11-28'] + ($s['key'] !== '' ? ['Authorization' => 'Bearer ' . $s['key']] : [])];
-  $list = [];
+  $list = []; $errs = [];
   foreach (array_slice(array_values($repos), 0, 20) as $repo) {
-    $rel = und_cached('gh-' . md5(strtolower($repo)) . '.json', 3600, function () use ($repo, $h) {
+    // one repository that cannot be read shows as its own row; the others still show
+    try { $rel = und_cached('gh-' . md5(strtolower($repo)) . '.json', 3600, function () use ($repo, $h) {
       $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases/latest', $h);
       if ($r['code'] === 404) {      // only pre-releases, or no releases at all
         $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases?per_page=1', $h);
@@ -559,15 +560,52 @@ function und_w_releases($s) {
       if ($r['code'] === 404) throw new Exception('GitHub has no repository ' . $repo . '.');
       if ($r['code'] !== 200 || !is_array($r['json'])) throw new Exception('HTTP ' . $r['code'] . ' from GitHub.');
       return $r['json'];
-    });
+    }); }
+    catch (Exception $e) { $errs[] = $e->getMessage(); $list[] = ['title' => explode('/', $repo)[1], 'sub' => und_clip($e->getMessage(), 120), 'href' => 'https://github.com/' . $repo]; continue; }
     $name = explode('/', $repo)[1];
     if (!empty($rel['none'])) { $list[] = ['title' => $name, 'sub' => 'no releases yet', 'href' => 'https://github.com/' . $repo]; continue; }
     $url = (string)($rel['html_url'] ?? '');
     $list[] = ['title' => $name, 'sub' => und_clip((string)($rel['tag_name'] ?? ''), 40) . (!empty($rel['prerelease']) ? ' (pre-release)' : ''),
                'ts' => strtotime((string)($rel['published_at'] ?? '')) ?: null, 'href' => preg_match('#^https://github\.com/#', $url) ? $url : 'https://github.com/' . $repo];
   }
+  if (count($errs) === count($list)) throw new Exception($errs[0]);
   usort($list, function ($a, $b) { return ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0); });
   return ['list' => $list];
+}
+
+/** "owner/repo" from a GitHub address (https://github.com/owner/repo, git@github.com:owner/repo.git …), or ''. */
+function und_github_repo_of($u) {
+  if (!preg_match('#github\.com[/:]([A-Za-z0-9_.-]{1,100})/([A-Za-z0-9_.-]{1,100}?)(?:\.git)?(?:[/?\#].*)?$#i', trim((string)$u), $m) || $m[2] === '.' || $m[2] === '..') return '';
+  return $m[1] . '/' . $m[2];
+}
+
+/**
+ * Each container with the GitHub repository it comes from, for "Add from my containers" in the releases widget:
+ * the image's org.opencontainers.image.source label, else a ghcr.io/owner/name image (marked as a guess).
+ * The Docker version asks the Unraid API for the labels separately, so an API without that field only loses the labels.
+ */
+function und_container_sources() {
+  $rows = [];
+  if (und_api_mode()) {
+    $r = und_gql('query { docker { containers { names image labels } } }', [], 15);
+    $list = (array)($r['data']['docker']['containers'] ?? []);
+    if (!$list) { $r = und_gql('query { docker { containers { names image } } }', [], 15); $list = (array)($r['data']['docker']['containers'] ?? []); }
+    if (!$list && isset($r['error'])) return ['error' => $r['error']];
+    foreach ($list as $c) $rows[] = ['name' => ltrim((string)($c['names'][0] ?? ''), '/'), 'image' => (string)($c['image'] ?? ''), 'source' => (string)(((array)($c['labels'] ?? []))['org.opencontainers.image.source'] ?? '')];
+  } else {
+    $dk = und_docker_live();
+    if (isset($dk['error'])) return ['error' => $dk['error']];
+    foreach ((array)($dk['containers'] ?? []) as $c) $rows[] = ['name' => $c['name'], 'image' => (string)$c['image'], 'source' => (string)($c['source'] ?? '')];
+  }
+  $out = [];
+  foreach ($rows as $c) {
+    if ($c['name'] === '') continue;
+    $repo = und_github_repo_of($c['source']); $guess = false;
+    if ($repo === '' && preg_match('#^ghcr\.io/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:[:@].*)?$#i', $c['image'], $m)) { $repo = $m[1] . '/' . $m[2]; $guess = true; }
+    $out[] = ['name' => und_clip($c['name'], 128), 'image' => und_clip($c['image'], 200), 'repo' => $repo, 'guess' => $guess];
+  }
+  usort($out, function ($a, $b) { return ($a['repo'] === '') <=> ($b['repo'] === '') ?: strcasecmp($a['name'], $b['name']); });
+  return ['containers' => $out];
 }
 
 /** Links you keep on the dashboard: "Title | https://…" per line, or just the address. Nothing is fetched. */
