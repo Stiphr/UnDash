@@ -179,7 +179,19 @@ function und_storage() {
 
 /* ---------- UPS: NUT (upsc) first, then apcupsd (apcaccess) ---------- */
 
-function und_ups($name = 'ups') {
+/** The UPS, with its power draw in watts when it can be known: measured by the UPS, or its load times its rated power
+ *  ($nominal from Settings, else the rating the UPS reports, apcupsd NOMPOWER / NUT ups.realpower.nominal). */
+function und_ups($name = 'ups', $nominal = 0) {
+  $u = und_ups_read($name);
+  if (!$u) return null;
+  $n = (int)$nominal > 0 ? (int)$nominal : (int)($u['nominal'] ?? 0);
+  $u['nominal'] = $n ?: null;
+  if (empty($u['watts'])) $u['watts'] = $n && $u['load'] !== null ? (int)round($u['load'] / 100 * $n) : null;
+  else $u['watts'] = (int)round($u['watts']);
+  return $u;
+}
+
+function und_ups_read($name) {
   // the Unraid API only reads apcupsd; a NUT UPS is read straight from the server's NUT daemon (port 3493)
   if (und_api_mode()) return und_api_ups() ?: und_api_cached('nut', 5, function () use ($name) { return und_nut_tcp((string)parse_url(und_api_conf()['url'], PHP_URL_HOST), $name); });
   $upsc = und_bin('upsc');
@@ -198,7 +210,8 @@ function und_ups($name = 'ups') {
       $k = [];
       foreach (explode("\n", $r['out']) as $l) if (strpos($l, ':') !== false) { list($a, $b) = explode(':', $l, 2); $k[trim($a)] = trim($b); }
       return ['source' => 'apcupsd', 'charge' => (float)($k['BCHARGE'] ?? 0), 'load' => isset($k['LOADPCT']) ? (float)$k['LOADPCT'] : null,
-              'status' => ucfirst(strtolower((string)($k['STATUS'] ?? ''))), 'runtime' => isset($k['TIMELEFT']) ? (int)round((float)$k['TIMELEFT'] * 60) : null, 'model' => (string)($k['MODEL'] ?? '')];
+              'status' => ucfirst(strtolower((string)($k['STATUS'] ?? ''))), 'runtime' => isset($k['TIMELEFT']) ? (int)round((float)$k['TIMELEFT'] * 60) : null, 'model' => (string)($k['MODEL'] ?? ''),
+              'nominal' => isset($k['NOMPOWER']) ? (int)(float)$k['NOMPOWER'] : null, 'watts' => null];
     }
   }
   return null;
@@ -206,7 +219,8 @@ function und_ups($name = 'ups') {
 
 function und_nut_vars(array $k) {
   return ['source' => 'NUT', 'charge' => (float)($k['battery.charge'] ?? 0), 'load' => isset($k['ups.load']) ? (float)$k['ups.load'] : null,
-          'status' => und_ups_status($k['ups.status'] ?? ''), 'runtime' => isset($k['battery.runtime']) ? (int)$k['battery.runtime'] : null, 'model' => (string)($k['ups.model'] ?? $k['device.model'] ?? '')];
+          'status' => und_ups_status($k['ups.status'] ?? ''), 'runtime' => isset($k['battery.runtime']) ? (int)$k['battery.runtime'] : null, 'model' => (string)($k['ups.model'] ?? $k['device.model'] ?? ''),
+          'nominal' => isset($k['ups.realpower.nominal']) ? (int)(float)$k['ups.realpower.nominal'] : null, 'watts' => isset($k['ups.realpower']) ? (float)$k['ups.realpower'] : null];
 }
 
 /** NUT's own protocol (LIST VAR), for a UPS name like "ups" or "ups@host[:port]"; null when there is no answer. */

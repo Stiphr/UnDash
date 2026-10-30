@@ -85,10 +85,11 @@ function und_w_docker_summary($s) { $r = und_docker_summary(); if (isset($r['err
 function und_w_vm_summary($s) { $r = und_vm_summary(); if (isset($r['error'])) throw new Exception($r['error']);
   return ['blocks' => [und_b('running', 'Running', $r['running']), und_b('stopped', 'Stopped', $r['stopped']), und_b('paused', 'Paused', $r['paused']), und_b('total', 'Total', $r['total'])], 'link' => 'vms']; }
 function und_w_ups($s, $cfg) {
-  $u = und_ups($s['options']['ups'] ?? $cfg['general']['ups_name']);
+  $u = und_ups($s['options']['ups'] ?? $cfg['general']['ups_name'], $cfg['general']['ups_watts']);
   if (!$u) throw new Exception('No UPS found (NUT or apcupsd).');
   $b = [und_b('battery_charge', 'Battery charge', $u['charge'], 'pct')];
   if ($u['load'] !== null) $b[] = und_b('ups_load', 'UPS load', $u['load'], 'pct');
+  if ($u['watts'] !== null) $b[] = und_b('ups_watts', 'Power draw', $u['watts'] . ' W', 'text');
   $b[] = und_b('ups_status', 'UPS status', $u['status'], 'text');
   if ($u['runtime'] !== null) $b[] = und_b('runtime', 'Runtime', $u['runtime'], 'dur');
   return ['blocks' => $b];

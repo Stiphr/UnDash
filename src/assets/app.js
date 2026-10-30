@@ -579,7 +579,7 @@
       if (p.hidden || (score(nm) < 0 && score(v.name) < 0)) return;
       put(score(nm) >= 0 ? nm : v.name, sbItem(vIcon(v, p, 'aico'), [nm, 'VM · ' + v.state],
         function () { if (web) window.open(web, '_blank', 'noopener'); else sbJump('vms', v.name); },
-        h('span', { class: 'sb-acts' }, web ? sbBtn('Open console (VNC)', 'screen', function () { window.open(web, '_blank', 'noopener'); }) : null,
+        h('span', { class: 'sb-acts' }, web ? sbBtn(v.vnc ? 'Open console (VNC)' : 'Open Unraid\'s VMs page', 'screen', function () { window.open(web, '_blank', 'noopener'); }) : null,
           ['start', 'resume', 'stop', 'restart'].filter(function (o) { return (v.ops || []).indexOf(o) >= 0 && VMOPS[o]; }).map(function (o) { return sbBtn(VMOPS[o][0], VMOPS[o][1], function () { vAct(v, o); }); }))));
     });
     return out.sort(function (a, c) { return a[0] - c[0] || a[1] - c[1]; }).slice(0, 8).map(function (x) { return x[2]; });
@@ -840,7 +840,7 @@
     tile('disks', hot === null ? 'n/a' : hot + '°C', hot === null ? 'No disk temperatures (spun down?)' : 'hottest · ' + (a.hot ? a.hot + ' at 50°C+' : 'all below 50°C'), hot === null ? null : Math.min(100, hot / 60 * 100), hot === null ? 'na' : hot >= 55 ? 'bad' : hot >= 50 ? 'warn' : 'ok');
     tile('uptime', upt(s.uptime), s.uptime ? 'since ' + new Date((s.now - s.uptime) * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '', null, '');
     var u = y.ups;
-    if (R.overview.tiles.ups) { R.overview.tiles.ups.el.hidden = !u; if (u) tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
+    if (R.overview.tiles.ups) { R.overview.tiles.ups.el.hidden = !u; if (u) tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) + (u.watts !== null && u.watts !== undefined ? ' (' + u.watts + ' W)' : '') : u.watts ? ' · ' + u.watts + ' W' : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
     var cores = s.cpu.cores || [];
     tile('cores', cores.length ? pct(Math.max.apply(null, cores)) : 'n/a', cores.length ? 'busiest of ' + cores.length + ' cores' : '', cores.length ? Math.max.apply(null, cores) : null, cores.length ? lvl(Math.max.apply(null, cores), 90, 99) : 'na');
     tile('swap', s.mem.swap_total ? pct(100 * s.mem.swap_used / s.mem.swap_total) : 'None', s.mem.swap_total ? bytes(s.mem.swap_used) + ' of ' + bytes(s.mem.swap_total) : 'No swap configured', s.mem.swap_total ? 100 * s.mem.swap_used / s.mem.swap_total : null, s.mem.swap_total ? '' : 'na');
@@ -889,7 +889,7 @@
       var o = s.os_update || {};
       r.detail.appendChild(h('div', { class: 'kv2 sm' }, h('span', null, 'Server'), h('span', null, s.name + ' · ' + s.ip), h('span', null, 'Unraid'), h('span', null, (s.os || '-') + (o.available ? ' · ' + o.latest + ' available' : '')),
         h('span', null, 'Uptime'), h('span', null, upt(s.uptime) + ' · since ' + new Date((s.now - s.uptime) * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })),
-        y.ups ? [h('span', null, 'UPS'), h('span', null, (y.ups.model || '') + ' · ' + y.ups.status + ' · ' + pct(y.ups.charge) + (y.ups.runtime ? ' · ' + Math.round(y.ups.runtime / 60) + ' min runtime' : ''))] : null));
+        y.ups ? [h('span', null, 'UPS'), h('span', null, (y.ups.model || '') + ' · ' + y.ups.status + ' · ' + pct(y.ups.charge) + (y.ups.watts ? ' · ' + y.ups.watts + ' W' + (y.ups.nominal ? ' of ' + y.ups.nominal + ' W' : '') : '') + (y.ups.runtime ? ' · ' + Math.round(y.ups.runtime / 60) + ' min runtime' : ''))] : null));
     }
   }
   function sparkBox(vals, max) {
@@ -1539,16 +1539,18 @@
   /* the VM's "web UI" is its VNC console */
   /* what clicking a VM's icon or name does, said in its tooltip */
   function vTip(x, web, other) {
-    if (web) return 'Open the console of ' + x.name + ' (VNC)';
+    if (web) return x.vnc ? 'Open the console of ' + x.name + ' (VNC)' : 'Open Unraid\'s VMs page to reach the console of ' + x.name;
     if (x.state !== 'running') return x.name + ' is ' + (x.state || 'stopped') + ': start it from its menu to open the console';
     return other + (S.boot.caps.mode === 'api' ? ' · the console opens from Unraid\'s VMs page' : ' · this VM has no VNC console');
   }
-  function vWeb(x) { return x.state === 'running' && x.vnc ? UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=&path=' + encodeURIComponent(x.vnc) : ''; }
+  // the Unraid API gives no VNC port, so in the Docker version a running VM opens Unraid's VMs page, where the console starts
+  function vWeb(x) { if (x.state === 'running' && !x.vnc && S.boot.caps.mode === 'api' && UNRAID) return UNRAID + '/VMs';
+    return x.state === 'running' && x.vnc ? UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=&path=' + encodeURIComponent(x.vnc) : ''; }
   function vActions(x, p) {
     var a = h('div', { class: 'acts c-acts' }), web = vWeb(x);
     a.appendChild(gear(x.name, function () {
       var b = !!S.busy['v:' + x.name];
-      return [web ? ['Open console (VNC)', 'screen', function () { window.open(web, '_blank', 'noopener'); }] : null, web ? 'hr' : null]
+      return [web ? [x.vnc ? 'Open console (VNC)' : 'Open Unraid\'s VMs page (console)', 'screen', function () { window.open(web, '_blank', 'noopener'); }] : null, web ? 'hr' : null]
         .concat(x.ops.map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' || o === 'stop' ? 'danger' : '', b]; }))
         .concat([x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
           [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('vms', x.name, { favorite: !p.favorite }); }],
@@ -2456,7 +2458,8 @@
     b.appendChild(set('Display', null, h('div', { class: 'grid2' },
       F('Dashboard title', tIn(g, 'title', dirty, 'UnDash')),
       F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
-      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'))));
+      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'),
+      F('UPS rated power (W)', tIn(g, 'ups_watts', dirty, 'from the UPS', 'number', { min: 0, max: 20000 }), 'For the power draw on the UPS tile (load × rated power). Leave it at 0 to use what the UPS reports (apcupsd NOMPOWER, NUT, the Unraid API); fill it in when your UPS only reports its load. The UPS label or manual gives it in watts, not VA.'))));
     if (!Array.isArray(g.search_in)) g.search_in = [];
     var src = function (k, lab, hint) {
       return h('label', { class: 'switch t' }, h('input', { type: 'checkbox', checked: g.search_in.indexOf(k) >= 0, onchange: function (e) {

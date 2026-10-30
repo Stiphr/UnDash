@@ -149,6 +149,24 @@ $GLOBALS['ANSWER'] = function ($q) { return strpos($q['query'], 'labels') !== fa
   : ['json' => ['data' => ['docker' => ['containers' => [['names' => ['/qui'], 'image' => 'ghcr.io/autobrr/qui:latest']]]]]]; };
 $cs = und_container_sources()['containers'];
 t('an Unraid API without container labels still lists the containers', count($cs) === 1 && $cs[0]['repo'] === 'autobrr/qui', json_encode($cs));
+// UPS: watts from the API's own power fields; an older API without them is asked again without
+$ups = ['name' => 'ups', 'model' => 'Back-UPS', 'status' => 'ONLINE', 'battery' => ['chargeLevel' => 100, 'estimatedRuntime' => 3000], 'power' => ['loadPercentage' => 24]];
+$GLOBALS['ANSWER'] = function ($req) use ($ups) {
+  $GLOBALS['UPSQ'][] = $req['query'];
+  return ['json' => ['data' => ['upsDevices' => [array_replace($ups, ['power' => ['loadPercentage' => 24, 'nominalPower' => 600, 'currentPower' => 151.0]])]]]];
+};
+clear_cache(); $GLOBALS['UPSQ'] = [];
+$u = und_ups('ups');
+t('the Unraid API reports the UPS power draw', $u['watts'] === 151 && $u['nominal'] === 600 && count($GLOBALS['UPSQ']) === 1 && strpos($GLOBALS['UPSQ'][0], 'currentPower') !== false, json_encode([$u, $GLOBALS['UPSQ']]));
+$GLOBALS['ANSWER'] = function ($req) use ($ups) {
+  $GLOBALS['UPSQ'][] = $req['query'];
+  if (strpos($req['query'], 'nominalPower') !== false) return ['code' => 400, 'json' => ['errors' => [['message' => 'Cannot query field "nominalPower" on type "UPSPower".', 'extensions' => ['code' => 'GRAPHQL_VALIDATION_FAILED']]]]];
+  return ['json' => ['data' => ['upsDevices' => [$ups]]]];
+};
+clear_cache(); $GLOBALS['UPSQ'] = [];
+$u = und_ups('ups', 500);
+t('an older Unraid API is asked again without the power fields; Settings supplies the rating', count($GLOBALS['UPSQ']) === 2 && $u['load'] === 24.0 && $u['watts'] === 120 && $u['nominal'] === 500);
+
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

@@ -757,6 +757,17 @@ proc_close($fake);
 t('a NUT UPS is read over TCP', is_array($u) && $u['charge'] === 87.0 && $u['load'] === 12.0 && $u['runtime'] === 1800 && $u['status'] === 'On battery, Discharging' && $u['model'] === 'Back-UPS', json_encode($u));
 t('no NUT daemon means no UPS', und_nut_tcp('127.0.0.1:' . $port, 'ups') === null);
 t('odd UPS names are refused', und_nut_tcp('127.0.0.1', "ups\nFSD") === null);
+$apcOut = "STATUS   : ONLINE\nBCHARGE  : 100.0 Percent\nLOADPCT  : 24.0 Percent\nTIMELEFT : 52.0 Minutes\nMODEL    : Back-UPS XS 1000M\n";
+$GLOBALS['MOCK'] = function ($argv) use (&$apcOut) { return basename($argv[0]) === 'apcaccess' ? ['code' => 0, 'out' => $apcOut, 'err' => ''] : ['code' => 1, 'out' => '', 'err' => 'no']; };
+$u = und_ups('ups');
+t('without a rated power there are no watts', $u['load'] === 24.0 && $u['watts'] === null && $u['nominal'] === null);
+$apcOut .= "NOMPOWER : 600 Watts\n";
+$u = und_ups('ups');
+t('apcupsd NOMPOWER gives the power draw', $u['nominal'] === 600 && $u['watts'] === 144);
+t('the rated power from Settings wins', und_ups('ups', 900)['watts'] === 216 && und_ups('ups', 900)['nominal'] === 900);
+unset($GLOBALS['MOCK']);
+$nv = und_nut_vars(['battery.charge' => '90', 'ups.load' => '20', 'ups.realpower' => '151.6', 'ups.realpower.nominal' => '900']);
+t('NUT reports measured watts and its rating', $nv['watts'] === 151.6 && $nv['nominal'] === 900);
 
 /* ---------------- monitoring and tool apps ---------------- */
 group('more apps');
