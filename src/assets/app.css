@@ -490,6 +490,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .mi .badge{font-size:10.5px;line-height:15px;padding:0 6px}
 .und[data-density=compact] .mimg{width:32px;height:48px}.und[data-density=compact] .mi{padding:4px 6px}
 .und[data-density=expanded] .mimg{width:52px;height:78px}.und[data-density=expanded] .mlist{--media-h:460px}
+.und .mi.ml{gap:8px;padding:4px 6px;align-items:baseline}
+.und .mi.ml .pt{flex:0 1 auto;min-width:3em}.und .mi.ml .ps{flex:0 100 auto;min-width:0}.und .mi.ml .grow{flex:1 0 4px}
+.und .mi.ml .pd{flex:none;font-variant-numeric:tabular-nums}.und .mi.ml .ok-t{flex:none;align-self:center;display:inline-flex;color:var(--muted)}.und .mi.ml .ok-t svg{width:13px;height:13px}
+.und .media.text .mlist{min-height:80px}
+@container (max-width:300px){.und .mi.ml .ps{display:none}}
+.und[data-density=compact] .mi.ml{padding:2px 6px}.und[data-density=expanded] .mi.ml{padding:6px}
 
 /* Arr Stack */
 .und .arr{display:flex;flex-direction:column}
