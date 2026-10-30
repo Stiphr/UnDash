@@ -4,6 +4,9 @@
 
 A compact dashboard for Unraid. System health, alerts, media, Arr apps, downloads, requests, containers and VMs on one page, with the controls to manage them.
 
+> [!WARNING]
+> **UnDash is entirely vibe coded (written with AI) and is still a work in progress.** Expect bugs and changes between versions. It can start, stop, restart and update containers and VMs on your server. Use it at your own risk: I am not responsible for anything that happens to your system or your data. Keep backups of your appdata and flash drive.
+
 - **System**: CPU, memory, storage, network, array health, disk temperatures, uptime and UPS, with short history charts.
 - **Alerts**: problems only (unhealthy or restarting containers, disk errors and heat, array state, updates). Each alert can be ignored for a while or for good. A history keeps when each problem started and ended.
 - **Media**: upcoming and recently added movies and episodes from Radarr and Sonarr.
@@ -70,13 +73,77 @@ Open it from the **UnDash** tab in Unraid's menu, or full-window at `http://YOUR
 
 ## Set up
 
-Everything is set up in **Settings**; you never have to edit a file.
+Everything is set up in **Settings** (the gear at the top right, or press `,`); you never have to edit a file. Changes take effect when you press **Save**; **Preview** next to it shows the dashboard with your changes first.
 
-1. **Add your apps** in **Settings > Sections & apps > Add app**: pick Radarr, qBittorrent, Plex and so on, enter its address and API key, press **Test**. Each app goes to the right section on its own (Arr Stack, Downloads, Apps). Edit, hide, reorder or remove any app from the same list.
-2. **Arrange the dashboard** on the same page: show, hide and order sections (half-width sections sit side by side), and open a section for its own options.
-3. **Pick a look** in **Settings > Theme**: theme, light / dark / system mode, accent colour, spacing and wallpaper.
+### Add apps
 
-Press **Preview** next to Save to see the dashboard with your changes before saving them.
+1. Go to **Settings > Sections & apps** and press **Add app**.
+2. Pick the app type. Search, or browse by group:
+
+   | Group | App types |
+   |---|---|
+   | Arr Stack | Radarr, Sonarr, Lidarr, Readarr, Prowlarr, Bazarr, autobrr, Overseerr / Jellyseerr, Wizarr |
+   | Downloads | qBittorrent, qui, SABnzbd |
+   | Media | Plex, Jellyfin, Emby, Tautulli, Tautulli recently added, Calendar |
+   | Network and tools | AdGuard Home, Pi-hole, Nginx Proxy Manager, Immich, PeaNUT |
+   | Server | Storage, Docker summary, VM summary, UPS |
+   | Other | Custom API (JSON) for most other apps, Link for a plain shortcut |
+
+3. Fill in the form:
+   - **Address**: where UnDash reaches the app from the server, with the port, e.g. `http://192.168.1.10:7878`. Use the server's LAN IP, not `localhost`.
+   - **API key**, or **Username** and **Password**: the form says where to find the key in that app (Radarr: *Settings > General*). They are saved in `.env` on the server and never sent back to the browser.
+   - **Link** (optional): what opens when you click the app, if it differs from the address (a public HTTPS address, for example).
+   - **Icon**: filled in for you. Change it to `sh-NAME` ([selfh.st icons](https://selfh.st/icons/)), `NAME.png` ([dashboard-icons](https://github.com/homarr-labs/dashboard-icons)) or an image URL.
+   - **More options**: which numbers to show and other settings for that app type.
+4. Press **Test**. It tries the app with what you filled in and shows the numbers it got, or the error. Nothing is saved yet.
+5. Press **Add app**, then **Save**.
+
+Each app lands in the right section by itself: the Arr apps in **Arr Stack**, download clients in **Downloads**, Calendar and Tautulli recently added in **Media**, Storage, UPS and the Docker / VM summaries in **System**, everything else in **Apps**. Radarr and Sonarr also fill **Media**, Plex, Emby, Jellyfin and Tautulli fill **Now playing**, and Overseerr fills **Requests**. To change an app later, find it under its section (or type its name in **Find an app**) and use edit, hide, star (favorite), drag to reorder, or remove.
+
+Apps in the **Apps** section sit in groups. Open **Apps > Groups and apps** to add, rename and reorder groups, set the number of columns, and choose whether group names are shown.
+
+**qBittorrent tip:** qBittorrent often skips the login for your own network, but UnDash connects from Docker's internal network, so always fill in the username and password. To use one value (a login, a server address) in several apps, add it under **Shared values** at the bottom of the page and type `{{NAME}}` in each app's field.
+
+### Add containers and VMs
+
+Containers and VMs need no setup: UnDash lists everything it finds on the server through the Unraid API (Docker version) or Unraid itself (plugin). Choose which ones the dashboard shows:
+
+1. Go to **Settings > Sections & apps**.
+2. Open **Containers > Containers and view** (or **Virtual machines > VMs and view**).
+3. Under **Containers on the dashboard**, tick the ones to show. **Select all**, **Running only** and **None** act on everything the filter box lists, so you can type `arr` and press **Select all** to add every Arr container at once. New containers show until you untick them.
+4. Per container you can also set a **display name**, an **icon**, **favorite** (star, also shown in the **Favorites** section) and whether it is **checked for updates** (arrow).
+5. Pick the **layout** (compact grid, table or cards), **sort order**, what each container shows (CPU, memory, uptime, image) and which ones show by default: running, all, or **Selected**.
+6. Press **Save**.
+
+The list stays empty until UnDash can read the server. In the Docker version, check **Settings > Connection** and that the API key has read access to *Docker* and *VMs* (see [Install](#docker-container)).
+
+On the dashboard, the gear on each container or VM has the controls: start, stop, restart, update, logs, **Show in "Selected"** and **Hide from the dashboard**. Click the icon or name to open its web UI.
+
+### Arrange the sections (widgets)
+
+The dashboard is made of sections: **System**, **Alerts**, **Favorites**, **Media**, **Arr Stack**, **Downloads**, **Now playing**, **Requests**, **Endpoint health**, **Containers**, **Virtual machines** and **Apps**. Each app you add is a widget card inside one of them.
+
+1. In **Settings > Sections & apps**, under **Sections**:
+   - tick a section to show it, untick to hide it;
+   - drag it to change the order;
+   - set it to **Full width** or **Half width** (two half-width sections sit side by side on wide screens).
+2. Press the button on the right of a section to open its options:
+
+   | Section | Options |
+   |---|---|
+   | System | which tiles to show (CPU, memory, storage, network, health, disks, UPS…) and their order |
+   | Media | which columns (upcoming and recent movies and episodes), items per column, days ahead, which Radarr and Sonarr |
+   | Arr Stack / Downloads | their apps; how many active downloads per client |
+   | Apps | columns, groups, group names, shortcut links |
+   | Containers / Virtual machines | see [Add containers and VMs](#add-containers-and-vms) |
+
+3. Press **Save**.
+
+App widgets refresh every 15 seconds and the system every 2 seconds; change both in **Settings > Refresh & display**.
+
+### Pick a look
+
+**Settings > Theme**: theme, light / dark / system mode, accent colour, spacing and wallpaper. **Settings > Custom CSS** for anything else.
 
 ### Start from the example
 
