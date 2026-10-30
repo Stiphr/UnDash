@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.9.0">
+<!ENTITY version "0.9.1">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.9.1
+- Media: new "Show as" option (Settings &gt; Sections &amp; apps &gt; Media). Text only shows one line per item, the title with its episode or release type and the date on the right, with a tick when it is already downloaded, so many more items fit. Posters stays the default.
+
 ###0.9.0
 - Alerts: a disk that Scrutiny marks as failed is a red alert ("sdb (WD…) failed its SMART check"), kept in the alert history and can be ignored like any other. The background check asks Scrutiny every 5 minutes; the alert ends only when Scrutiny has been asked again and says the disk is fine.
 - GitHub releases: "Add from my containers" lists your containers with the GitHub repository each comes from (the image's source label, or a ghcr.io image name) to follow with a tick. A repository that cannot be read now shows as its own row instead of hiding the others.
@@ -221,7 +224,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.9.0');
+define('UND_VERSION', '0.9.1');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -395,7 +398,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>1e641eab7431d554405d76e3ad338f65d8e9d5d4c5daf032ce61d640808b5c12</SHA256>
+<SHA256>9db56b73be61c7f0454f69abc0c99026ddc86c7d2d6092e660a90be369fda4bd</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -460,7 +463,7 @@ function und_default_config() {
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
     'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true],
-    'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
+    'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
     'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
@@ -773,7 +776,7 @@ function und_normalize(array $c) {
   };
   $md = (isset($c['media']) && is_array($c['media']) ? $c['media'] : []) + $d['media'];
   $media = ['radarr' => preg_match('/^[a-f0-9]{8}$/', (string)$md['radarr']) ? $md['radarr'] : '', 'sonarr' => preg_match('/^[a-f0-9]{8}$/', (string)$md['sonarr']) ? $md['sonarr'] : '',
-            'count' => max(4, min(40, (int)$md['count'])), 'days_ahead' => max(7, min(120, (int)$md['days_ahead'])),
+            'count' => max(4, min(40, (int)$md['count'])), 'days_ahead' => max(7, min(120, (int)$md['days_ahead'])), 'style' => ($md['style'] ?? '') === 'text' ? 'text' : 'art',
             'widgets' => $order($md['widgets'] ?? [], und_media_ids(), $d['media']['widgets'], ['visible' => 'bool'])];
   // the four columns always come in this order; each has its own length (older configurations used the shared count)
   $raw = []; foreach ((array)($md['widgets'] ?? []) as $x) if (is_array($x) && is_string($x['id'] ?? null)) $raw[$x['id']] = $x;
@@ -995,7 +998,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>3ed7ee18a49d9e2eadf879c349f2b05216882b08144b5c6eaebb0be75e991631</SHA256>
+<SHA256>77c44adfd9b483f848004e0b1418e85c3c7bb79fd1d1e75743f5c37ab0dd3efe</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -5903,6 +5906,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .mi .badge{font-size:10.5px;line-height:15px;padding:0 6px}
 .und[data-density=compact] .mimg{width:32px;height:48px}.und[data-density=compact] .mi{padding:4px 6px}
 .und[data-density=expanded] .mimg{width:52px;height:78px}.und[data-density=expanded] .mlist{--media-h:460px}
+.und .mi.ml{gap:8px;padding:4px 6px;align-items:baseline}
+.und .mi.ml .pt{flex:0 1 auto;min-width:3em}.und .mi.ml .ps{flex:0 100 auto;min-width:0}.und .mi.ml .grow{flex:1 0 4px}
+.und .mi.ml .pd{flex:none;font-variant-numeric:tabular-nums}.und .mi.ml .ok-t{flex:none;align-self:center;display:inline-flex;color:var(--muted)}.und .mi.ml .ok-t svg{width:13px;height:13px}
+.und .media.text .mlist{min-height:80px}
+@container (max-width:300px){.und .mi.ml .ps{display:none}}
+.und[data-density=compact] .mi.ml{padding:2px 6px}.und[data-density=expanded] .mi.ml{padding:6px}
 
 /* Arr Stack */
 .und .arr{display:flex;flex-direction:column}
@@ -6112,7 +6121,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
 }
 ]]></INLINE>
-<SHA256>57a0062633a56a9f4284822528c1601cc4057522c3e579154eee4a045e60b2d3</SHA256>
+<SHA256>4fa9a2360d18e2cb781c06c2ead87eb84853448cabfb921560d6adc2200a2b9d</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -7615,7 +7624,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
                 recent_movies: ['Recent movies', 'No movies imported recently.'], recent_episodes: ['Recent episodes', 'No episodes imported recently.'] };
   var MEDIA_ORDER = ['upcoming_movies', 'upcoming_episodes', 'recent_movies', 'recent_episodes'];
   BUILD.media = function (r) {
-    r.grid = h('div', { class: 'media' }); r.w = {};
+    r.grid = h('div', { class: 'media' + (S.L.media.style === 'text' ? ' text' : '') }); r.w = {};
     var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; });
     MEDIA_ORDER.forEach(function (id) {
       if (vis[id] === false) return;
@@ -7648,8 +7657,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var items = j.items || [];
     txt(x.count, String(j.items.length));
     if (!j.items.length) { x.row.appendChild(h('div', { class: 'empty' }, MEDIA[k][1])); return; }
-    var upcoming = k.indexOf('upcoming') === 0;
+    var upcoming = k.indexOf('upcoming') === 0, text = S.L.media.style === 'text';
     items.forEach(function (it) {
+      if (text) { x.row.appendChild(mediaLine(it, upcoming)); return; }
       var d = it.ts ? new Date(it.ts * 1000) : null;
       var when = !d ? '' : upcoming ? (it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' })) : rel(it.ts);
       // only what Radarr / Sonarr reported: no year, episode or quality line when they did not send one
@@ -7662,6 +7672,17 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
         h('span', { class: 'mt' }, h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null,
           h('span', { class: 'pm' }, when ? h('span', { class: 'pd' }, when) : null, tags))));
     });
+  }
+
+  /* text only: one line per item, the title with its episode or kind, the date on the right */
+  function mediaLine(it, upcoming) {
+    var d = it.ts ? new Date(it.ts * 1000) : null;
+    var when = !d ? '' : !upcoming ? rel(it.ts) : it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    var sub = [it.sub || '', upcoming && it.when && it.when !== 'Airs' ? it.when : '', !upcoming && it.quality ? it.quality : ''].filter(Boolean).join(' · ');
+    return h(it.href ? 'a' : 'div', { class: 'mi ml', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: it.href ? 'noopener' : null,
+        title: it.title + (it.year ? ' (' + it.year + ')' : '') + (sub ? '\n' + sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') + (it.done ? '\nAlready downloaded' : '') },
+      h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null, h('span', { class: 'grow' }),
+      it.done ? h('span', { class: 'ok-t', 'aria-label': 'Downloaded' }, ic('check')) : null, when ? h('span', { class: 'pd' }, when) : null);
   }
 
   /* ---- sections that load their own data on a timer (paused while the browser tab is hidden) ---- */
@@ -8318,14 +8339,15 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       media: function () {
         var radarrs = [['', 'First Radarr app']], sonarrs = [['', 'First Sonarr app']];
         c.groups.forEach(function (g) { g.services.forEach(function (x) { if (x.type === 'radarr') radarrs.push([x.id, x.name]); if (x.type === 'sonarr') sonarrs.push([x.id, x.name]); }); });
-        return [sub('Columns', 'Always in this order, with posters and dates from Radarr and Sonarr. Each column scrolls on its own.'),
+        return [sub('Columns', 'Always in this order, with dates from Radarr and Sonarr (and posters, unless Show as is Text only). Each column scrolls on its own.'),
           h('div', { class: 'olist' }, c.media.widgets.map(function (w) {
             return h('div', { class: 'oi' }, h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: w.visible, onchange: function (e) { w.visible = e.target.checked; dirty(); } }),
               h('span', null, h('b', null, MEDIA[w.id][0]), h('span', { class: 'muted sm' }, ' · ' + MEDIA_DESC[w.id]))),
               h('label', { class: 'muted sm nowrap' }, 'Items ', tIn(w, 'count', dirty, '15', 'number', { min: 1, max: 50, style: 'width:70px', 'aria-label': 'Items in ' + MEDIA[w.id][0] })));
           })),
           h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Radarr', sIn(c.media, 'radarr', dirty, radarrs)), F('Sonarr', sIn(c.media, 'sonarr', dirty, sonarrs)),
-            F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 }), 'How far the two Upcoming columns look ahead.')),
+            F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 }), 'How far the two Upcoming columns look ahead.'),
+            F('Show as', sIn(c.media, 'style', dirty, [['art', 'Posters'], ['text', 'Text only']]), 'Text only fits many more items in the same height.')),
           ed.zone('media')];
       },
       arr: function () { return [ed.zone('arr')]; },
@@ -9152,7 +9174,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>d4185e6633f109466df88aa6815a24760da3a495a7fda809b4806e64e90189ff</SHA256>
+<SHA256>12f8aabae7ae70dbff5b43867305505231feb196c4f0b18eddf3b87602ba4b5c</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">

@@ -1497,7 +1497,7 @@
                 recent_movies: ['Recent movies', 'No movies imported recently.'], recent_episodes: ['Recent episodes', 'No episodes imported recently.'] };
   var MEDIA_ORDER = ['upcoming_movies', 'upcoming_episodes', 'recent_movies', 'recent_episodes'];
   BUILD.media = function (r) {
-    r.grid = h('div', { class: 'media' }); r.w = {};
+    r.grid = h('div', { class: 'media' + (S.L.media.style === 'text' ? ' text' : '') }); r.w = {};
     var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; });
     MEDIA_ORDER.forEach(function (id) {
       if (vis[id] === false) return;
@@ -1530,8 +1530,9 @@
     var items = j.items || [];
     txt(x.count, String(j.items.length));
     if (!j.items.length) { x.row.appendChild(h('div', { class: 'empty' }, MEDIA[k][1])); return; }
-    var upcoming = k.indexOf('upcoming') === 0;
+    var upcoming = k.indexOf('upcoming') === 0, text = S.L.media.style === 'text';
     items.forEach(function (it) {
+      if (text) { x.row.appendChild(mediaLine(it, upcoming)); return; }
       var d = it.ts ? new Date(it.ts * 1000) : null;
       var when = !d ? '' : upcoming ? (it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' })) : rel(it.ts);
       // only what Radarr / Sonarr reported: no year, episode or quality line when they did not send one
@@ -1544,6 +1545,17 @@
         h('span', { class: 'mt' }, h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null,
           h('span', { class: 'pm' }, when ? h('span', { class: 'pd' }, when) : null, tags))));
     });
+  }
+
+  /* text only: one line per item, the title with its episode or kind, the date on the right */
+  function mediaLine(it, upcoming) {
+    var d = it.ts ? new Date(it.ts * 1000) : null;
+    var when = !d ? '' : !upcoming ? rel(it.ts) : it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    var sub = [it.sub || '', upcoming && it.when && it.when !== 'Airs' ? it.when : '', !upcoming && it.quality ? it.quality : ''].filter(Boolean).join(' · ');
+    return h(it.href ? 'a' : 'div', { class: 'mi ml', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: it.href ? 'noopener' : null,
+        title: it.title + (it.year ? ' (' + it.year + ')' : '') + (sub ? '\n' + sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') + (it.done ? '\nAlready downloaded' : '') },
+      h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null, h('span', { class: 'grow' }),
+      it.done ? h('span', { class: 'ok-t', 'aria-label': 'Downloaded' }, ic('check')) : null, when ? h('span', { class: 'pd' }, when) : null);
   }
 
   /* ---- sections that load their own data on a timer (paused while the browser tab is hidden) ---- */
@@ -2200,14 +2212,15 @@
       media: function () {
         var radarrs = [['', 'First Radarr app']], sonarrs = [['', 'First Sonarr app']];
         c.groups.forEach(function (g) { g.services.forEach(function (x) { if (x.type === 'radarr') radarrs.push([x.id, x.name]); if (x.type === 'sonarr') sonarrs.push([x.id, x.name]); }); });
-        return [sub('Columns', 'Always in this order, with posters and dates from Radarr and Sonarr. Each column scrolls on its own.'),
+        return [sub('Columns', 'Always in this order, with dates from Radarr and Sonarr (and posters, unless Show as is Text only). Each column scrolls on its own.'),
           h('div', { class: 'olist' }, c.media.widgets.map(function (w) {
             return h('div', { class: 'oi' }, h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: w.visible, onchange: function (e) { w.visible = e.target.checked; dirty(); } }),
               h('span', null, h('b', null, MEDIA[w.id][0]), h('span', { class: 'muted sm' }, ' · ' + MEDIA_DESC[w.id]))),
               h('label', { class: 'muted sm nowrap' }, 'Items ', tIn(w, 'count', dirty, '15', 'number', { min: 1, max: 50, style: 'width:70px', 'aria-label': 'Items in ' + MEDIA[w.id][0] })));
           })),
           h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Radarr', sIn(c.media, 'radarr', dirty, radarrs)), F('Sonarr', sIn(c.media, 'sonarr', dirty, sonarrs)),
-            F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 }), 'How far the two Upcoming columns look ahead.')),
+            F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 }), 'How far the two Upcoming columns look ahead.'),
+            F('Show as', sIn(c.media, 'style', dirty, [['art', 'Posters'], ['text', 'Text only']]), 'Text only fits many more items in the same height.')),
           ed.zone('media')];
       },
       arr: function () { return [ed.zone('arr')]; },
