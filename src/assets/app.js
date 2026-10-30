@@ -2022,7 +2022,7 @@
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime',
     scrutiny: 'passed, failed, unknown, hottest', tdarr: 'queue, processed, errored, saved', unmanic: 'active, workers, pending', uptimekuma: 'up, down, uptime',
-    speedtest: 'download, upload, ping', gluetun: 'public_ip, country, region, city, port', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
+    speedtest: 'download, upload, ping', weather: 'now, today, humidity, wind', gluetun: 'public_ip, country, region, city, port', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
   };
   var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', playing: 'Active Plex, Emby, Jellyfin and Tautulli streams', requests: 'Overseerr / Jellyseerr requests, approve or decline', health: 'Every app and container web UI: status and latency', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
@@ -2457,7 +2457,7 @@
   var APP_PORT = { radarr: 7878, sonarr: 8989, lidarr: 8686, readarr: 8787, prowlarr: 9696, bazarr: 6767, autobrr: 7474, overseerr: 5055, wizarr: 5690, qbittorrent: 8080, qui: 7476, sabnzbd: 8080,
     plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80,
     scrutiny: 8080, tdarr: 8265, unmanic: 8888, uptimekuma: 3001, speedtest: 80, gluetun: 8000, homeassistant: 8123 };
-  var APP_ICON = { weather: '', releases: 'github', bookmarks: '', uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
+  var APP_ICON = { weather: '', releases: 'github', bookmarks: '', tdarr: 'tdarr.png', unmanic: 'unmanic.png', uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
   var KEY_WHERE = { radarr: 'Radarr: Settings > General', sonarr: 'Sonarr: Settings > General', lidarr: 'Lidarr: Settings > General', readarr: 'Readarr: Settings > General', prowlarr: 'Prowlarr: Settings > General',
     bazarr: 'Bazarr: Settings > General', overseerr: 'Overseerr / Jellyseerr: Settings > General', sabnzbd: 'SABnzbd: Config > General', qui: 'qui: Settings > API Keys', autobrr: 'autobrr: Settings > API Keys',
     tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys',
@@ -2716,9 +2716,17 @@
       if (s.type === 'emby' || s.type === 'jellyfin') adv.appendChild(cIn(s.options, 'hide_blocks', noop, 'Only show the streams (hide the library counts)'));
       if (s.type === 'customapi') {
         var js = function (k, def, lab) { var t = h('textarea', { rows: 6, spellcheck: 'false', 'aria-label': lab, oninput: function (e) { try { s.options[k] = JSON.parse(e.target.value || def); e.target.style.borderColor = ''; } catch (x) { e.target.style.borderColor = 'var(--bad)'; } } }); t.value = JSON.stringify(s.options[k] || JSON.parse(def), null, 2); return t; };
-        form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Blocks'], ['list', 'List']])), F('Method', tIn(s.options, 'method', noop, 'GET'))));
+        form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Numbers (blocks)'], ['items', 'A row for each item of a list'], ['list', 'Fixed rows']], draw)), F('Method', tIn(s.options, 'method', noop, 'GET'))));
         form.appendChild(F('Headers (JSON)', js('headers', '{}', 'Headers'), '{{KEY}} is replaced by the API key above, e.g. {"X-Api-Key": "{{KEY}}"}.'));
-        form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}]. Formats: number, text, bytes, rate, percent; lists can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
+        if (s.options.display === 'items') {
+          form.appendChild(h('div', { class: 'grid2' },
+            F('List in the answer', tIn(s.options, 'items', noop, 'data.results'), 'Where the list is, as a path. Empty: the answer itself is the list.'),
+            F('Rows', tIn(s.options, 'limit', noop, '10', 'number', { min: 1, max: 50 })),
+            F('Title', tIn(s.options, 'title', noop, '{name}')), F('Second line', tIn(s.options, 'sub', noop, '{status} · {size|bytes}')),
+            F('Right side', tIn(s.options, 'right', noop, '{progress|percent}'), 'Not shown when there is a date.'), F('Date field', tIn(s.options, 'date', noop, 'added'), 'Shown as "2 h ago". ISO dates, seconds or milliseconds.'),
+            F('Link', tIn(s.options, 'link', noop, 'https://example.com/item/{id}'), 'Optional; opens when the row is clicked.')));
+          form.appendChild(h('div', { class: 'hint' }, 'In the boxes, {field} is replaced by that field of each item (a path like {user.name} works). Add a format after a bar: {size|bytes}, {speed|rate}, {done|percent}, {count|number}, {value|round}, {when|date}, {state|upper}.'));
+        } else form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}] or a template: {"template": "{data.up} / {data.total}", "label": "Up"}. Formats: number, text, bytes, rate, percent; fixed rows can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
       }
       if (adv.childNodes.length) form.appendChild(h('details', { class: 'ae-adv' }, h('summary', null, 'More options'), adv));
       var res = h('div', { role: 'status' });
@@ -2731,7 +2739,7 @@
         api('test', { config: cfg, creds: creds, shared: sharedOut(D), id: s.id }).then(function (r) {
           clear(res);
           if (r.error) res.appendChild(h('div', { class: 'banner bad' }, r.error));
-          else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' items' : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
+          else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' rows' + (r.list.length ? ': ' + r.list.slice(0, 3).map(function (x) { return x.title + (x.sub ? ' (' + x.sub + ')' : ''); }).join(', ') + (r.list.length > 3 ? '…' : '') : '') : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
         });
       }, '', 'check'), h('span', { class: 'muted sm' }, 'Tries it with what is filled in here; nothing is saved.')));
       form.appendChild(res);

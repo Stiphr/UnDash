@@ -812,7 +812,7 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
 };
 $sv = function ($type, $opt, $key = '') { return ['id' => 'x', 'type' => $type, 'url' => '', 'key' => $key, 'username' => '', 'password' => '', 'options' => $opt]; };
 $w = und_w_weather($sv('weather', ['location' => 'Amsterdam']));
-t('weather: now, feels like, today, humidity and wind', array_column($w['blocks'], 'value', 'key') === ['now' => '12°', 'feels' => '9°', 'today' => '13° / 8°', 'humidity' => 81.0, 'wind' => '17 km/h'] && $w['blocks'][0]['label'] === 'Cloudy', json_encode($w['blocks']));
+t('weather: now, today, humidity and wind', array_column($w['blocks'], 'value', 'key') === ['now' => '12°', 'today' => '13° / 8°', 'humidity' => 81.0, 'wind' => '17 km/h'] && $w['blocks'][0]['label'] === 'Cloudy', json_encode($w['blocks']));
 t('weather: the next days, with the chance of rain', $w['list'][0] === ['title' => 'Saturday', 'sub' => 'Light rain · 70% rain', 'right' => '12° / 8°'] && $w['list'][1]['sub'] === 'Clear');
 $n = count($GLOBALS['SEEN']);
 und_w_weather($sv('weather', ['location' => 'amsterdam']));
@@ -832,6 +832,26 @@ $e = ''; try { und_w_releases($sv('releases', ['repos' => '../../etc'])); } catc
 t('releases: only owner/repo names', strpos($e, 'Not a GitHub repository') !== false);
 $bk = und_w_bookmarks($sv('bookmarks', ['links' => "Router | http://192.168.1.1\nhttps://selfh.st/apps/\nEvil | javascript:alert(1)\nData | data:text/html,x\n\n"]));
 t('bookmarks: title and link, or the host name; only http and https', $bk['list'] === [['title' => 'Router', 'href' => 'http://192.168.1.1'], ['title' => 'selfh.st', 'href' => 'https://selfh.st/apps/']], json_encode($bk['list']));
+unset($GLOBALS['UND_HTTP_MOCK']);
+
+/* ---------------- custom API templates ---------------- */
+group('custom api');
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $d = ['data' => ['up' => 7, 'total' => 9, 'results' => [['name' => 'Ubuntu ISO', 'size' => 4831838208, 'done' => 0.5, 'added' => 1761800000000, 'id' => 4, 'meta' => ['user' => 'al']],
+    ['name' => 'Notes', 'size' => 512, 'done' => true, 'added' => '2026-10-29T08:00:00Z', 'id' => '5" onmouseover="x']]]];
+  return ['code' => 200, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []];
+};
+$ca = function ($o) { return und_w_customapi(['id' => 'x', 'type' => 'customapi', 'url' => 'http://app.lan/api', 'key' => '', 'username' => '', 'password' => '', 'options' => $o]); };
+$r = $ca(['display' => 'items', 'items' => 'data.results', 'title' => '{name}', 'sub' => '{size|bytes} · {meta.user|upper}', 'right' => '{done|percent}', 'link' => 'https://app.lan/i/{id}']);
+t('items: a row per element, fields and formats filled in', $r['list'][0]['title'] === 'Ubuntu ISO' && $r['list'][0]['sub'] === '4.5 GiB · AL' && $r['list'][0]['right'] === '0.5%' && $r['list'][1]['sub'] === '512 B ·', json_encode($r['list']));
+t('items: a link that is not a plain web address is dropped', $r['list'][0]['href'] === 'https://app.lan/i/4' && !isset($r['list'][1]['href']));
+$r = $ca(['display' => 'items', 'items' => 'data.results', 'date' => 'added', 'right' => '{done}', 'limit' => 1]);
+t('items: a date field (milliseconds) beats the right side; the name is the default title; rows are capped', count($r['list']) === 1 && $r['list'][0]['ts'] === 1761800000 && !isset($r['list'][0]['right']) && $r['list'][0]['title'] === 'Ubuntu ISO');
+$e = ''; try { $ca(['display' => 'items', 'items' => 'data.nothing']); } catch (Exception $x) { $e = $x->getMessage(); }
+t('items: a wrong path says so', strpos($e, 'Nothing is at "data.nothing"') !== false);
+$r = $ca(['mappings' => [['template' => '{data.up} / {data.total}', 'label' => 'Up'], ['field' => 'data.total', 'label' => 'Total']]]);
+t('blocks: a template and a plain field side by side', $r['blocks'][0]['value'] === '7 / 9' && $r['blocks'][0]['fmt'] === 'text' && $r['blocks'][1]['value'] === 9);
+t('templates: true reads yes, a list counts its items, unknown fields are empty', und_tpl('{a}|{b}|{c}', ['a' => true, 'b' => [1, 2]]) === 'yes|2|');
 unset($GLOBALS['UND_HTTP_MOCK']);
 
 /* ---------------- icon picker ---------------- */

@@ -3,6 +3,8 @@
 - New apps: Scrutiny (disks passed / failed, hottest disk, failed disks listed), Tdarr (queue, processed, errored, space saved), Unmanic (workers, pending), Uptime Kuma (a status page's monitors up and down, uptime, down monitors listed), Speedtest Tracker (latest download, upload and ping; old and new API), Gluetun (VPN public IP, location, forwarded port) and Home Assistant (chosen entities, or people home, lights and switches on). Each is also found among your containers.
 - New widgets (Add app > Widgets): Weather from Open-Meteo (no key; a town or coordinates, °C or °F) with today and the next three days; GitHub releases, the latest release of the repositories you list, newest first, checked at most once an hour (a GitHub token is optional); Bookmarks, a list of links (Title | https://…).
 - Lists in app cards can link their rows and show a second, quieter line.
+- Custom API: a new display, "A row for each item of a list", turns any JSON list into rows: where the list is, then Title, Second line, Right side, Date and Link written with fields in braces ({name}, {size|bytes}, {user.name}). Formats: bytes, rate, percent, number, round, date, upper, lower. Number blocks can use a template too ({"template": "{up} / {total}"}). Test shows the first rows.
+- Tdarr and Unmanic get their icons (selfh.st has them as PNG only).
 - Fixed: on PHP 8.5 a deprecation notice could break an answer from the server (curl_close).
 
 ###0.7.6
