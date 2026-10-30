@@ -1,3 +1,9 @@
+###0.7.5
+- Apps: a Groups / One grid switch in the section header turns the groups (sub-categories) on or off right from the dashboard. The gear next to a group name also has "Show all apps in one grid".
+- The gear next to a group name is centred in its button again.
+- With a wallpaper, the switches in section headers (Apps grouping, container filters, VM layout), group names and group gears get the same frosted backdrop as other buttons, so they stay readable.
+- Settings > Sections & apps on a phone: each section takes two tidy lines (name and move arrows, then width and options), and the options button shows its label again ("Tiles and apps", "Containers and view"…).
+
 ###0.7.4
 - Settings > Sections & apps > Containers (and Virtual machines) lists every container and VM UnDash finds, through the Unraid API in the Docker version. Tick the ones to show on the dashboard, or use Select all, Running only or None (they act on what the filter lists). New containers show until you untick them.
 - The star (favorite) and arrow (update check) in that list are icons you click, and the list fits a phone screen.
