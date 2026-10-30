@@ -736,6 +736,60 @@ t('a NUT UPS is read over TCP', is_array($u) && $u['charge'] === 87.0 && $u['loa
 t('no NUT daemon means no UPS', und_nut_tcp('127.0.0.1:' . $port, 'ups') === null);
 t('odd UPS names are refused', und_nut_tcp('127.0.0.1', "ups\nFSD") === null);
 
+/* ---------------- monitoring and tool apps ---------------- */
+group('more apps');
+reset_store();
+$GLOBALS['SEEN'] = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['SEEN'][] = [$m, $url, $o];
+  $p = parse_url($url, PHP_URL_PATH);
+  $j = function ($d, $c = 200) { return ['code' => $c, 'body' => is_string($d) ? $d : json_encode($d), 'json' => is_string($d) ? null : $d, 'err' => '', 'headers' => []]; };
+  $dev = function ($n, $st, $t, $arch = false) { return ['device' => ['device_name' => $n, 'model_name' => 'WD', 'device_status' => $st, 'archived' => $arch], 'smart' => ['temp' => $t]]; };
+  switch ($p) {
+    case '/api/summary': return $j(['data' => ['summary' => ['a' => $dev('sda', 0, 35), 'b' => $dev('sdb', 1, 44), 'c' => $dev('sdc', 2, 30), 'd' => $dev('sdd', 7, 0), 'e' => $dev('sde', 3, 61, true)]]]);
+    case '/api/settings': return $j(['settings' => ['metrics' => ['status_threshold' => 1]]]);
+    case '/api/v2/cruddb': return $j(['table1Count' => 5, 'table1ViewableCount' => 3, 'table4Count' => 2, 'table2Count' => 10, 'table5Count' => 1, 'table3Count' => 1, 'table6Count' => 0, 'sizeDiff' => 1.5]);
+    case '/unmanic/api/v2/workers/status': return $j(['workers_status' => [['idle' => true], ['idle' => false], ['idle' => false]]]);
+    case '/unmanic/api/v2/pending/tasks': return $j(['recordsTotal' => 12]);
+    case '/api/status-page/home': return $j(['publicGroupList' => [['monitorList' => [['id' => 1, 'name' => 'Plex'], ['id' => 2, 'name' => 'NAS'], ['id' => 3, 'name' => 'Old']]]], 'incident' => null]);
+    case '/api/status-page/heartbeat/home': return $j(['heartbeatList' => ['1' => [['status' => 0], ['status' => 1]], '2' => [['status' => 0]], '3' => [['status' => 3]]], 'uptimeList' => ['1_24' => 1, '2_24' => 0.5, '3_24' => 0.9]]);
+    case '/api/v1/results/latest': return ($o['headers']['Authorization'] ?? '') === 'Bearer tok' ? $j(['data' => ['download' => 12500000, 'upload' => 2500000, 'ping' => 9.4]]) : $j(['message' => 'Unauthenticated'], 401);
+    case '/api/speedtest/latest': return $j(['data' => ['download' => 100, 'upload' => 20, 'ping' => 11]]);
+    case '/v1/publicip/ip': return $j(['public_ip' => '203.0.113.9', 'country' => 'Netherlands', 'region' => 'North Holland', 'city' => 'Amsterdam']);
+    case '/v1/portforward': return $j(['error' => 'not found'], 404);
+    case '/v1/openvpn/portforwarded': return $j(['port' => 51413]);
+    case '/api/states/sensor.temp': return $j(['state' => '21.5', 'attributes' => ['friendly_name' => 'Living room', 'unit_of_measurement' => '°C']]);
+    case '/api/template': return $j(strpos($o['body'], 'person') !== false ? '2 / 3' : '0 / 4');
+  }
+  return $j(['error' => 'nope'], 404);
+};
+$sv = function ($type, $extra = []) { return $extra + ['id' => 'x', 'type' => $type, 'url' => 'http://app.lan:1', 'key' => '', 'username' => '', 'password' => '', 'options' => []]; };
+$bv = function ($r) { return array_column($r['blocks'], 'value', 'key'); };
+$r = und_w_scrutiny($sv('scrutiny'));
+t('Scrutiny: archived disks are left out, failures follow its threshold, hottest disk shown', $bv($r) === ['passed' => 2, 'failed' => 1, 'unknown' => 1, 'hottest' => '44 °C'] && $r['list'][0]['title'] === 'sdb WD', json_encode($bv($r)));
+$r = und_w_tdarr($sv('tdarr', ['key' => 'k']));
+$last = end($GLOBALS['SEEN']);
+t('Tdarr: queue counts as Tdarr does, saved space in bytes, key sent', $bv($r) === ['queue' => 5, 'processed' => 11, 'errored' => 1, 'saved' => 1.5e9] && $last[0] === 'POST' && $last[2]['headers']['x-api-key'] === 'k'
+  && json_decode($last[2]['body'], true)['data']['docID'] === 'statistics');
+t('Unmanic: busy and total workers, pending tasks', $bv(und_w_unmanic($sv('unmanic'))) === ['active' => 2, 'workers' => 3, 'pending' => 12]);
+$r = und_w_uptimekuma($sv('uptimekuma', ['options' => ['slug' => 'home']]));
+t('Uptime Kuma: last beat decides, maintenance is not down, down ones listed by name', $bv($r) === ['up' => 1, 'down' => 1, 'uptime' => 80.0] && $r['list'] === [['title' => 'NAS', 'right' => 'down']], json_encode($r));
+$e = ''; try { und_w_uptimekuma($sv('uptimekuma', ['options' => ['slug' => '../x']])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('Uptime Kuma: a slug with a path in it is refused', strpos($e, 'slug') !== false);
+t('Speedtest Tracker v1: bytes per second with the token', $bv(und_w_speedtest($sv('speedtest', ['key' => 'tok']))) === ['download' => 12500000.0, 'upload' => 2500000.0, 'ping' => 9.4]);
+t('Speedtest Tracker without a token: the old API, Mbit/s turned into bytes per second', $bv(und_w_speedtest($sv('speedtest'))) === ['download' => 12500000.0, 'upload' => 2500000.0, 'ping' => 11.0]);
+$e = ''; try { und_w_speedtest($sv('speedtest', ['key' => 'wrong'])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('Speedtest Tracker: a wrong token says so', strpos($e, 'API token') !== false);
+$r = und_w_gluetun($sv('gluetun', ['key' => 'g']));
+t('Gluetun: public address and the forwarded port (older API)', $bv($r)['public_ip'] === '203.0.113.9' && $bv($r)['port'] === 51413 && $GLOBALS['SEEN'][count($GLOBALS['SEEN']) - 3][2]['headers']['X-API-Key'] === 'g');
+$r = und_w_homeassistant($sv('homeassistant', ['key' => 'tok', 'options' => ['entities' => "sensor.temp\n"]]));
+t('Home Assistant: an entity with its name and unit, token sent', $r['blocks'] === [['key' => 'sensor_temp', 'label' => 'Living room', 'value' => '21.5 °C', 'fmt' => 'text']] && end($GLOBALS['SEEN'])[2]['headers']['Authorization'] === 'Bearer tok');
+t('Home Assistant: people home, lights and switches by default', array_column(und_w_homeassistant($sv('homeassistant', ['key' => 'tok']))['blocks'], 'value') === ['2 / 3', '0 / 4', '0 / 4']);
+$e = ''; try { und_w_homeassistant($sv('homeassistant', ['key' => 'tok', 'options' => ['entities' => '../../api/config']])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('Home Assistant: only entity ids are asked for', strpos($e, 'Not an entity id') !== false);
+t('the new apps show in Apps', und_zone(['type' => 'scrutiny']) === 'apps' && und_zone(['type' => 'homeassistant']) === 'apps');
+unset($GLOBALS['UND_HTTP_MOCK']);
+
 /* ---------------- icon picker ---------------- */
 group('icons');
 reset_store();

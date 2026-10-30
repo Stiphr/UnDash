@@ -336,6 +336,121 @@ function und_w_peanut($s) {
                        und_b('ups_status', 'UPS status', und_ups_status((string)($j['ups.status'] ?? '')), 'text')]];
 }
 
+/* ---------- monitoring and tools ---------- */
+
+/** Scrutiny: disks by SMART result. A disk counts as failed by the same rule as Scrutiny's own page (its status threshold setting). */
+function und_w_scrutiny($s) {
+  $j = und_get(und_u($s['url'], '/api/summary'));
+  try { $thr = (int)(und_get(und_u($s['url'], '/api/settings'))['settings']['metrics']['status_threshold'] ?? 3); } catch (Exception $e) { $thr = 3; }
+  $pass = 0; $bad = 0; $unk = 0; $hot = null; $list = [];
+  foreach ((array)($j['data']['summary'] ?? []) as $d) {
+    if (!is_array($d) || !empty($d['device']['archived'])) continue;
+    $st = (int)($d['device']['device_status'] ?? -1);
+    if ($st < 0 || $st > 3) $unk++;
+    elseif ($st > 0 && ($thr === 3 || $st === $thr || $st === 3)) {
+      $bad++;
+      $list[] = ['title' => trim(($d['device']['device_name'] ?? '') . ' ' . ($d['device']['model_name'] ?? '')) ?: 'Disk', 'right' => $st === 1 ? 'SMART failed' : ($st === 2 ? 'Scrutiny failed' : 'Failed')];
+    } else $pass++;
+    $t = (int)($d['smart']['temp'] ?? 0);
+    if ($t > 0 && ($hot === null || $t > $hot)) $hot = $t;
+  }
+  $r = ['blocks' => [und_b('passed', 'Passed', $pass), und_b('failed', 'Failed', $bad), und_b('unknown', 'Unknown', $unk), und_b('hottest', 'Hottest', $hot === null ? null : $hot . ' °C', 'text')]];
+  if ($list) $r['list'] = $list;
+  return $r;
+}
+
+/** Tdarr: transcode and health-check queues (tables 1-3 transcode, 4-6 health check), counted like Tdarr's own tables. */
+function und_w_tdarr($s) {
+  $h = ['Content-Type' => 'application/json'];
+  if ($s['key'] !== '') $h['x-api-key'] = $s['key'];
+  $j = und_get(und_u($s['url'], '/api/v2/cruddb'), ['method' => 'POST', 'headers' => $h, 'body' => json_encode(['data' => ['collection' => 'StatisticsJSONDB', 'mode' => 'getById', 'docID' => 'statistics']])]);
+  $n = function ($i) use ($j) { return (int)($j['table' . $i . 'ViewableCount'] ?? 0) ?: (int)($j['table' . $i . 'Count'] ?? 0); };
+  return ['blocks' => [und_b('queue', 'Queue', $n(1) + $n(4)), und_b('processed', 'Processed', $n(2) + $n(5)), und_b('errored', 'Errored', $n(3) + $n(6)),
+                       und_b('saved', 'Saved', (float)($j['sizeDiff'] ?? 0) * 1e9, 'bytes')]];
+}
+
+function und_w_unmanic($s) {
+  $w = und_get(und_u($s['url'], '/unmanic/api/v2/workers/status'));
+  $p = und_get(und_u($s['url'], '/unmanic/api/v2/pending/tasks'), ['method' => 'POST', 'body' => '{}', 'headers' => ['Content-Type' => 'application/json']]);
+  $all = (array)($w['workers_status'] ?? []);
+  $busy = count(array_filter($all, function ($x) { return is_array($x) && empty($x['idle']); }));
+  return ['blocks' => [und_b('active', 'Active', $busy), und_b('workers', 'Workers', count($all)), und_b('pending', 'Pending', (int)($p['recordsTotal'] ?? 0))]];
+}
+
+/** Uptime Kuma: a status page's monitors (Kuma's API needs no key for a published status page). */
+function und_w_uptimekuma($s) {
+  $slug = trim((string)($s['options']['slug'] ?? ''));
+  if ($slug === '') throw new Exception('Set the status page slug: the end of its address, /status/NAME.');
+  if (!preg_match('/^[A-Za-z0-9_-]{1,100}$/', $slug)) throw new Exception('The status page slug can only have letters, numbers, - and _.');
+  $page = und_get(und_u($s['url'], '/api/status-page/' . $slug));
+  $hb = und_get(und_u($s['url'], '/api/status-page/heartbeat/' . $slug));
+  $names = [];
+  foreach ((array)($page['publicGroupList'] ?? []) as $g) foreach ((array)($g['monitorList'] ?? []) as $m) if (isset($m['id'])) $names[(string)$m['id']] = (string)($m['name'] ?? '');
+  $up = 0; $down = 0; $list = [];
+  foreach ((array)($hb['heartbeatList'] ?? []) as $id => $beats) {
+    $last = is_array($beats) && $beats ? end($beats) : null;
+    $st = is_array($last) ? (int)($last['status'] ?? 0) : 0;
+    if ($st === 1) $up++;
+    elseif ($st !== 3) { $down++; $list[] = ['title' => $names[(string)$id] ?? ('Monitor ' . $id), 'right' => $st === 2 ? 'pending' : 'down']; }   // 3 = maintenance
+  }
+  $ups = array_filter((array)($hb['uptimeList'] ?? []), 'is_numeric');
+  $r = ['blocks' => [und_b('up', 'Up', $up), und_b('down', 'Down', $down), und_b('uptime', 'Uptime', $ups ? round(array_sum($ups) / count($ups) * 100, 1) : null, 'pct')]];
+  if ($list) $r['list'] = $list;
+  if (!empty($page['incident']['title'])) $r['list'] = array_merge([['title' => (string)$page['incident']['title'], 'right' => 'incident']], $r['list'] ?? []);
+  return $r;
+}
+
+/** Speedtest Tracker: the latest result. v1 and later answer /api/v1 with an API token (bytes/s); older versions /api/speedtest/latest (Mbit/s). */
+function und_w_speedtest($s) {
+  $d = null;
+  if ($s['key'] !== '') {
+    $r = und_http('GET', und_u($s['url'], '/api/v1/results/latest'), ['headers' => ['Authorization' => 'Bearer ' . $s['key'], 'Accept' => 'application/json']]);
+    if ($r['code'] === 401 || $r['code'] === 403) throw new Exception('Not authorised (HTTP ' . $r['code'] . '): check the API token and that it may read results.');
+    if ($r['code'] === 200 && isset($r['json']['data'])) $d = ['down' => (float)($r['json']['data']['download'] ?? 0), 'up' => (float)($r['json']['data']['upload'] ?? 0), 'ping' => $r['json']['data']['ping'] ?? null];
+  }
+  if ($d === null) {
+    $j = und_get(und_u($s['url'], '/api/speedtest/latest'), ['headers' => ['Accept' => 'application/json']]);
+    if (!isset($j['data'])) throw new Exception('No speed test result yet.');
+    $d = ['down' => (float)($j['data']['download'] ?? 0) * 125000, 'up' => (float)($j['data']['upload'] ?? 0) * 125000, 'ping' => $j['data']['ping'] ?? null];
+  }
+  return ['blocks' => [und_b('download', 'Download', $d['down'], 'rate'), und_b('upload', 'Upload', $d['up'], 'rate'), und_b('ping', 'Ping', $d['ping'] === null ? null : (float)$d['ping'], 'ms')]];
+}
+
+/** Gluetun: the VPN's public address, from its control server (port 8000). The forwarded port only when there is one. */
+function und_w_gluetun($s) {
+  $o = $s['key'] !== '' ? ['headers' => ['X-API-Key' => $s['key']]] : [];
+  $j = und_get(und_u($s['url'], '/v1/publicip/ip'), $o);
+  $b = [und_b('public_ip', 'Public IP', (string)($j['public_ip'] ?? ''), 'text'), und_b('country', 'Country', (string)($j['country'] ?? ''), 'text'),
+        und_b('region', 'Region', (string)($j['region'] ?? ''), 'text'), und_b('city', 'City', (string)($j['city'] ?? ''), 'text')];
+  foreach (['/v1/portforward', '/v1/openvpn/portforwarded'] as $p) {
+    $r = und_http('GET', und_u($s['url'], $p), $o);
+    if ($r['code'] === 200 && !empty($r['json']['port'])) { $b[] = und_b('port', 'Port', (int)$r['json']['port'], 'text'); break; }
+  }
+  return ['blocks' => $b];
+}
+
+/** Home Assistant: chosen entities' states, or people home, lights on and switches on. Needs a long-lived access token. */
+function und_w_homeassistant($s) {
+  $h = ['headers' => ['Authorization' => 'Bearer ' . $s['key'], 'Content-Type' => 'application/json']];
+  $ids = preg_split('/[\s,]+/', (string)($s['options']['entities'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
+  $b = [];
+  if ($ids) {
+    foreach (array_slice($ids, 0, 8) as $id) {
+      if (!preg_match('/^[a-z0-9_]+\.[a-z0-9_]+$/', $id)) throw new Exception('Not an entity id: ' . und_clip($id, 60) . ' (like sensor.living_room_temperature).');
+      $j = und_get(und_u($s['url'], '/api/states/' . $id), $h);
+      $unit = (string)($j['attributes']['unit_of_measurement'] ?? '');
+      $b[] = und_b(str_replace('.', '_', $id), und_clip((string)($j['attributes']['friendly_name'] ?? $id), 40), trim((string)($j['state'] ?? '') . ' ' . $unit), 'text');
+    }
+    return ['blocks' => $b];
+  }
+  foreach (['people_home' => ['People home', 'person', 'home'], 'lights_on' => ['Lights on', 'light', 'on'], 'switches_on' => ['Switches on', 'switch', 'on']] as $k => $q) {
+    $tpl = "{{ states.$q[1]|selectattr('state','equalto','$q[2]')|list|length }} / {{ states.$q[1]|list|length }}";
+    $r = und_get(und_u($s['url'], '/api/template'), $h + ['method' => 'POST', 'body' => json_encode(['template' => $tpl]), 'raw' => true]);
+    $b[] = und_b($k, $q[0], und_clip(trim($r['body']), 20), 'text');
+  }
+  return ['blocks' => $b];
+}
+
 /* ---------- calendar (Radarr + Sonarr) ---------- */
 
 function und_w_calendar($s, $cfg) {
