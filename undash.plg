@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.9.3">
+<!ENTITY version "0.9.4">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,16 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.9.4
+- Arr Stack: problems are grouped. A season pack that is blocked for 16 episodes is one row "The Mentalist · Season 3" with ×16 (the releases are in its tooltip). Health checks get a short tag (Indexer, Series removed, Import, Caution…) instead of the raw check name. The list scrolls inside a box of at most 260 px, and a long release name opens in full on click.
+- Media: episodes of one show added the same day (or airing at the same time) are one row, "S01E08–E12" with "5 eps".
+- Container and VM icons from selfh.st, found by name or image (binhex-, linuxserver-, lscr-, hotio-, ich777- and official- are ignored). Settings &gt; Theme &gt; Container and VM icons: in colour, light or dark to suit the theme, light, dark, or Unraid's own. When selfh.st has none, Unraid's icon is used, and a broken icon becomes a plain one instead of a blank space. An icon picked for a container still wins.
+- Header: the server, Unraid and UnDash chips sit on the same row as the name.
+- Ctrl+K / Cmd+K opens the search. Its results can now start, stop and restart containers and VMs, and open a VM's console.
+- VMs: hovering a stopped VM's name says how to start it, instead of nothing.
+- UPS: the power draw in watts next to the load ("load 8% (48 W)"), measured by the UPS when it reports it, otherwise load × rated power. The rating comes from the UPS (apcupsd NOMPOWER, NUT ups.realpower.nominal, the Unraid API) or from the new Settings &gt; Refresh &amp; display &gt; UPS rated power (W). An older Unraid API without the power fields still works.
+- Docker version: clicking a running VM opens Unraid's VMs page (the Unraid API has no VNC port to open the console directly).
+
 ###0.9.3
 - Arr Stack: roomier rows. When it sits beside Media (or another section) at the top of the half-width columns, it grows to the same height and its rows share the extra space.
 - New setting: Settings &gt; Theme &gt; Section names. Off hides the names above the sections (System, Media, Arr Stack…); their buttons stay, and a collapsed section still shows its name.
@@ -234,7 +244,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.9.3');
+define('UND_VERSION', '0.9.4');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -408,7 +418,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>bf77a0ee12fdac8f2ecada7692b7c4d743f1c6894a4c5775e768635792e3b17b</SHA256>
+<SHA256>3d7a8a734d51427519905daba1e0c1208dc3ebfb822fe9d73afe23b30a213837</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -471,8 +481,8 @@ function und_default_config() {
   return [
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
-                  'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true],
+                  'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -727,6 +737,7 @@ function und_normalize(array $c) {
   if ($g['search'] === 'none') $g['search_in'] = array_values(array_diff($g['search_in'], ['web']));
   $g['search'] = in_array($g['search'], ['duckduckgo', 'google', 'bing', 'startpage', 'brave'], true) ? $g['search'] : 'duckduckgo';
   $g['ups_name'] = preg_match('/^[A-Za-z0-9_.@:-]{1,64}$/', (string)$g['ups_name']) ? (string)$g['ups_name'] : 'ups';
+  $g['ups_watts'] = max(0, min(20000, (int)$g['ups_watts']));   // the UPS's rated power in W; 0 = what the UPS reports
 
   $a = (isset($c['appearance']) && is_array($c['appearance']) ? $c['appearance'] : []) + $d['appearance'];
   $a = array_intersect_key($a, $d['appearance']);
@@ -743,6 +754,7 @@ function und_normalize(array $c) {
   $a['blur_target'] = in_array($a['blur_target'], ['wallpaper', 'cards'], true) ? $a['blur_target'] : 'wallpaper';   // blur the whole picture, or only what is behind the cards
   $a['css_enabled'] = !empty($a['css_enabled']);
   $a['sec_names'] = !empty($a['sec_names']);
+  $a['icon_mode'] = in_array($a['icon_mode'], ['color', 'auto', 'light', 'dark', 'off'], true) ? $a['icon_mode'] : 'color';   // container / VM icons from selfh.st, off = Unraid's own
 
   // sections and metrics: keep the user's order, drop unknown ids, append new ones at the end
   $db = isset($c['dashboard']) && is_array($c['dashboard']) ? $c['dashboard'] : [];
@@ -1011,7 +1023,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>b951b5b611fa2684fba8746477fd3e21333801ce7a6a5f319eff57b4648adf27</SHA256>
+<SHA256>e98efbcf1df61cbfa1b3aad70371b1c73b0ac8c058229436c664e950dae99163</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -1196,7 +1208,19 @@ function und_storage() {
 
 /* ---------- UPS: NUT (upsc) first, then apcupsd (apcaccess) ---------- */
 
-function und_ups($name = 'ups') {
+/** The UPS, with its power draw in watts when it can be known: measured by the UPS, or its load times its rated power
+ *  ($nominal from Settings, else the rating the UPS reports, apcupsd NOMPOWER / NUT ups.realpower.nominal). */
+function und_ups($name = 'ups', $nominal = 0) {
+  $u = und_ups_read($name);
+  if (!$u) return null;
+  $n = (int)$nominal > 0 ? (int)$nominal : (int)($u['nominal'] ?? 0);
+  $u['nominal'] = $n ?: null;
+  if (empty($u['watts'])) $u['watts'] = $n && $u['load'] !== null ? (int)round($u['load'] / 100 * $n) : null;
+  else $u['watts'] = (int)round($u['watts']);
+  return $u;
+}
+
+function und_ups_read($name) {
   // the Unraid API only reads apcupsd; a NUT UPS is read straight from the server's NUT daemon (port 3493)
   if (und_api_mode()) return und_api_ups() ?: und_api_cached('nut', 5, function () use ($name) { return und_nut_tcp((string)parse_url(und_api_conf()['url'], PHP_URL_HOST), $name); });
   $upsc = und_bin('upsc');
@@ -1215,7 +1239,8 @@ function und_ups($name = 'ups') {
       $k = [];
       foreach (explode("\n", $r['out']) as $l) if (strpos($l, ':') !== false) { list($a, $b) = explode(':', $l, 2); $k[trim($a)] = trim($b); }
       return ['source' => 'apcupsd', 'charge' => (float)($k['BCHARGE'] ?? 0), 'load' => isset($k['LOADPCT']) ? (float)$k['LOADPCT'] : null,
-              'status' => ucfirst(strtolower((string)($k['STATUS'] ?? ''))), 'runtime' => isset($k['TIMELEFT']) ? (int)round((float)$k['TIMELEFT'] * 60) : null, 'model' => (string)($k['MODEL'] ?? '')];
+              'status' => ucfirst(strtolower((string)($k['STATUS'] ?? ''))), 'runtime' => isset($k['TIMELEFT']) ? (int)round((float)$k['TIMELEFT'] * 60) : null, 'model' => (string)($k['MODEL'] ?? ''),
+              'nominal' => isset($k['NOMPOWER']) ? (int)(float)$k['NOMPOWER'] : null, 'watts' => null];
     }
   }
   return null;
@@ -1223,7 +1248,8 @@ function und_ups($name = 'ups') {
 
 function und_nut_vars(array $k) {
   return ['source' => 'NUT', 'charge' => (float)($k['battery.charge'] ?? 0), 'load' => isset($k['ups.load']) ? (float)$k['ups.load'] : null,
-          'status' => und_ups_status($k['ups.status'] ?? ''), 'runtime' => isset($k['battery.runtime']) ? (int)$k['battery.runtime'] : null, 'model' => (string)($k['ups.model'] ?? $k['device.model'] ?? '')];
+          'status' => und_ups_status($k['ups.status'] ?? ''), 'runtime' => isset($k['battery.runtime']) ? (int)$k['battery.runtime'] : null, 'model' => (string)($k['ups.model'] ?? $k['device.model'] ?? ''),
+          'nominal' => isset($k['ups.realpower.nominal']) ? (int)(float)$k['ups.realpower.nominal'] : null, 'watts' => isset($k['ups.realpower']) ? (float)$k['ups.realpower'] : null];
 }
 
 /** NUT's own protocol (LIST VAR), for a UPS name like "ups" or "ups@host[:port]"; null when there is no answer. */
@@ -1300,7 +1326,7 @@ function und_os_update() {
   return ['ok' => true];
 }
 ]]></INLINE>
-<SHA256>3fc92e36d4d602fc1fe59fb58b638908f958d4b2bf5c100ebed706ec83f0964e</SHA256>
+<SHA256>1f7e9544586fb39e311a836099408ecfecccda71a844859c47a593fba77df8b6</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/docker.php" Mode="0644">
@@ -1753,10 +1779,11 @@ function und_w_docker_summary($s) { $r = und_docker_summary(); if (isset($r['err
 function und_w_vm_summary($s) { $r = und_vm_summary(); if (isset($r['error'])) throw new Exception($r['error']);
   return ['blocks' => [und_b('running', 'Running', $r['running']), und_b('stopped', 'Stopped', $r['stopped']), und_b('paused', 'Paused', $r['paused']), und_b('total', 'Total', $r['total'])], 'link' => 'vms']; }
 function und_w_ups($s, $cfg) {
-  $u = und_ups($s['options']['ups'] ?? $cfg['general']['ups_name']);
+  $u = und_ups($s['options']['ups'] ?? $cfg['general']['ups_name'], $cfg['general']['ups_watts']);
   if (!$u) throw new Exception('No UPS found (NUT or apcupsd).');
   $b = [und_b('battery_charge', 'Battery charge', $u['charge'], 'pct')];
   if ($u['load'] !== null) $b[] = und_b('ups_load', 'UPS load', $u['load'], 'pct');
+  if ($u['watts'] !== null) $b[] = und_b('ups_watts', 'Power draw', $u['watts'] . ' W', 'text');
   $b[] = und_b('ups_status', 'UPS status', $u['status'], 'text');
   if ($u['runtime'] !== null) $b[] = und_b('runtime', 'Runtime', $u['runtime'], 'dur');
   return ['blocks' => $b];
@@ -2403,7 +2430,7 @@ function und_w_customapi($s) {
   return ['blocks' => $b];
 }
 ]]></INLINE>
-<SHA256>444fb87e2b6efa125f6d829013f1b4c3aae0964b5137ae0379034b409556db03</SHA256>
+<SHA256>42ec980711b560b9576f6dfaf3da746dc036ac623e167b0ebab82ebbcb0c56c3</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/import.php" Mode="0644">
@@ -3278,11 +3305,17 @@ function und_api_storage() {
 }
 
 function und_api_ups() {
-  $r = und_api_cached('ups', 5, function () { return und_gql('query { upsDevices { name model status battery { chargeLevel estimatedRuntime } power { loadPercentage } } }'); });
+  // nominalPower and currentPower are in newer API versions only; an older one rejects the whole query, so ask again without them
+  $r = und_api_cached('ups', 5, function () {
+    $q = 'query { upsDevices { name model status battery { chargeLevel estimatedRuntime } power { loadPercentage%s } } }';
+    $r = und_gql(sprintf($q, ' nominalPower currentPower'));
+    return isset($r['error']) && empty($r['auth']) ? und_gql(sprintf($q, '')) : $r;
+  });
   $u = $r['data']['upsDevices'][0] ?? null;
   if (!$u) return null;
   return ['source' => 'Unraid API', 'charge' => (float)$u['battery']['chargeLevel'], 'load' => (float)$u['power']['loadPercentage'], 'status' => (string)$u['status'],
-          'runtime' => isset($u['battery']['estimatedRuntime']) ? (int)$u['battery']['estimatedRuntime'] : null, 'model' => (string)$u['model']];
+          'runtime' => isset($u['battery']['estimatedRuntime']) ? (int)$u['battery']['estimatedRuntime'] : null, 'model' => (string)$u['model'],
+          'nominal' => !empty($u['power']['nominalPower']) ? (int)$u['power']['nominalPower'] : null, 'watts' => !empty($u['power']['currentPower']) ? (float)$u['power']['currentPower'] : null];
 }
 
 /* ---------- Docker ---------- */
@@ -3428,7 +3461,7 @@ function und_api_vm_action($name, $op) {
   return $ok ? ['ok' => true] : ['error' => $err];
 }
 ]]></INLINE>
-<SHA256>133dba252db69f51d5ee5712d336e8276576f7dbb8dc4e04af94ccd9c1ddb847</SHA256>
+<SHA256>e7cb406b6771c610521163c355691870c2b8bcf3d4cc36ca2d5cb9672b320f2e</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/media.php" Mode="0644">
@@ -3548,6 +3581,51 @@ function und_arr_types() { return ['radarr', 'sonarr', 'lidarr', 'readarr', 'pro
 /** API version path per app family. */
 function und_arr_v($type) { return in_array($type, ['radarr', 'sonarr'], true) ? 'v3' : 'v1'; }
 
+/** A health check as a short tag plus the message: "IndexerLongTermStatusCheck" -> "Indexer", a leading "Caution: " becomes the tag. */
+function und_arr_health_item($level, $source, $msg) {
+  $tags = ['RemovedSeriesCheck' => 'Series removed', 'RemovedMovieCheck' => 'Movie removed', 'RemovedArtistCheck' => 'Artist removed', 'ImportMechanismCheck' => 'Import',
+    'RootFolderCheck' => 'Root folder', 'UpdateCheck' => 'Update', 'ProxyCheck' => 'Proxy', 'SystemTimeCheck' => 'System time', 'MountCheck' => 'Mount', 'RecyclingBinCheck' => 'Recycle bin'];
+  $msg = trim($msg); $tag = '';
+  if (preg_match('/^(Caution|Warning|Error):\s*(.+)$/is', $msg, $m)) { $tag = ucfirst(strtolower($m[1])); $msg = $m[2]; }
+  if (isset($tags[$source])) $tag = $tags[$source];
+  elseif (preg_match('/^Indexer/', $source)) $tag = 'Indexer';
+  elseif (preg_match('/^DownloadClient/', $source)) $tag = 'Download client';
+  elseif ($tag === '' && preg_match('/^([A-Z][A-Za-z]+?)Check$/', $source, $m)) $tag = trim(preg_replace('/(?<!^)([A-Z])/', ' $1', $m[1]));
+  return ['level' => $level, 'tag' => und_clip($tag, 40), 'msg' => und_clip($msg, 240), 'source' => $source];
+}
+
+/** Stuck or failed downloads from an *arr queue, one row per release group and problem: a season pack that is blocked for
+ *  16 episodes is one row "The Mentalist · Season 3" with count 16 instead of 16 rows. */
+function und_arr_queue_issues(array $records) {
+  $states = ['importblocked' => 'Import blocked', 'importpending' => 'Import pending', 'failedpending' => 'Failed', 'failed' => 'Failed', 'importing' => 'Importing', 'downloading' => 'Download'];
+  $groups = [];
+  foreach ($records as $r) {
+    if (!is_array($r)) continue;
+    $status = strtolower((string)($r['trackedDownloadStatus'] ?? '')); $state = strtolower((string)($r['trackedDownloadState'] ?? ''));
+    if ($status !== 'warning' && $status !== 'error' && !in_array($state, ['importblocked', 'failedpending', 'failed'], true)) continue;
+    $msg = (string)($r['errorMessage'] ?? '');
+    if ($msg === '' && !empty($r['statusMessages'][0]['messages'][0])) $msg = (string)$r['statusMessages'][0]['messages'][0];
+    $level = $status === 'error' || strpos($state, 'fail') !== false ? 'bad' : 'warn';
+    $release = (string)($r['title'] ?? '');
+    if (!empty($r['series']['title'])) $name = $r['series']['title'] . (isset($r['seasonNumber']) ? ' · Season ' . (int)$r['seasonNumber'] : '');
+    elseif (!empty($r['movie']['title'])) $name = $r['movie']['title'] . (!empty($r['movie']['year']) ? ' (' . (int)$r['movie']['year'] . ')' : '');
+    elseif (preg_match('/^(.+?[. _-]S\d{1,2})(E\d|[. _-])/i', $release, $m)) $name = preg_replace('/[._]+/', ' ', $m[1]);
+    else $name = $release !== '' ? $release : 'Download';
+    $tag = $states[$state] ?? ($status === 'error' ? 'Error' : 'Warning');
+    $msg = $msg !== '' ? $msg : $tag;
+    $key = strtolower($name . '|' . $tag . '|' . $msg);
+    if (!isset($groups[$key])) $groups[$key] = ['level' => $level, 'tag' => $tag, 'title' => und_clip($name, 120), 'msg' => und_clip($msg, 200), 'count' => 0, 'releases' => []];
+    $g = &$groups[$key];
+    $g['count']++;
+    if ($level === 'bad') $g['level'] = 'bad';
+    if ($release !== '' && count($g['releases']) < 5 && !in_array($release, $g['releases'], true)) $g['releases'][] = und_clip($release, 200);
+    unset($g);
+  }
+  $out = array_values($groups);
+  usort($out, function ($a, $b) { return ($a['level'] === 'bad' ? 0 : 1) - ($b['level'] === 'bad' ? 0 : 1) ?: $b['count'] - $a['count']; });
+  return $out;
+}
+
 function und_arr_status(array $cfg, $id) {
   $s0 = null;
   foreach ($cfg['groups'] as $g) foreach ($g['services'] as $x) if ($x['id'] === $id) $s0 = $x;
@@ -3568,18 +3646,11 @@ function und_arr_status(array $cfg, $id) {
         $out['version'] = (string)($st['version'] ?? '');
         foreach ((array)und_get("$base/api/$v/health", $h) as $x) {
           $type = strtolower((string)($x['type'] ?? ''));
-          if ($type === 'warning' || $type === 'error') $out['health'][] = ['level' => $type === 'error' ? 'bad' : 'warn', 'msg' => und_clip((string)($x['message'] ?? ''), 240), 'source' => (string)($x['source'] ?? '')];
+          if ($type === 'warning' || $type === 'error') $out['health'][] = und_arr_health_item($type === 'error' ? 'bad' : 'warn', (string)($x['source'] ?? ''), (string)($x['message'] ?? ''));
         }
         if ($t !== 'prowlarr') {
           $q = und_get("$base/api/$v/queue?page=1&pageSize=50" . ($t === 'sonarr' ? '&includeSeries=true' : ($t === 'radarr' ? '&includeMovie=true' : '')), $h + ['timeout' => 15]);
-          foreach ((array)($q['records'] ?? []) as $r) {
-            $status = strtolower((string)($r['trackedDownloadStatus'] ?? '')); $state = strtolower((string)($r['trackedDownloadState'] ?? ''));
-            if ($status !== 'warning' && $status !== 'error' && !in_array($state, ['importblocked', 'failedpending', 'failed'], true)) continue;
-            $msg = (string)($r['errorMessage'] ?? '');
-            if ($msg === '' && !empty($r['statusMessages'][0]['messages'][0])) $msg = (string)$r['statusMessages'][0]['messages'][0];
-            $out['issues'][] = ['level' => $status === 'error' || strpos($state, 'fail') !== false ? 'bad' : 'warn', 'title' => und_clip((string)($r['title'] ?? $r['movie']['title'] ?? $r['series']['title'] ?? 'Download'), 120),
-                                'msg' => und_clip($msg !== '' ? $msg : ucfirst($state ?: $status), 200)];
-          }
+          $out['issues'] = und_arr_queue_issues((array)($q['records'] ?? []));
         }
       } elseif ($t === 'bazarr') {
         $h = ['headers' => ['X-API-KEY' => $s['key']]];
@@ -3599,7 +3670,7 @@ function und_arr_status(array $cfg, $id) {
   });
 }
 ]]></INLINE>
-<SHA256>20489c835c661a64eef82d18cd98a5f20b58b6d947c6bc794e3c0510d945be68</SHA256>
+<SHA256>01c8b0a284d0d6bfc52bde0c7305020b315f6adf406749148c1b3f0433ec63f5</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/downloads.php" Mode="0644">
@@ -4752,11 +4823,12 @@ function und_seerr_request(array $cfg, $app, $type, $tmdb) {
 define('UND_ICON_SH', 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/index.json');
 define('UND_ICON_DI', 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/tree.json');
 
-/** ['sh' => [[ref, name, tags, svg], ...], 'di' => [[name, ext], ...]], fetched at most once a week. */
+/** ['sh' => [[ref, name, tags, svg, light, dark, png], ...], 'di' => [[name, ext], ...]], fetched at most once a week. */
 function und_icon_index() {
   $f = und_tmp('icon-index.json');
   $old = und_read_json($f, []);
-  if (!empty($old['at']) && time() - (int)$old['at'] < 7 * 86400 && !empty($old['sh'])) return $old;
+  // lists saved before the light / dark / PNG flags were kept (v < 2) are fetched again
+  if (!empty($old['at']) && time() - (int)$old['at'] < 7 * 86400 && !empty($old['sh']) && (int)($old['v'] ?? 1) >= 2) return $old;
   $lock = und_tmp('icon-index.lock');
   // a failed download is not retried for 10 minutes; the old list (if any) is used meanwhile
   if (is_file($lock) && time() - filemtime($lock) < 600) { if ($old) return $old; throw new Exception('The icon list could not be downloaded. Try again in a few minutes.'); }
@@ -4766,7 +4838,8 @@ function und_icon_index() {
     foreach ((array)und_get(UND_ICON_SH, ['timeout' => 20]) as $x) {
       $ref = (string)($x['Reference'] ?? '');
       if (!preg_match('/^[a-z0-9][a-z0-9._-]{0,80}$/', $ref)) continue;
-      $sh[] = [$ref, und_clip((string)($x['Name'] ?? $ref), 80), und_clip(strtolower((string)($x['Tags'] ?? '')), 200), ($x['SVG'] ?? '') === 'Yes' ? 1 : 0];
+      $y = function ($k) use ($x) { return ($x[$k] ?? '') === 'Yes' ? 1 : 0; };
+      $sh[] = [$ref, und_clip((string)($x['Name'] ?? $ref), 80), und_clip(strtolower((string)($x['Tags'] ?? '')), 200), $y('SVG'), $y('Light'), $y('Dark'), $y('PNG')];
     }
     $t = (array)und_get(UND_ICON_DI, ['timeout' => 20]);
     $svg = array_flip(array_map(function ($n) { return preg_replace('/\.svg$/', '', (string)$n); }, (array)($t['svg'] ?? [])));
@@ -4779,7 +4852,7 @@ function und_icon_index() {
     throw new Exception('The icon list could not be downloaded: ' . $e->getMessage());
   }
   if (!$sh && !$di) { if ($old) return $old; throw new Exception('The icon list came back empty.'); }
-  $idx = ['at' => time(), 'sh' => $sh, 'di' => $di];
+  $idx = ['v' => 2, 'at' => time(), 'sh' => $sh, 'di' => $di];
   und_write_json($f, $idx);
   @unlink($lock);
   return $idx;
@@ -4816,8 +4889,22 @@ function und_icon_search($q, $max = 60) {
   usort($hits, function ($a, $b) { return $a[0] <=> $b[0] ?: $a[1] <=> $b[1] ?: strcmp($a[2]['v'], $b[2]['v']); });
   return ['icons' => array_column(array_slice($hits, 0, max(1, min(200, (int)$max))), 2), 'more' => count($hits) > $max];
 }
+
+/** Which of these selfh.st names exist, and in which forms: ['radarr' => 'svg,light,dark,png', ...]. Names that are not
+ *  there are left out, so the browser goes straight to the next choice instead of trying URLs that do not exist. */
+function und_icon_slugs($slugs) {
+  $want = [];
+  foreach ((array)$slugs as $x) { $x = strtolower((string)$x); if (preg_match('/^[a-z0-9][a-z0-9._-]{0,80}$/', $x)) $want[$x] = 1; if (count($want) >= 300) break; }
+  if (!$want) return ['icons' => new stdClass()];
+  $out = [];
+  foreach (und_icon_index()['sh'] as $x) {
+    if (!isset($want[$x[0]])) continue;
+    $out[$x[0]] = implode(',', array_keys(array_filter(['svg' => $x[3] ?? 0, 'light' => $x[4] ?? 0, 'dark' => $x[5] ?? 0, 'png' => $x[6] ?? 0])));
+  }
+  return ['icons' => $out ?: new stdClass()];
+}
 ]]></INLINE>
-<SHA256>e1c3da84f07fa95cffcbc17112dab6c0fcff5d0e8a64a88bfaa7928ab0ce7b2b</SHA256>
+<SHA256>f007179233af71784094d0b1e9f0e1be11aeced5b884b670541002b52d520af1</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/api.php" Mode="0644">
@@ -4871,7 +4958,7 @@ switch ($action) {
     if (isset($want['system'])) { $r['system'] = und_system($cfg); if (!und_api_mode() && isset($r['system']['os_update'])) api_os_autocheck($cfg, $r['system']['os_update']); }
     if (isset($want['docker'])) $r['docker'] = und_docker_live();
     if (isset($want['vms'])) $r['vms'] = und_vm_live();
-    if (isset($want['ups'])) $r['ups'] = und_ups($cfg['general']['ups_name']);
+    if (isset($want['ups'])) $r['ups'] = und_ups($cfg['general']['ups_name'], $cfg['general']['ups_watts']);
     // alerts are worked out here (one source for the page and the history); only the parts this request loaded are tracked
     if (isset($r['system'])) {
       $dk = $r['docker'] ?? null;
@@ -4973,6 +5060,7 @@ switch ($action) {
   case 'storage':       out(und_storage());
   case 'container_sources': out(und_container_sources());
   case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'))); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
+  case 'icon_slugs':    { $l = json_decode($P('slugs', '[]'), true); try { out(und_icon_slugs(is_array($l) ? $l : [])); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
 
   /* ---- settings ---- */
   case 'settings': {
@@ -5127,7 +5215,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>80278aaf62a41f606d374dd9d70a978c1b511a5b27f3427205257f3a31abafa8</SHA256>
+<SHA256>169bced26e4de06a29aca0ff1026f61e5df94000230eb69b301e9b71bf3947d9</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -5469,6 +5557,11 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .logo{width:40px;height:40px;border-radius:10px;flex:none;display:block}
 .und .und-name{font:600 20px/1.2 Poppins,"Segoe UI",system-ui,sans-serif;color:var(--title);margin:0;padding:0;border:0;background:none;text-shadow:none;letter-spacing:0}
 .und .und-sub{font-size:12.5px;color:var(--muted);display:flex;gap:6px 8px;flex-wrap:wrap;align-items:center;margin-top:2px}
+/* one row: logo, name, then the server / Unraid / UnDash chips beside it (below it only on phones) */
+.und .brand>.ell{display:flex;align-items:center;gap:6px 14px;min-width:0}
+.und .brand .und-sub{margin-top:0;flex-wrap:nowrap;min-width:0;overflow:hidden}
+.und .brand .logo{width:34px;height:34px;border-radius:9px}
+@media (max-width:700px){.und .brand>.ell{flex-direction:column;align-items:flex-start}.und .brand .und-sub{flex-wrap:wrap}}
 .und .und-sub .vchip{display:inline-flex;align-items:center;gap:6px;padding:1px 3px 1px 8px;border:1px solid var(--line-2);border-radius:999px;line-height:18px;white-space:nowrap;color:var(--text);font-size:11.5px}
 .und .und-sub .vchip:not(:has(.upd)){padding-right:8px}
 .und .und-sub .upd{all:unset;display:inline-flex;align-items:center;gap:3px;cursor:pointer;background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:0 7px;font-size:11px;font-weight:600;line-height:16px}
@@ -5953,6 +6046,13 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .ax{flex:none}
 .und .adet{padding:4px 12px 12px 38px;display:flex;flex-direction:column;gap:6px}
 .und .adet .blocks{margin:0}
+.und .aiss{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.und .aiss:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.und .ais{display:flex;align-items:baseline;gap:8px;padding:6px 10px;font-size:12px;min-width:0}.und .ais+.ais{border-top:1px solid var(--line)}
+.und .ais>.badge{flex:none;font-size:10.5px;line-height:15px;padding:0 6px}
+.und .ais-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border-radius:3px}.und .ais-t:focus-visible{outline:2px solid var(--accent)}
+.und .ais.open .ais-t{white-space:normal;overflow-wrap:anywhere}
+.und .ais-t b{color:var(--text);font-weight:600}
 /* stretched to match the section beside it: the rows share the extra height */
 .und .sec.fill .arr>.aitem{flex:1 0 auto;display:flex;flex-direction:column;justify-content:center}.und .sec.fill .arr>.aitem>.aline{flex:1 0 auto}
 .und[data-density=compact] button.arow{padding:6px 10px;min-height:36px}.und[data-density=expanded] button.arow{padding:12px 14px;min-height:52px}
@@ -6148,7 +6248,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
 }
 ]]></INLINE>
-<SHA256>c89762b1de9fb82c5519e3b822790709b40d9dff0f2cf41edb2de38e603e6780</SHA256>
+<SHA256>0a3c98c0eb1518dd605b2cfede823e151108d5fcfaa1ce6b45e754e9a029ea27</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -6262,10 +6362,69 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     if ((m = /^(.+)\.(png|svg|webp)$/.exec(i))) return 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/' + m[2] + '/' + i;
     return 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/' + i + '.png';
   }
+  /* src may be a list: when one fails to load the next is tried, and after the last the generic icon takes its place */
   function img(src, cls, fallback) {
-    if (!src) return fallback ? h('span', { class: 'ph' }, ic(fallback)) : null;
-    return h('img', { class: cls || 'ico', src: src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.style.visibility = 'hidden'; } });
+    var list = (Array.isArray(src) ? src : [src]).filter(Boolean);
+    var ph = function () { return fallback ? h('span', { class: 'ph' + (cls ? ' ' + cls : '') }, ic(fallback)) : null; };
+    if (!list.length) return ph();
+    var i = 0;
+    return h('img', { class: cls || 'ico', src: list[0], alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () {
+      if (++i < list.length) { this.src = list[i]; return; }
+      var r = ph(); if (r && this.parentNode) this.parentNode.replaceChild(r, this); else this.style.visibility = 'hidden';
+    } });
   }
+
+  /* Container and VM icons from selfh.st, by name (Settings > Theme > Icons): "binhex-qbittorrentvpn" and
+     "lscr.io/linuxserver/radarr:latest" become qbittorrentvpn / qbittorrent and radarr. The server says which names exist
+     (and in which forms), so the browser does not try URLs that are not there; Unraid's own icon is the next choice. */
+  var ICON_PRE = /^(binhex|linuxserver|lscr|hotio|ich777|official)[-_]/;
+  function iconSlugs(name, image) {
+    var out = [];
+    var add = function (v) { if (v && out.indexOf(v) < 0) out.push(v); };
+    [name, image].forEach(function (v) {
+      if (!v) return;
+      v = String(v).toLowerCase().replace(/@sha256:.*$/, '').split('/').pop().replace(/:[^:]*$/, '');
+      v = v.replace(ICON_PRE, '').replace(/^arch-/, '').replace(/[\s_.]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '');
+      var bare = v.replace(/-v?\d+(-\d+)*$/, '');                        // a version or number at the end: windows-11, app-v2
+      [v, bare, bare.replace(/-?vpn$/, ''), bare.replace(/-(server|app|web|docker)$/, '')].forEach(add);
+    });
+    return out;
+  }
+  var ICO = { map: null, want: {}, t: 0 };
+  function icoMap() {
+    if (!ICO.map) { var c = LS.get('icoSlugs', null); ICO.map = c && c.at > Date.now() - 86400000 ? c : { at: Date.now(), m: {}, no: {} }; }
+    return ICO.map;
+  }
+  function icoAsk(slugs) {
+    var m = icoMap(), n = 0;
+    slugs.forEach(function (x) { if (!(x in m.m) && !m.no[x] && !ICO.want[x]) { ICO.want[x] = 1; n++; } });
+    if (!n || ICO.t) return;
+    ICO.t = setTimeout(function () {
+      var ask = Object.keys(ICO.want); ICO.want = {}; ICO.t = 0;
+      api('icon_slugs', { slugs: ask }).then(function (j) {
+        if (j.error) return;                                            // offline: Unraid's icons stay
+        var got = 0; ask.forEach(function (x) { if (j.icons[x]) { m.m[x] = j.icons[x]; got++; } else m.no[x] = 1; });
+        LS.set('icoSlugs', m);
+        if (got && !root.querySelector('.drawer,.modal-bg')) shell();
+      });
+    }, 300);
+  }
+  function objIcon(name, image, own, cls, fb) {
+    var mode = (S.L && S.L.appearance.icon_mode) || 'color';
+    if (mode === 'off') return img(iconUrl(own), cls, fb);
+    var slugs = iconSlugs(name, image), m = icoMap().m, hit = null;
+    icoAsk(slugs);
+    slugs.some(function (x) { if (m[x]) { hit = x; return true; } return false; });
+    if (!hit) return img(iconUrl(own), cls, fb);
+    var f = m[hit].split(','), base = 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/';
+    var dark = (root.getAttribute('data-mode') || 'dark') === 'dark';
+    var v = mode === 'light' ? 'light' : mode === 'dark' ? 'dark' : mode === 'auto' ? (dark ? 'light' : 'dark') : '';
+    return img([v && f.indexOf(v) >= 0 ? base + 'svg/' + hit + '-' + v + '.svg' : '', f.indexOf('svg') >= 0 ? base + 'svg/' + hit + '.svg' : '',
+      f.indexOf('png') >= 0 ? base + 'png/' + hit + '.png' : '', iconUrl(own)], cls, fb);
+  }
+  /* an icon picked in Settings always wins */
+  function cIcon(c, p, cls) { return p.icon ? img(iconUrl(p.icon), cls, 'box') : objIcon(c.name, c.image, c.icon, cls, 'box'); }
+  function vIcon(v, p, cls) { return p.icon ? img(iconUrl(p.icon), cls, 'vm') : objIcon(v.name, '', v.icon, cls, 'vm'); }
   function meterCls(p) { return p > 90 ? 'bad' : p > 75 ? 'warn' : ''; }
 
   var toastBox = null;
@@ -6662,16 +6821,20 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     ((y.docker && y.docker.containers) || []).forEach(function (c) {
       var p = pref('docker', c.name), nm = p.label || c.name, web = dWeb(c);
       if (p.hidden || (score(nm) < 0 && score(c.name) < 0)) return;
-      put(score(nm) >= 0 ? nm : c.name, sbItem(img(iconUrl(p.icon || c.icon), 'aico', 'box'), [nm, 'Container · ' + c.state],
+      put(score(nm) >= 0 ? nm : c.name, sbItem(cIcon(c, p, 'aico'), [nm, 'Container · ' + c.state],
         function () { if (web) window.open(web, '_blank', 'noopener'); else inspect(c.name); },
         h('span', { class: 'sb-acts' }, web ? sbBtn('Open web UI', 'web', function () { window.open(web, '_blank', 'noopener'); }) : null,
+          c.state === 'running' ? sbBtn('Stop', 'stop', function () { dAct(c, 'stop'); }) : c.state === 'paused' ? null : sbBtn('Start', 'play', function () { dAct(c, 'start'); }),
+          c.state !== 'paused' ? sbBtn('Restart', 'restart', function () { dAct(c, 'restart'); }) : null,
           sbBtn('Logs', 'logs', function () { logs(c.name); }), sbBtn('Details', 'info', function () { inspect(c.name); }))));
     });
     ((y.vms && y.vms.vms) || []).forEach(function (v) {
       var p = pref('vms', v.name), nm = p.label || v.name, web = vWeb(v);
       if (p.hidden || (score(nm) < 0 && score(v.name) < 0)) return;
-      put(score(nm) >= 0 ? nm : v.name, sbItem(img(iconUrl(p.icon), 'aico', 'vm'), [nm, 'VM · ' + v.state],
-        function () { if (web) window.open(web, '_blank', 'noopener'); else sbJump('vms', v.name); }));
+      put(score(nm) >= 0 ? nm : v.name, sbItem(vIcon(v, p, 'aico'), [nm, 'VM · ' + v.state],
+        function () { if (web) window.open(web, '_blank', 'noopener'); else sbJump('vms', v.name); },
+        h('span', { class: 'sb-acts' }, web ? sbBtn(v.vnc ? 'Open console (VNC)' : 'Open Unraid\'s VMs page', 'screen', function () { window.open(web, '_blank', 'noopener'); }) : null,
+          ['start', 'resume', 'stop', 'restart'].filter(function (o) { return (v.ops || []).indexOf(o) >= 0 && VMOPS[o]; }).map(function (o) { return sbBtn(VMOPS[o][0], VMOPS[o][1], function () { vAct(v, o); }); }))));
     });
     return out.sort(function (a, c) { return a[0] - c[0] || a[1] - c[1]; }).slice(0, 8).map(function (x) { return x[2]; });
   }
@@ -6931,7 +7094,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     tile('disks', hot === null ? 'n/a' : hot + '°C', hot === null ? 'No disk temperatures (spun down?)' : 'hottest · ' + (a.hot ? a.hot + ' at 50°C+' : 'all below 50°C'), hot === null ? null : Math.min(100, hot / 60 * 100), hot === null ? 'na' : hot >= 55 ? 'bad' : hot >= 50 ? 'warn' : 'ok');
     tile('uptime', upt(s.uptime), s.uptime ? 'since ' + new Date((s.now - s.uptime) * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '', null, '');
     var u = y.ups;
-    if (R.overview.tiles.ups) { R.overview.tiles.ups.el.hidden = !u; if (u) tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
+    if (R.overview.tiles.ups) { R.overview.tiles.ups.el.hidden = !u; if (u) tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) + (u.watts !== null && u.watts !== undefined ? ' (' + u.watts + ' W)' : '') : u.watts ? ' · ' + u.watts + ' W' : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
     var cores = s.cpu.cores || [];
     tile('cores', cores.length ? pct(Math.max.apply(null, cores)) : 'n/a', cores.length ? 'busiest of ' + cores.length + ' cores' : '', cores.length ? Math.max.apply(null, cores) : null, cores.length ? lvl(Math.max.apply(null, cores), 90, 99) : 'na');
     tile('swap', s.mem.swap_total ? pct(100 * s.mem.swap_used / s.mem.swap_total) : 'None', s.mem.swap_total ? bytes(s.mem.swap_used) + ' of ' + bytes(s.mem.swap_total) : 'No swap configured', s.mem.swap_total ? 100 * s.mem.swap_used / s.mem.swap_total : null, s.mem.swap_total ? '' : 'na');
@@ -6980,7 +7143,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       var o = s.os_update || {};
       r.detail.appendChild(h('div', { class: 'kv2 sm' }, h('span', null, 'Server'), h('span', null, s.name + ' · ' + s.ip), h('span', null, 'Unraid'), h('span', null, (s.os || '-') + (o.available ? ' · ' + o.latest + ' available' : '')),
         h('span', null, 'Uptime'), h('span', null, upt(s.uptime) + ' · since ' + new Date((s.now - s.uptime) * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })),
-        y.ups ? [h('span', null, 'UPS'), h('span', null, (y.ups.model || '') + ' · ' + y.ups.status + ' · ' + pct(y.ups.charge) + (y.ups.runtime ? ' · ' + Math.round(y.ups.runtime / 60) + ' min runtime' : ''))] : null));
+        y.ups ? [h('span', null, 'UPS'), h('span', null, (y.ups.model || '') + ' · ' + y.ups.status + ' · ' + pct(y.ups.charge) + (y.ups.watts ? ' · ' + y.ups.watts + ' W' + (y.ups.nominal ? ' of ' + y.ups.nominal + ' W' : '') : '') + (y.ups.runtime ? ' · ' + Math.round(y.ups.runtime / 60) + ' min runtime' : ''))] : null));
     }
   }
   function sparkBox(vals, max) {
@@ -7183,11 +7346,11 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       if (x[0] === 'd') {
         var run = it.state === 'running';
         var fw = dWeb(it), ft = fw ? 'Open the web UI of ' + it.name : it.name;
-        el = h('div', { class: 'fav' }, webA(fw, ft, img(iconUrl(pref('docker', it.name).icon || it.icon), '', 'box')), h('div', { class: 't' }, webA(fw, ft, h('b', null, label('docker', it.name))), dStateBadge(it)),
+        el = h('div', { class: 'fav' }, webA(fw, ft, cIcon(it, pref('docker', it.name), '')), h('div', { class: 't' }, webA(fw, ft, h('b', null, label('docker', it.name))), dStateBadge(it)),
           dActions(it, pref('docker', it.name)));
       } else if (x[0] === 'v') {
-        var vw = vWeb(it), vt = vw ? 'Open the console of ' + it.name : it.name;
-        el = h('div', { class: 'fav' }, webA(vw, vt, img(iconUrl(pref('vms', it.name).icon || it.icon), '', 'vm')), h('div', { class: 't' }, webA(vw, vt, h('b', null, label('vms', it.name))), vStateBadge(it.state, S.busy['v:' + it.name])),
+        var vw = vWeb(it), vt = vTip(it, vw, it.name);
+        el = h('div', { class: 'fav' }, webA(vw, vt, vIcon(it, pref('vms', it.name), '')), h('div', { class: 't' }, webA(vw, vt, h('b', null, label('vms', it.name))), vStateBadge(it.state, S.busy['v:' + it.name])),
           vActions(it, pref('vms', it.name)));
       } else {
         var href = it.href_resolved;
@@ -7385,7 +7548,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   }
   function dWho(c, p) {
     var web = dWeb(c), t = web ? 'Open the web UI of ' + c.name : c.name;
-    return h('div', { class: 'who c-who' }, webA(web, t, img(iconUrl(p.icon || c.icon), '', 'box')),
+    return h('div', { class: 'who c-who' }, webA(web, t, cIcon(c, p, '')),
       h('div', { class: 'ell' }, h('div', { class: 'nm' }, webA(web, t, h('span', { class: 'ell', title: c.name }, p.label || c.name)), p.favorite ? ic('star', true) : null),
         h('div', { class: 'im ell', title: c.image }, p.description || c.image)));
   }
@@ -7405,7 +7568,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var row = h('div', { class: 'rowi c' + (S.busy['d:' + c.name] ? ' busy' : ''), role: 'listitem', 'data-name': c.name, title: c.image });
     row._cpu = h('span', { class: 'c-cpu num' }); row._mem = h('span', { class: 'c-mem num muted' });
     var web = dWeb(c), wt = web ? 'Open the web UI of ' + c.name : c.name;
-    row.appendChild(h('div', { class: 'who c-who' }, webA(web, wt, img(iconUrl(p.icon || c.icon), '', 'box')), webA(web, wt, h('span', { class: 'nm ell' }, p.label || c.name, p.favorite ? ic('star', true) : null))));
+    row.appendChild(h('div', { class: 'who c-who' }, webA(web, wt, cIcon(c, p, '')), webA(web, wt, h('span', { class: 'nm ell' }, p.label || c.name, p.favorite ? ic('star', true) : null))));
     row.appendChild(h('div', { class: 'c-st' }, dStateBadge(c)));
     row.appendChild(row._cpu); row.appendChild(row._mem);
     row.appendChild(h('div', { class: 'c-upd' }, c.job === 'update_failed' ? dUpdBadge(c) : null));
@@ -7428,7 +7591,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       if (!/^(running|stopped|created)$/.test(st.textContent)) sub.appendChild(h('span', null, st.textContent));   // the dot says running / stopped
     }
     var web = dWeb(c), wt = web ? 'Open the web UI of ' + c.name : c.name + ' · ' + c.image;
-    cell.appendChild(webA(web, wt, img(iconUrl(p.icon || c.icon), 'cico', 'box')));
+    cell.appendChild(webA(web, wt, cIcon(c, p, 'cico')));
     cell.appendChild(h('div', { class: 'cn' }, h('span', { class: 'cname ell' }, dot, webA(web, wt, p.label || c.name), p.favorite ? ic('star', true) : null), sub));
     if (c.job === 'update_failed') cell.appendChild(dUpdBadge(c));
     cell.appendChild(dActions(c, p));
@@ -7615,9 +7778,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     if (!list.length) r.rows.appendChild(h('div', { class: 'empty' }, v.vms.length ? 'All VMs are hidden.' : 'No virtual machines.'));
     list.forEach(function (x) {
       var p = pref('vms', x.name), b = busy[x.name];
-      var a = vActions(x, p), vw = vWeb(x), vt = vw ? 'Open the console of ' + x.name : x.os || x.name;
-      var who = S.L.vms.layout === 'cards' ? h('div', { class: 'who c-who' }, webA(vw, vt, img(iconUrl(p.icon || x.icon), '', 'vm')), h('div', { class: 'ell' }, h('div', { class: 'nm' }, webA(vw, vt, h('span', { class: 'ell' }, p.label || x.name)), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')))
-        : h('div', { class: 'who c-who' }, webA(vw, vt, img(iconUrl(p.icon || x.icon), '', 'vm')), webA(vw, vt, h('span', { class: 'nm ell' }, p.label || x.name, p.favorite ? ic('star', true) : null)));
+      var a = vActions(x, p), vw = vWeb(x), vt = vTip(x, vw, x.os || x.name);
+      var who = S.L.vms.layout === 'cards' ? h('div', { class: 'who c-who' }, webA(vw, vt, vIcon(x, p, '')), h('div', { class: 'ell' }, h('div', { class: 'nm' }, webA(vw, vt, h('span', { class: 'ell' }, p.label || x.name)), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')))
+        : h('div', { class: 'who c-who' }, webA(vw, vt, vIcon(x, p, '')), webA(vw, vt, h('span', { class: 'nm ell' }, p.label || x.name, p.favorite ? ic('star', true) : null)));
       var res = x.cpus ? x.cpus + ' vCPU · ' + bytes(x.memory) : '';
       if (S.L.vms.layout === 'cards') r.rows.appendChild(h('div', { class: 'tile' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'chips' }, vStateBadge(x.state, b), x.autostart ? h('span', { class: 'badge plain' }, 'autostart') : null), h('div', { class: 'stats' }, h('span', null, res), h('span', null, x.agent ? 'guest agent' : 'no guest agent')), a));
       else r.rows.appendChild(h('div', { class: 'rowi c' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'c-st' }, vStateBadge(x.state, b)),
@@ -7628,12 +7791,20 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     if (focus) { var f = r.rows.querySelector('[aria-label="' + focus.replace(/"/g, '') + '"]'); if (f && !f.disabled) f.focus(); }
   }
   /* the VM's "web UI" is its VNC console */
-  function vWeb(x) { return x.state === 'running' && x.vnc ? UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=&path=' + encodeURIComponent(x.vnc) : ''; }
+  /* what clicking a VM's icon or name does, said in its tooltip */
+  function vTip(x, web, other) {
+    if (web) return x.vnc ? 'Open the console of ' + x.name + ' (VNC)' : 'Open Unraid\'s VMs page to reach the console of ' + x.name;
+    if (x.state !== 'running') return x.name + ' is ' + (x.state || 'stopped') + ': start it from its menu to open the console';
+    return other + (S.boot.caps.mode === 'api' ? ' · the console opens from Unraid\'s VMs page' : ' · this VM has no VNC console');
+  }
+  // the Unraid API gives no VNC port, so in the Docker version a running VM opens Unraid's VMs page, where the console starts
+  function vWeb(x) { if (x.state === 'running' && !x.vnc && S.boot.caps.mode === 'api' && UNRAID) return UNRAID + '/VMs';
+    return x.state === 'running' && x.vnc ? UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(location.hostname) + '&port=&path=' + encodeURIComponent(x.vnc) : ''; }
   function vActions(x, p) {
     var a = h('div', { class: 'acts c-acts' }), web = vWeb(x);
     a.appendChild(gear(x.name, function () {
       var b = !!S.busy['v:' + x.name];
-      return [web ? ['Open console (VNC)', 'screen', function () { window.open(web, '_blank', 'noopener'); }] : null, web ? 'hr' : null]
+      return [web ? [x.vnc ? 'Open console (VNC)' : 'Open Unraid\'s VMs page (console)', 'screen', function () { window.open(web, '_blank', 'noopener'); }] : null, web ? 'hr' : null]
         .concat(x.ops.map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' || o === 'stop' ? 'danger' : '', b]; }))
         .concat([x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
           [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('vms', x.name, { favorite: !p.favorite }); }],
@@ -7697,7 +7868,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     clear(x.row); clear(x.link);
     if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
     if (j.error && !(j.items || []).length) { x.row.appendChild(h('div', { class: 'empty ' + (j.unconfigured ? '' : 'err-t') }, j.error)); txt(x.count, ''); return; }
-    var items = j.items || [];
+    var items = k.indexOf('episodes') > 0 ? groupEps(j.items || [], k.indexOf('upcoming') === 0) : j.items || [];
     txt(x.count, String(j.items.length));
     if (!j.items.length) { x.row.appendChild(h('div', { class: 'empty' }, MEDIA[k][1])); return; }
     var upcoming = k.indexOf('upcoming') === 0, text = S.L.media.style === 'text';
@@ -7707,13 +7878,35 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       var when = !d ? '' : upcoming ? (it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' })) : rel(it.ts);
       // only what Radarr / Sonarr reported: no year, episode or quality line when they did not send one
       var sub = it.sub || (it.year ? String(it.year) : '');
-      var tags = [upcoming && it.when && it.when !== 'Airs' ? h('span', { class: 'badge plain' }, it.when) : null, it.quality ? h('span', { class: 'badge plain' }, it.quality) : null,
+      var tags = [it.n ? h('span', { class: 'badge plain' }, it.n + ' eps') : null, upcoming && it.when && it.when !== 'Airs' ? h('span', { class: 'badge plain' }, it.when) : null, it.quality ? h('span', { class: 'badge plain' }, it.quality) : null,
         it.done ? h('span', { class: 'badge plain', title: 'Already downloaded' }, 'Downloaded') : null].filter(Boolean);
       x.row.appendChild(h(it.href ? 'a' : 'div', { class: 'mi', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: it.href ? 'noopener' : null,
-          title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.sub ? '\n' + it.sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') },
+          title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.list ? '\n' + it.list.join('\n') : it.sub ? '\n' + it.sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') },
         h('span', { class: 'mimg' }, it.poster ? h('img', { src: it.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
         h('span', { class: 'mt' }, h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null,
           h('span', { class: 'pm' }, when ? h('span', { class: 'pd' }, when) : null, tags))));
+    });
+  }
+
+  /* Episodes of one show next to each other that air at the same time (upcoming) or were added the same day (recent) become
+     one row: "S01E08–E12" and an "5 eps" badge, instead of the show five times. */
+  function groupEps(items, upcoming) {
+    var out = [];
+    var day = function (ts) { var d = new Date(ts * 1000); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); };
+    items.forEach(function (it) {
+      var g = out[out.length - 1];
+      if (g && g.title === it.title && it.ts && g.ts && (upcoming ? g.ts === it.ts : day(g.ts) === day(it.ts))) { g.eps.push(it); return; }
+      out.push(Object.assign({}, it, { eps: [it] }));
+    });
+    return out.map(function (g) {
+      if (g.eps.length < 2) return g;
+      var codes = g.eps.map(function (e) { var m = /^S(\d+)E(\d+)/.exec(e.sub || ''); return m ? [+m[1], +m[2], m[0]] : null; });
+      var ok = codes.every(Boolean) && codes.every(function (c) { return c[0] === codes[0][0]; });
+      var nums = ok ? codes.map(function (c) { return c[1]; }).sort(function (a, b) { return a - b; }) : [];
+      var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+      return Object.assign(g, { n: g.eps.length, sub: ok ? 'S' + pad(codes[0][0]) + 'E' + pad(nums[0]) + '–E' + pad(nums[nums.length - 1]) : g.eps.length + ' episodes',
+        done: g.eps.every(function (e) { return e.done; }), quality: g.eps.every(function (e) { return e.quality === g.quality; }) ? g.quality : '',
+        list: g.eps.map(function (e) { return e.sub; }).filter(Boolean) });
     });
   }
 
@@ -7721,9 +7914,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   function mediaLine(it, upcoming) {
     var d = it.ts ? new Date(it.ts * 1000) : null;
     var when = !d ? '' : !upcoming ? rel(it.ts) : it.when === 'Airs' ? d.toLocaleDateString([], { weekday: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    var sub = [it.sub || '', upcoming && it.when && it.when !== 'Airs' ? it.when : '', !upcoming && it.quality ? it.quality : ''].filter(Boolean).join(' · ');
+    var sub = [it.sub || '', it.n ? it.n + ' eps' : '', upcoming && it.when && it.when !== 'Airs' ? it.when : '', !upcoming && it.quality ? it.quality : ''].filter(Boolean).join(' · ');
     return h(it.href ? 'a' : 'div', { class: 'mi ml', role: 'listitem', href: it.href || null, target: it.href ? '_blank' : null, rel: it.href ? 'noopener' : null,
-        title: it.title + (it.year ? ' (' + it.year + ')' : '') + (sub ? '\n' + sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') + (it.done ? '\nAlready downloaded' : '') },
+        title: it.title + (it.year ? ' (' + it.year + ')' : '') + (it.list ? '\n' + it.list.join('\n') : sub ? '\n' + sub : '') + (d ? '\n' + (upcoming ? (it.when === 'Airs' ? 'Airs ' : it.when + ' ') : 'Added ') + d.toLocaleString() : '') + (it.done ? '\nAlready downloaded' : '') },
       h('span', { class: 'pt' }, it.title), sub ? h('span', { class: 'ps' }, sub) : null, h('span', { class: 'grow' }),
       it.done ? h('span', { class: 'ok-t', 'aria-label': 'Downloaded' }, ic('check')) : null, when ? h('span', { class: 'pd' }, when) : null);
   }
@@ -7901,14 +8094,32 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     clear(x.info); clear(x.extra);
     if (!j.online) x.info.appendChild(h('span', { class: j.unconfigured ? 'muted' : 't-bad' }, j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline'));
     else (j.blocks || []).slice(0, 4).forEach(function (b) { x.info.appendChild(h('span', { class: 'st' }, h('b', null, fmt(b.value, b.fmt)), ' ' + b.label.toLowerCase())); });
-    if (issues) x.extra.appendChild(h('span', { class: 'badge ' + (bad ? 'bad' : 'warn') }, issues + (issues === 1 ? ' issue' : ' issues')));
+    var raw = (j.health || []).length + (j.issues || []).reduce(function (n, z) { return n + (z.count || 1); }, 0);
+    if (issues) x.extra.appendChild(h('span', { class: 'badge ' + (bad ? 'bad' : 'warn'), title: raw > issues ? raw + ' queue items and health checks, grouped' : null }, issues + (issues === 1 ? ' issue' : ' issues')));
     else if (j.version) x.extra.appendChild(h('span', { class: 'muted xs' }, 'v' + j.version));
     clear(x.det);
     if (j.error && !j.preview) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
     if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(blk)));
-    (j.health || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, (z.source ? z.source + ': ' : '') + z.msg))); });
-    (j.issues || []).forEach(function (z) { x.det.appendChild(h('div', { class: 'alert ' + z.level }, h('span', { class: 'grow' }, h('b', null, z.title), ' · ' + z.msg))); });
+    // one row per problem (the server groups a blocked season pack into one row with its count); long lists scroll inside the box
+    if (issues) {
+      var box = h('div', { class: 'aiss', role: 'list', tabindex: '0', 'aria-label': 'Problems' });
+      (j.health || []).forEach(function (z) { box.appendChild(arrIssue(z.level, z.tag || z.source, '', z.msg, 0, z.source ? z.source + ': ' + z.msg : z.msg)); });
+      (j.issues || []).forEach(function (z) { box.appendChild(arrIssue(z.level, z.tag, z.title, z.msg, z.count, z.title + ' · ' + z.msg + (z.releases && z.releases.length ? '\n\n' + z.releases.join('\n') + (z.count > z.releases.length ? '\n…' : '') : ''))); });
+      x.det.appendChild(box);
+    }
     if (j.online && !issues && !j.error) x.det.appendChild(h('div', { class: 'muted sm' }, 'No warnings' + (j.version ? ' · version ' + j.version : '') + '.'));
+  }
+
+  /* a problem row: tag pill, what (one line, click to show it whole), ×count, message */
+  function arrIssue(level, tag, what, msg, count, tip) {
+    var row = h('div', { class: 'ais ' + level, role: 'listitem', title: tip });
+    row.appendChild(h('span', { class: 'badge ' + level }, tag || (level === 'bad' ? 'Error' : 'Warning')));
+    var t = h('span', { class: 'ais-t', tabindex: '0', role: 'button', 'aria-expanded': 'false', onclick: function () { var o = row.classList.toggle('open'); t.setAttribute('aria-expanded', o ? 'true' : 'false'); },
+      onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t.click(); } } },
+      what ? h('b', null, what) : null, what ? ' · ' : null, h('span', { class: 'muted' }, msg));
+    row.appendChild(t);
+    if (count > 1) row.appendChild(h('span', { class: 'badge plain num', 'aria-label': count + ' items' }, '×' + count));
+    return row;
   }
 
   /* ---- download clients ---- */
@@ -8471,7 +8682,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
           h('label', { class: 'switch', title: 'Show on the dashboard' }, h('input', { type: 'checkbox', checked: !p.hidden, 'aria-label': 'Show ' + it.name + ' on the dashboard', onchange: function (e) {
             p.hidden = !e.target.checked; row.classList.toggle('off', p.hidden); put(); counted(); } })),
           h('button', { type: 'button', class: 'ico-btn', title: 'Pick an icon for ' + it.name, 'aria-label': 'Pick an icon for ' + it.name, onclick: function () { iconPicker(p.label || it.name, function (v) { p.icon = v; put(); draw(); }); } },
-            img(iconUrl(p.icon || it.icon), '', dk ? 'box' : 'vm')),
+            (dk ? cIcon : vIcon)(it, p, '')),
           h('span', { class: 't' }, h('span', { class: 'sdot ' + (it.state === 'running' ? 'ok' : 'na'), title: it.state || '' }), h('b', null, it.name)),
           h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
@@ -8501,7 +8712,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     b.appendChild(set('Display', null, h('div', { class: 'grid2' },
       F('Dashboard title', tIn(g, 'title', dirty, 'UnDash')),
       F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
-      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'))));
+      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'),
+      F('UPS rated power (W)', tIn(g, 'ups_watts', dirty, 'from the UPS', 'number', { min: 0, max: 20000 }), 'For the power draw on the UPS tile (load × rated power). Leave it at 0 to use what the UPS reports (apcupsd NOMPOWER, NUT, the Unraid API); fill it in when your UPS only reports its load. The UPS label or manual gives it in watts, not VA.'))));
     if (!Array.isArray(g.search_in)) g.search_in = [];
     var src = function (k, lab, hint) {
       return h('label', { class: 'switch t' }, h('input', { type: 'checkbox', checked: g.search_in.indexOf(k) >= 0, onchange: function (e) {
@@ -8601,6 +8813,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
       F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
         'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
+      F('Container and VM icons', sIn(a, 'icon_mode', function () { dirty(); }, [['color', 'selfh.st, in colour'], ['auto', 'selfh.st, light or dark to suit the theme'], ['light', 'selfh.st, light'], ['dark', 'selfh.st, dark'], ['off', 'Unraid\'s own icons']], preview),
+        'Found by the container\'s name or image (binhex-, linuxserver and similar prefixes are ignored). When selfh.st has none, Unraid\'s icon is used. An icon picked for a container in Sections & apps always wins.'),
       margin('safe_x', 'Side margin'), margin('safe_y', 'Top and bottom margin'))));
     var pd = function () { dirty(); preview(); };
     var rng = function (k, lo, hi, unit, lab) {
@@ -9187,11 +9401,15 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var row = function (k, what) { return h('div', { class: 'kh' }, h('span', null, k.split(' ').map(function (x) { return h('kbd', null, x); })), h('span', null, what)); };
     var go = Object.keys(GOTO).map(function (k) { return row('g ' + k, TITLES[GOTO[k]]); });
     modal('Keyboard shortcuts', h('div', { class: 'keys' },
-      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Search'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
+      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Search'), row('Ctrl K', 'Search (⌘ K on a Mac), also while typing'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
         row(',', 'Settings'), row('?', 'This list'), row('Esc', 'Close a dialog, menu or the filter')),
       h('div', null, h('h4', { class: 'ign-h' }, 'Go to a section'), go)), null, true);
   }
   document.addEventListener('keydown', function (e) {
+    // Ctrl+K / Cmd+K: the search, which also starts, stops and opens containers, VMs and apps (works while typing too)
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key || '').toLowerCase() === 'k' && R.search && S.L && !root.querySelector('.modal-bg,.drawer')) {
+      e.preventDefault(); R.search.focus(); R.search.select(); return;
+    }
     var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || (document.activeElement && document.activeElement.isContentEditable);
     if (typing || e.ctrlKey || e.metaKey || e.altKey || !S.L || root.querySelector('.modal-bg,.drawer') || S.menu) { S.gKey = 0; return; }
     var k = e.key;
@@ -9222,7 +9440,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>705b5ff1d7016768638e649806786f1f6238512b09e2eb0dab2d464c466ee813</SHA256>
+<SHA256>2b038316e26e255d48fa7c032299dba191bead1961d283e02107e9ca4521259e</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
