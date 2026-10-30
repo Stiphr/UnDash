@@ -872,7 +872,7 @@
   /* Alert ids are "<category>:<resource>" (see include/ignores.php); an alert without a category cannot be ignored. */
   var ALERT_CAT = {
     'docker.unhealthy': 'Container unhealthy', 'docker.restarting': 'Container restarting', 'docker.exited': 'Container stopped with an error', 'docker.update_failed': 'Container update failed',
-    'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature',
+    'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature', 'disk.smart': 'Disk failed SMART (Scrutiny)',
     'auth.open': 'No dashboard password', 'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
   };
   /* the rules in force, by the server's clock (live.at), plus this tab's own changes until the next refresh confirms them */
@@ -2572,6 +2572,28 @@
     look();
   }
 
+  /* the releases widget: tick containers to follow the GitHub repository each comes from (its image's source label) */
+  function followPicker(cur, done) {
+    var have = {}, picked = {}, m, list = h('div', { class: 'olist pick-list' }, h('div', { class: 'progress' }, h('i')));
+    cur.split(/[\s,]+/).forEach(function (x) { if (x) have[x.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/\/$/, '').toLowerCase()] = 1; });
+    api('container_sources').then(function (r) {
+      clear(list);
+      if (r.error) { list.appendChild(h('div', { class: 'banner bad' }, r.error)); return; }
+      r.containers.forEach(function (c) {
+        var on = !!have[c.repo.toLowerCase()];
+        list.appendChild(h('div', { class: 'oi' + (c.repo ? '' : ' off') },
+          h('label', { class: 'switch t' }, h('input', { type: 'checkbox', checked: on, disabled: !c.repo || on, onchange: function (e) { if (e.target.checked) picked[c.repo] = 1; else delete picked[c.repo]; } }),
+            h('span', null, h('b', null, c.name), h('span', { class: 'muted sm' }, ' · ' + (c.repo ? c.repo + (c.guess ? ' (from the image name)' : '') + (on ? ' · already followed' : '') : 'no GitHub source in the image'))))));
+      });
+      if (!r.containers.length) list.appendChild(h('div', { class: 'empty' }, 'No containers found.'));
+    });
+    m = modal('Follow the apps you run', h('div', null, h('p', { class: 'muted sm' }, 'The repository comes from each image\'s source label. For linuxserver.io images that is their Docker repository (docker-radarr), whose releases follow the app\'s.'), list),
+      [btn('Cancel', function () { m.close(); }), btn('Add', function () {
+        var add = Object.keys(picked);
+        m.close(); if (add.length) done((cur.trim() ? cur.replace(/\s+$/, '') + '\n' : '') + add.join('\n'));
+      }, 'pri')], true);
+  }
+
   /* containers that look like an app type UnDash reads, and are not added yet. Matched on the image name
      (lscr.io/linuxserver/radarr, binhex/arch-qbittorrentvpn …), then on the container name */
   var FOUND_RE = [['overseerr', /^(overseerr|jellyseerr|seerr)$/], ['plex', /^(plex|pms-docker|plex-media-server|plexmediaserver)$/], ['emby', /^(emby|embyserver)$/],
@@ -2708,7 +2730,12 @@
       if (s.type === 'weather') form.appendChild(h('div', { class: 'grid2' }, F('Place', tIn(s.options, 'location', noop, 'Amsterdam'), 'A town or city, or latitude, longitude. From Open-Meteo, no key needed.'),
         F('Units', sIn(s.options, 'units', noop, [['metric', '°C, km/h'], ['imperial', '°F, mph']]))));
       var lines = function (k, ph, lab, hint) { return F(lab, h('textarea', { rows: 5, spellcheck: 'false', placeholder: ph, oninput: function (e) { s.options[k] = e.target.value; } }, s.options[k] || ''), hint); };
-      if (s.type === 'releases') form.appendChild(lines('repos', 'immich-app/immich\nautobrr/qui', 'Repositories', 'One per line: owner/repo or its GitHub address, up to 20. Each is checked at most once an hour.'));
+      if (s.type === 'releases') {
+        form.appendChild(lines('repos', 'immich-app/immich\nautobrr/qui', 'Repositories', 'One per line: owner/repo or its GitHub address, up to 20. Each is checked at most once an hour.'));
+        form.appendChild(h('div', { style: { 'margin-top': '-4px', 'margin-bottom': '10px' } }, btn('Add from my containers', function () {
+          followPicker(s.options.repos || '', function (txt) { s.options.repos = txt; draw(); });
+        }, 'sm', 'box')));
+      }
       if (s.type === 'bookmarks') form.appendChild(lines('links', 'Router | http://192.168.1.1\nhttps://selfh.st', 'Links', 'One per line: Title | https://… or just the address. Only http and https links are kept.'));
       if (s.type === 'uptimekuma') form.appendChild(F('Status page slug', tIn(s.options, 'slug', noop, 'home'), 'Uptime Kuma reads a status page: the end of its address, /status/NAME. Make one under Status Pages first.'));
       if (s.type === 'homeassistant') form.appendChild(F('Entities', h('textarea', { rows: 3, spellcheck: 'false', placeholder: 'sensor.living_room_temperature\nlight.kitchen', oninput: function (e) { s.options.entities = e.target.value; } }, s.options.entities || ''),

@@ -65,7 +65,8 @@ function und_docker_details(array $ps, $force = false) {
         'webui' => preg_match('#^https?://#', $webui) ? $webui : '', 'network' => $net, 'ip' => $cip, 'ports' => $ports, 'autostart' => isset($auto[$name]),
         'managed' => ($labels['net.unraid.docker.managed'] ?? '') === 'dockerman', 'restarts' => (int)($x['RestartCount'] ?? 0),
         'started' => strtotime((string)($x['State']['StartedAt'] ?? '')) ?: null, 'exit' => (int)($x['State']['ExitCode'] ?? 0),
-        'created' => strtotime((string)($x['Created'] ?? '')) ?: null, 'cfg_image' => (string)($x['Config']['Image'] ?? '')];
+        'created' => strtotime((string)($x['Created'] ?? '')) ?: null, 'cfg_image' => (string)($x['Config']['Image'] ?? ''),
+        'source' => und_clip((string)($labels['org.opencontainers.image.source'] ?? ''), 300)];
     }
   }
   und_write_json($f, ['sig' => $sig, 'at' => time(), 'd' => $d]);

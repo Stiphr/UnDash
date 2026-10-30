@@ -1,3 +1,13 @@
+###0.9.0
+- Alerts: a disk that Scrutiny marks as failed is a red alert ("sdb (WD…) failed its SMART check"), kept in the alert history and can be ignored like any other. The background check asks Scrutiny every 5 minutes; the alert ends only when Scrutiny has been asked again and says the disk is fine.
+- GitHub releases: "Add from my containers" lists your containers with the GitHub repository each comes from (the image's source label, or a ghcr.io image name) to follow with a tick. A repository that cannot be read now shows as its own row instead of hiding the others.
+- Security: while the Docker version has no password, it only answers at the server's IP address or name (tower, tower.local) and the names in the new UNDASH_ALLOWED_HOSTS setting. Before, a web page could point a host name of its own at your server (DNS rebinding) and use the dashboard through your browser. With a password nothing changes.
+- Security: wrong passwords are also counted for all addresses together (30 in 15 minutes), on top of 5 per address.
+- Security: a value with a carriage return (a pasted key, for example) could add a line to .env. Line breaks are now always escaped.
+- Security: changing the Unraid API address to another server asks for the API key again, so the saved key is never sent to a new address.
+- Security: without a dashboard password, the .env file (every key) cannot be downloaded from Settings > Backup.
+- Media links only point to web addresses.
+
 ###0.8.0
 - Icon picker: "Browse" next to an app's Icon field, and a click on a container's or VM's icon in Settings, searches about 5,000 icons from selfh.st icons and dashboard-icons by name. The server downloads the two name lists once a week; the images load from the same CDN as before.
 - New apps: Scrutiny (disks passed / failed, hottest disk, failed disks listed), Tdarr (queue, processed, errored, space saved), Unmanic (workers, pending), Uptime Kuma (a status page's monitors up and down, uptime, down monitors listed), Speedtest Tracker (latest download, upload and ping; old and new API), Gluetun (VPN public IP, location, forwarded port) and Home Assistant (chosen entities, or people home, lights and switches on). Each is also found among your containers.

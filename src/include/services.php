@@ -338,25 +338,53 @@ function und_w_peanut($s) {
 
 /* ---------- monitoring and tools ---------- */
 
-/** Scrutiny: disks by SMART result. A disk counts as failed by the same rule as Scrutiny's own page (its status threshold setting). */
-function und_w_scrutiny($s) {
+/** Scrutiny's disks by SMART result. A disk counts as failed by the same rule as Scrutiny's own page (its status threshold
+ *  setting). The failed ones are also kept in the temp folder for Alerts (und_smart_failures). */
+function und_scrutiny_disks($s) {
   $j = und_get(und_u($s['url'], '/api/summary'));
   try { $thr = (int)(und_get(und_u($s['url'], '/api/settings'))['settings']['metrics']['status_threshold'] ?? 3); } catch (Exception $e) { $thr = 3; }
-  $pass = 0; $bad = 0; $unk = 0; $hot = null; $list = [];
+  $r = ['passed' => 0, 'failed' => [], 'unknown' => 0, 'hottest' => null];
   foreach ((array)($j['data']['summary'] ?? []) as $d) {
     if (!is_array($d) || !empty($d['device']['archived'])) continue;
     $st = (int)($d['device']['device_status'] ?? -1);
-    if ($st < 0 || $st > 3) $unk++;
-    elseif ($st > 0 && ($thr === 3 || $st === $thr || $st === 3)) {
-      $bad++;
-      $list[] = ['title' => trim(($d['device']['device_name'] ?? '') . ' ' . ($d['device']['model_name'] ?? '')) ?: 'Disk', 'right' => $st === 1 ? 'SMART failed' : ($st === 2 ? 'Scrutiny failed' : 'Failed')];
-    } else $pass++;
+    if ($st < 0 || $st > 3) $r['unknown']++;
+    elseif ($st > 0 && ($thr === 3 || $st === $thr || $st === 3))
+      $r['failed'][] = ['disk' => und_clip((string)($d['device']['device_name'] ?? ''), 60) ?: 'disk', 'model' => und_clip((string)($d['device']['model_name'] ?? ''), 80), 'status' => $st];
+    else $r['passed']++;
     $t = (int)($d['smart']['temp'] ?? 0);
-    if ($t > 0 && ($hot === null || $t > $hot)) $hot = $t;
+    if ($t > 0 && ($r['hottest'] === null || $t > $r['hottest'])) $r['hottest'] = $t;
   }
-  $r = ['blocks' => [und_b('passed', 'Passed', $pass), und_b('failed', 'Failed', $bad), und_b('unknown', 'Unknown', $unk), und_b('hottest', 'Hottest', $hot === null ? null : $hot . ' °C', 'text')]];
-  if ($list) $r['list'] = $list;
+  und_write_json(und_tmp('smart-' . $s['id'] . '.json'), ['at' => time(), 'app' => (string)($s['name'] ?? 'Scrutiny'), 'failed' => $r['failed']]);
   return $r;
+}
+function und_w_scrutiny($s) {
+  $d = und_scrutiny_disks($s);
+  $why = [1 => 'SMART failed', 2 => 'Scrutiny failed', 3 => 'Failed'];
+  $r = ['blocks' => [und_b('passed', 'Passed', $d['passed']), und_b('failed', 'Failed', count($d['failed'])), und_b('unknown', 'Unknown', $d['unknown']),
+                     und_b('hottest', 'Hottest', $d['hottest'] === null ? null : $d['hottest'] . ' °C', 'text')]];
+  if ($d['failed']) $r['list'] = array_map(function ($f) use ($why) { return ['title' => trim($f['disk'] . ' ' . $f['model']), 'right' => $why[$f['status']] ?? 'Failed']; }, $d['failed']);
+  return $r;
+}
+
+/**
+ * Failed disks from every Scrutiny app, for Alerts. Reads what the last check left behind; $refresh (the background
+ * check) asks Scrutiny again when that is older than 5 minutes. checked = at least one answer from the last 30 minutes,
+ * so a disk's alert only ends when Scrutiny has actually been asked again.
+ */
+function und_smart_failures(array $cfg, $refresh = false) {
+  $out = ['checked' => false, 'failed' => []];
+  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $sv) {
+    if ($sv['type'] !== 'scrutiny' || !empty($sv['hidden'])) continue;
+    $f = und_tmp('smart-' . $sv['id'] . '.json');
+    $st = und_read_json($f, []);
+    if ($refresh && time() - (int)($st['at'] ?? 0) > 300 && ($full = und_service_full($cfg, $sv['id'])) && trim($full['url']) !== '') {
+      try { und_scrutiny_disks($full); $st = und_read_json($f, []); } catch (Exception $e) { /* Scrutiny did not answer: the last result stands until it is too old */ }
+    }
+    if (time() - (int)($st['at'] ?? 0) > 1800) continue;
+    $out['checked'] = true;
+    foreach ((array)($st['failed'] ?? []) as $d) if (is_array($d)) $out['failed'][] = $d + ['app' => (string)($st['app'] ?? 'Scrutiny')];
+  }
+  return $out;
 }
 
 /** Tdarr: transcode and health-check queues (tables 1-3 transcode, 4-6 health check), counted like Tdarr's own tables. */
@@ -517,9 +545,10 @@ function und_w_releases($s) {
   }
   if (!$repos) throw new Exception('List the repositories to follow, like immich-app/immich.');
   $h = ['headers' => ['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => '2022-11-28'] + ($s['key'] !== '' ? ['Authorization' => 'Bearer ' . $s['key']] : [])];
-  $list = [];
+  $list = []; $errs = [];
   foreach (array_slice(array_values($repos), 0, 20) as $repo) {
-    $rel = und_cached('gh-' . md5(strtolower($repo)) . '.json', 3600, function () use ($repo, $h) {
+    // one repository that cannot be read shows as its own row; the others still show
+    try { $rel = und_cached('gh-' . md5(strtolower($repo)) . '.json', 3600, function () use ($repo, $h) {
       $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases/latest', $h);
       if ($r['code'] === 404) {      // only pre-releases, or no releases at all
         $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases?per_page=1', $h);
@@ -531,15 +560,52 @@ function und_w_releases($s) {
       if ($r['code'] === 404) throw new Exception('GitHub has no repository ' . $repo . '.');
       if ($r['code'] !== 200 || !is_array($r['json'])) throw new Exception('HTTP ' . $r['code'] . ' from GitHub.');
       return $r['json'];
-    });
+    }); }
+    catch (Exception $e) { $errs[] = $e->getMessage(); $list[] = ['title' => explode('/', $repo)[1], 'sub' => und_clip($e->getMessage(), 120), 'href' => 'https://github.com/' . $repo]; continue; }
     $name = explode('/', $repo)[1];
     if (!empty($rel['none'])) { $list[] = ['title' => $name, 'sub' => 'no releases yet', 'href' => 'https://github.com/' . $repo]; continue; }
     $url = (string)($rel['html_url'] ?? '');
     $list[] = ['title' => $name, 'sub' => und_clip((string)($rel['tag_name'] ?? ''), 40) . (!empty($rel['prerelease']) ? ' (pre-release)' : ''),
                'ts' => strtotime((string)($rel['published_at'] ?? '')) ?: null, 'href' => preg_match('#^https://github\.com/#', $url) ? $url : 'https://github.com/' . $repo];
   }
+  if (count($errs) === count($list)) throw new Exception($errs[0]);
   usort($list, function ($a, $b) { return ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0); });
   return ['list' => $list];
+}
+
+/** "owner/repo" from a GitHub address (https://github.com/owner/repo, git@github.com:owner/repo.git …), or ''. */
+function und_github_repo_of($u) {
+  if (!preg_match('#github\.com[/:]([A-Za-z0-9_.-]{1,100})/([A-Za-z0-9_.-]{1,100}?)(?:\.git)?(?:[/?\#].*)?$#i', trim((string)$u), $m) || $m[2] === '.' || $m[2] === '..') return '';
+  return $m[1] . '/' . $m[2];
+}
+
+/**
+ * Each container with the GitHub repository it comes from, for "Add from my containers" in the releases widget:
+ * the image's org.opencontainers.image.source label, else a ghcr.io/owner/name image (marked as a guess).
+ * The Docker version asks the Unraid API for the labels separately, so an API without that field only loses the labels.
+ */
+function und_container_sources() {
+  $rows = [];
+  if (und_api_mode()) {
+    $r = und_gql('query { docker { containers { names image labels } } }', [], 15);
+    $list = (array)($r['data']['docker']['containers'] ?? []);
+    if (!$list) { $r = und_gql('query { docker { containers { names image } } }', [], 15); $list = (array)($r['data']['docker']['containers'] ?? []); }
+    if (!$list && isset($r['error'])) return ['error' => $r['error']];
+    foreach ($list as $c) $rows[] = ['name' => ltrim((string)($c['names'][0] ?? ''), '/'), 'image' => (string)($c['image'] ?? ''), 'source' => (string)(((array)($c['labels'] ?? []))['org.opencontainers.image.source'] ?? '')];
+  } else {
+    $dk = und_docker_live();
+    if (isset($dk['error'])) return ['error' => $dk['error']];
+    foreach ((array)($dk['containers'] ?? []) as $c) $rows[] = ['name' => $c['name'], 'image' => (string)$c['image'], 'source' => (string)($c['source'] ?? '')];
+  }
+  $out = [];
+  foreach ($rows as $c) {
+    if ($c['name'] === '') continue;
+    $repo = und_github_repo_of($c['source']); $guess = false;
+    if ($repo === '' && preg_match('#^ghcr\.io/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:[:@].*)?$#i', $c['image'], $m)) { $repo = $m[1] . '/' . $m[2]; $guess = true; }
+    $out[] = ['name' => und_clip($c['name'], 128), 'image' => und_clip($c['image'], 200), 'repo' => $repo, 'guess' => $guess];
+  }
+  usort($out, function ($a, $b) { return ($a['repo'] === '') <=> ($b['repo'] === '') ?: strcasecmp($a['name'], $b['name']); });
+  return ['containers' => $out];
 }
 
 /** Links you keep on the dashboard: "Title | https://…" per line, or just the address. Nothing is fetched. */

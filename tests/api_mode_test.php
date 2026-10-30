@@ -138,6 +138,17 @@ $GLOBALS['ANSWER'] = ['code' => 0, 'err' => 'timed out', 'json' => null];
 und_api_poll_due();
 t('a failed poll keeps the last good copy', json_decode(file_get_contents(UND_TMP . '/api-net.json'), true)['t'] === $w['t']);
 @unlink(UND_TMP . '/apipoll.beat');
+$GLOBALS['ANSWER'] = function ($q) { return strpos($q['query'], 'labels') !== false
+  ? ['json' => ['data' => ['docker' => ['containers' => [['names' => ['/immich'], 'image' => 'ghcr.io/immich-app/immich-server:release', 'labels' => ['org.opencontainers.image.source' => 'https://github.com/immich-app/immich']],
+      ['names' => ['/qui'], 'image' => 'ghcr.io/autobrr/qui:latest', 'labels' => null], ['names' => ['/plex'], 'image' => 'plexinc/pms-docker', 'labels' => []]]]]]]
+  : ['json' => ['data' => null]]; };
+$cs = und_container_sources()['containers'];
+t('containers with their GitHub repository: the source label, else a ghcr.io image name as a guess', array_map(function ($c) { return [$c['name'], $c['repo'], $c['guess']]; }, $cs)
+  === [['immich', 'immich-app/immich', false], ['qui', 'autobrr/qui', true], ['plex', '', false]], json_encode($cs));
+$GLOBALS['ANSWER'] = function ($q) { return strpos($q['query'], 'labels') !== false ? ['json' => ['errors' => [['message' => 'Cannot query field "labels" on type "DockerContainer".']], 'data' => null]]
+  : ['json' => ['data' => ['docker' => ['containers' => [['names' => ['/qui'], 'image' => 'ghcr.io/autobrr/qui:latest']]]]]]; };
+$cs = und_container_sources()['containers'];
+t('an Unraid API without container labels still lists the containers', count($cs) === 1 && $cs[0]['repo'] === 'autobrr/qui', json_encode($cs));
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);
