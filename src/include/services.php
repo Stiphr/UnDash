@@ -451,6 +451,112 @@ function und_w_homeassistant($s) {
   return ['blocks' => $b];
 }
 
+/* ---------- widgets that need no app of your own ---------- */
+
+/** A JSON file in the temp folder, reused while younger than $ttl seconds; $fetch fills it. Stale data is better than none when the fetch fails. */
+function und_cached($name, $ttl, callable $fetch) {
+  $f = und_tmp($name);
+  $old = und_read_json($f, null);
+  if (is_array($old) && time() - (int)($old['at'] ?? 0) < $ttl) return $old['data'];
+  try { $data = $fetch(); }
+  catch (Exception $e) { if (is_array($old)) return $old['data']; throw $e; }
+  und_write_json($f, ['at' => time(), 'data' => $data]);
+  return $data;
+}
+
+/** WMO weather codes, as Open-Meteo reports them. */
+function und_wmo($c) {
+  $c = (int)$c;
+  $t = [0 => 'Clear', 1 => 'Mostly clear', 2 => 'Partly cloudy', 3 => 'Cloudy', 45 => 'Fog', 48 => 'Freezing fog', 51 => 'Light drizzle', 53 => 'Drizzle', 55 => 'Heavy drizzle',
+        56 => 'Freezing drizzle', 57 => 'Freezing drizzle', 61 => 'Light rain', 63 => 'Rain', 65 => 'Heavy rain', 66 => 'Freezing rain', 67 => 'Freezing rain', 71 => 'Light snow', 73 => 'Snow',
+        75 => 'Heavy snow', 77 => 'Snow grains', 80 => 'Showers', 81 => 'Showers', 82 => 'Heavy showers', 85 => 'Snow showers', 86 => 'Snow showers', 95 => 'Thunderstorm', 96 => 'Thunderstorm, hail', 99 => 'Thunderstorm, hail'];
+  return $t[$c] ?? 'Weather ' . $c;
+}
+
+/** Weather from Open-Meteo (no key). The place is a name (looked up once) or "latitude, longitude". */
+function und_w_weather($s) {
+  $o = $s['options'];
+  $place = trim((string)($o['location'] ?? ''));
+  if ($place === '') throw new Exception('Set a place: a town or city, or latitude, longitude.');
+  if (preg_match('/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/', $place, $m)) { $lat = (float)$m[1]; $lon = (float)$m[2]; }
+  else {
+    $g = und_cached('geo-' . md5(strtolower($place)) . '.json', 30 * 86400, function () use ($place) {
+      $j = und_get('https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=' . rawurlencode(und_clip($place, 100)));
+      if (empty($j['results'][0])) throw new Exception('No place called "' . und_clip($place, 60) . '" was found. Try the city name alone, or latitude, longitude.');
+      return ['lat' => (float)$j['results'][0]['latitude'], 'lon' => (float)$j['results'][0]['longitude']];
+    });
+    $lat = $g['lat']; $lon = $g['lon'];
+  }
+  $imp = ($o['units'] ?? '') === 'imperial';
+  $q = 'latitude=' . round($lat, 3) . '&longitude=' . round($lon, 3) . '&timezone=auto&forecast_days=4'
+     . '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m'
+     . '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' . ($imp ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '');
+  $j = und_cached('weather-' . md5($q) . '.json', 600, function () use ($q) { return und_get('https://api.open-meteo.com/v1/forecast?' . $q); });
+  $c = (array)($j['current'] ?? []); $d = (array)($j['daily'] ?? []);
+  $deg = function ($v) { return $v === null ? '-' : round((float)$v) . '°'; };
+  $r = ['blocks' => [und_b('now', und_wmo($c['weather_code'] ?? -1), $deg($c['temperature_2m'] ?? null), 'text'), und_b('feels', 'Feels like', $deg($c['apparent_temperature'] ?? null), 'text'),
+    und_b('today', 'Today', $deg($d['temperature_2m_max'][0] ?? null) . ' / ' . $deg($d['temperature_2m_min'][0] ?? null), 'text'),
+    und_b('humidity', 'Humidity', isset($c['relative_humidity_2m']) ? (float)$c['relative_humidity_2m'] : null, 'pct'),
+    und_b('wind', 'Wind', isset($c['wind_speed_10m']) ? round((float)$c['wind_speed_10m']) . ($imp ? ' mph' : ' km/h') : null, 'text')], 'list' => []];
+  for ($i = 1; $i < count((array)($d['time'] ?? [])); $i++) {
+    $rain = $d['precipitation_probability_max'][$i] ?? null;
+    $r['list'][] = ['title' => date('l', strtotime((string)$d['time'][$i])), 'sub' => und_wmo($d['weather_code'][$i] ?? -1) . ($rain ? ' · ' . (int)$rain . '% rain' : ''),
+                    'right' => $deg($d['temperature_2m_max'][$i] ?? null) . ' / ' . $deg($d['temperature_2m_min'][$i] ?? null)];
+  }
+  return $r;
+}
+
+/** The latest release of each GitHub repository listed ("owner/repo" or its address). Each is asked at most once an hour:
+ *  without a token GitHub allows 60 requests an hour per address. */
+function und_w_releases($s) {
+  $repos = [];
+  foreach (preg_split('/[\s,]+/', (string)($s['options']['repos'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) as $x) {
+    $x = preg_replace('#^(https?://)?(www\.)?github\.com/#i', '', rtrim($x, '/'));
+    if (!preg_match('#^([A-Za-z0-9_.-]{1,100})/([A-Za-z0-9_.-]{1,100})$#', $x, $m) || $m[2] === '.' || $m[2] === '..') throw new Exception('Not a GitHub repository: ' . und_clip($x, 80) . ' (write owner/repo).');
+    $repos[strtolower($x)] = $x;
+  }
+  if (!$repos) throw new Exception('List the repositories to follow, like immich-app/immich.');
+  $h = ['headers' => ['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => '2022-11-28'] + ($s['key'] !== '' ? ['Authorization' => 'Bearer ' . $s['key']] : [])];
+  $list = [];
+  foreach (array_slice(array_values($repos), 0, 20) as $repo) {
+    $rel = und_cached('gh-' . md5(strtolower($repo)) . '.json', 3600, function () use ($repo, $h) {
+      $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases/latest', $h);
+      if ($r['code'] === 404) {      // only pre-releases, or no releases at all
+        $r = und_http('GET', 'https://api.github.com/repos/' . $repo . '/releases?per_page=1', $h);
+        if ($r['code'] === 200) return is_array($r['json'][0] ?? null) ? $r['json'][0] : ['none' => true];
+      }
+      if ($r['err'] !== '') throw new Exception(und_redact($r['err']));
+      if ($r['code'] === 403 || $r['code'] === 429) throw new Exception('GitHub\'s limit of checks was reached. Add a GitHub token, or wait an hour.');
+      if ($r['code'] === 401) throw new Exception('GitHub refused the token.');
+      if ($r['code'] === 404) throw new Exception('GitHub has no repository ' . $repo . '.');
+      if ($r['code'] !== 200 || !is_array($r['json'])) throw new Exception('HTTP ' . $r['code'] . ' from GitHub.');
+      return $r['json'];
+    });
+    $name = explode('/', $repo)[1];
+    if (!empty($rel['none'])) { $list[] = ['title' => $name, 'sub' => 'no releases yet', 'href' => 'https://github.com/' . $repo]; continue; }
+    $url = (string)($rel['html_url'] ?? '');
+    $list[] = ['title' => $name, 'sub' => und_clip((string)($rel['tag_name'] ?? ''), 40) . (!empty($rel['prerelease']) ? ' (pre-release)' : ''),
+               'ts' => strtotime((string)($rel['published_at'] ?? '')) ?: null, 'href' => preg_match('#^https://github\.com/#', $url) ? $url : 'https://github.com/' . $repo];
+  }
+  usort($list, function ($a, $b) { return ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0); });
+  return ['list' => $list];
+}
+
+/** Links you keep on the dashboard: "Title | https://…" per line, or just the address. Nothing is fetched. */
+function und_w_bookmarks($s) {
+  $list = [];
+  foreach (preg_split('/\r?\n/', (string)($s['options']['links'] ?? '')) as $line) {
+    $line = trim($line);
+    if ($line === '') continue;
+    $p = array_map('trim', explode('|', $line, 2));
+    $url = count($p) === 2 ? $p[1] : $p[0];
+    if (!preg_match('#^https?://[^\s<>"]+$#i', $url)) continue;          // only web addresses: no javascript: or data: links
+    $list[] = ['title' => und_clip(count($p) === 2 && $p[0] !== '' ? $p[0] : (parse_url($url, PHP_URL_HOST) ?: $url), 60), 'href' => $url];
+    if (count($list) >= 50) break;
+  }
+  return ['list' => $list, 'empty' => 'Add links in Settings: one per line, Title | https://…'];
+}
+
 /* ---------- calendar (Radarr + Sonarr) ---------- */
 
 function und_w_calendar($s, $cfg) {

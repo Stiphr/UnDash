@@ -790,6 +790,50 @@ t('Home Assistant: only entity ids are asked for', strpos($e, 'Not an entity id'
 t('the new apps show in Apps', und_zone(['type' => 'scrutiny']) === 'apps' && und_zone(['type' => 'homeassistant']) === 'apps');
 unset($GLOBALS['UND_HTTP_MOCK']);
 
+/* ---------------- weather, releases, bookmarks ---------------- */
+group('widgets');
+reset_store();
+$GLOBALS['SEEN'] = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['SEEN'][] = $url;
+  $host = parse_url($url, PHP_URL_HOST); $p = parse_url($url, PHP_URL_PATH); parse_str((string)parse_url($url, PHP_URL_QUERY), $q);
+  $j = function ($d, $c = 200) { return ['code' => $c, 'body' => json_encode($d), 'json' => $d, 'err' => '', 'headers' => []]; };
+  if ($host === 'geocoding-api.open-meteo.com') return $j($q['name'] === 'Nowhere' ? ['generationtime_ms' => 1] : ['results' => [['latitude' => 52.374, 'longitude' => 4.8897, 'name' => 'Amsterdam']]]);
+  if ($host === 'api.open-meteo.com') return $j(['current' => ['temperature_2m' => 11.6, 'apparent_temperature' => 9.2, 'relative_humidity_2m' => 81, 'weather_code' => 3, 'wind_speed_10m' => 17.4],
+    'daily' => ['time' => ['2026-10-30', '2026-10-31', '2026-11-01'], 'weather_code' => [3, 61, 0], 'temperature_2m_max' => [13.1, 12, 10.4], 'temperature_2m_min' => [7.9, 8, 4.5], 'precipitation_probability_max' => [10, 70, 0]]]);
+  if ($host === 'api.github.com') {
+    if ($p === '/repos/immich-app/immich/releases/latest') return $j(['tag_name' => 'v2.1.0', 'published_at' => '2026-10-20T10:00:00Z', 'html_url' => 'https://github.com/immich-app/immich/releases/tag/v2.1.0']);
+    if ($p === '/repos/autobrr/qui/releases/latest') return $j(['tag_name' => 'v1.5.0', 'published_at' => '2026-10-28T10:00:00Z', 'html_url' => 'javascript:alert(1)']);
+    if ($p === '/repos/a/pre/releases/latest') return $j(['message' => 'Not Found'], 404);
+    if ($p === '/repos/a/pre/releases') return $j([['tag_name' => 'v0.1-rc1', 'prerelease' => true, 'published_at' => '2026-01-01T00:00:00Z', 'html_url' => 'https://github.com/a/pre/releases/tag/v0.1-rc1']]);
+    if ($p === '/repos/a/limited/releases/latest') return $j(['message' => 'API rate limit exceeded'], 403);
+  }
+  return $j(['error' => 'nope'], 404);
+};
+$sv = function ($type, $opt, $key = '') { return ['id' => 'x', 'type' => $type, 'url' => '', 'key' => $key, 'username' => '', 'password' => '', 'options' => $opt]; };
+$w = und_w_weather($sv('weather', ['location' => 'Amsterdam']));
+t('weather: now, feels like, today, humidity and wind', array_column($w['blocks'], 'value', 'key') === ['now' => '12°', 'feels' => '9°', 'today' => '13° / 8°', 'humidity' => 81.0, 'wind' => '17 km/h'] && $w['blocks'][0]['label'] === 'Cloudy', json_encode($w['blocks']));
+t('weather: the next days, with the chance of rain', $w['list'][0] === ['title' => 'Saturday', 'sub' => 'Light rain · 70% rain', 'right' => '12° / 8°'] && $w['list'][1]['sub'] === 'Clear');
+$n = count($GLOBALS['SEEN']);
+und_w_weather($sv('weather', ['location' => 'amsterdam']));
+t('weather: the place and the forecast are kept a while', count($GLOBALS['SEEN']) === $n);
+und_w_weather($sv('weather', ['location' => '52.37, 4.89', 'units' => 'imperial']));
+$last = end($GLOBALS['SEEN']);
+t('weather: coordinates skip the lookup; imperial asks for °F and mph', count($GLOBALS['SEEN']) === $n + 1 && strpos($last, 'latitude=52.37&longitude=4.89') !== false && strpos($last, 'temperature_unit=fahrenheit&wind_speed_unit=mph') !== false, $last);
+$e = ''; try { und_w_weather($sv('weather', ['location' => 'Nowhere'])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('weather: an unknown place says so', strpos($e, 'No place called "Nowhere"') !== false);
+$rl = und_w_releases($sv('releases', ['repos' => "https://github.com/immich-app/immich/\nautobrr/qui\na/pre"], 'ghp_x'));
+t('releases: newest first, with tag and date', array_column($rl['list'], 'title') === ['qui', 'immich', 'pre'] && $rl['list'][1]['sub'] === 'v2.1.0' && $rl['list'][1]['ts'] === strtotime('2026-10-20T10:00:00Z'));
+t('releases: only GitHub links', $rl['list'][0]['href'] === 'https://github.com/autobrr/qui' && $rl['list'][1]['href'] === 'https://github.com/immich-app/immich/releases/tag/v2.1.0');
+t('releases: a repository with only pre-releases shows its latest one', $rl['list'][2]['sub'] === 'v0.1-rc1 (pre-release)');
+$e = ''; try { und_w_releases($sv('releases', ['repos' => 'a/limited'])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('releases: the GitHub limit says to add a token', strpos($e, 'GitHub token') !== false, $e);
+$e = ''; try { und_w_releases($sv('releases', ['repos' => '../../etc'])); } catch (Exception $x) { $e = $x->getMessage(); }
+t('releases: only owner/repo names', strpos($e, 'Not a GitHub repository') !== false);
+$bk = und_w_bookmarks($sv('bookmarks', ['links' => "Router | http://192.168.1.1\nhttps://selfh.st/apps/\nEvil | javascript:alert(1)\nData | data:text/html,x\n\n"]));
+t('bookmarks: title and link, or the host name; only http and https', $bk['list'] === [['title' => 'Router', 'href' => 'http://192.168.1.1'], ['title' => 'selfh.st', 'href' => 'https://selfh.st/apps/']], json_encode($bk['list']));
+unset($GLOBALS['UND_HTTP_MOCK']);
+
 /* ---------------- icon picker ---------------- */
 group('icons');
 reset_store();

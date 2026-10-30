@@ -1885,8 +1885,11 @@
     if (r.blocks && r.blocks.length) cb.appendChild(blocks(r.blocks));
     if (r.list) {
       var l = h('div', { class: 'lst' });
-      r.list.forEach(function (x) { l.appendChild(h('div', { class: 'r' }, x.label ? h('span', { class: 'lab' }, x.label) : null, h('span', { class: 't', title: x.title }, x.title), x.ts ? h('span', { class: 'when' }, rel(x.ts)) : (x.right ? h('span', { class: 'when' }, x.right) : null))); });
-      if (!r.list.length) l.appendChild(h('div', { class: 'muted sm' }, 'Nothing yet'));
+      r.list.forEach(function (x) {
+        var tt = x.title + (x.sub ? ' · ' + x.sub : ''), body = [x.title, x.sub ? h('span', { class: 'muted' }, ' ' + x.sub) : null];
+        l.appendChild(h('div', { class: 'r' }, x.label ? h('span', { class: 'lab' }, x.label) : null,
+          /^https?:\/\//i.test(x.href || '') ? h('a', { class: 't', href: x.href, target: '_blank', rel: 'noopener noreferrer', title: tt }, body) : h('span', { class: 't', title: tt }, body), x.ts ? h('span', { class: 'when' }, rel(x.ts)) : (x.right ? h('span', { class: 'when' }, x.right) : null))); });
+      if (!r.list.length) l.appendChild(h('div', { class: 'muted sm' }, r.empty || 'Nothing yet'));
       cb.appendChild(l);
     }
     if (r.calendar) {
@@ -2450,21 +2453,22 @@
   /* ---- Apps: every app is added, changed, hidden and removed here. Addresses go to config.yaml, keys and passwords to .env (server side) ---- */
   var APP_CATS = [['Arr Stack', ['radarr', 'sonarr', 'lidarr', 'readarr', 'prowlarr', 'bazarr', 'autobrr', 'overseerr', 'wizarr']],
     ['Downloads', ['qbittorrent', 'qui', 'sabnzbd']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar', 'tdarr', 'unmanic']],
-    ['Network and tools', ['adguard', 'pihole', 'npm', 'gluetun', 'immich', 'homeassistant', 'peanut']], ['Monitoring', ['scrutiny', 'uptimekuma', 'speedtest']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Other', ['customapi', 'link']]];
+    ['Network and tools', ['adguard', 'pihole', 'npm', 'gluetun', 'immich', 'homeassistant', 'peanut']], ['Monitoring', ['scrutiny', 'uptimekuma', 'speedtest']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Widgets', ['weather', 'releases', 'bookmarks']], ['Other', ['customapi', 'link']]];
   var APP_PORT = { radarr: 7878, sonarr: 8989, lidarr: 8686, readarr: 8787, prowlarr: 9696, bazarr: 6767, autobrr: 7474, overseerr: 5055, wizarr: 5690, qbittorrent: 8080, qui: 7476, sabnzbd: 8080,
     plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80,
     scrutiny: 8080, tdarr: 8265, unmanic: 8888, uptimekuma: 3001, speedtest: 80, gluetun: 8000, homeassistant: 8123 };
-  var APP_ICON = { uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
+  var APP_ICON = { weather: '', releases: 'github', bookmarks: '', uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
   var KEY_WHERE = { radarr: 'Radarr: Settings > General', sonarr: 'Sonarr: Settings > General', lidarr: 'Lidarr: Settings > General', readarr: 'Readarr: Settings > General', prowlarr: 'Prowlarr: Settings > General',
     bazarr: 'Bazarr: Settings > General', overseerr: 'Overseerr / Jellyseerr: Settings > General', sabnzbd: 'SABnzbd: Config > General', qui: 'qui: Settings > API Keys', autobrr: 'autobrr: Settings > API Keys',
     tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys',
     tdarr: 'Tdarr: Tools > API keys (only when its login is on; else leave it empty)', speedtest: 'Speedtest Tracker: API Tokens (v1 and later; older versions need none)',
-    gluetun: 'Gluetun\'s control server settings (only if you set one; else leave it empty)', homeassistant: 'Home Assistant: your profile > Security > Long-lived access tokens' };
-  var KEY_OPT = { peanut: 1, customapi: 1, tdarr: 1, speedtest: 1, gluetun: 1 };     // apps that work without a key
+    gluetun: 'Gluetun\'s control server settings (only if you set one; else leave it empty)', homeassistant: 'Home Assistant: your profile > Security > Long-lived access tokens',
+    releases: 'GitHub: Settings > Developer settings > Personal access tokens, with no scopes (optional: without one GitHub allows 60 checks an hour)' };
+  var KEY_OPT = { peanut: 1, customapi: 1, tdarr: 1, speedtest: 1, gluetun: 1, releases: 1 };     // apps that work without a key
   var ZONE_NAME = { arr: 'Arr Stack', downloads: 'Downloads', media: 'Media', overview: 'System overview', apps: 'Apps' };
   function appIcon(t) { var n = APP_ICON[t] !== undefined ? APP_ICON[t] : t; return n ? 'sh-' + n : ''; }
   function appZone(D, s) { return s.type === 'customapi' && /get_recently_added/.test(s.url || '') ? 'media' : (D.zones || {})[s.type] || 'apps'; }
-  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : t === 'homeassistant' ? 'Access token' : t === 'speedtest' ? 'API token' : 'API key', username: 'Username', password: 'Password' }[k]; }
+  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : t === 'homeassistant' ? 'Access token' : t === 'speedtest' ? 'API token' : t === 'releases' ? 'GitHub token' : 'API key', username: 'Username', password: 'Password' }[k]; }
 
   /* the app lists in Settings > Sections & apps: one per section (zone), plus the groups of the Apps section.
      Every list redraws together, so moving or finding an app updates all of them. */
@@ -2701,6 +2705,11 @@
       }
       if (s.type === 'tautulli_recent') adv.appendChild(h('div', { class: 'grid2' }, F('Media type', tIn(s.options, 'media_type', noop, 'movie, episode, track…')), F('Library section id', tIn(s.options, 'section_id', noop, 'optional')), F('Count', tIn(s.options, 'count', noop, '6'))));
       if (s.type === 'ups') form.appendChild(F('UPS name', tIn(s.options, 'ups', noop, D.cfg.general.ups_name)));
+      if (s.type === 'weather') form.appendChild(h('div', { class: 'grid2' }, F('Place', tIn(s.options, 'location', noop, 'Amsterdam'), 'A town or city, or latitude, longitude. From Open-Meteo, no key needed.'),
+        F('Units', sIn(s.options, 'units', noop, [['metric', '°C, km/h'], ['imperial', '°F, mph']]))));
+      var lines = function (k, ph, lab, hint) { return F(lab, h('textarea', { rows: 5, spellcheck: 'false', placeholder: ph, oninput: function (e) { s.options[k] = e.target.value; } }, s.options[k] || ''), hint); };
+      if (s.type === 'releases') form.appendChild(lines('repos', 'immich-app/immich\nautobrr/qui', 'Repositories', 'One per line: owner/repo or its GitHub address, up to 20. Each is checked at most once an hour.'));
+      if (s.type === 'bookmarks') form.appendChild(lines('links', 'Router | http://192.168.1.1\nhttps://selfh.st', 'Links', 'One per line: Title | https://… or just the address. Only http and https links are kept.'));
       if (s.type === 'uptimekuma') form.appendChild(F('Status page slug', tIn(s.options, 'slug', noop, 'home'), 'Uptime Kuma reads a status page: the end of its address, /status/NAME. Make one under Status Pages first.'));
       if (s.type === 'homeassistant') form.appendChild(F('Entities', h('textarea', { rows: 3, spellcheck: 'false', placeholder: 'sensor.living_room_temperature\nlight.kitchen', oninput: function (e) { s.options.entities = e.target.value; } }, s.options.entities || ''),
         'Entity ids, one per line, up to 8 (Developer tools > States lists them). Empty shows people home, lights on and switches on.'));
@@ -2713,7 +2722,7 @@
       }
       if (adv.childNodes.length) form.appendChild(h('details', { class: 'ae-adv' }, h('summary', null, 'More options'), adv));
       var res = h('div', { role: 'status' });
-      if (T[2] || s.type === 'calendar' || s.type === 'customapi' || s.type === 'ups') form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
+      if (T[2] || /^(calendar|customapi|ups|weather|releases|bookmarks)$/.test(s.type)) form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
         clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
         var cfg = JSON.parse(JSON.stringify(D.cfg)), creds = JSON.parse(JSON.stringify(D.creds));
         var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0] || cfg.groups[0];
