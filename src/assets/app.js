@@ -2220,6 +2220,16 @@
     function sub(t, hint) { return h('div', { class: 'sub-h' }, h('b', null, t), hint ? h('span', { class: 'hint' }, hint) : null); }
     b.appendChild(h('div', { class: 'ae-bar' }, filter, h('span', { class: 'grow' }),
       btn('Add app', function () { addApp(D, null, null, function () { ed.draw(); }, dirty); }, 'pri sm', 'plus')));
+    var foundBox = b.appendChild(h('div'));
+    ed.draws.push(function () {
+      var fs = foundApps(D);
+      clear(foundBox);
+      if (!fs.length || ed.q || D.hideFound) return;
+      foundBox.appendChild(h('div', { class: 'found-bar' },
+        h('div', { class: 'ae-h' }, h('b', null, 'Found on your server'), h('span', { class: 'muted sm' }, fs.length + ' container' + (fs.length > 1 ? 's' : '') + ' UnDash can read. Pick one, then paste its key.'),
+          h('span', { class: 'grow' }), btn('', function () { D.hideFound = true; ed.draw(); }, 'sm ghost', 'x', 'Hide this list until Settings is opened again')),
+        h('div', { class: 'tpick found' }, fs.map(function (f) { return foundBtn(D, f, function () { addFound(D, f, null, function () { ed.draw(); }, dirty); }); }))));
+    });
     b.appendChild(set('Sections', 'Tick the sections to show, drag to reorder, and open one for its options and apps. Half-width sections sit side by side on wide screens. Keys and passwords stay in .env on the server, never in the browser.',
       orderList(c.dashboard.sections, function (s) {
         var o = SEC_OPTS[s.id];
@@ -2528,14 +2538,64 @@
     return E;
   }
 
+  /* containers that look like an app type UnDash reads, and are not added yet. Matched on the image name
+     (lscr.io/linuxserver/radarr, binhex/arch-qbittorrentvpn …), then on the container name */
+  var FOUND_RE = [['overseerr', /^(overseerr|jellyseerr|seerr)$/], ['plex', /^(plex|pms-docker|plex-media-server|plexmediaserver)$/], ['emby', /^(emby|embyserver)$/],
+    ['immich', /^immich(-server)?$/], ['adguard', /^adguard-?home$/], ['pihole', /^pi-?hole$/], ['npm', /^nginx-proxy-manager$/], ['peanut', /^peanut$/],
+    ['qbittorrent', /^qbittorrent$/], ['qui', /^qui$/], ['sabnzbd', /^sabnzbd$/], ['jellyfin', /^jellyfin$/], ['tautulli', /^tautulli$/], ['radarr', /^radarr$/],
+    ['sonarr', /^sonarr$/], ['lidarr', /^lidarr$/], ['readarr', /^readarr$/], ['bazarr', /^bazarr$/], ['prowlarr', /^prowlarr$/], ['autobrr', /^autobrr$/], ['wizarr', /^wizarr$/]];
+  function foundType(c) {
+    var norm = function (v) { return String(v || '').toLowerCase().replace(/^(arch-|docker-)/, '').replace(/-?vpn$/, ''); };
+    var img0 = norm(String(c.image || '').split('@')[0].split('/').pop().split(':')[0]), nm = norm(c.name);
+    for (var p = 0; p < 2; p++) for (var i = 0; i < FOUND_RE.length; i++) if (FOUND_RE[i][1].test(p ? nm : img0)) return FOUND_RE[i][0];
+    return '';
+  }
+  function origin(u) { var m = /^(https?:\/\/[^\/?#]+)/i.exec(String(u || '').trim()); return m ? m[1].toLowerCase() : ''; }
+  function portOf(u) { var o = origin(u), m = /:(\d+)$/.exec(o); return m ? +m[1] : o ? (o.indexOf('https') === 0 ? 443 : 80) : -1; }
+  function foundApps(D) {
+    var have = [];
+    D.cfg.groups.forEach(function (g) { g.services.forEach(function (s) { have.push(s); }); });
+    return (((S.live || {}).docker || {}).containers || []).map(function (c) {
+      var t = foundType(c);
+      if (!t || !D.types[t]) return null;
+      // the address UnDash reads it at: the web UI's origin, else the server and the published port
+      var url = origin(c.webui), ports = c.ports || {};
+      if (!url) {
+        var hp = 0;
+        Object.keys(ports).forEach(function (k) { if (parseInt(k, 10) === APP_PORT[t] || !hp) hp = ports[k]; });
+        if (hp) url = 'http://' + location.hostname + ':' + hp;
+      }
+      var label = D.types[t][0].replace(/ \(.*\)$/, '');
+      // already added: same address, same port (the app may be added by host name) or same name
+      if (have.some(function (s) { return s.type === t && (url && (origin(s.url) === url || portOf(s.url) === portOf(url)) || String(s.name).toLowerCase() === c.name.toLowerCase()); })) return null;
+      var more = have.some(function (s) { return s.type === t; });
+      return { c: c, t: t, url: url, href: c.webui && c.webui.replace(/\/$/, '') !== url ? c.webui : '', name: more ? c.name : label };
+    }).filter(Boolean);
+  }
+  function addFound(D, f, group, after, dirty) {
+    var g = group || D.cfg.groups.filter(function (x) { return appZone(D, { type: f.t }) !== 'apps' || x.services.some(function (s) { return appZone(D, s) === 'apps'; }); })[0] || D.cfg.groups[0];
+    if (!g) { g = { id: rid(), name: 'Apps', columns: 4, header: true, services: [] }; D.cfg.groups.push(g); }
+    editService(D, { id: rid(), name: f.name, type: f.t, icon: appIcon(f.t), href: f.href, url: f.url, description: '', hidden: false, favorite: false, span: 1, fields: [], options: {} }, g, true, after, dirty);
+  }
+  function foundBtn(D, f, onpick) {
+    return h('button', { type: 'button', title: 'Add ' + f.c.name + (f.url ? ' (' + f.url + ')' : ''), onclick: onpick },
+      img(iconUrl(appIcon(f.t)), '', 'web'), h('span', { class: 'ell' }, f.name), f.name.toLowerCase() === f.c.name.toLowerCase() ? null : h('span', { class: 'muted sm ell' }, f.c.name));
+  }
+
   /* pick a type, then fill in the details */
   function addApp(D, zone, group, after, dirty) {
     var qq = '', grid = h('div');
     var find = h('input', { type: 'search', placeholder: 'Search apps…', 'aria-label': 'Search app types', oninput: function () { qq = find.value.toLowerCase(); paint(); } });
     var order = APP_CATS.slice().sort(function (a, c) { var za = appZone(D, { type: a[1][0] }) === zone, zc = appZone(D, { type: c[1][0] }) === zone; return za === zc ? 0 : za ? -1 : 1; });
     var m;
+    var found = foundApps(D);
     function paint() {
       clear(grid);
+      var fs = found.filter(function (f) { return !qq || (f.name + ' ' + f.c.name + ' ' + f.t).toLowerCase().indexOf(qq) >= 0; });
+      if (fs.length) {
+        grid.appendChild(h('div', { class: 'tp-h' }, 'Found on your server'));
+        grid.appendChild(h('div', { class: 'tpick found' }, fs.map(function (f) { return foundBtn(D, f, function () { m.close(); addFound(D, f, group, after, dirty); }); })));
+      }
       order.forEach(function (cat) {
         var ts = cat[1].filter(function (t) { return D.types[t] && (!qq || (D.types[t][0] + ' ' + t).toLowerCase().indexOf(qq) >= 0); });
         if (!ts.length) return;
