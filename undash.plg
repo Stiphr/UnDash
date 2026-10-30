@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.7.1">
+<!ENTITY version "0.7.2">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,8 +10,12 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.7.2
+- UPS in the Docker version: a UPS run by NUT (the NUT plugin) now shows. The Unraid API only knows apcupsd, so UnDash reads NUT straight from the server (port 3493), using the UPS name in Settings &gt; Refresh &amp; display (NAME@HOST for another NUT server).
+
 ###0.7.1
 - Check configuration and the app list no longer say a Custom API app has no API key: its key is optional (it can sit in the address, as with Tautulli, or not be needed at all).
+- config.yaml is shorter and easier to read: an app's empty and default fields (no description, not hidden, no fields of its own …) are no longer written out. Older files load as before.
 - Title bar: the server's name is a pill like the Unraid and UnDash versions, and the IP address is gone (hover the name to see it).
 
 ###0.7.0
@@ -177,7 +181,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.7.1');
+define('UND_VERSION', '0.7.2');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -351,7 +355,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>97adb8e37bbcc049fd35ec53e62e7e67ab7cec213c78dfd3c647b91d28e3f458</SHA256>
+<SHA256>ff002e294adaf0c0de1bf1d1fa3857476a3a978d162bb087669496e005f622db</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -783,8 +787,17 @@ function und_config_lock() {
 
 function und_save_config(array $c, $backup = true) {
   if ($backup) und_backup('before saving');
-  $n = und_normalize($c); unset($n['schema']);
-  return und_doc_write(['version' => UND_SCHEMA] + json_decode(json_encode($n), true));
+  $n = json_decode(json_encode(und_normalize($c)), true); unset($n['schema']);
+  foreach ($n['groups'] as &$g) $g['services'] = array_map('und_compact_service', $g['services']);
+  unset($g);
+  return und_doc_write(['version' => UND_SCHEMA] + $n);
+}
+
+/** An app as written to config.yaml: fields left at their default are left out (und_normalize fills them in again). */
+function und_compact_service(array $s) {
+  $def = ['icon' => '', 'href' => '', 'url' => '', 'description' => '', 'hidden' => false, 'favorite' => false, 'span' => 1, 'fields' => [], 'options' => []] + array_fill_keys(array_keys(UND_CRED_FIELDS), '');
+  foreach ($def as $k => $v) if (array_key_exists($k, $s) && $s[$k] === $v) unset($s[$k]);
+  return $s;
 }
 
 /** Every widget id in a config (used to drop credentials of widgets that were removed). */
@@ -936,7 +949,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>ec97babea1f344b60988d5f0521d09a03c97efd58911b509e98523960e89137e</SHA256>
+<SHA256>23afec3b40f48fad0270d14721212e0ca43045bb8379573c65186c7c0b706bdd</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -1122,15 +1135,15 @@ function und_storage() {
 /* ---------- UPS: NUT (upsc) first, then apcupsd (apcaccess) ---------- */
 
 function und_ups($name = 'ups') {
-  if (und_api_mode()) return und_api_ups();
+  // the Unraid API only reads apcupsd; a NUT UPS is read straight from the server's NUT daemon (port 3493)
+  if (und_api_mode()) return und_api_ups() ?: und_api_cached('nut', 5, function () use ($name) { return und_nut_tcp((string)parse_url(und_api_conf()['url'], PHP_URL_HOST), $name); });
   $upsc = und_bin('upsc');
   if ($upsc !== 'upsc' || isset($GLOBALS['UND_EXEC_MOCK'])) {
     $r = und_run([$upsc, strpos($name, '@') === false ? $name . '@localhost' : $name], 8);
     if ($r['code'] === 0 && preg_match('/battery\.charge:/', $r['out'])) {
       $k = [];
       foreach (explode("\n", $r['out']) as $l) if (strpos($l, ':') !== false) { list($a, $b) = explode(':', $l, 2); $k[trim($a)] = trim($b); }
-      return ['source' => 'NUT', 'charge' => (float)($k['battery.charge'] ?? 0), 'load' => isset($k['ups.load']) ? (float)$k['ups.load'] : null,
-              'status' => und_ups_status($k['ups.status'] ?? ''), 'runtime' => isset($k['battery.runtime']) ? (int)$k['battery.runtime'] : null, 'model' => (string)($k['ups.model'] ?? $k['device.model'] ?? '')];
+      return und_nut_vars($k);
     }
   }
   $apc = und_bin('apcaccess');
@@ -1144,6 +1157,30 @@ function und_ups($name = 'ups') {
     }
   }
   return null;
+}
+
+function und_nut_vars(array $k) {
+  return ['source' => 'NUT', 'charge' => (float)($k['battery.charge'] ?? 0), 'load' => isset($k['ups.load']) ? (float)$k['ups.load'] : null,
+          'status' => und_ups_status($k['ups.status'] ?? ''), 'runtime' => isset($k['battery.runtime']) ? (int)$k['battery.runtime'] : null, 'model' => (string)($k['ups.model'] ?? $k['device.model'] ?? '')];
+}
+
+/** NUT's own protocol (LIST VAR), for a UPS name like "ups" or "ups@host[:port]"; null when there is no answer. */
+function und_nut_tcp($host, $name) {
+  if (strpos($name, '@') !== false) list($name, $host) = explode('@', $name, 2);
+  $port = 3493;
+  if (preg_match('/^(.+):(\d+)$/', $host, $m)) { $host = $m[1]; $port = (int)$m[2]; }
+  if ($host === '' || !preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $name)) return null;
+  $f = @fsockopen($host, $port, $en, $es, 1.5);
+  if (!$f) return null;
+  stream_set_timeout($f, 2);
+  fwrite($f, "LIST VAR $name\nLOGOUT\n");
+  $k = [];
+  while (($l = fgets($f)) !== false) {
+    if (preg_match('/^VAR \S+ (\S+) "(.*)"$/', rtrim($l), $m)) $k[$m[1]] = stripcslashes($m[2]);
+    elseif (strpos($l, 'END LIST') === 0 || strpos($l, 'ERR') === 0) break;
+  }
+  fclose($f);
+  return isset($k['battery.charge']) ? und_nut_vars($k) : null;
 }
 
 function und_ups_status($s) {
@@ -1201,7 +1238,7 @@ function und_os_update() {
   return ['ok' => true];
 }
 ]]></INLINE>
-<SHA256>ffe04a5f8de2653c70c70605b3fff4760adf979853246da6aa79c35bf19a529e</SHA256>
+<SHA256>3fc92e36d4d602fc1fe59fb58b638908f958d4b2bf5c100ebed706ec83f0964e</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/docker.php" Mode="0644">
@@ -7837,7 +7874,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     b.appendChild(set('Display', null, h('div', { class: 'grid2' },
       F('Dashboard title', tIn(g, 'title', dirty, 'UnDash')),
       F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
-      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT (upsc) is tried first, then apcupsd.'))));
+      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'))));
     if (!Array.isArray(g.search_in)) g.search_in = [];
     var src = function (k, lab, hint) {
       return h('label', { class: 'switch t' }, h('input', { type: 'checkbox', checked: g.search_in.indexOf(k) >= 0, onchange: function (e) {
@@ -8432,7 +8469,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>13754c9ab93e3c833103cfa9b244ef752e48658ce0bfff5059d4ce049dd22181</SHA256>
+<SHA256>0bef81d5df47d3d7512a67954e3bb66e442c175d2eac241578eb7615f7223cb6</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">

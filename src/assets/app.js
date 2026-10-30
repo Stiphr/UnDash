@@ -2287,7 +2287,7 @@
     b.appendChild(set('Display', null, h('div', { class: 'grid2' },
       F('Dashboard title', tIn(g, 'title', dirty, 'UnDash')),
       F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
-      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT (upsc) is tried first, then apcupsd.'))));
+      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'))));
     if (!Array.isArray(g.search_in)) g.search_in = [];
     var src = function (k, lab, hint) {
       return h('label', { class: 'switch t' }, h('input', { type: 'checkbox', checked: g.search_in.indexOf(k) >= 0, onchange: function (e) {
