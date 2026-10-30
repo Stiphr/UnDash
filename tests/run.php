@@ -697,6 +697,7 @@ $m = und_normalize(['groups' => [], 'media' => ['count' => 12, 'widgets' => [['i
 t('columns always in the fixed order', array_column($m['widgets'], 'id') === ['upcoming_movies', 'upcoming_episodes', 'recent_movies', 'recent_episodes']);
 t('per-column count kept and clamped', $m['widgets'][3]['count'] === 7 && $m['widgets'][0]['count'] === 50);
 t('older configs fall back to the shared count', $m['widgets'][1]['count'] === 12);
+t('style defaults to posters', $m['style'] === 'art' && und_normalize(['groups' => [], 'media' => ['style' => 'text']])['media']['style'] === 'text' && und_normalize(['groups' => [], 'media' => ['style' => 'x']])['media']['style'] === 'art');
 t('visibility kept', $m['widgets'][3]['visible'] === false && $m['widgets'][0]['visible'] === true);
 t('default count is 15', und_load_config()['media']['widgets'][2]['count'] === 15);
 $ap = und_normalize(['groups' => [], 'appearance' => ['brightness' => 0, 'blur_target' => 'cards']])['appearance'];

@@ -59,7 +59,7 @@ function und_default_config() {
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups'],
     'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true],
-    'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
+    'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
     'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
@@ -372,7 +372,7 @@ function und_normalize(array $c) {
   };
   $md = (isset($c['media']) && is_array($c['media']) ? $c['media'] : []) + $d['media'];
   $media = ['radarr' => preg_match('/^[a-f0-9]{8}$/', (string)$md['radarr']) ? $md['radarr'] : '', 'sonarr' => preg_match('/^[a-f0-9]{8}$/', (string)$md['sonarr']) ? $md['sonarr'] : '',
-            'count' => max(4, min(40, (int)$md['count'])), 'days_ahead' => max(7, min(120, (int)$md['days_ahead'])),
+            'count' => max(4, min(40, (int)$md['count'])), 'days_ahead' => max(7, min(120, (int)$md['days_ahead'])), 'style' => ($md['style'] ?? '') === 'text' ? 'text' : 'art',
             'widgets' => $order($md['widgets'] ?? [], und_media_ids(), $d['media']['widgets'], ['visible' => 'bool'])];
   // the four columns always come in this order; each has its own length (older configurations used the shared count)
   $raw = []; foreach ((array)($md['widgets'] ?? []) as $x) if (is_array($x) && is_string($x['id'] ?? null)) $raw[$x['id']] = $x;

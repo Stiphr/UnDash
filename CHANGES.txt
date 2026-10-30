@@ -1,3 +1,6 @@
+###0.9.1
+- Media: new "Show as" option (Settings > Sections & apps > Media). Text only shows one line per item, the title with its episode or release type and the date on the right, with a tick when it is already downloaded, so many more items fit. Posters stays the default.
+
 ###0.9.0
 - Alerts: a disk that Scrutiny marks as failed is a red alert ("sdb (WD…) failed its SMART check"), kept in the alert history and can be ignored like any other. The background check asks Scrutiny every 5 minutes; the alert ends only when Scrutiny has been asked again and says the disk is fine.
 - GitHub releases: "Add from my containers" lists your containers with the GitHub repository each comes from (the image's source label, or a ghcr.io image name) to follow with a tick. A repository that cannot be read now shows as its own row instead of hiding the others.
