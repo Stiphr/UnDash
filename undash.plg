@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.9.1">
+<!ENTITY version "0.9.2">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.9.2
+- Requests: new "Show as" option (Settings &gt; Sections &amp; apps &gt; Requests). Text only shows each request on one line, with Approve and Decline still there.
+- Plex, Tautulli, Emby and Jellyfin app cards show what is playing the same way as Now playing: title, episode, who and on what, progress, direct play or transcode, quality and bandwidth.
+- Half-width sections: when one column is shorter, its last card now grows to the end of the column, instead of leaving empty space under it, so both columns end level.
+
 ###0.9.1
 - Media: new "Show as" option (Settings &gt; Sections &amp; apps &gt; Media). Text only shows one line per item, the title with its episode or release type and the date on the right, with a tick when it is already downloaded, so many more items fit. Posters stays the default.
 
@@ -224,7 +229,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.9.1');
+define('UND_VERSION', '0.9.2');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -398,7 +403,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>9db56b73be61c7f0454f69abc0c99026ddc86c7d2d6092e660a90be369fda4bd</SHA256>
+<SHA256>1fa71a6c51888c22ae3b62e712fdf7f30181cdce15846bdf2fd32fe932bfd647</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -465,6 +470,7 @@ function und_default_config() {
     'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
+    'requests' => ['style' => 'art'],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
     'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
     'docker' => ['layout' => 'grid', 'view' => 'compact', 'filter' => 'running', 'selected' => [], 'columns' => 0, 'sort' => 'name', 'show' => ['cpu', 'memory', 'update'], 'hide_stopped' => false, 'update_check' => true, 'items' => new stdClass()],
@@ -786,6 +792,7 @@ function und_normalize(array $c) {
   }, und_media_ids());
   $dl = (isset($c['downloads']) && is_array($c['downloads']) ? $c['downloads'] : []) + $d['downloads'];
   $downloads = ['items' => max(0, min(20, (int)$dl['items']))];
+  $requests = ['style' => (($c['requests']['style'] ?? '') === 'text') ? 'text' : 'art'];
   $dk = (isset($c['docker']) && is_array($c['docker']) ? $c['docker'] : []) + $d['docker'];
   $sel = [];
   foreach ((array)$dk['selected'] as $n) if (is_string($n) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/', $n) && count($sel) < 500) $sel[$n] = 1;
@@ -817,7 +824,7 @@ function und_normalize(array $c) {
     }
     $groups[] = $out;
   }
-  return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics], 'media' => $media, 'downloads' => $downloads, 'apps' => $apps,
+  return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics], 'media' => $media, 'downloads' => $downloads, 'requests' => $requests, 'apps' => $apps,
           'docker' => $docker, 'vms' => $vms, 'groups' => $groups];
 }
 
@@ -998,7 +1005,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>77c44adfd9b483f848004e0b1418e85c3c7bb79fd1d1e75743f5c37ab0dd3efe</SHA256>
+<SHA256>531a75c95c5431c2fba20650f4d6409c309f5d0e90553e07106a576b31d3acfe</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -1660,7 +1667,7 @@ function und_vm_summary() {
  *   ['blocks' => [['key','label','value','fmt'], ...]]           fmt: n | bytes | rate | ms | pct | text
  *   ['list'   => [['title','sub','right','ts'], ...]]             ts: unix time shown as a relative date
  *   ['calendar' => [['ts','title','sub','done'], ...]]
- *   ['streams' => [['title','user','state','pos','dur'], ...]]   (can be combined with blocks)
+ *   ['streams' => [['title','user','state','pos','dur'], ...]]   (can be combined with blocks; sub, device, method, quality, bandwidth, location optional)
  *   ['error' => 'message']
  * Each app's numbers come from its own documented API.
  */
@@ -1878,15 +1885,7 @@ function und_emby_like($s, $pre) {
   if ($pre !== '' && und_ends($base, $pre)) $pre = '';
   $h = ['headers' => ['X-Emby-Token' => $s['key'], 'Accept' => 'application/json']];
   $c = und_get($base . $pre . '/Items/Counts', $h);
-  $sess = und_get($base . $pre . '/Sessions', $h);
-  $streams = [];
-  foreach ((array)$sess as $x) {
-    if (empty($x['NowPlayingItem'])) continue;
-    $n = $x['NowPlayingItem'];
-    $t = !empty($n['SeriesName']) ? $n['SeriesName'] . ': S' . sprintf('%02d', (int)($n['ParentIndexNumber'] ?? 0)) . ' · E' . sprintf('%02d', (int)($n['IndexNumber'] ?? 0)) . ' - ' . ($n['Name'] ?? '') : (string)($n['Name'] ?? '');
-    $streams[] = ['title' => $t, 'user' => (string)($x['UserName'] ?? ''), 'state' => !empty($x['PlayState']['IsPaused']) ? 'paused' : 'playing',
-                  'pos' => (int)(($x['PlayState']['PositionTicks'] ?? 0) / 10000000), 'dur' => (int)(($n['RunTimeTicks'] ?? 0) / 10000000)];
-  }
+  $streams = und_streams_emby(und_get($base . $pre . '/Sessions', $h));
   $b = [und_b('movies', 'Movies', (int)($c['MovieCount'] ?? 0)), und_b('series', 'Series', (int)($c['SeriesCount'] ?? 0)), und_b('episodes', 'Episodes', (int)($c['EpisodeCount'] ?? 0)), und_b('songs', 'Songs', (int)($c['SongCount'] ?? 0))];
   return ['blocks' => empty($s['options']['hide_blocks']) ? $b : [], 'streams' => $streams, 'empty' => 'No active streams'];
 }
@@ -1915,16 +1914,7 @@ function und_tautulli($s, array $q) {
 }
 
 function und_w_tautulli($s) {
-  $d = und_tautulli($s, ['cmd' => 'get_activity']);
-  $streams = [];
-  foreach ((array)($d['sessions'] ?? []) as $x) {
-    $t = ($x['media_type'] ?? '') === 'episode'
-      ? $x['grandparent_title'] . ': S' . sprintf('%02d', (int)$x['parent_media_index']) . ' · E' . sprintf('%02d', (int)$x['media_index']) . ' - ' . $x['title']
-      : (string)($x['full_title'] ?? $x['title'] ?? '');
-    $streams[] = ['title' => $t, 'user' => (string)($x['friendly_name'] ?? $x['user'] ?? ''), 'state' => (string)($x['state'] ?? ''),
-                  'pos' => (int)((int)($x['view_offset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000), 'transcode' => (string)($x['transcode_decision'] ?? '')];
-  }
-  return ['streams' => $streams, 'empty' => 'No active streams'];
+  return ['streams' => und_streams_tautulli(und_tautulli($s, ['cmd' => 'get_activity'])), 'empty' => 'No active streams'];
 }
 
 function und_w_tautulli_recent($s) {
@@ -2407,7 +2397,7 @@ function und_w_customapi($s) {
   return ['blocks' => $b];
 }
 ]]></INLINE>
-<SHA256>65c26a7ea28779e813ac8c4ea074b07275f591a7749735ae21d0a34dc03713a3</SHA256>
+<SHA256>444fb87e2b6efa125f6d829013f1b4c3aae0964b5137ae0379034b409556db03</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/import.php" Mode="0644">
@@ -4499,45 +4489,57 @@ function und_playing_ep($series, $season, $ep, $name) { return [$series, 'S' . s
 function und_playing_one(array $cfg, $id) {
   $s = und_service_full($cfg, $id);
   if (trim($s['url']) === '' || und_has($s['url'], '{{')) return ['error' => $s['name'] . ' has no API URL yet.'];
+  if ($s['type'] === 'tautulli') return ['streams' => und_streams_tautulli(und_tautulli($s, ['cmd' => 'get_activity']))];
+  if ($s['type'] === 'plex') return ['streams' => und_streams_plex(und_get(und_u($s['url'], '/status/sessions'), ['headers' => ['X-Plex-Token' => $s['key'], 'Accept' => 'application/json']]))];
+  $base = rtrim($s['url'], '/'); $pre = $s['type'] === 'emby' && !und_ends($base, '/emby') ? '/emby' : '';
+  return ['streams' => und_streams_emby(und_get($base . $pre . '/Sessions', ['headers' => ['X-Emby-Token' => $s['key'], 'Accept' => 'application/json']]))];
+}
+
+/* The streams of one answer, the same shape for every server (also used by the app cards):
+   title, sub (episode or year), user, device, state, pos, dur (seconds), method, quality, bandwidth (bit/s), location. */
+function und_streams_tautulli($d) {
   $out = [];
-  if ($s['type'] === 'tautulli') {
-    foreach ((array)(und_tautulli($s, ['cmd' => 'get_activity'])['sessions'] ?? []) as $x) {
-      $ep = ($x['media_type'] ?? '') === 'episode';
-      [$t, $sub] = $ep ? und_playing_ep($x['grandparent_title'] ?? '', $x['parent_media_index'] ?? 0, $x['media_index'] ?? 0, (string)($x['title'] ?? ''))
-                       : [(string)($x['title'] ?? $x['full_title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
-      $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['friendly_name'] ?? $x['user'] ?? ''), 'device' => trim(($x['player'] ?? '') . (isset($x['product']) && $x['product'] !== ($x['player'] ?? '') ? ' · ' . $x['product'] : '')),
-        'state' => (string)($x['state'] ?? 'playing'), 'pos' => (int)((int)($x['view_offset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
-        'method' => und_playing_method($x['transcode_decision'] ?? ''), 'quality' => (string)($x['quality_profile'] ?? $x['stream_video_full_resolution'] ?? ''),
-        'bandwidth' => isset($x['bandwidth']) && $x['bandwidth'] !== '' ? (int)$x['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['location'] ?? ''))];
-    }
-  } elseif ($s['type'] === 'plex') {
-    $j = und_get(und_u($s['url'], '/status/sessions'), ['headers' => ['X-Plex-Token' => $s['key'], 'Accept' => 'application/json']]);
-    foreach ((array)($j['MediaContainer']['Metadata'] ?? []) as $x) {
-      $ep = ($x['type'] ?? '') === 'episode';
-      [$t, $sub] = $ep ? und_playing_ep($x['grandparentTitle'] ?? '', $x['parentIndex'] ?? 0, $x['index'] ?? 0, (string)($x['title'] ?? ''))
-                       : [(string)($x['title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
-      $ts = $x['TranscodeSession'] ?? null;
-      $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['User']['title'] ?? ''), 'device' => trim(($x['Player']['title'] ?? '') . (!empty($x['Player']['product']) ? ' · ' . $x['Player']['product'] : '')),
-        'state' => (string)($x['Player']['state'] ?? 'playing'), 'pos' => (int)((int)($x['viewOffset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
-        'method' => $ts ? und_playing_method($ts['videoDecision'] ?? 'transcode') : 'direct play', 'quality' => (string)($x['Media'][0]['videoResolution'] ?? ''),
-        'bandwidth' => isset($x['Session']['bandwidth']) ? (int)$x['Session']['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['Session']['location'] ?? ''))];
-    }
-  } else {
-    $base = rtrim($s['url'], '/'); $pre = $s['type'] === 'emby' && !und_ends($base, '/emby') ? '/emby' : '';
-    $j = und_get($base . $pre . '/Sessions', ['headers' => ['X-Emby-Token' => $s['key'], 'Accept' => 'application/json']]);
-    foreach ((array)$j as $x) {
-      if (empty($x['NowPlayingItem'])) continue;
-      $n = $x['NowPlayingItem'];
-      [$t, $sub] = !empty($n['SeriesName']) ? und_playing_ep($n['SeriesName'], $n['ParentIndexNumber'] ?? 0, $n['IndexNumber'] ?? 0, (string)($n['Name'] ?? ''))
-                                           : [(string)($n['Name'] ?? ''), !empty($n['ProductionYear']) ? (string)$n['ProductionYear'] : ''];
-      $w = (int)($n['Width'] ?? 0);
-      $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['UserName'] ?? ''), 'device' => trim(($x['DeviceName'] ?? '') . (!empty($x['Client']) ? ' · ' . $x['Client'] : '')),
-        'state' => !empty($x['PlayState']['IsPaused']) ? 'paused' : 'playing', 'pos' => (int)(($x['PlayState']['PositionTicks'] ?? 0) / 10000000), 'dur' => (int)(($n['RunTimeTicks'] ?? 0) / 10000000),
-        'method' => und_playing_method($x['PlayState']['PlayMethod'] ?? ''), 'quality' => $w >= 3800 ? '4K' : ($w >= 1900 ? '1080p' : ($w >= 1260 ? '720p' : ($w ? 'SD' : ''))),
-        'bandwidth' => isset($x['TranscodingInfo']['Bitrate']) ? (int)$x['TranscodingInfo']['Bitrate'] : null, 'location' => ''];
-    }
+  foreach ((array)($d['sessions'] ?? []) as $x) {
+    $ep = ($x['media_type'] ?? '') === 'episode';
+    [$t, $sub] = $ep ? und_playing_ep($x['grandparent_title'] ?? '', $x['parent_media_index'] ?? 0, $x['media_index'] ?? 0, (string)($x['title'] ?? ''))
+                     : [(string)($x['title'] ?? $x['full_title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
+    $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['friendly_name'] ?? $x['user'] ?? ''), 'device' => trim(($x['player'] ?? '') . (isset($x['product']) && $x['product'] !== ($x['player'] ?? '') ? ' · ' . $x['product'] : '')),
+      'state' => (string)($x['state'] ?? 'playing'), 'pos' => (int)((int)($x['view_offset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
+      'method' => und_playing_method($x['transcode_decision'] ?? ''), 'quality' => (string)($x['quality_profile'] ?? $x['stream_video_full_resolution'] ?? ''),
+      'bandwidth' => isset($x['bandwidth']) && $x['bandwidth'] !== '' ? (int)$x['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['location'] ?? ''))];
   }
-  return ['streams' => $out];
+  return $out;
+}
+
+function und_streams_plex($j) {
+  $out = [];
+  foreach ((array)($j['MediaContainer']['Metadata'] ?? []) as $x) {
+    $ep = ($x['type'] ?? '') === 'episode';
+    [$t, $sub] = $ep ? und_playing_ep($x['grandparentTitle'] ?? '', $x['parentIndex'] ?? 0, $x['index'] ?? 0, (string)($x['title'] ?? ''))
+                     : [(string)($x['title'] ?? ''), !empty($x['year']) ? (string)$x['year'] : ''];
+    $ts = $x['TranscodeSession'] ?? null;
+    $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['User']['title'] ?? ''), 'device' => trim(($x['Player']['title'] ?? '') . (!empty($x['Player']['product']) ? ' · ' . $x['Player']['product'] : '')),
+      'state' => (string)($x['Player']['state'] ?? 'playing'), 'pos' => (int)((int)($x['viewOffset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
+      'method' => $ts ? und_playing_method($ts['videoDecision'] ?? 'transcode') : 'direct play', 'quality' => (string)($x['Media'][0]['videoResolution'] ?? ''),
+      'bandwidth' => isset($x['Session']['bandwidth']) ? (int)$x['Session']['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['Session']['location'] ?? ''))];
+  }
+  return $out;
+}
+
+function und_streams_emby($j) {
+  $out = [];
+  foreach ((array)$j as $x) {
+    if (empty($x['NowPlayingItem'])) continue;
+    $n = $x['NowPlayingItem'];
+    [$t, $sub] = !empty($n['SeriesName']) ? und_playing_ep($n['SeriesName'], $n['ParentIndexNumber'] ?? 0, $n['IndexNumber'] ?? 0, (string)($n['Name'] ?? ''))
+                                         : [(string)($n['Name'] ?? ''), !empty($n['ProductionYear']) ? (string)$n['ProductionYear'] : ''];
+    $w = (int)($n['Width'] ?? 0);
+    $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['UserName'] ?? ''), 'device' => trim(($x['DeviceName'] ?? '') . (!empty($x['Client']) ? ' · ' . $x['Client'] : '')),
+      'state' => !empty($x['PlayState']['IsPaused']) ? 'paused' : 'playing', 'pos' => (int)(($x['PlayState']['PositionTicks'] ?? 0) / 10000000), 'dur' => (int)(($n['RunTimeTicks'] ?? 0) / 10000000),
+      'method' => und_playing_method($x['PlayState']['PlayMethod'] ?? ''), 'quality' => $w >= 3800 ? '4K' : ($w >= 1900 ? '1080p' : ($w >= 1260 ? '720p' : ($w ? 'SD' : ''))),
+      'bandwidth' => isset($x['TranscodingInfo']['Bitrate']) ? (int)$x['TranscodingInfo']['Bitrate'] : null, 'location' => ''];
+  }
+  return $out;
 }
 
 function und_playing(array $cfg) {
@@ -4558,7 +4560,7 @@ function und_playing(array $cfg) {
   });
 }
 ]]></INLINE>
-<SHA256>5e00f2d43968077c1e919232f0b4cf529185f22ff543af3beaf4a8ce78a4cd03</SHA256>
+<SHA256>34c73b520d945164f335f4b2e542462d52af155e02c78522145c0069176d5304</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/requests.php" Mode="0644">
@@ -5533,7 +5535,10 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .hcols{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--gap);align-items:start;min-width:0}
 .und .hcol{display:flex;flex-direction:column;gap:16px;min-width:0}
 .und .hcols.one{grid-template-columns:minmax(0,1fr)}
-.und .sec.fill{display:flex;flex-direction:column}.und .sec.fill>.sec-b{flex:1;display:flex;flex-direction:column}.und .sec.fill>.sec-b>:last-child{flex:1}.und .hcols.one>.hcol:empty{display:none}
+.und .sec.fill{display:flex;flex-direction:column}.und .sec.fill>.sec-b{flex:1;display:flex;flex-direction:column}.und .sec.fill>.sec-b>:last-child{flex:1}
+/* lists of cards: the last card takes the extra height, so the column ends on a box, not on empty space */
+.und .sec.fill .dls>.card:last-child,.und .sec.fill .plist>.pl:last-child,.und .sec.fill .rqlist:not(.text)>.rq:last-child{flex:1}.und .sec.fill .rqlist>.rq:last-child{align-items:flex-start}
+.und .hcols.one>.hcol:empty{display:none}
 .und .sec-h{display:flex;align-items:center;gap:8px;margin:0 0 8px;min-height:30px;flex-wrap:wrap}
 .und .sec-h h2{display:flex;align-items:center;gap:8px;font:600 15px/1.3 var(--font);color:var(--title);margin:0;padding:0;border:0;background:none;text-transform:none;letter-spacing:0}
 .und .sec-h h2 button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border-radius:4px}
@@ -5851,6 +5856,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .pl .pl2{display:flex;align-items:center;gap:6px;min-width:0}.und .pl .pl2 svg{width:12px;height:12px;flex:none}
 .und .pl .pl3{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .und .pl .meter{height:4px}
+.und .plist.in{gap:10px;margin-top:12px}.und .plist.in:first-child{margin-top:0}
+.und .pl.in,.und.glass .pl.in{background:none;-webkit-backdrop-filter:none;backdrop-filter:none;border:0;border-radius:0;padding:0}
+.und .plist.in .pl.in+.pl.in{border-top:1px solid var(--line);padding-top:10px}
 
 /* requests */
 .und .rq{display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:6px 10px;min-width:0}
@@ -5860,6 +5868,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .rqt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.und .rqt b{color:var(--title);font-size:13.5px}
 .und .rqa{display:flex;gap:6px;flex:none}
 .und .rq>.badge{flex:none}
+.und .rqlist.text{gap:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:4px 0}
+.und.glass .rqlist.text{background:color-mix(in srgb,var(--panel) 62%,transparent);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(1.15);backdrop-filter:blur(var(--glass-blur)) saturate(1.15)}
+.und .rq.line,.und.glass .rq.line{background:none;-webkit-backdrop-filter:none;backdrop-filter:none;border:0;border-radius:0;padding:5px 12px}
+.und .rq.line+.rq.line{border-top:1px solid var(--line)}
+.und .rq.line .rqt{flex-direction:row;align-items:baseline;gap:8px}.und .rq.line .rqt b,.und .rq.line .rqt a{flex:0 1 auto;font-size:13px;min-width:4em}.und .rq.line .rqt a{color:var(--title);font-weight:600}
+.und .rq.line .rqt .muted{flex:0 100 auto;min-width:0}
 
 /* endpoint health */
 .und .htab .hrow{display:grid;grid-template-columns:minmax(180px,2.2fr) minmax(130px,1.2fr) minmax(130px,1fr) 80px;gap:12px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);min-width:0}
@@ -6121,7 +6135,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
 }
 ]]></INLINE>
-<SHA256>4fa9a2360d18e2cb781c06c2ead87eb84853448cabfb921560d6adc2200a2b9d</SHA256>
+<SHA256>9c6405b16a884b61f5fc218a61eff4ff2ab596ac57056666d40177f6c4909971</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -7725,18 +7739,20 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     if (j.streams.length) r.sum.appendChild(document.createTextNode((tc ? tc + ' transcoding · ' : '') + (bw ? rate(bw / 8) : '')));
     (j.apps || []).filter(function (a) { return a.error; }).forEach(function (a) { r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error)); });
     if (!j.streams.length) { r.list.appendChild(h('div', { class: 'empty' }, 'Nothing is playing right now.')); return; }
-    j.streams.forEach(function (x) {
-      var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
-      r.list.appendChild(h('div', { class: 'pl' + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
-        img(iconUrl(x.icon), 'aico', 'play'),
-        h('div', { class: 'pt' },
-          h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null),
-          h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [x.user, x.device, x.app].filter(Boolean).join(' · '))),
-          h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { class: 'acc', style: { width: p + '%' } })),
-          h('div', { class: 'pl3 xs' }, h('span', { class: 'num muted' }, dur(x.pos) + ' / ' + dur(x.dur)),
-            m ? h('span', { class: 'badge ' + m[1] }, m[0]) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
-            x.bandwidth ? h('span', { class: 'num muted' }, rate(x.bandwidth / 8)) : null, x.location === 'wan' ? h('span', { class: 'badge plain', title: 'Streaming outside your network' }, 'remote') : null))));
-    });
+    j.streams.forEach(function (x) { r.list.appendChild(playRow(x, true)); });
+  }
+  /* one stream, as in Now playing; app cards use it without the app icon. Custom API streams may only have title, user, pos and dur. */
+  function playRow(x, icon) {
+    var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
+    return h('div', { class: 'pl' + (icon ? '' : ' in') + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
+      icon ? img(iconUrl(x.icon), 'aico', 'play') : null,
+      h('div', { class: 'pt' },
+        h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null),
+        h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [x.user, x.device, x.app].filter(Boolean).join(' · '))),
+        x.dur ? h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { class: 'acc', style: { width: p + '%' } })) : null,
+        h('div', { class: 'pl3 xs' }, x.dur ? h('span', { class: 'num muted' }, dur(x.pos) + ' / ' + dur(x.dur)) : null,
+          m ? h('span', { class: 'badge ' + m[1] }, m[0]) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
+          x.bandwidth ? h('span', { class: 'num muted' }, rate(x.bandwidth / 8)) : null, x.location === 'wan' ? h('span', { class: 'badge plain', title: 'Streaming outside your network' }, 'remote') : null)));
   }
 
   /* ---- Requests (Overseerr / Jellyseerr) ---- */
@@ -7758,14 +7774,18 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       else if (a.href && j.apps.length === 1) r.link.appendChild(h('a', { class: 'btn sm ghost', href: a.href, target: '_blank', rel: 'noopener', title: 'Open ' + a.name }, h('span', { class: 'lbl' }, a.name), ic('web')));
     });
     if (!j.items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No requests yet.')); return; }
+    var text = (S.L.requests || {}).style === 'text';
+    r.list.classList.toggle('text', text);
     j.items.forEach(function (x) {
       var key = 'rq:' + x.app + ':' + x.id, busy = !!S.busy[key];
       var title = x.title + (x.year ? ' (' + x.year + ')' : '');
       var what = (x.type === 'tv' ? 'Series' + (x.seasons.length ? ' · season ' + x.seasons.join(', ') : '') : 'Movie') + (x.is4k ? ' · 4K' : '');
-      r.list.appendChild(h('div', { class: 'rq' + (x.status === 'pending' ? ' pend' : ''), role: 'listitem', 'data-name': x.title },
-        h(x.href ? 'a' : 'span', { class: 'rqp', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title },
+      var meta = [what, x.user, x.at ? rel(x.at) : ''].filter(Boolean).join(' · ');
+      r.list.appendChild(h('div', { class: 'rq' + (x.status === 'pending' ? ' pend' : '') + (text ? ' line' : ''), role: 'listitem', 'data-name': x.title },
+        text ? null : h(x.href ? 'a' : 'span', { class: 'rqp', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title },
           x.poster ? h('img', { src: x.poster, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function () { this.remove(); } }) : null),
-        h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs ell' }, [what, x.user, x.at ? rel(x.at) : ''].filter(Boolean).join(' · '))),
+        text ? h('div', { class: 'rqt' }, h(x.href ? 'a' : 'b', { class: 'ell', href: x.href || null, target: x.href ? '_blank' : null, rel: x.href ? 'noopener' : null, title: title + '\n' + meta }, title), h('span', { class: 'muted xs ell' }, meta))
+          : h('div', { class: 'rqt' }, h('b', { class: 'ell', title: title }, title), h('span', { class: 'muted xs ell' }, meta)),
         x.status === 'pending' ? h('div', { class: 'rqa' },
           btn('Approve', function () { reqAct(x, 'approve'); }, 'sm pri', 'check', 'Approve ' + title),
           btn('', function () { confirmBox('Decline ' + title + '?', (x.user || 'The requester') + ' asked for it ' + (x.at ? rel(x.at) : '') + '. Declining tells them in ' + x.app_name + ' and cannot be undone here.', 'Decline', true).then(function (y) { if (y) reqAct(x, 'decline'); }); }, 'sm danger', 'x', 'Decline ' + title))
@@ -8046,11 +8066,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     }
     if (r.streams) {
       if (!r.streams.length) cb.appendChild(h('div', { class: 'muted sm', style: { 'margin-top': '6px' } }, r.empty || 'No active streams'));
-      else cb.appendChild(h('div', { class: 'streams' }, r.streams.map(function (x) {
-        return h('div', { class: 'stream', title: x.title + (x.user ? ' (' + x.user + ')' : '') + (x.transcode ? ' · ' + x.transcode : '') },
-          h('i', { class: 'pg', style: { width: (x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0) + '%' } }), ic(x.state === 'paused' ? 'pause' : 'play'),
-          h('span', { class: 'tt' }, x.title + (x.user ? ' (' + x.user + ')' : '')), h('span', { class: 'tm' }, x.dur ? dur(x.pos) + ' / ' + dur(x.dur) : ''));
-      })));
+      else cb.appendChild(h('div', { class: 'plist in', role: 'list' }, r.streams.map(function (x) { return playRow(x, false); })));
     }
     if (r.bars) cb.appendChild(h('div', { class: 'bars' }, r.bars.map(function (x) { var p = x.size ? 100 * x.used / x.size : 0; return h('div', null, h('div', { class: 'bt' }, h('span', null, x.title, x.sub ? h('span', { class: 'muted' }, ' · ' + x.sub) : null), h('span', null, bytes(x.size - x.used) + ' free')), h('div', { class: 'meter' }, h('i', { class: meterCls(p), style: { width: p.toFixed(1) + '%' } }))); })));
   }
@@ -8321,7 +8337,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 
   /* Settings > Sections & apps: the dashboard's sections in order, each with its own options folded under it.
      Apps are listed in the section they show in; "Find an app" opens every section that has a match. */
-  var SEC_OPTS = { overview: 'Tiles and apps', media: 'Columns and apps', arr: 'Apps', downloads: 'Clients', apps: 'Groups and apps', docker: 'Containers and view', vms: 'VMs and view' };
+  var SEC_OPTS = { overview: 'Tiles and apps', media: 'Columns and apps', arr: 'Apps', downloads: 'Clients', requests: 'View', apps: 'Groups and apps', docker: 'Containers and view', vms: 'VMs and view' };
   function tabDashboard(b, D, dirty) {
     var c = D.cfg, open = D.open || (D.open = {}), panels = {}, chevs = {};
     var ed = appsEditor(D, dirty, function () { paint(); });
@@ -8350,6 +8366,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
             F('Show as', sIn(c.media, 'style', dirty, [['art', 'Posters'], ['text', 'Text only']]), 'Text only fits many more items in the same height.')),
           ed.zone('media')];
       },
+      requests: function () { return [h('div', { class: 'grid2' }, F('Show as', sIn(c.requests, 'style', dirty, [['art', 'Posters'], ['text', 'Text only']]), 'Text only puts each request on one short line.')), ed.zone('requests')]; },
       arr: function () { return [ed.zone('arr')]; },
       downloads: function () { return [h('div', { class: 'grid2' }, F('Active items shown per client', tIn(c.downloads, 'items', dirty, '4', 'number', { min: 0, max: 20 }), '0 shows the totals only.')), ed.zone('downloads')]; },
       apps: function () {
@@ -9174,7 +9191,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>12f8aabae7ae70dbff5b43867305505231feb196c4f0b18eddf3b87602ba4b5c</SHA256>
+<SHA256>c010f041b6b2045732fd73ef78378991204758c7009be05b99d024a09aba4ef0</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
