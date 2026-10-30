@@ -191,6 +191,8 @@ switch ($action) {
     } elseif ($kind === 'docker_view' || $kind === 'vms_view') {
       $k = $kind === 'docker_view' ? 'docker' : 'vms';
       $cfg[$k] = array_merge($cfg[$k], array_intersect_key($val, ['layout' => 1, 'sort' => 1, 'hide_stopped' => 1, 'view' => 1, 'filter' => 1, 'selected' => 1, 'columns' => 1]));
+    } elseif ($kind === 'apps_view') {
+      if (isset($val['headers'])) $cfg['apps']['headers'] = (bool)$val['headers'];
     } elseif ($kind === 'group') {
       if (isset($val['name'])) $val['name'] = trim((string)$val['name']);
       if (isset($val['name']) && ($val['name'] === '' || strlen($val['name']) > 60)) fail('Give the group a name of up to 60 characters.');
