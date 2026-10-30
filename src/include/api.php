@@ -183,7 +183,7 @@ switch ($action) {
     if ($kind === 'docker' || $kind === 'vms') {
       if ($key === '' || strlen($key) > 200) fail('Invalid name.');
       $items = (array)$cfg[$kind]['items'];
-      $items[$key] = array_merge((array)($items[$key] ?? []), array_intersect_key($val, ['label' => 1, 'icon' => 1, 'description' => 1, 'hidden' => 1, 'favorite' => 1]));
+      $items[$key] = array_merge((array)($items[$key] ?? []), array_intersect_key($val, ['label' => 1, 'icon' => 1, 'description' => 1, 'hidden' => 1, 'favorite' => 1, 'no_update' => 1]));
       $cfg[$kind]['items'] = $items;
     } elseif ($kind === 'section') {
       foreach ($cfg['dashboard']['sections'] as &$s) if ($s['id'] === $key) $s = array_merge($s, array_intersect_key($val, ['collapsed' => 1, 'visible' => 1, 'width' => 1]));

@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.7.2">
+<!ENTITY version "0.7.3">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.7.3
+- Containers: the grid no longer repeats "running" or "stopped" (the coloured dot already says it) and drops the "update" badge. When a container has an update, its gear turns orange and the menu's first Update line says so.
+- Update checks can be turned off: for every container in Settings &gt; Sections &amp; apps &gt; Containers, or for one container from its gear menu or the arrow next to it in that list. A container that is not checked never turns orange and is left out of "Update all".
+
 ###0.7.2
 - UPS in the Docker version: a UPS run by NUT (the NUT plugin) now shows. The Unraid API only knows apcupsd, so UnDash reads NUT straight from the server (port 3493), using the UPS name in Settings &gt; Refresh &amp; display (NAME@HOST for another NUT server).
 
@@ -181,7 +185,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.7.2');
+define('UND_VERSION', '0.7.3');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -355,7 +359,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>ff002e294adaf0c0de1bf1d1fa3857476a3a978d162bb087669496e005f622db</SHA256>
+<SHA256>1d9b77b4f340a325a275e9be9a9c5e67923676ca5968db5969d28be5574be708</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -421,7 +425,7 @@ function und_default_config() {
     'downloads' => ['items' => 4],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
     'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
-    'docker' => ['layout' => 'grid', 'view' => 'compact', 'filter' => 'running', 'selected' => [], 'columns' => 0, 'sort' => 'name', 'show' => ['cpu', 'memory', 'update'], 'hide_stopped' => false, 'items' => new stdClass()],
+    'docker' => ['layout' => 'grid', 'view' => 'compact', 'filter' => 'running', 'selected' => [], 'columns' => 0, 'sort' => 'name', 'show' => ['cpu', 'memory', 'update'], 'hide_stopped' => false, 'update_check' => true, 'items' => new stdClass()],
     'vms' => ['layout' => 'list', 'show' => ['status', 'cpus', 'memory'], 'items' => new stdClass()],
     'groups' => [
       ['id' => und_id(), 'name' => 'Apps', 'columns' => 4, 'header' => true, 'services' => []],
@@ -722,7 +726,8 @@ function und_normalize(array $c) {
       if (!is_array($p) || !is_string($name) || $name === '' || strlen($name) > 200 || preg_match('/[\x00-\x1f]/', $name)) continue;
       $row = ['label' => und_clip(trim((string)($p['label'] ?? '')), 60), 'icon' => und_clip((string)($p['icon'] ?? ''), 300), 'description' => und_clip(trim((string)($p['description'] ?? '')), 200),
               'hidden' => !empty($p['hidden']), 'favorite' => !empty($p['favorite'])];
-      if ($row['label'] === '' && $row['icon'] === '' && $row['description'] === '' && !$row['hidden'] && !$row['favorite']) continue;
+      if (!empty($p['no_update'])) $row['no_update'] = true;          // containers only: no update check for this one
+      if ($row['label'] === '' && $row['icon'] === '' && $row['description'] === '' && !$row['hidden'] && !$row['favorite'] && empty($row['no_update'])) continue;
       $out[$name] = $row;
     }
     return $out ? $out : new stdClass();
@@ -746,7 +751,7 @@ function und_normalize(array $c) {
              'filter' => in_array($dk['filter'], ['running', 'all', 'selected'], true) ? $dk['filter'] : 'running', 'selected' => array_keys($sel), 'columns' => max(0, min(4, (int)$dk['columns'])),
              'sort' => in_array($dk['sort'], ['name', 'status', 'cpu', 'memory'], true) ? $dk['sort'] : 'name',
              'show' => array_values(array_intersect((array)$dk['show'], ['status', 'cpu', 'memory', 'uptime', 'image', 'update', 'ports', 'restarts', 'network'])),
-             'hide_stopped' => !empty($dk['hide_stopped']), 'items' => $items($dk['items'] ?? [])];
+             'hide_stopped' => !empty($dk['hide_stopped']), 'update_check' => !empty($dk['update_check']), 'items' => $items($dk['items'] ?? [])];
   $ap = (isset($c['apps']) && is_array($c['apps']) ? $c['apps'] : []) + $d['apps'];
   $apps = ['columns' => max(0, min(6, (int)$ap['columns'])), 'links' => !empty($ap['links']), 'headers' => !empty($ap['headers'])];
   $vm = (isset($c['vms']) && is_array($c['vms']) ? $c['vms'] : []) + $d['vms'];
@@ -949,7 +954,7 @@ function und_validate(array $cfg) {
   return $issues;
 }
 ]]></INLINE>
-<SHA256>23afec3b40f48fad0270d14721212e0ca43045bb8379573c65186c7c0b706bdd</SHA256>
+<SHA256>472c6e17989ac06d524d09bebb5405e08d9c3a8a8652fec615df4ee592e4576f</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/system.php" Mode="0644">
@@ -4499,7 +4504,7 @@ switch ($action) {
     if ($kind === 'docker' || $kind === 'vms') {
       if ($key === '' || strlen($key) > 200) fail('Invalid name.');
       $items = (array)$cfg[$kind]['items'];
-      $items[$key] = array_merge((array)($items[$key] ?? []), array_intersect_key($val, ['label' => 1, 'icon' => 1, 'description' => 1, 'hidden' => 1, 'favorite' => 1]));
+      $items[$key] = array_merge((array)($items[$key] ?? []), array_intersect_key($val, ['label' => 1, 'icon' => 1, 'description' => 1, 'hidden' => 1, 'favorite' => 1, 'no_update' => 1]));
       $cfg[$kind]['items'] = $items;
     } elseif ($kind === 'section') {
       foreach ($cfg['dashboard']['sections'] as &$s) if ($s['id'] === $key) $s = array_merge($s, array_intersect_key($val, ['collapsed' => 1, 'visible' => 1, 'width' => 1]));
@@ -4607,7 +4612,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>09c9db8161e71fc7dd7fd28a8cbcdee8def9382d7ec2eea06f34be88d13d944f</SHA256>
+<SHA256>fecef7b98dfcfb97665b69a5ce5a8af669d487e9cac49906617055168c829cbd</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -5475,7 +5480,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .ci .cn{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;line-height:1.25}
 .und .ci .cname{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13.5px;color:var(--title)}
 .und .ci .cname svg{width:12px;height:12px;color:var(--warn);flex:none}
-.und .ci .cs{display:flex;gap:10px;font-size:12px;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}
+.und .ci .cs{display:flex;gap:10px;font-size:12px;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}.und .ci .cs:empty{display:none}
 .und .ci .badge{flex:none}
 .und .ci .acts{gap:2px;flex:none}
 .und .ci .acts .btn.ic.sm{width:30px;min-width:30px!important;min-height:30px!important}
@@ -5484,6 +5489,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und a.wl,.und span.wl{color:inherit;text-decoration:none!important;display:inline-flex;align-items:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .und a.wl:hover{color:var(--accent-text)}.und a.wl:hover img{filter:brightness(1.15)}.und a.wl:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 .und .btn.gear{background:transparent!important;border-color:transparent!important;color:var(--muted)!important}.und .btn.gear:hover{background:var(--bar)!important;border-color:var(--line-2)!important;color:var(--title)!important}
+/* an update is waiting: the gear turns orange (whatever the theme's accent) */
+.und .btn.gear.has-upd{color:#f97316!important;background:rgba(249,115,22,.12)!important;border-color:rgba(249,115,22,.45)!important}.und .btn.gear.has-upd:hover{background:rgba(249,115,22,.22)!important;color:#fb923c!important}
+.und .menu button.upd{color:#f97316}.und .upd-t{color:#f97316}
 .und .ci.st-exited .cname,.und .ci.st-created .cname,.und .ci.st-dead .cname{color:var(--muted);font-weight:500}
 
 /* apps: compact cards in one grid */
@@ -5581,7 +5589,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .pv-bar{bottom:10px;padding:8px 10px}.und .pv-bar>.grow{flex-basis:100%}
 }
 ]]></INLINE>
-<SHA256>9fccb9d91b1fea945d4b337b3feb645330d60b2c23793e0e3924b7fe08c1a42c</SHA256>
+<SHA256>b406e98dd7635bd60f317cd9c36b22582115ae211980162df25de2738f6b7bfe</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/assets/app.js" Mode="0644">
@@ -6640,7 +6648,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var s = { running: 0, stopped: 0, paused: 0, updates: 0, unhealthy: 0, total: c.length, updList: [] };
     c.forEach(function (x) {
       if (x.state === 'running') s.running++; else if (x.state === 'paused') s.paused++; else s.stopped++;
-      if (x.update === 'available' && !pref('docker', x.name).hidden) { s.updates++; s.updList.push(x.name); }
+      if (updOn(x) && !pref('docker', x.name).hidden) { s.updates++; s.updList.push(x.name); }
       if (x.health === 'unhealthy') s.unhealthy++;
     });
     return s;
@@ -6654,9 +6662,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var m = { running: ['running', 'ok'], exited: ['stopped', 'off'], paused: ['paused', 'warn'], restarting: ['restarting', 'warn'], created: ['created', 'off'], dead: ['dead', 'bad'], removing: ['removing', 'warn'] }[c.state] || [c.state, 'off'];
     return h('span', { class: 'badge ' + m[1] }, m[0]);
   }
+  /* an update counts unless update checks are off (Settings > Sections & apps > Containers), for all or for this container */
+  function updOn(c) { return c.update === 'available' && S.L.docker.update_check !== false && !pref('docker', c.name).no_update; }
   function dUpdBadge(c) {
     if (c.job === 'update_failed') return h('span', { class: 'badge bad', title: 'The last update failed; see the logs' }, 'update failed');
-    if (c.update === 'available') return h('span', { class: 'badge upd' }, '↑ update');
+    if (S.L.docker.update_check === false || pref('docker', c.name).no_update) return h('span', { class: 'badge plain' }, 'not checked');
+    if (c.update === 'available') return h('span', { class: 'muted sm upd-t' }, 'update available');
     if (c.update === 'current') return h('span', { class: 'badge ok' }, 'up to date');
     return h('span', { class: 'badge plain', title: c.managed ? 'Unraid has not checked this image yet, or the check failed: unknown, not "up to date"' : 'Not created from an Unraid template, so Unraid cannot check it' }, c.managed ? 'not checked' : 'no update check');
   }
@@ -6723,7 +6734,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
       if (S.fd === 'selected') return D.selected.indexOf(c.name) >= 0;
       if (S.fd === 'running') return c.state === 'running';
       if (S.fd === 'stopped') return c.state !== 'running';
-      if (S.fd === 'updates') return c.update === 'available';
+      if (S.fd === 'updates') return updOn(c);
       if (S.fd === 'problems') return c.health === 'unhealthy' || c.state === 'restarting' || c.job === 'update_failed' || (c.state === 'exited' && c.exit && c.autostart);
       if (S.fd === 'favorites') return !!p.favorite;
       if (D.hide_stopped && c.state !== 'running') { hiddenN++; return false; }
@@ -6742,7 +6753,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     list.forEach(function (c, i) {
       var p = pref('docker', c.name);
       // rows are only rebuilt when something structural changes, so menus and focus survive the 2-second refresh
-      var sig = JSON.stringify([c.state, c.health, c.update, c.job, c.webui, c.managed, S.busy['d:' + c.name] || '', p, c.icon, c.image, D.layout, D.view, D.show, D.selected.indexOf(c.name) >= 0]);
+      var sig = JSON.stringify([c.state, c.health, c.update, c.job, c.webui, c.managed, S.busy['d:' + c.name] || '', p, c.icon, c.image, D.layout, D.view, D.show, D.update_check, D.selected.indexOf(c.name) >= 0]);
       var row = r.map[c.name];
       if (!row || row._sig !== sig) {
         var had = row && row.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
@@ -6769,8 +6780,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   /* every container action sits behind one gear button; the web UI opens from the icon or the name */
   function dWeb(c) { return c.state === 'running' && c.webui ? c.webui : ''; }
   function webA(url, title, kids) { return url ? h('a', { class: 'wl', href: url, target: '_blank', rel: 'noopener', title: title }, kids) : h('span', { class: 'wl' }, kids); }
-  function gear(name, items) {
-    var g = btn('', function () { menu(g, items()); }, 'sm gear', 'gear', 'Actions for ' + name);
+  function gear(name, items, upd) {
+    var g = btn('', function () { menu(g, items()); }, 'sm gear' + (upd ? ' has-upd' : ''), 'gear', 'Actions for ' + name + (upd ? ' · an update is available' : ''));
     g.setAttribute('aria-haspopup', 'menu');
     return g;
   }
@@ -6787,13 +6798,14 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
           : ['Start', 'play', function () { dAct(c, 'start'); }, '', busy],
         c.state !== 'paused' ? ['Restart', 'restart', function () { dAct(c, 'restart'); }, '', busy] : null,
         run ? ['Pause', 'pause', function () { dAct(c, 'pause'); }, '', busy] : null,
-        ['Update' + (c.update === 'available' ? '' : ' (force)'), 'up', function () { updateMany([c.name]); }, '', busy],
+        [updOn(c) ? 'Update (new version available)' : 'Update (force)', 'up', function () { updateMany([c.name]); }, updOn(c) ? 'upd' : '', busy],
         'hr', ['Logs', 'logs', function () { logs(c.name); }], ['Details', 'info', function () { inspect(c.name); }], 'hr',
         [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('docker', c.name, { favorite: !p.favorite }); }],
         [S.L.docker.selected.indexOf(c.name) >= 0 ? 'Remove from "Selected"' : 'Show in "Selected"', 'check', function () { toggleSelected(c.name); }],
         [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('docker', c.name, { hidden: !p.hidden }); }],
+        S.L.docker.update_check !== false ? [p.no_update ? 'Check this container for updates' : 'Don\'t check this container for updates', 'up', function () { savePref('docker', c.name, { no_update: !p.no_update }); }] : null,
         ['Customize…', 'edit', function () { customize('docker', c); }]];
-    }));
+    }, updOn(c)));
     return a;
   }
   function dWho(c, p) {
@@ -6806,7 +6818,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     var row = h('div', { class: 'rowi' + (S.busy['d:' + c.name] ? ' busy' : ''), role: 'listitem', 'data-name': c.name });
     row._cpu = h('span'); row._mem = h('span', { class: 'muted' }); row._m = h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i')); row._up = h('span', { class: 'c-up num muted sm' }); row._mob = h('span', { class: 'mob muted sm num' });
     row.appendChild(dWho(c, p));
-    row.appendChild(h('div', { class: 'c-st' }, dStateBadge(c), c.update === 'available' || c.job === 'update_failed' ? h('span', { class: 'mob' }, dUpdBadge(c)) : null, row._mob));
+    row.appendChild(h('div', { class: 'c-st' }, dStateBadge(c), c.job === 'update_failed' ? h('span', { class: 'mob' }, dUpdBadge(c)) : null, row._mob));
     row.appendChild(h('div', { class: 'res c-res' }, h('div', { class: 'inl', style: { gap: '6px' } }, row._cpu, row._mem), row._m));
     row.appendChild(row._up);
     row.appendChild(h('div', { class: 'c-upd' }, dUpdBadge(c)));
@@ -6821,7 +6833,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     row.appendChild(h('div', { class: 'who c-who' }, webA(web, wt, img(iconUrl(p.icon || c.icon), '', 'box')), webA(web, wt, h('span', { class: 'nm ell' }, p.label || c.name, p.favorite ? ic('star', true) : null))));
     row.appendChild(h('div', { class: 'c-st' }, dStateBadge(c)));
     row.appendChild(row._cpu); row.appendChild(row._mem);
-    row.appendChild(h('div', { class: 'c-upd' }, c.update === 'available' || c.job === 'update_failed' ? dUpdBadge(c) : null));
+    row.appendChild(h('div', { class: 'c-upd' }, c.job === 'update_failed' ? dUpdBadge(c) : null));
     row.appendChild(dActions(c, p));
     return row;
   }
@@ -6836,11 +6848,14 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     if (sh('memory') && S.boot.caps.docker_stats) sub.appendChild(cell._mem);
     if (cell._up) sub.appendChild(cell._up);
     if (sh('image')) sub.appendChild(h('span', { class: 'ell' }, c.image));
-    if (!sub.childNodes.length || c.state !== 'running') { clear(sub); sub.appendChild(h('span', null, st.textContent)); cell._cpu = h('span'); cell._mem = h('span'); cell._up = null; }
+    if (!sub.childNodes.length || c.state !== 'running') {
+      clear(sub); cell._cpu = h('span'); cell._mem = h('span'); cell._up = null;
+      if (!/^(running|stopped|created)$/.test(st.textContent)) sub.appendChild(h('span', null, st.textContent));   // the dot says running / stopped
+    }
     var web = dWeb(c), wt = web ? 'Open the web UI of ' + c.name : c.name + ' · ' + c.image;
     cell.appendChild(webA(web, wt, img(iconUrl(p.icon || c.icon), 'cico', 'box')));
     cell.appendChild(h('div', { class: 'cn' }, h('span', { class: 'cname ell' }, dot, webA(web, wt, p.label || c.name), p.favorite ? ic('star', true) : null), sub));
-    if (sh('update') && (c.update === 'available' || c.job === 'update_failed')) cell.appendChild(dUpdBadge(c));
+    if (c.job === 'update_failed') cell.appendChild(dUpdBadge(c));
     cell.appendChild(dActions(c, p));
     return cell;
   }
@@ -7786,7 +7801,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
           h('div', { class: 'hint', style: { 'margin-bottom': '10px' } }, 'Rename a group in its name box. "Show name" hides one group\'s name and keeps its apps together. On the dashboard, the gear next to a group name does the same.'),
           ed.groups()];
       },
-      docker: function () { return [dockerOpts(c, dirty), sub('Names, icons and visibility', 'Kept by name, so they survive updates and re-created containers. Star = favorite, crossed eye = hidden from the dashboard.'), namesList(c, dirty, 'docker')]; },
+      docker: function () { return [dockerOpts(c, dirty), sub('Names, icons and visibility', 'Kept by name, so they survive updates and re-created containers. Star = favorite, crossed eye = hidden from the dashboard, arrow = checked for updates.'), namesList(c, dirty, 'docker')]; },
       vms: function () { return [h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']]))), sub('Names, icons and visibility', 'VMs are found automatically through libvirt.'), namesList(c, dirty, 'vms')]; }
     };
     function sub(t, hint) { return h('div', { class: 'sub-h' }, h('b', null, t), hint ? h('span', { class: 'hint' }, hint) : null); }
@@ -7807,7 +7822,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   }
   function dockerOpts(c, dirty) {
     var D2 = c.docker;
-    var shows = [['cpu', 'CPU'], ['memory', 'Memory'], ['uptime', 'Uptime'], ['image', 'Image'], ['update', 'Update badge']];
+    var shows = [['cpu', 'CPU'], ['memory', 'Memory'], ['uptime', 'Uptime'], ['image', 'Image']];
     var showBox = h('div', { class: 'inl' }, shows.map(function (x) {
       return h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D2.show.indexOf(x[0]) >= 0, onchange: function (e) {
         D2.show = D2.show.filter(function (k) { return k !== x[0]; }); if (e.target.checked) D2.show.push(x[0]); dirty(); } }), x[1]);
@@ -7832,6 +7847,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
         F('Layout', sIn(D2, 'layout', dirty, [['grid', 'Compact grid'], ['list', 'Table'], ['cards', 'Cards']])),
         F('Grid columns', sIn(D2, 'columns', dirty, [[0, 'Automatic (fits the width)'], [1, '1'], [2, '2'], [3, '3'], [4, '4']])),
         F('Sort by', sIn(D2, 'sort', dirty, [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']]))),
+      cIn(D2, 'update_check', dirty, 'Check for container updates: the gear turns orange when a container has one'),
       F('Details on each container', showBox, S.boot.caps.docker_stats ? null : 'CPU and memory are not available through the Unraid API (Docker version).'),
       h('div', { class: 'fld' }, h('label', null, 'Selected containers ', selCount),
         h('div', { class: 'inl', style: { 'margin-bottom': '6px' } }, pf,
@@ -7856,7 +7872,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
           h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
           h('label', { class: 'switch', title: 'Favorite' }, h('input', { type: 'checkbox', checked: !!p.favorite, 'aria-label': 'Favorite ' + it.name, onchange: function (e) { p.favorite = e.target.checked; put(); } }), ic('star')),
-          h('label', { class: 'switch', title: 'Hidden from the dashboard' }, h('input', { type: 'checkbox', checked: !!p.hidden, 'aria-label': 'Hide ' + it.name, onchange: function (e) { p.hidden = e.target.checked; put(); } }), ic('eyeoff'))));
+          h('label', { class: 'switch', title: 'Hidden from the dashboard' }, h('input', { type: 'checkbox', checked: !!p.hidden, 'aria-label': 'Hide ' + it.name, onchange: function (e) { p.hidden = e.target.checked; put(); } }), ic('eyeoff')),
+          kind === 'docker' ? h('label', { class: 'switch', title: 'Check for updates' }, h('input', { type: 'checkbox', checked: !p.no_update, 'aria-label': 'Check ' + it.name + ' for updates', onchange: function (e) { p.no_update = !e.target.checked; put(); } }), ic('up')) : null));
       });
       if (!list.childNodes.length) list.appendChild(h('div', { class: 'empty' }, items.length ? 'Nothing matches.' : kind === 'docker' ? 'No containers found yet.' : 'No VMs found yet.'));
     }
@@ -8469,7 +8486,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>0bef81d5df47d3d7512a67954e3bb66e442c175d2eac241578eb7615f7223cb6</SHA256>
+<SHA256>44f2981ab1e1f0b4263a04532f627db6c544dd4241094a3c6238049014665a81</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
