@@ -331,6 +331,13 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .toasts{position:fixed;right:16px;bottom:16px;z-index:10003;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
 .und .toast{background:var(--panel);color:var(--text);border:1px solid var(--line-2);border-left:3px solid var(--ok);padding:9px 14px;border-radius:6px;max-width:420px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:13px;pointer-events:auto}
 .und .toast.bad{border-left-color:var(--bad)}
+.und .upbar{width:320px;max-width:calc(100vw - 32px);pointer-events:auto;background:var(--panel);color:var(--text);border:1px solid var(--line-2);border-left:3px solid var(--accent);border-radius:6px;padding:9px 12px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:13px}
+.und .upbar.ok{border-left-color:var(--ok)}.und .upbar.bad{border-left-color:var(--bad)}
+.und .upbar-h{display:flex;align-items:center;gap:8px;min-height:22px}.und .upbar-h>b{flex:1;min-width:0}
+.und .upbar .progress{margin:6px 0 2px}.und .upbar .chips{margin-top:6px}.und .upbar .chips:empty{display:none}
+.und .upbar pre.log{min-height:0;max-height:180px;margin-top:8px;font-size:11px}
+.und .upbar-f{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.und .upbar [hidden]{display:none}
 .und .toast.act{display:flex;align-items:center;gap:12px}.und .toast.act>span{flex:1;min-width:0}
 .und .ign-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.und .ign-bar input{flex:1 1 220px;min-width:0}
 .und .olist.ign-list{border:0;border-radius:0}.und .ign-list .oi.ign{border:1px solid var(--line);border-radius:var(--radius);margin-bottom:6px}
@@ -381,6 +388,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und .drawer .dt .dg{display:none}
   .und .drawer .dt button{white-space:nowrap;flex:none}.und .drawer .dt button.on{box-shadow:inset 0 -2px 0 var(--accent)}
   .und .toasts{left:12px;right:12px;bottom:12px;align-items:stretch}.und .toast{max-width:none}
+  .und .upbar{width:auto;max-width:none}
   .und .tiles,.und .favs{grid-template-columns:1fr}
   .und .sec-h .tools{margin-left:0;width:100%}
   .und .top .acts .btn.focus{display:none!important}
