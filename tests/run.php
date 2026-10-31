@@ -965,6 +965,11 @@ t('the board is on by default', und_board_clean(null)['on'] === true && und_defa
 $c = und_default_config(); $c['dashboard']['board']['lg'] = [['i' => 'arr', 'x' => 2, 'y' => 3, 'w' => 6, 'h' => 9]];
 t('a saved board survives loading the settings', und_normalize($c)['dashboard']['board']['lg'][0]['x'] === 2);
 
+$c = und_default_config(); $c['appearance']['radius'] = 500;
+t('the corner radius stays inside its limits', und_normalize($c)['appearance']['radius'] === 28 && und_default_config()['appearance']['radius'] === 16);
+$c['appearance']['radius'] = -9;
+t('a negative corner radius becomes square', und_normalize($c)['appearance']['radius'] === 0);
+
 group('background jobs');
 $mock = $GLOBALS['UND_SPAWN_MOCK']; unset($GLOBALS['UND_SPAWN_MOCK']);
 $log = und_tmp('job-test.log');

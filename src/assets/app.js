@@ -338,6 +338,7 @@
     root.classList.toggle('no-sec-names', a.sec_names === false);
     var set = function (k, v) { root.style.setProperty(k, v); };
     if (S.L && boardOn() && a.theme === 'default' && !light) p = Object.assign({}, p, BOARD_DARK);
+    if (S.L && boardOn()) set('--radius', Math.max(0, Math.min(28, a.radius === undefined ? 16 : +a.radius || 0)) + 'px'); else root.style.removeProperty('--radius');
     [['--bg', 'bg'], ['--panel', 'panel'], ['--panel-2', 'p2'], ['--bar', 'bar'], ['--field', 'field'], ['--line', 'line'], ['--line-2', 'l2'], ['--text', 'text'], ['--muted', 'muted'], ['--faint', 'faint'], ['--title', 'title']]
       .forEach(function (x) { set(x[0], p[x[1]]); });
     ['ok', 'warn', 'bad', 'info', 'off'].forEach(function (k) {
@@ -3072,6 +3073,7 @@
     };
     b.appendChild(set('Spacing', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
       F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
+      F('Corner radius', rng('radius', 0, 28, ' px', 'Corner radius'), 'How round the cards are on the card board, from square to 28 px.'),
       F('Text size', sIn(a, 'text_size', dirty, [['s', 'Small'], ['m', 'Normal'], ['l', 'Large']]), 'On the card board. Text also follows the size of your screen.'),
       F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'),
       F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
@@ -3080,11 +3082,11 @@
         'Found by the container\'s name or image (binhex-, linuxserver and similar prefixes are ignored). When selfh.st has none, Unraid\'s icon is used. An icon picked for a container in Sections & apps always wins.'),
       margin('safe_x', 'Side margin'), margin('safe_y', 'Top and bottom margin'))));
     var pd = function () { dirty(); preview(); };
-    var rng = function (k, lo, hi, unit, lab) {
+    function rng(k, lo, hi, unit, lab) {
       var out = h('span', { class: 'num muted sm', style: { 'min-width': '44px', 'text-align': 'right' } }, a[k] + unit);
       return h('div', { class: 'inl' }, h('input', { type: 'range', min: lo, max: hi, value: a[k], 'aria-label': lab, style: { flex: '1' },
         oninput: function (e) { a[k] = +e.target.value; txt(out, a[k] + unit); dirty(); preview(); } }), out);
-    };
+    }
     b.appendChild(set('Wallpaper', 'Optional image behind the dashboard (https:// or a path served by Unraid).', h('div', { class: 'grid2' },
       F('Image URL', tIn(a, 'background', pd, 'https://…')),
       F('Blur', sIn(a, 'blur_target', dirty, [['wallpaper', 'The whole wallpaper'], ['cards', 'Only behind the cards (frosted glass)']], preview), 'Frosted glass keeps the picture sharp and blurs it only where cards sit on it.'),

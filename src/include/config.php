@@ -78,7 +78,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 16, 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -343,6 +343,7 @@ function und_normalize(array $c) {
   $a['mode'] = in_array($a['mode'], ['dark', 'light', 'system'], true) ? $a['mode'] : 'dark';
   $a['accent'] = $a['accent'] === '' ? '' : und_hex($a['accent'], '');   // empty = the theme's own accent
   $a['density'] = in_array($a['density'], ['compact', 'comfortable', 'expanded'], true) ? $a['density'] : 'comfortable';
+  $a['radius'] = max(0, min(28, (int)($a['radius'] ?? 16)));
   $a['text_size'] = in_array($a['text_size'] ?? '', ['s', 'm', 'l'], true) ? $a['text_size'] : 'm';
   $a['background'] = preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(0, min(100, (int)$a['brightness']));

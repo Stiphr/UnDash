@@ -790,7 +790,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 }
 
 /* ===== the card board's design: one type scale, one spacing scale, cards that fit their content ===== */
-.und.bui{zoom:var(--ts,1);--radius:16px;--r2:10px;--gg:10px;--shadow:none;--safe-x:clamp(10px,1.3vw,22px);--safe-y:0px;min-height:100vh;min-height:100dvh;font-size:14px}
+.und.bui{zoom:var(--ts,1);--r2:calc(var(--radius)*.62);--gg:10px;--shadow:none;--safe-x:clamp(10px,1.3vw,22px);--safe-y:0px;min-height:100vh;min-height:100dvh;font-size:14px}
 .und.bui .btn{border-radius:999px!important}
 .und.bui .gc{container-type:inline-size}
 
