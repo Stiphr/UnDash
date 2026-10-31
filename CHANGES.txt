@@ -13,6 +13,7 @@
 - Five new themes in the spirit of qui's: Autobrr, The Kyle, Napster, Nightwalker and Swizzin, with their own palettes for the glass cards. Mono is rebuilt in clean greys with a soft light from above.
 - Every card has the same inner margin on all four sides.
 - Virtual machines look like the Containers list. Clicking a VM's icon or name opens its console in its own window; in the Docker version that works when one VM is running, and with several it opens Unraid's VMs page.
+- Settings > Sections & apps follows the board: a link to Edit layout, cards as simple rows with a switch, apps and options folded under each, and Alerts and Endpoint checks kept apart.
 - App stats run in one line across the card, so the cards are shorter. Show all sits beside the Containers count.
 - Every theme has its own gradient background, with a switch under Settings > Theme > Background.
 - Nothing is boxed inside a card any more: Now playing, Requests, Downloads and app stats sit on the card, split by thin lines.
@@ -20,7 +21,8 @@
 - System tiles show their graph only. The classic layout's bar no longer comes back over a graph either.
 - Endpoint health no longer has a card or phone tab. An address that stops answering shows in Alerts, and Endpoints there lists them all.
 - Containers are a small, plain list: no box around each one, and the gear appears when you point at it. Show all is a simple link.
-- Found on your server has a Refresh button for containers added after the page opened.
+- Found on your server has a Refresh button, and lists other running containers with a web page, which you can add as links.
+- Scrolling fades the page out under the header: a soft blur with the Translucent Effect, a colour fade without it.
 - Daily wallpaper: a new photo every day from Wikimedia Commons, with no key or account. Pick Nature, Cityscape, Cars, Mountains, Ocean or Night sky, or type your own words (Settings > Theme > Daily wallpaper). The author and licence are shown in the corner.
 - Translucent Effect (Settings > Theme): glass cards that blur and tint what is behind them, for dark and light themes. Its blur, opacity and saturation are adjustable, and the wallpaper gets saturation, contrast and opacity beside blur and brightness, all with safe limits. Without a wallpaper the page gets a soft colour wash for the glass to show.
 - Smooth animations: cards arrive in turn, and Settings, dialogs, menus, toasts and tabs move gently. Settings > Theme > Animations sets Full, Fast, Skip the opening or Off, any click or key skips the opening, and the system's reduced motion setting is respected.
