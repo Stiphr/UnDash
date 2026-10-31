@@ -15,7 +15,7 @@ function und_alert_categories() {
           'docker.update_failed' => 'Container update failed', 'array.state' => 'Array not started', 'array.resync' => 'Parity operation running',
           'disk.bad' => 'Disk disabled or missing', 'disk.errors' => 'Disk read/write errors', 'disk.hot' => 'Disk temperature', 'disk.smart' => 'Disk failed SMART (Scrutiny)',
           'os.staged' => 'Unraid update waiting for restart', 'os.available' => 'Unraid update available', 'os.check_failed' => 'Unraid update check failed',
-          'api.error' => 'Unraid API problem', 'auth.open' => 'No dashboard password'];
+          'api.error' => 'Unraid API problem', 'auth.open' => 'No dashboard password', 'health.down' => 'Endpoint not answering'];
 }
 
 const UND_IGNORE_MAX = 500;

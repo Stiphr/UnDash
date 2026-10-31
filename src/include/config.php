@@ -78,7 +78,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'pexels' => ['on' => false, 'query' => 'nature wallpaper', 'color' => 'black'], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'daily' => ['on' => false, 'topic' => 'nature', 'custom' => ''], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -314,7 +314,7 @@ function und_migrate(array $c) {
 }
 
 /** Colour themes (palettes in assets/app.js). AMOLED and Fluent Dark are dark only. */
-function und_theme_ids() { return ['default', 'amoled', 'minimal', 'wave', 'catppuccin', 'nord']; }
+function und_theme_ids() { return ['default', 'amoled', 'minimal', 'wave', 'catppuccin', 'nord', 'autobrr', 'kyle', 'napster', 'nightwalker', 'swizzin']; }
 
 /** Themes made or imported by the user: colours only as hex values, CSS cleaned like the custom CSS, look values inside their limits. */
 function und_themes_clean($list) {
@@ -327,7 +327,7 @@ function und_themes_clean($list) {
       $colors[$k] = preg_match('/^#[0-9a-f]{6}$/i', (string)($t['colors'][$k] ?? '')) ? strtolower($t['colors'][$k]) : $def;
     $look = [];
     foreach ($limits as $k => $r) if (isset($t['look'][$k])) $look[$k] = max($r[0], min($r[1], (int)$t['look'][$k]));
-    if (isset($t['look']['translucent'])) $look['translucent'] = !empty($t['look']['translucent']);
+    foreach (['translucent', 'gradient'] as $k) if (isset($t['look'][$k])) $look[$k] = !empty($t['look'][$k]);
     $out[] = ['id' => $t['id'], 'name' => und_clip(trim((string)($t['name'] ?? 'My theme')), 40) ?: 'My theme', 'mode' => ($t['mode'] ?? '') === 'light' ? 'light' : 'dark', 'colors' => $colors, 'look' => $look ?: new stdClass(), 'css' => und_clip(und_sanitize_css((string)($t['css'] ?? '')), 60000)];
   }
   return $out;
@@ -369,10 +369,14 @@ function und_normalize(array $c) {
   $a['accent'] = $a['accent'] === '' ? '' : und_hex($a['accent'], '');   // empty = the theme's own accent
   $a['density'] = in_array($a['density'], ['compact', 'comfortable', 'expanded'], true) ? $a['density'] : 'comfortable';
   $a['translucent'] = array_key_exists('translucent', $a) ? !empty($a['translucent']) : true;
+  $a['gradient'] = array_key_exists('gradient', $a) ? !empty($a['gradient']) : true;
   foreach (und_look_limits() as $k => $r) $a[$k] = max($r[0], min($r[1], (int)($a[$k] ?? $r[2])));
   $a['motion'] = in_array($a['motion'] ?? '', ['full', 'fast', 'nointro', 'off'], true) ? $a['motion'] : 'full';
-  $px = is_array($a['pexels'] ?? null) ? $a['pexels'] : [];
-  $a['pexels'] = ['on' => !empty($px['on']), 'query' => und_clip(trim((string)($px['query'] ?? 'nature wallpaper')), 80) ?: 'nature wallpaper', 'color' => in_array($px['color'] ?? 'black', UND_PEXELS_COLORS, true) ? (string)($px['color'] ?? 'black') : 'black'];
+  // the wallpaper used to come from Pexels: a saved search carries over as custom words
+  $old = (array)($c['appearance']['pexels'] ?? []);
+  $w = is_array($a['daily'] ?? null) && isset($c['appearance']['daily']) ? $a['daily'] : ['on' => !empty($old['on']), 'topic' => ($old['query'] ?? 'nature wallpaper') === 'nature wallpaper' ? 'nature' : 'custom', 'custom' => ($old['query'] ?? 'nature wallpaper') === 'nature wallpaper' ? '' : (string)$old['query']];
+  $topic = (string)($w['topic'] ?? 'nature');
+  $a['daily'] = ['on' => !empty($w['on']), 'topic' => $topic === 'custom' || isset(UND_WALL_TOPICS[$topic]) ? $topic : 'nature', 'custom' => und_clip(trim((string)($w['custom'] ?? '')), 80)];
   $a['text_size'] = in_array($a['text_size'] ?? '', ['s', 'm', 'l'], true) ? $a['text_size'] : 'm';
   $a['background'] = preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(0, min(100, (int)$a['brightness']));

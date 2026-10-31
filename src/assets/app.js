@@ -59,7 +59,7 @@
     eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', eyeoff: 'M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.1 3.9M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2',
     search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4', list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
     grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', chev: 'M6 9l6 6 6-6', history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
-    download: 'M12 4v12M6 10l6 6 6-6M4 20h16', warn: 'M12 3l10 18H2zM12 10v5M12 18h.01', mute: 'M9 18h6M6 15V10a6 6 0 0 1 9.5-4.9M18 10v5l1.5 2H8M3 3l18 18'
+    download: 'M12 4v12M6 10l6 6 6-6M4 20h16', warn: 'M12 3l10 18H2zM12 10v5M12 18h.01', bell: 'M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4', mute: 'M9 18h6M6 15V10a6 6 0 0 1 9.5-4.9M18 10v5l1.5 2H8M3 3l18 18'
   };
   function ic(n, fill) {
     var s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor');
@@ -301,16 +301,57 @@
       light: { bg: '#f3f4f6', panel: '#ffffff', p2: '#f6f7f9', bar: '#f0f1f4', field: '#ffffff', line: '#e2e3e8', l2: '#cdd0d6', text: '#1d1f24', muted: '#5b606b', faint: '#80858f', title: '#111318', accent: '#e0491b' } },
     amoled: { name: 'Midnight', dark: { bg: '#000000', panel: '#0b0b0b', p2: '#070707', bar: '#141414', field: '#050505', line: '#202020', l2: '#2e2e2e', text: '#f2f2f2', muted: '#a8a8a8', faint: '#767676', title: '#ffffff', accent: '#f15a2c' },
       light: { bg: '#ffffff', panel: '#ffffff', p2: '#f7f7f7', bar: '#f0f0f0', field: '#ffffff', line: '#e3e3e3', l2: '#c9c9c9', text: '#000000', muted: '#4a4a4a', faint: '#777777', title: '#000000', accent: '#e0491b' } },
-    minimal: { name: 'Mono', dark: { bg: '#0a0a0a', panel: '#171717', p2: '#121212', bar: '#262626', field: '#0f0f0f', line: '#262626', l2: '#3a3a3a', text: '#fafafa', muted: '#a3a3a3', faint: '#737373', title: '#ffffff', accent: '#e5e5e5' },
-      light: { bg: '#fafafa', panel: '#ffffff', p2: '#f5f5f5', bar: '#f5f5f5', field: '#ffffff', line: '#e5e5e5', l2: '#d4d4d4', text: '#0a0a0a', muted: '#737373', faint: '#a3a3a3', title: '#0a0a0a', accent: '#171717' } },
+    minimal: { name: 'Mono', dark: { bg: '#0b0b0c', panel: '#18181a', p2: '#131315', bar: '#232326', field: '#101012', line: '#2a2a2d', l2: '#3b3b3f', text: '#f5f5f7', muted: '#a1a1a6', faint: '#6e6e73', title: '#ffffff', accent: '#f5f5f7', ok: '#8fd6a6', warn: '#e8c46a', bad: '#ff7b72', info: '#b6c2d2' },
+      light: { bg: '#f5f5f7', panel: '#ffffff', p2: '#f2f2f4', bar: '#e8e8ed', field: '#ffffff', line: '#e3e3e8', l2: '#d2d2d7', text: '#1d1d1f', muted: '#6e6e73', faint: '#8e8e93', title: '#000000', accent: '#1d1d1f' } },
     wave: { name: 'Kanagawa', dark: { bg: '#1f1f28', panel: '#2a2a37', p2: '#232330', bar: '#363646', field: '#1a1a22', line: '#363646', l2: '#54546d', text: '#dcd7ba', muted: '#a8a48f', faint: '#727169', title: '#ece7cb', accent: '#7e9cd8', ok: '#98bb6c', warn: '#e6c384', bad: '#e46876', info: '#7fb4ca' },
       light: { bg: '#e5ddb0', panel: '#f2ecbc', p2: '#ece5b6', bar: '#e7dba0', field: '#f7f1c8', line: '#d5cea3', l2: '#c7bf93', text: '#545464', muted: '#6f6e66', faint: '#8a8980', title: '#43436c', accent: '#4d699b', ok: '#6f894e', warn: '#836f4a', bad: '#c84053', info: '#4e8ca2' } },
     catppuccin: { name: 'Catppuccin', dark: { bg: '#11111b', panel: '#1e1e2e', p2: '#181825', bar: '#313244', field: '#181825', line: '#313244', l2: '#45475a', text: '#cdd6f4', muted: '#a6adc8', faint: '#7f849c', title: '#e6ebff', accent: '#cba6f7', ok: '#a6e3a1', warn: '#f9e2af', bad: '#f38ba8', info: '#89b4fa' },
       light: { bg: '#dce0e8', panel: '#eff1f5', p2: '#e6e9ef', bar: '#ccd0da', field: '#e6e9ef', line: '#ccd0da', l2: '#bcc0cc', text: '#4c4f69', muted: '#6c6f85', faint: '#8c8fa1', title: '#4c4f69', accent: '#8839ef', ok: '#40a02b', warn: '#b76d0b', bad: '#d20f39', info: '#1e66f5' } },
     nord: { name: 'Nord', dark: { bg: '#2e3440', panel: '#3b4252', p2: '#353b49', bar: '#434c5e', field: '#2b303b', line: '#434c5e', l2: '#4c566a', text: '#e5e9f0', muted: '#aeb6c4', faint: '#7b88a1', title: '#eceff4', accent: '#88c0d0', ok: '#a3be8c', warn: '#ebcb8b', bad: '#bf616a', info: '#81a1c1' },
-      light: { bg: '#e5e9f0', panel: '#eceff4', p2: '#e8ecf2', bar: '#d8dee9', field: '#f2f4f8', line: '#d8dee9', l2: '#c2cad8', text: '#2e3440', muted: '#4c566a', faint: '#7b88a1', title: '#2e3440', accent: '#5e81ac', ok: '#5c7d43', warn: '#9a7417', bad: '#bf616a', info: '#5e81ac' } }
+      light: { bg: '#e5e9f0', panel: '#eceff4', p2: '#e8ecf2', bar: '#d8dee9', field: '#f2f4f8', line: '#d8dee9', l2: '#c2cad8', text: '#2e3440', muted: '#4c566a', faint: '#7b88a1', title: '#2e3440', accent: '#5e81ac', ok: '#5c7d43', warn: '#9a7417', bad: '#bf616a', info: '#5e81ac' } },
+    autobrr: { name: 'Autobrr', dark: { bg: '#14151b', panel: '#1e1f27', p2: '#191a21', bar: '#2a2c36', field: '#121318', line: '#2c2e38', l2: '#40424f', text: '#e9eaf0', muted: '#a2a4b3', faint: '#737586', title: '#ffffff', accent: '#4f8dff' },
+      light: { bg: '#eef0f6', panel: '#ffffff', p2: '#f4f5f9', bar: '#e7e9f1', field: '#ffffff', line: '#dfe1ea', l2: '#c8cbd8', text: '#1b1c24', muted: '#5c5f70', faint: '#868899', title: '#0d0e14', accent: '#2563eb' } },
+    kyle: { name: 'The Kyle', dark: { bg: '#10121f', panel: '#1b1a33', p2: '#161529', bar: '#2a2747', field: '#0e0f1b', line: '#2e2b4d', l2: '#46426c', text: '#f1eff8', muted: '#b0abc6', faint: '#7f7a99', title: '#ffffff', accent: '#ec3f9d' },
+      light: { bg: '#fbf0f6', panel: '#ffffff', p2: '#fbf4f8', bar: '#f6e4ee', field: '#ffffff', line: '#f0dde8', l2: '#e0c6d5', text: '#201a2b', muted: '#6c5f74', faint: '#958999', title: '#14101c', accent: '#c81e7e' } },
+    napster: { name: 'Napster', dark: { bg: '#0d1433', panel: '#17204a', p2: '#121a3e', bar: '#232e62', field: '#0b112b', line: '#27336b', l2: '#3d4a8c', text: '#eef0fa', muted: '#aab1d4', faint: '#7a82a8', title: '#ffffff', accent: '#f2d23d' },
+      light: { bg: '#c9c9cd', panel: '#f4f4f5', p2: '#e9e9eb', bar: '#dcdcdf', field: '#ffffff', line: '#b9b9bf', l2: '#9c9ca5', text: '#14151c', muted: '#4a4b57', faint: '#6d6e7a', title: '#0a0c24', accent: '#1f2f8f' } },
+    nightwalker: { name: 'Nightwalker', dark: { bg: '#1c2130', panel: '#262c3d', p2: '#212636', bar: '#323a4f', field: '#191d2a', line: '#333b50', l2: '#4a5470', text: '#e4e9f4', muted: '#a7b0c6', faint: '#7a84a0', title: '#f6f8ff', accent: '#6ea8ff' },
+      light: { bg: '#e6ebf4', panel: '#fbfcfe', p2: '#f1f4f9', bar: '#e2e8f2', field: '#ffffff', line: '#d9e0ec', l2: '#c2cbdc', text: '#1a2133', muted: '#566079', faint: '#7f89a1', title: '#0e1424', accent: '#2f6fd8' } },
+    swizzin: { name: 'Swizzin', dark: { bg: '#1a1b1c', panel: '#26282a', p2: '#202223', bar: '#323436', field: '#171819', line: '#343638', l2: '#4a4d50', text: '#f1f2f2', muted: '#a9adb0', faint: '#7b7f82', title: '#ffffff', accent: '#2fc4a0' },
+      light: { bg: '#eff1f1', panel: '#ffffff', p2: '#f5f6f6', bar: '#e8ebeb', field: '#ffffff', line: '#dfe3e3', l2: '#c7cdcd', text: '#26292b', muted: '#5e6467', faint: '#878d90', title: '#141617', accent: '#2d6a86' } }
   };
   var STATUS = { dark: { ok: '#4ec38b', warn: '#e8b33c', bad: '#ff6b5e', info: '#79a0ee', off: '#8a8484' }, light: { ok: '#14804a', warn: '#8a5a00', bad: '#c4332a', info: '#2457c5', off: '#6f7480' } };
+  /* each theme's background: a soft mesh of its own colours. Themes made in Settings get one from their background and accent. */
+  var MESH = {
+    default: { dark: 'radial-gradient(95% 72% at 84% 110%,#e88b42 0%,#c95a2b 30%,transparent 70%),radial-gradient(72% 56% at 16% 108%,#a53c5e 0%,transparent 72%),radial-gradient(62% 46% at 60% 64%,rgba(124,58,112,.6),transparent 74%),radial-gradient(72% 52% at 8% -4%,#27467a,transparent 72%),linear-gradient(176deg,#0e1628,#191830 48%,#2c1a33)',
+      light: 'radial-gradient(95% 72% at 86% 108%,#ffb878,transparent 70%),radial-gradient(72% 56% at 10% 104%,#f7a3ad,transparent 72%),radial-gradient(72% 52% at 12% -4%,#a8c9f2,transparent 72%),linear-gradient(176deg,#dde9f6,#f4eaeb 55%,#fce4d4)' },
+    amoled: { dark: 'radial-gradient(62% 46% at 86% -4%,#14346a,transparent 72%),radial-gradient(54% 42% at 12% 106%,#3d1156,transparent 72%),radial-gradient(44% 32% at 64% 112%,#0c4e5c,transparent 72%),#000',
+      light: 'radial-gradient(62% 46% at 86% -4%,#dbe7ff,transparent 72%),radial-gradient(54% 42% at 12% 106%,#efdcfb,transparent 72%),radial-gradient(44% 32% at 64% 112%,#d4f1f4,transparent 72%),#fff' },
+    minimal: { dark: 'radial-gradient(100% 62% at 50% -14%,#5a5a60,transparent 70%),radial-gradient(60% 46% at 100% 104%,#2e2e32,transparent 72%),radial-gradient(60% 46% at 0% 104%,#232326,transparent 72%),linear-gradient(180deg,#101012,#0a0a0b)',
+      light: 'radial-gradient(100% 62% at 50% -14%,#fff,transparent 70%),radial-gradient(60% 46% at 100% 104%,#d3d3d9,transparent 72%),radial-gradient(60% 46% at 0% 104%,#dcdce1,transparent 72%),linear-gradient(180deg,#f5f5f7,#e9e9ee)' },
+    wave: { dark: 'radial-gradient(84% 62% at 86% 108%,#2d5a78,transparent 72%),radial-gradient(62% 50% at 8% 98%,rgba(149,127,184,.5),transparent 72%),radial-gradient(54% 42% at 76% -4%,#223249,transparent 72%),radial-gradient(26% 22% at 24% 10%,rgba(195,64,67,.28),transparent 74%),linear-gradient(170deg,#16161d,#1f1f28 50%,#1a2330)',
+      light: 'radial-gradient(84% 62% at 86% 108%,#a5c9d6,transparent 72%),radial-gradient(62% 50% at 8% 98%,#d8c6e0,transparent 72%),radial-gradient(26% 22% at 24% 10%,#efb6a6,transparent 74%),linear-gradient(170deg,#f2ecbc,#e8dfb4 60%,#dfe0c0)' },
+    catppuccin: { dark: 'radial-gradient(72% 60% at 86% -2%,rgba(203,166,247,.55),transparent 72%),radial-gradient(72% 60% at 6% 104%,rgba(137,180,250,.46),transparent 72%),radial-gradient(52% 42% at 78% 106%,rgba(245,194,231,.36),transparent 72%),linear-gradient(165deg,#11111b,#1e1e2e)',
+      light: 'radial-gradient(72% 60% at 86% -2%,#d9c2fa,transparent 72%),radial-gradient(72% 60% at 6% 104%,#b8d0fb,transparent 72%),radial-gradient(52% 42% at 78% 106%,#f9cfe6,transparent 72%),linear-gradient(165deg,#eff1f5,#dce0e8)' },
+    nord: { dark: 'radial-gradient(82% 56% at 82% -4%,rgba(136,192,208,.48),transparent 72%),radial-gradient(62% 50% at 12% 104%,rgba(180,142,173,.42),transparent 72%),radial-gradient(62% 46% at 92% 106%,rgba(163,190,140,.26),transparent 72%),radial-gradient(70% 52% at 6% 6%,rgba(94,129,172,.5),transparent 72%),linear-gradient(170deg,#242933,#2e3440)',
+      light: 'radial-gradient(82% 56% at 82% -4%,#b6dbe6,transparent 72%),radial-gradient(62% 50% at 12% 104%,#e2d0df,transparent 72%),radial-gradient(62% 46% at 92% 106%,#d2e2c6,transparent 72%),linear-gradient(170deg,#eceff4,#dbe2ec)' },
+    autobrr: { dark: 'radial-gradient(80% 62% at 88% -6%,rgba(79,141,255,.5),transparent 72%),radial-gradient(70% 56% at 4% 106%,rgba(46,84,210,.42),transparent 72%),radial-gradient(44% 34% at 62% 108%,rgba(96,60,220,.24),transparent 72%),linear-gradient(170deg,#101116,#191a22)',
+      light: 'radial-gradient(80% 62% at 88% -6%,#b5cdfd,transparent 72%),radial-gradient(70% 56% at 4% 106%,#c4d0fa,transparent 72%),linear-gradient(170deg,#f3f5fa,#e4e8f3)' },
+    kyle: { dark: 'radial-gradient(84% 62% at 90% 106%,rgba(236,63,157,.62),transparent 72%),radial-gradient(66% 54% at 6% 0%,rgba(92,60,214,.5),transparent 72%),radial-gradient(44% 36% at 22% 104%,rgba(170,40,170,.3),transparent 72%),linear-gradient(170deg,#0d0f1c,#171430)',
+      light: 'radial-gradient(84% 62% at 90% 106%,#f9b4d8,transparent 72%),radial-gradient(66% 54% at 6% 0%,#cfc3f7,transparent 72%),linear-gradient(170deg,#fdf3f8,#f6e6f0)' },
+    napster: { dark: 'radial-gradient(70% 54% at 88% -4%,rgba(242,210,61,.34),transparent 70%),radial-gradient(84% 60% at 4% 106%,rgba(40,70,190,.6),transparent 72%),linear-gradient(170deg,#0a1029,#121b45)',
+      light: 'radial-gradient(70% 54% at 88% -4%,#f4e596,transparent 70%),radial-gradient(84% 60% at 4% 106%,#aab6e2,transparent 72%),linear-gradient(170deg,#d6d6da,#bdbdc4)' },
+    nightwalker: { dark: 'radial-gradient(70% 56% at 76% -6%,rgba(110,168,255,.42),transparent 72%),radial-gradient(70% 54% at 4% 104%,rgba(70,92,160,.5),transparent 72%),radial-gradient(40% 30% at 96% 104%,rgba(90,210,220,.2),transparent 72%),linear-gradient(170deg,#171b28,#20263a)',
+      light: 'radial-gradient(70% 56% at 76% -6%,#bcd4f8,transparent 72%),radial-gradient(70% 54% at 4% 104%,#c9d3ea,transparent 72%),linear-gradient(170deg,#eef2f8,#dee5f1)' },
+    swizzin: { dark: 'radial-gradient(76% 58% at 88% 106%,rgba(47,196,160,.46),transparent 72%),radial-gradient(60% 46% at 4% -4%,rgba(60,120,140,.34),transparent 72%),linear-gradient(170deg,#161718,#212324)',
+      light: 'radial-gradient(76% 58% at 88% 106%,#b0e3d5,transparent 72%),radial-gradient(60% 46% at 4% -4%,#bcd6e2,transparent 72%),linear-gradient(170deg,#f3f5f5,#e4e8e8)' }
+  };
+  function meshCss(id, mode) {
+    var t = THEMES[id] || THEMES.default;
+    if (!t.custom) return (MESH[id] || MESH.default)[mode];
+    var c = t.custom.colors, ac = hexRgb(c.accent), tint = function (o) { return 'rgba(' + ac.join(',') + ',' + o + ')'; };
+    return 'radial-gradient(86% 66% at 84% 108%,' + tint(0.62) + ',transparent 72%),radial-gradient(66% 56% at 8% -4%,' + tint(0.26) + ',transparent 72%),linear-gradient(170deg,' + c.bg + ',' + mix(hexRgb(c.bg), ac, 0.16) + ')';
+  }
   var DARK_OS = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
   /* the six colours of any theme, as plain hex, for the theme maker and the export file */
   function applyBase(p, mode, a) {
@@ -345,6 +386,8 @@
     root.setAttribute('data-density', a.density);
     root.classList.toggle('no-sec-names', a.sec_names === false);
     root.classList.toggle('translucent', !!a.translucent);
+    root.classList.toggle('mesh', a.gradient !== false);
+    root.style.setProperty('--mesh', meshCss(a.theme, mode));
     root.setAttribute('data-motion', a.motion || 'full');
     var set = function (k, v) { root.style.setProperty(k, v); };
     var look = function (k, d) { return a[k] === undefined ? d : a[k]; };
@@ -366,7 +409,7 @@
     // link text must stay readable on the panel colour: darken on light, lighten on dark
     set('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : acc) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
     if (window.UND_STANDALONE) document.body.style.background = p.bg;
-    var wall = a.pexels && a.pexels.on && S.wall && S.wall.url ? S.wall.url : a.background;
+    var wall = a.daily && a.daily.on && S.wall && S.wall.url ? S.wall.url : a.background;
     root.classList.toggle('has-bg', !!wall);
     // wallpaper blur: the whole picture, or only what shows through the (then see-through) cards
     // the margin around the dashboard: automatic, or what Settings > Theme says
@@ -386,15 +429,15 @@
       bg.style.inset = glass ? '0' : '-' + (a.blur * 2) + 'px';
     } else if (bg) bg.parentNode.removeChild(bg);
   }
-  /* Pexels asks for the photographer to be named, with a link back */
+  /* these photos are free to use when the author and licence are named, with a link back */
   function wallCredit(w) {
     var old = root.querySelector('.wcredit'); if (old) old.remove();
-    if (w) root.appendChild(h('div', { class: 'wcredit' }, 'Photo by ', h('a', { href: w.by_url, target: '_blank', rel: 'noopener' }, w.by || 'a photographer'), ' on ', h('a', { href: w.link, target: '_blank', rel: 'noopener' }, 'Pexels')));
+    if (w) root.appendChild(h('div', { class: 'wcredit' }, h('a', { href: w.link, target: '_blank', rel: 'noopener' }, 'Photo' + (w.by ? ' by ' + w.by : '')), (w.license ? ' · ' + w.license : '') + ' · Wikimedia Commons'));
   }
-  /* today's photo; the server asks Pexels at most once a day, the page looks again every hour for the new day */
+  /* today's photo; the server asks Wikimedia Commons at most once a day, the page looks again every hour for the new day */
   function loadWall() {
     clearTimeout(S.wallT);
-    if (!S.L.appearance.pexels || !S.L.appearance.pexels.on) { if (S.wall) { S.wall = null; applyLook(); } return; }
+    if (!S.L.appearance.daily || !S.L.appearance.daily.on) { if (S.wall) { S.wall = null; applyLook(); } return; }
     api('wallpaper').then(function (j) {
       S.wall = j.url ? j : null; S.wallErr = j.error || '';
       if (!S.drawer) applyLook();
@@ -425,7 +468,7 @@
   var R = {};      // references to live parts of the page
   function shell() {
     closeMenu(true);
-    clear(root); R = {}; toastBox = null;
+    alertClose(); clear(root); R = {}; toastBox = null;
     applyLook();
     applyCss(S.boot.css);
     var g = S.L.general;
@@ -436,7 +479,8 @@
       oninput: function () { S.q = R.search.value; searchRun(); },
       onfocus: function () { if (S.q.trim() && R.sbox.hidden) searchRun(); },
       onkeydown: searchKey }) : null;
-    var acts = h('div', { class: 'acts' }, R.live,
+    R.bell = boardOn() ? h('button', { type: 'button', class: 'bell', hidden: true, 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: alertPop }, ic('bell'), R.bellT = h('span', { class: 'bt' })) : null;
+    var acts = h('div', { class: 'acts' }, R.bell, R.live,
       R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
       window.UND_STANDALONE ? null : btn('', toggleFull, 'focus' + (S.full ? ' on' : ''), 'full', S.full ? 'Exit focus mode' : 'Focus mode (hide Unraid\'s menu)'),
       R.priv = btn('', togglePrivacy, 'priv', 'eye', 'Blur titles, posters, torrents and the server name'),
@@ -458,10 +502,12 @@
       if (sec.visible && (!board || want[sec.id])) buildSection(sec);
     });
     if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Sections & apps.'));
+    if (R.bell) R.bell.hidden = !R.alerts;
+    if (R.bell && R.alerts && R.health) R.alerts.tools.insertBefore(btn('Endpoints', function () { alertClose(); endpointsDialog(); }, 'ghost sm', 'web', 'Every address UnDash checks, and how it answered'), R.alerts.tools.firstChild);
     if (board) boardMount(); else packHalves();
     paintAll(); paintLive(); paintIdent();
     if (!S.selfT) { S.selfT = 1; checkSelf(); }
-    if (S.wallFor !== JSON.stringify(S.L.appearance.pexels)) { S.wallFor = JSON.stringify(S.L.appearance.pexels); loadWall(); }
+    if (S.wallFor !== JSON.stringify(S.L.appearance.daily)) { S.wallFor = JSON.stringify(S.L.appearance.daily); loadWall(); }
   }
 
   /* privacy: blurs what you may not want on a screen share or a screenshot, on this browser only */
@@ -501,8 +547,8 @@
   var BOARD_ROW = 20, BOARD_GAP = 10, BOARD_COLS = { lg: 24, md: 12 };
   var BOARD_DARK = { bg: '#101114', panel: '#1b1c20', p2: '#141518', bar: '#26272c', field: '#131417', line: '#2c2d33', l2: '#3c3d44', text: '#f2f2f4', muted: '#a3a4ad', faint: '#74757f', accent: '#ec6a35' };
   var BOARD_LIGHT = { bg: '#eceef1', panel: '#ffffff', p2: '#f4f5f7', bar: '#ebedf0', field: '#ffffff', line: '#dcdfe4', l2: '#c8ccd3', text: '#1d1d1f', muted: '#5f6168', faint: '#86878f', accent: '#d9531e' };
-  var BOARD_TABS = [['home', 'Home', 'server'], ['media', 'Media', 'play'], ['apps', 'Apps', 'grid'], ['docker', 'Docker', 'box'], ['health', 'Health', 'check']];
-  function boardTab(s) { return { media: 'media', arr: 'apps', downloads: 'apps', apps: 'apps', docker: 'docker', vms: 'docker', health: 'health' }[s] || 'home'; }
+  var BOARD_TABS = [['home', 'Home', 'server'], ['media', 'Media', 'play'], ['apps', 'Apps', 'grid'], ['docker', 'Docker', 'box']];
+  function boardTab(s) { return { media: 'media', arr: 'apps', downloads: 'apps', apps: 'apps', docker: 'docker', vms: 'docker' }[s] || 'home'; }
   var MD = window.matchMedia ? window.matchMedia('(max-width:1100px)') : null, SM = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
   function boardOn() { return !!(S.L.dashboard.board && S.L.dashboard.board.on); }
   function boardMode() { return SM && SM.matches ? 'sm' : MD && MD.matches ? 'md' : 'lg'; }
@@ -510,7 +556,7 @@
   function boardCards() {
     var out = [], d = S.L.dashboard, api = S.boot.caps.mode === 'api';
     d.sections.forEach(function (sec) {
-      if (!sec.visible) return;
+      if (!sec.visible || sec.id === 'alerts' || sec.id === 'health') return;     // alerts live in the header, and a dead endpoint is an alert
       if (sec.id === 'overview') d.metrics.forEach(function (m) { if (m.visible && MET[m.id] && !((m.id === 'load' || m.id === 'path') && api)) out.push({ i: 'm:' + m.id, t: MET[m.id][0], s: 'overview', w: 3, h: 5, minw: 2, minh: 3 }); });
       else if (sec.id === 'media') { var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; }); MEDIA_ORDER.forEach(function (id) { if (vis[id] !== false) out.push({ i: 'media:' + id, t: MEDIA[id][0], s: 'media', w: 6, h: 18, minw: 3, minh: 6 }); }); }
       else if (sec.id === 'apps') S.L.groups.forEach(function (g) { g.services.forEach(function (x) {
@@ -518,15 +564,15 @@
         out.push({ i: 'app:' + x.id, t: x.name, s: 'apps', link: x.type === 'link', w: x.type === 'link' ? 4 : 4, h: x.type === 'link' ? 3 : 7, minw: 2, minh: 3 });
       }); });
       else {
-        var size = { alerts: [24, 6], favorites: [24, 8], arr: [12, 20], downloads: [12, 16], playing: [12, 10], requests: [12, 16], docker: [24, 24], vms: [12, 10], health: [12, 14] }[sec.id] || [12, 10];
-        out.push({ i: sec.id, t: TITLES[sec.id], s: sec.id, w: size[0], h: size[1], minw: 4, minh: 3, maxh: sec.id === 'docker' || sec.id === 'health' ? 100 : 60 });
+        var size = { favorites: [24, 8], arr: [12, 20], downloads: [12, 16], playing: [12, 10], requests: [12, 16], docker: [24, 24], vms: [12, 10] }[sec.id] || [12, 10];
+        out.push({ i: sec.id, t: TITLES[sec.id], s: sec.id, w: size[0], h: size[1], minw: 4, minh: 3, maxh: sec.id === 'docker' ? 100 : 60 });
       }
     });
     return out;
   }
   /* which sections to build: System and Apps always (their parts are painted even off the board), the others when a card needs them */
   function boardWants() {
-    var bd = S.L.dashboard.board, gone = {}, want = { overview: 1 }; (bd.hidden || []).forEach(function (i) { gone[i] = 1; });
+    var bd = S.L.dashboard.board, gone = {}, want = { overview: 1, alerts: 1, health: 1 }; (bd.hidden || []).forEach(function (i) { gone[i] = 1; });
     boardCards().forEach(function (c) { if (c.s === 'apps' || !gone[c.i]) want[c.s] = 1; });
     return want;
   }
@@ -1352,7 +1398,7 @@
     var t = R.overview.tiles[id]; if (!t) return;
     txt(t.v, val); txt(t.s, sub || '');
     t.m.style.width = (p === null || p === undefined ? 0 : Math.max(0, Math.min(100, p))) + '%';
-    t.el.className = 'stat ' + (lvl || '') + (R.overview.open === id ? ' on' : '');
+    t.el.className = 'stat ' + (lvl || '') + (R.overview.open === id ? ' on' : '') + (t.sp.firstChild ? ' has-sp' : '');
   }
   /* a tile's history as an area chart behind the number (Grafana-style); the plain bar stays for tiles without history */
   /* hi null = scale to the data, never below floor (so a quiet 3% CPU still shows its shape without looking busy) */
@@ -1500,15 +1546,41 @@
   /* ---- alerts ---- */
   BUILD.alerts = function (r) {
     r.list = h('div', { class: 'alerts' }); r.body.appendChild(r.list);
-    r.ign = h('button', { type: 'button', class: 'btn ghost sm', hidden: true, onclick: function () { openSettings('ignored'); } });
+    r.ign = h('button', { type: 'button', class: 'btn ghost sm', hidden: true, onclick: function () { alertClose(); openSettings('ignored'); } });
     r.tools.appendChild(r.ign);
-    r.tools.appendChild(btn('History', alertHistory, 'ghost sm', 'clock', 'When each problem started and ended'));
+    r.tools.appendChild(btn('History', function () { alertClose(); alertHistory(); }, 'ghost sm', 'clock', 'When each problem started and ended'));
+    if (R.bell) { r.pop = h('div', { class: 'anc', hidden: true, role: 'dialog', 'aria-label': 'Alerts' }, h('div', { class: 'anc-h' }, h('b', null, 'Alerts'), r.tools), r.list); root.appendChild(r.pop); }
   };
+  /* on the board alerts are a button in the header that names the problem and opens a list; nothing takes up a card */
+  function alertClose() {
+    var p = R.alerts && R.alerts.pop; if (!p || p.hidden) return;
+    p.hidden = true; R.bell.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', S.ancOut, true); document.removeEventListener('keydown', S.ancKey);
+  }
+  function alertPop() {
+    var r = R.alerts, p = r && r.pop; if (!p) return;
+    if (!p.hidden) { alertClose(); return; }
+    var b = R.bell.getBoundingClientRect(), ts = boardTs();
+    p.style.top = (R.bell.closest('.top').getBoundingClientRect().bottom / ts + 8) + 'px';
+    p.style.right = Math.max(8, (window.innerWidth - b.right) / ts) + 'px';
+    p.hidden = false; R.bell.setAttribute('aria-expanded', 'true');
+    S.ancOut = function (e) { if (!p.contains(e.target) && !R.bell.contains(e.target) && !(e.target.closest && e.target.closest('.menu,.modal,.modal-bg'))) alertClose(); };
+    S.ancKey = function (e) { if (e.key === 'Escape') { alertClose(); R.bell.focus(); } };
+    document.addEventListener('mousedown', S.ancOut, true); document.addEventListener('keydown', S.ancKey);
+  }
+  function paintBell(out) {
+    if (!R.bell) return;
+    var n = out.length, lv = function (k) { return out.some(function (x) { return x.lv === k; }); }, sev = lv('bad') ? ' bad' : lv('warn') ? ' warn' : n ? ' info' : '';
+    R.bell.className = 'bell' + sev;
+    txt(R.bellT, n === 1 ? ALERT_CAT[out[0].cat] || '1 alert' : n ? n + ' alerts' : '');
+    var say = n === 1 ? out[0].msg : n ? n + ' alerts' : 'No alerts';
+    R.bell.title = say; R.bell.setAttribute('aria-label', 'Alerts: ' + say);
+  }
   /* Alert ids are "<category>:<resource>" (see include/ignores.php); an alert without a category cannot be ignored. */
   var ALERT_CAT = {
     'docker.unhealthy': 'Container unhealthy', 'docker.restarting': 'Container restarting', 'docker.exited': 'Container stopped with an error', 'docker.update_failed': 'Container update failed',
     'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature', 'disk.smart': 'Disk failed SMART (Scrutiny)',
-    'auth.open': 'No dashboard password', 'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
+    'auth.open': 'No dashboard password', 'health.down': 'Endpoint not answering', 'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
   };
   /* the rules in force, by the server's clock (live.at), plus this tab's own changes until the next refresh confirms them */
   function ignRules(y) {
@@ -1538,6 +1610,7 @@
     if (S.conn === 'auth') out.push({ lv: 'bad', msg: 'Your session ended. Reload the page to sign in again.', btn: null, cat: '', res: '' });
     // the most important one: always first, red and highlighted
     if (S.boot && S.boot.auth === 'open') out.unshift({ lv: 'bad', crit: true, msg: 'No dashboard password: anyone who can open this address can see and control your containers and VMs. Set one now.', btn: ['Set password', function () { openSettings('config'); }], cat: 'auth.open', res: 'dashboard' });
+    if (R.bell) (S.down || []).forEach(function (x) { out.push({ lv: 'warn', msg: x.name + ' is not answering (' + x.text + ').', btn: x.url ? ['Open', function () { window.open(x.url, '_blank', 'noopener'); }] : null, cat: 'health.down', res: x.name }); });
     (y.alerts || []).forEach(function (a) { out.push({ lv: a.lv, msg: a.msg, btn: ALERT_ACT[a.act] ? ALERT_ACT[a.act](a.res) : null, cat: a.cat, res: a.res }); });
     return out;
   }
@@ -1574,11 +1647,12 @@
     r.ign.title = 'Alerts hidden by ignore rules. Open Settings > Ignored alerts.';
     // nothing wrong: the whole section steps aside (ignored alerts and the history are under Settings > Ignored alerts)
     r.el.hidden = !out.length;
-    if (!out.length) return;
+    paintBell(out);
+    if (!out.length) { if (r.pop) r.list.appendChild(h('div', { class: 'empty' }, 'All clear. Nothing needs your attention.')); return; }
     out.forEach(function (x) {
       var mb = x.cat ? h('button', { type: 'button', class: 'btn ghost sm', 'aria-haspopup': 'menu', title: 'Ignore this alert', 'aria-label': 'Ignore: ' + x.msg, onclick: function (e) { ignoreMenu(e.currentTarget, x); } }, ic('mute'), 'Ignore') : null;
       r.list.appendChild(h('div', { class: 'alert ' + x.lv + (x.crit ? ' crit' : ''), role: x.crit ? 'alert' : null, 'data-alert': x.cat ? x.cat + ':' + x.res : null },
-        x.crit || R.cards ? ic(x.lv === 'info' ? 'info' : 'warn') : null, h('span', { class: 'grow' }, x.crit ? h('b', null, x.msg) : x.msg), x.btn ? btn(x.btn[0], x.btn[1], x.crit ? 'sm danger solid' : 'sm') : null, mb));
+        x.crit || R.cards ? ic(x.lv === 'info' ? 'info' : 'warn') : null, h('span', { class: 'grow' }, x.crit ? h('b', null, x.msg) : x.msg), x.btn ? btn(x.btn[0], function () { alertClose(); x.btn[1](); }, x.crit ? 'sm danger solid' : 'sm') : null, mb));
     });
   }
   function durText(sec) { return sec === 'permanent' ? 'permanently' : sec % 86400 === 0 ? 'for ' + sec / 86400 + ' day' + (sec > 86400 ? 's' : '') : sec % 3600 === 0 ? 'for ' + sec / 3600 + ' hour' + (sec > 3600 ? 's' : '') : 'for ' + Math.round(sec / 60) + ' minutes'; }
@@ -1814,7 +1888,7 @@
     var dk = dockerStats(y), fs = JSON.stringify([hiddenN, S.showHidden, dk.updates, S.fd, list.length, d.containers.length]);
     if (r.fSig !== fs) {
       r.fSig = fs; clear(r.foot); clear(r.updAll);
-      if (S.fd !== 'all' && list.length < d.containers.length) r.foot.appendChild(btn('Show all ' + d.containers.length, function () { S.fd = 'all'; S.fdSet = true; shell(); }, 'sm ghost', 'eye', 'Show every container'));
+      if (S.fd !== 'all' && list.length < d.containers.length) r.foot.appendChild(h('button', { type: 'button', class: 'allb', title: 'Show every container', onclick: function () { S.fd = 'all'; S.fdSet = true; shell(); } }, 'Show all ' + d.containers.length, ic('chev')));
       if (hiddenN || S.showHidden) r.foot.appendChild(btn(S.showHidden ? 'Hide hidden containers' : 'Show ' + hiddenN + ' hidden', function () { S.showHidden = !S.showHidden; r.fSig = null; if (R.vms) R.vms.sig = null; paintAll(); }, 'sm ghost', S.showHidden ? 'eyeoff' : 'eye'));
       if (dk.updates) r.updAll.appendChild(btn('Update all (' + dk.updates + ')', function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up', 'Update every container that has an update'));
     }
@@ -2372,9 +2446,16 @@
     r.body.appendChild(r.table);
     poller('health', 'health', 60000, paintHealth);
   };
+  /* the full list, for when you want to look: on the board it has no card of its own */
+  function endpointsDialog() {
+    var r = R.health, m;
+    m = modal('Endpoints', h('div', null, h('p', { class: 'muted sm' }, r.sum), r.table), [btn('Check again', function () { txt(r.sum, 'Checking…'); pollKick('health', { force: '1' }); }, '', 'restart'), btn('Close', function () { m.close(); })], true);
+  }
   function paintHealth(j) {
     var r = R.health; if (!r) return;
     if (j.error) { clear(r.rows).appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
+    S.down = (j.rows || []).filter(function (x) { return x.level === 'bad'; });
+    if (R.alerts) paintAlerts(S.live || {});
     var bad = j.total - j.up;
     clear(r.sum);
     r.sum.appendChild(h('span', { class: bad ? 'bad-t' : 'ok-t' }, j.up + '/' + j.total + ' reachable'));
@@ -2401,9 +2482,10 @@
     r.list = h('div', { class: 'panel arr', role: 'list' }); r.rows = {};
     if (!apps.length) r.list.appendChild(h('div', { class: 'empty' }, 'No Arr apps yet. Add Radarr, Sonarr, Prowlarr… in Settings > Sections & apps.'));
     apps.forEach(function (s) {
-      var x = { s: s, dot: h('span', { class: 'sdot na', role: 'img', 'aria-label': 'checking' }), info: h('span', { class: 'ai' }, 'Checking…'), extra: h('span', { class: 'ax' }), det: h('div', { class: 'adet', hidden: true }) };
-      var tog = h('button', { type: 'button', class: 'arow', 'aria-expanded': 'false', onclick: function () { x.det.hidden = !x.det.hidden; tog.setAttribute('aria-expanded', x.det.hidden ? 'false' : 'true'); } },
-        img(iconUrl(s.icon), 'aico', 'tag'), h('span', { class: 'an' }, s.name), x.dot, x.info, x.extra);
+      var x = { s: s, dot: h('span', { class: 'sdot na', role: 'img', 'aria-label': 'checking' }), state: h('span', { class: 'ell' }, 'Checking…'), info: h('span', { class: 'ai' }), chev: h('span', { class: 'achev', hidden: true }, ic('chev')), det: h('div', { class: 'adet', hidden: true }) };
+      var tog = h('button', { type: 'button', class: 'arow', 'aria-expanded': 'false', onclick: function () { if (x.chev.hidden) return; x.det.hidden = !x.det.hidden; tog.setAttribute('aria-expanded', x.det.hidden ? 'false' : 'true'); if (R.cards) boardAutoSoon(); } },
+        img(iconUrl(s.icon), 'aico', 'tag'), h('span', { class: 'ahd' }, h('span', { class: 'an ell' }, s.name), h('span', { class: 'asub' }, x.dot, x.state)), x.info, x.chev);
+      x.tog = tog;
       x.el = h('div', { class: 'aitem', role: 'listitem', 'data-name': s.name }, h('div', { class: 'aline' }, tog, s.href_resolved ? h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('open')) : null), x.det);
       r.rows[s.id] = x; r.list.appendChild(x.el);
     });
@@ -2431,34 +2513,36 @@
     var issues = (j.health || []).length + (j.issues || []).length, bad = (j.health || []).concat(j.issues || []).some(function (z) { return z.level === 'bad'; });
     var state = !j.online ? (j.unconfigured ? 'na' : 'bad') : issues ? (bad ? 'bad' : 'warn') : 'ok';
     x.dot.className = 'sdot ' + state; x.dot.setAttribute('aria-label', !j.online ? (j.unconfigured ? 'not configured' : 'offline') : issues ? issues + ' issues' : 'online');
-    clear(x.info); clear(x.extra);
-    if (!j.online) x.info.appendChild(h('span', { class: j.unconfigured ? 'muted' : 't-bad' }, j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline'));
-    else (j.blocks || []).slice(0, 4).forEach(function (b) { x.info.appendChild(h('span', { class: 'st' }, h('b', null, fmt(b.value, b.fmt)), ' ' + b.label.toLowerCase())); });
-    var raw = (j.health || []).length + (j.issues || []).reduce(function (n, z) { return n + (z.count || 1); }, 0);
-    if (issues) x.extra.appendChild(h('span', { class: 'badge ' + (bad ? 'bad' : 'warn'), title: raw > issues ? raw + ' queue items and health checks, grouped' : null }, issues + (issues === 1 ? ' issue' : ' issues')));
-    else if (j.version) x.extra.appendChild(h('span', { class: 'muted xs' }, 'v' + j.version));
+    clear(x.info);
+    x.state.className = 'ell ' + (!j.online ? (j.unconfigured ? 'muted' : 't-bad') : issues ? (bad ? 't-bad' : 't-warn') : '');
+    txt(x.state, !j.online ? (j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline') : issues ? issues + (issues === 1 ? ' issue' : ' issues') : j.version ? 'v' + j.version : 'Healthy');
+    var list = j.online ? j.blocks || [] : [];
+    list.slice(0, 3).forEach(function (b) { x.info.appendChild(h('span', { class: 'st', title: b.label + ': ' + fmt(b.value, b.fmt) }, h('b', null, blkVal(b)), h('span', { class: 'ell' }, b.label))); });
     clear(x.det);
-    if (j.error && !j.preview) x.det.appendChild(h('div', { class: 'banner bad' }, j.error));
-    if ((j.blocks || []).length) x.det.appendChild(h('div', { class: 'blocks' }, j.blocks.map(blk)));
-    // one row per problem (the server groups a blocked season pack into one row with its count); long lists scroll inside the box
+    if (j.error && !j.preview) x.det.appendChild(h('div', { class: 'sm t-bad' }, j.error));
+    // the row shows three numbers: the rest of them and the problems open under it
+    if (list.length > 3) x.det.appendChild(h('div', { class: 'amore' }, list.slice(3).map(function (b) { return h('span', { class: 'st' }, h('b', null, blkVal(b)), ' ' + b.label.toLowerCase()); })));
     if (issues) {
       var box = h('div', { class: 'aiss', role: 'list', tabindex: '0', 'aria-label': 'Problems' });
-      (j.health || []).forEach(function (z) { box.appendChild(arrIssue(z.level, z.tag || z.source, '', z.msg, 0, z.source ? z.source + ': ' + z.msg : z.msg)); });
-      (j.issues || []).forEach(function (z) { box.appendChild(arrIssue(z.level, z.tag, z.title, z.msg, z.count, z.title + ' · ' + z.msg + (z.releases && z.releases.length ? '\n\n' + z.releases.join('\n') + (z.count > z.releases.length ? '\n…' : '') : ''))); });
+      var rows = (j.health || []).map(function (z) { return [z.level, z.tag || z.source, '', z.msg, 0, z.source ? z.source + ': ' + z.msg : z.msg]; })
+        .concat((j.issues || []).map(function (z) { return [z.level, z.tag, z.title, z.msg, z.count, z.title + ' · ' + z.msg + (z.releases && z.releases.length ? '\n\n' + z.releases.join('\n') + (z.count > z.releases.length ? '\n…' : '') : '')]; }));
+      rows.filter(function (z) { return z[0] === 'bad'; }).concat(rows.filter(function (z) { return z[0] !== 'bad'; })).forEach(function (z) { box.appendChild(arrIssue.apply(null, z)); });
       x.det.appendChild(box);
     }
-    if (j.online && !issues && !j.error) x.det.appendChild(h('div', { class: 'muted sm' }, 'No warnings' + (j.version ? ' · version ' + j.version : '') + '.'));
+    x.chev.hidden = !x.det.childNodes.length;
+    if (x.chev.hidden) { x.det.hidden = true; x.tog.setAttribute('aria-expanded', 'false'); }
   }
 
-  /* a problem row: tag pill, what (one line, click to show it whole), ×count, message */
+  /* a problem row: what is wrong (one line, click to show it whole), its kind, ×count */
   function arrIssue(level, tag, what, msg, count, tip) {
     var row = h('div', { class: 'ais ' + level, role: 'listitem', title: tip });
-    row.appendChild(h('span', { class: 'badge ' + level }, tag || (level === 'bad' ? 'Error' : 'Warning')));
+    row.appendChild(h('span', { class: 'sdot ' + level, 'aria-hidden': 'true' }));
     var t = h('span', { class: 'ais-t', tabindex: '0', role: 'button', 'aria-expanded': 'false', onclick: function () { var o = row.classList.toggle('open'); t.setAttribute('aria-expanded', o ? 'true' : 'false'); },
       onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t.click(); } } },
-      what ? h('b', null, what) : null, what ? ' · ' : null, h('span', { class: 'muted' }, msg));
+      what ? h('b', null, what) : null, what && msg && msg !== tag ? ' · ' : null, msg && msg !== tag ? h('span', { class: 'muted' }, msg) : null);
     row.appendChild(t);
-    if (count > 1) row.appendChild(h('span', { class: 'badge plain num', 'aria-label': count + ' items' }, '×' + count));
+    row.appendChild(h('span', { class: 'ais-k' }, tag || (level === 'bad' ? 'Error' : 'Warning')));
+    if (count > 1) row.appendChild(h('span', { class: 'muted xs num', 'aria-label': count + ' items' }, '×' + count));
     return row;
   }
 
@@ -2505,7 +2589,7 @@
     var chips = [['downloading', 'active', ''], ['stalled', 'stalled', 'warn'], ['queued', 'queued', ''], ['paused', 'paused', 'off'], ['seeding', 'seeding', ''], ['idle', 'idle', 'off'], ['crossseed', 'cross-seed', ''],
       ['checking', 'checking', ''], ['completed', 'done', ''], ['tracker', 'tracker issues', 'warn'], ['error', 'errors', 'bad']];
     if (j.type === 'qui') chips = chips.filter(function (z) { return z[0] !== 'completed'; });   // in qui nearly everything is complete: seeding says more
-    x.body.appendChild(h('div', { class: 'chips' }, chips.filter(function (z) { return c[z[0]]; }).map(function (z) { return h('span', { class: 'badge plain ' + z[2] }, c[z[0]].toLocaleString() + ' ' + z[1]); })));
+    x.body.appendChild(h('div', { class: 'chips' }, chips.filter(function (z) { return c[z[0]]; }).map(function (z) { return h('span', { class: 'badge plain ' + z[2] }, h('b', null, c[z[0]].toLocaleString()), ' ' + z[1]); })));
     if (j.note) x.body.appendChild(h('div', { class: 'xs t-warn' }, j.note));
     // qui: one line per qBittorrent instance
     if ((j.instances || []).length) x.body.appendChild(h('div', { class: 'dl-inst' }, j.instances.map(function (i) {
@@ -2882,7 +2966,7 @@
     paintTabs(); render();
     api('settings').then(function (j) {
       if (j.error) { status.textContent = j.error; return; }
-      D.cfg = j.config; D.pexelsKey = !!j.pexels_key; D.creds = Array.isArray(j.creds) ? {} : j.creds; D.shared = j.shared || []; D.zones = j.zones || {}; D.types = j.types; prevB.disabled = false; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
+      D.cfg = j.config; D.creds = Array.isArray(j.creds) ? {} : j.creds; D.shared = j.shared || []; D.zones = j.zones || {}; D.types = j.types; prevB.disabled = false; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
       ['docker', 'vms'].forEach(function (k) { if (Array.isArray(D.cfg[k].items)) D.cfg[k].items = {}; });
       status.textContent = 'Changes apply after saving.';
       render();
@@ -2895,7 +2979,7 @@
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
   var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font zoom scale bigger', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
-    wallpaper: 'background image picture blur', 'daily wallpaper': 'pexels random photo background', animations: 'motion effects transitions skip speed reduce smooth', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
+    wallpaper: 'background image picture blur', 'daily wallpaper': 'wikimedia commons nature city cars random photo background', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
     'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
   var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Daily wallpaper', 'Animations', 'Dashboard password'];
   function settingsIndex(D) {
@@ -3064,11 +3148,12 @@
     ed.draws.push(function () {
       var fs = foundApps(D);
       clear(foundBox);
-      if (!fs.length || ed.q || D.hideFound) return;
+      if (ed.q || D.hideFound) return;
+      var again = btn('Refresh', function () { rescan(D, again, function () { ed.draw(); }); }, 'sm ghost', 'restart', 'Look for containers added since this page opened');
       foundBox.appendChild(h('div', { class: 'found-bar' },
-        h('div', { class: 'ae-h' }, h('b', null, 'Found on your server'), h('span', { class: 'muted sm' }, fs.length + ' container' + (fs.length > 1 ? 's' : '') + ' UnDash can read. Pick one, then paste its key.'),
-          h('span', { class: 'grow' }), btn('', function () { D.hideFound = true; ed.draw(); }, 'sm ghost', 'x', 'Hide this list until Settings is opened again')),
-        h('div', { class: 'tpick found' }, fs.map(function (f) { return foundBtn(D, f, function () { addFound(D, f, null, function () { ed.draw(); }, dirty); }); }))));
+        h('div', { class: 'ae-h' }, h('b', null, 'Found on your server'), h('span', { class: 'muted sm' }, fs.length ? fs.length + ' container' + (fs.length > 1 ? 's' : '') + ' UnDash can read. Pick one, then paste its key.' : 'No new containers UnDash can read.'),
+          h('span', { class: 'grow' }), again, btn('', function () { D.hideFound = true; ed.draw(); }, 'sm ghost', 'x', 'Hide this list until Settings is opened again')),
+        !fs.length ? null : h('div', { class: 'tpick found' }, fs.map(function (f) { return foundBtn(D, f, function () { addFound(D, f, null, function () { ed.draw(); }, dirty); }); }))));
     });
     b.appendChild(set('Sections', 'Tick the sections to show, drag to reorder, and open one for its options and apps. Half-width sections sit side by side on wide screens. Keys and passwords stay in .env on the server, never in the browser.',
       orderList(c.dashboard.sections, function (s) {
@@ -3196,7 +3281,7 @@
       if (!V.rules) { list.appendChild(h('div', { class: 'progress' }, h('i'))); return; }
       all.disabled = !V.rules.length;
       purge.disabled = !V.rules.some(function (r) { return r.until !== null && r.until <= V.now; });
-      if (!V.rules.length) { list.appendChild(h('div', { class: 'empty' }, 'No ignored alerts. Use Ignore on an alert in the Alerts section to hide it for a while or for good.')); return; }
+      if (!V.rules.length) { list.appendChild(h('div', { class: 'empty' }, 'No ignored alerts. Use Ignore on an alert to hide it for a while or for good.')); return; }
       var rs = V.rules.filter(function (r) {
         if (V.sev && r.severity !== V.sev) return false;
         return !V.q || [r.title, r.resource, r.category, V.cats[r.category] || ''].join(' ').toLowerCase().indexOf(V.q) >= 0;
@@ -3229,7 +3314,7 @@
       tw.appendChild(h('button', { type: 'button', class: 'theme' + (a.theme === id ? ' on' : ''), role: 'radio', 'aria-checked': a.theme === id ? 'true' : 'false',
         title: t.light ? 'Light and dark' : 'Dark only',
         onclick: function () { a.theme = id; a.accent = ''; if (t.custom) Object.assign(a, t.custom.look); hex.value = col.value = themeAccent(a); dirty(); preview(); applyCss(a.css_enabled ? D.css : ''); D.render(); } },
-        h('span', { class: 'pv', style: { background: id === 'default' ? 'linear-gradient(150deg,#22324c,#7a3d3a 62%,#ec8a3f)' : p.bg } },
+        h('span', { class: 'pv', style: { background: a.gradient === false ? p.bg : meshCss(id, lookMode({ theme: id, mode: a.mode })) } },
           h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.accent, flex: '0 0 18%' } })),
         h('span', { class: 'tn' }, h('b', null, themeName(t, lookMode({ theme: id, mode: a.mode }))), t.custom ? h('span', { class: 'muted xs' }, 'yours') : t.light ? null : h('span', { class: 'muted xs' }, 'dark only'))));
     });
@@ -3241,7 +3326,7 @@
       root.appendChild(f); f.click(); setTimeout(function () { f.remove(); }, 60000);
     }
     function saveFile(name, text, type) { var l = h('a', { href: URL.createObjectURL(new Blob([text], { type: type })), download: name }); root.appendChild(l); l.click(); l.remove(); }
-    function lookNow() { var o = { translucent: !!a.translucent }; ['radius', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity'].forEach(function (k) { o[k] = a[k]; }); return o; }
+    function lookNow() { var o = { translucent: !!a.translucent, gradient: a.gradient !== false }; ['radius', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity'].forEach(function (k) { o[k] = a[k]; }); return o; }
     function exportTheme() {
       var c = chosen(), m = lookMode(a), p = (THEMES[a.theme] || THEMES.default)[m], base = applyBase(p, m, a);
       var t = c ? c.custom : { name: themeName(THEMES[a.theme] || THEMES.default, m), mode: m, colors: base, css: '' };
@@ -3315,21 +3400,17 @@
       h('div', { class: 'grid2' }, F('Card blur', rng('glass_blur', 0, 60, ' px', 'Card blur')), F('Card opacity', rng('glass_opacity', 10, 95, ' %', 'Card opacity'), 'Lower shows more of what is behind.'),
         F('Card exposure', rng('glass_exposure', 40, 160, ' %', 'Card exposure')), F('Card saturation', rng('glass_saturation', 100, 250, ' %', 'Card saturation')), F('Card contrast', rng('glass_contrast', 50, 150, ' %', 'Card contrast'))),
       resetTo({ glass_blur: 26, glass_opacity: 42, glass_saturation: 170, glass_exposure: 100, glass_contrast: 100 })));
-    var px = a.pexels, keyIn = h('input', { type: 'password', autocomplete: 'off', placeholder: D.pexelsKey ? 'stored (leave empty to keep)' : 'Paste your Pexels API key', 'aria-label': 'Pexels API key' }), keyNote = h('div', { class: 'hint', role: 'status' });
-    b.appendChild(set('Daily wallpaper', 'A new photo every day from Pexels, chosen by the server. It replaces the image below while this is on. Blur and brightness apply to it too.',
+    var wd = a.daily, wCustom = F('Your words', tIn(wd, 'custom', dirty, 'autumn forest'), 'What the photo should show. A word or two works best.');
+    wCustom.hidden = wd.topic !== 'custom';
+    b.appendChild(set('Daily wallpaper', 'A new photo every day from Wikimedia Commons, no key or account needed. It replaces the image below while this is on. Blur and brightness apply to it too.',
       h('div', { class: 'grid2' },
-        F('New photo every day', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: px.on, onchange: function (e) { px.on = e.target.checked; dirty(); } }), 'From Pexels')),
-        F('Search for', tIn(px, 'query', dirty, 'nature wallpaper')),
-        F('Main colour', sIn(px, 'color', dirty, [['', 'Any']].concat(['black', 'gray', 'white', 'red', 'orange', 'yellow', 'green', 'turquoise', 'blue', 'violet', 'pink', 'brown'].map(function (c) { return [c, c[0].toUpperCase() + c.slice(1)]; })))),
-        F('Pexels API key', h('div', { class: 'inl' }, h('div', { style: { flex: '1', 'min-width': '150px' } }, keyIn), btn('Save key', function () {
-          if (!keyIn.value.trim()) return;
-          api('pexels_key', { key: keyIn.value.trim() }).then(function (j) {
-            if (j.error) { txt(keyNote, j.error); return; }
-            D.pexelsKey = true; keyIn.value = ''; keyIn.placeholder = 'stored (leave empty to keep)'; txt(keyNote, 'Saved. It stays on the server.');
-          });
-        }, 'sm')), h('div', null, 'Free at ', h('a', { href: 'https://www.pexels.com/api/', target: '_blank', rel: 'noopener' }, 'pexels.com/api'), '. Kept on the server only.', keyNote))),
+        F('New photo every day', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: wd.on, onchange: function (e) { wd.on = e.target.checked; dirty(); } }), 'Daily wallpaper')),
+        F('Subject', sIn(wd, 'topic', dirty, [['nature', 'Nature'], ['city', 'Cityscape'], ['cars', 'Cars'], ['mountains', 'Mountains'], ['ocean', 'Ocean'], ['space', 'Night sky'], ['custom', 'Custom…']], function () { wCustom.hidden = wd.topic !== 'custom'; })),
+        wCustom),
       S.wallErr ? h('div', { class: 'banner bad' }, S.wallErr) : null));
-    b.appendChild(set('Background', 'Optional image behind the dashboard (https:// or a path served by Unraid).', h('div', { class: 'grid2' },
+    b.appendChild(set('Background', 'Optional image behind the dashboard (https:// or a path served by Unraid).',
+      F('Gradient', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.gradient !== false, onchange: function (e) { a.gradient = e.target.checked; dirty(); preview(); D.render(); } }), 'A gradient in the theme\'s colours'), 'Off gives a plain colour. An image or daily wallpaper takes its place.'),
+      h('div', { class: 'grid2' },
       F('Image URL', tIn(a, 'background', pd, 'https://…')),
       F('Blur', sIn(a, 'blur_target', dirty, [['wallpaper', 'The whole wallpaper'], ['cards', 'Only behind the cards (frosted glass)']], preview), 'Frosted glass keeps the picture sharp and blurs it only where cards sit on it.'),
       F('Background blur', rng('blur', 0, 40, ' px', 'Background blur')),
@@ -3540,6 +3621,20 @@
   }
   function origin(u) { var m = /^(https?:\/\/[^\/?#]+)/i.exec(String(u || '').trim()); return m ? m[1].toLowerCase() : ''; }
   function portOf(u) { var o = origin(u), m = /:(\d+)$/.exec(o); return m ? +m[1] : o ? (o.indexOf('https') === 0 ? 443 : 80) : -1; }
+  /* containers added since the page loaded: ask the server now instead of waiting for the next refresh to be drawn */
+  function rescan(D, b, done) {
+    var before = foundApps(D).length;
+    b.disabled = true;
+    api('live', { parts: 'docker' }, 20000).then(function (j) {
+      b.disabled = false;
+      var err = j.error || (j.docker && j.docker.error);
+      if (err) { toast(err, true); return; }
+      S.live = Object.assign({}, S.live, { docker: j.docker });
+      var n = foundApps(D).length - before;
+      toast(n > 0 ? n + ' new container' + (n > 1 ? 's' : '') + ' found.' : 'No new containers.');
+      done();
+    });
+  }
   function foundApps(D) {
     var have = [];
     D.cfg.groups.forEach(function (g) { g.services.forEach(function (s) { have.push(s); }); });
@@ -3581,8 +3676,10 @@
     function paint() {
       clear(grid);
       var fs = found.filter(function (f) { return !qq || (f.name + ' ' + f.c.name + ' ' + f.t).toLowerCase().indexOf(qq) >= 0; });
-      if (fs.length) {
-        grid.appendChild(h('div', { class: 'tp-h' }, 'Found on your server'));
+      if (fs.length || !qq) {
+        var again = btn('Refresh', function () { rescan(D, again, function () { found = foundApps(D); paint(); }); }, 'sm ghost', 'restart', 'Look for containers added since this page opened');
+        grid.appendChild(h('div', { class: 'tp-h tp-r' }, 'Found on your server', again));
+        if (!fs.length) grid.appendChild(h('div', { class: 'muted sm' }, 'No new containers UnDash can read.'));
         grid.appendChild(h('div', { class: 'tpick found' }, fs.map(function (f) { return foundBtn(D, f, function () { m.close(); addFound(D, f, group, after, dirty); }); })));
       }
       order.forEach(function (cat) {
@@ -3916,6 +4013,7 @@
   var GOTO = { o: 'overview', a: 'alerts', f: 'favorites', m: 'media', s: 'arr', d: 'downloads', n: 'playing', q: 'requests', p: 'apps', c: 'docker', v: 'vms', h: 'health' };
   function jumpTo(id) {
     var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Sections & apps).', true); return; }
+    if (r.pop) { alertPop(); return; }
     if (R.cards) boardReveal(id);
     if (r.sec.collapsed) r.el.querySelector('.sec-h h2 button').click();
     r.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
