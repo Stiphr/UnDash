@@ -4,6 +4,7 @@
 - Desktop and tablet keep separate layouts; a phone shows the cards in order at their natural height. A new app appears by itself, and a card with nothing to show (no alerts) closes its gap.
 - Smart arrange lays the cards out in the classic dashboard's order, from your section order and widths, and keeps doing so as apps and alerts come and go. Moving a card by hand switches it off until you press it again.
 - New design for the board: near-black page, large rounded cards, one type scale. Cards are as tall as their content by default and grow into any empty space beside or below them, numbers scale with their card, and all text follows the screen size (Settings > Theme > Text size adjusts it).
+- Settings > Theme > Corner radius sets how round the cards are, from square to 28 px.
 - Phones get a bottom tab bar (Home, Media, Apps, Docker, Health) instead of one long page, larger touch targets and a compact header.
 - Settings > Theme > Card board turns it off and brings back the classic sections, unchanged.
 
