@@ -11,7 +11,7 @@
  * und_store_migrate) and moved to data/legacy/.
  */
 
-const UND_ENV_RESERVED = ['UNRAID_API_KEY', 'UNDASH_PASSWORD_HASH', 'UNDASH_AUTH'];
+const UND_ENV_RESERVED = ['UNRAID_API_KEY', 'UNDASH_PASSWORD_HASH', 'UNDASH_AUTH', 'PEXELS_API_KEY'];
 const UND_CRED_FIELDS = ['key' => 'API_KEY', 'username' => 'USERNAME', 'password' => 'PASSWORD'];
 
 function und_data_dir() { $d = und_store_dir() . '/data'; @mkdir($d, 0700, true); return $d; }

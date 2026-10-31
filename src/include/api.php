@@ -153,12 +153,14 @@ switch ($action) {
   case 'storage':       out(und_storage());
   case 'container_sources': out(und_container_sources());
   case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'), (int)$P('offset', '0'), $P('src'), $P('style'), $P('browse') === '1')); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
+  case 'wallpaper':     out(und_pexels(und_load_config()));
+  case 'pexels_key':    { if (!und_pexels_key($P('key'))) fail('Could not write the .env file in ' . und_store_dir() . '.', 500); out(['ok' => true, 'set' => $P('key') !== '']); }
   case 'icon_slugs':    { $l = json_decode($P('slugs', '[]'), true); try { out(und_icon_slugs(is_array($l) ? $l : [])); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
 
   /* ---- settings ---- */
   case 'settings': {
     $cfg = und_load_config(); $loc = und_loc();
-    out(['config' => $cfg, 'creds' => und_creds_view($cfg), 'shared' => und_shared_view($cfg), 'types' => und_types(), 'keep' => UND_KEEP, 'css' => und_load_css(),
+    out(['config' => $cfg, 'pexels_key' => und_pexels_key() !== '', 'creds' => und_creds_view($cfg), 'shared' => und_shared_view($cfg), 'types' => und_types(), 'keep' => UND_KEEP, 'css' => und_load_css(),
          'loc' => $loc, 'store' => und_store_dir(), 'flash' => UND_DIR, 'metrics' => und_metric_ids(), 'sections' => und_section_ids(),
          'zones' => array_map(function ($t) { return und_zone(['type' => $t]); }, array_combine(array_keys(und_types()), array_keys(und_types())))]);
   }

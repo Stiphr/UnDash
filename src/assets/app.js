@@ -336,9 +336,12 @@
     root.style.colorScheme = mode;          // native controls, dropdown lists and scrollbars follow the theme
     root.setAttribute('data-density', a.density);
     root.classList.toggle('no-sec-names', a.sec_names === false);
+    root.classList.toggle('translucent', !!a.translucent);
+    root.setAttribute('data-motion', a.motion || 'full');
     var set = function (k, v) { root.style.setProperty(k, v); };
+    set('--g-bl', (a.glass_blur === undefined ? 26 : a.glass_blur) + 'px'); set('--g-op', (a.glass_opacity === undefined ? 42 : a.glass_opacity) + '%'); set('--g-sat', (a.glass_saturation === undefined ? 170 : a.glass_saturation) + '%');
     if (S.L && boardOn() && a.theme === 'default' && !light) p = Object.assign({}, p, BOARD_DARK);
-    if (S.L && boardOn()) set('--radius', Math.max(0, Math.min(28, a.radius === undefined ? 16 : +a.radius || 0)) + 'px'); else root.style.removeProperty('--radius');
+    if (S.L && boardOn()) set('--radius', Math.max(0, Math.min(28, a.radius === undefined ? 8 : +a.radius || 0)) + 'px'); else root.style.removeProperty('--radius');
     [['--bg', 'bg'], ['--panel', 'panel'], ['--panel-2', 'p2'], ['--bar', 'bar'], ['--field', 'field'], ['--line', 'line'], ['--line-2', 'l2'], ['--text', 'text'], ['--muted', 'muted'], ['--faint', 'faint'], ['--title', 'title']]
       .forEach(function (x) { set(x[0], p[x[1]]); });
     ['ok', 'warn', 'bad', 'info', 'off'].forEach(function (k) {
@@ -354,22 +357,40 @@
     // link text must stay readable on the panel colour: darken on light, lighten on dark
     set('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : acc) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
     if (window.UND_STANDALONE) document.body.style.background = p.bg;
-    root.classList.toggle('has-bg', !!a.background);
+    var wall = a.pexels && a.pexels.on && S.wall && S.wall.url ? S.wall.url : a.background;
+    root.classList.toggle('has-bg', !!wall);
     // wallpaper blur: the whole picture, or only what shows through the (then see-through) cards
     // the margin around the dashboard: automatic, or what Settings > Theme says
     ['x', 'y'].forEach(function (k) { var v = a['safe_' + k]; if (v === undefined || v < 0) root.style.removeProperty('--safe-' + k); else root.style.setProperty('--safe-' + k, v + 'px'); });
-    var glass = !!a.background && a.blur_target === 'cards';
+    var glass = !!wall && a.blur_target === 'cards';
     root.classList.toggle('glass', glass);
     set('--glass-blur', (glass ? a.blur : 0) + 'px');
     root.classList.toggle('full', S.full && !window.UND_STANDALONE);
     var bg = null;
     for (var i = 0; i < root.children.length; i++) if (root.children[i].classList.contains('und-bg')) bg = root.children[i];
-    if (a.background) {
+    wallCredit(wall && wall === (S.wall || {}).url ? S.wall : null);
+    if (wall) {
       if (!bg) { bg = h('div', { class: 'und-bg' }); root.insertBefore(bg, root.firstChild); }
-      bg.style.backgroundImage = 'url("' + a.background.replace(/["\\()]/g, '') + '")';
-      bg.style.filter = (glass ? '' : 'blur(' + a.blur + 'px) ') + 'brightness(' + a.brightness + '%)';
+      bg.style.backgroundImage = 'url("' + wall.replace(/["\\()]/g, '') + '")';
+      bg.style.filter = (glass ? '' : 'blur(' + a.blur + 'px) ') + 'brightness(' + a.brightness + '%) saturate(' + (a.wall_saturation === undefined ? 100 : a.wall_saturation) + '%) contrast(' + (a.wall_contrast === undefined ? 100 : a.wall_contrast) + '%)';
+      bg.style.opacity = (a.wall_opacity === undefined ? 100 : a.wall_opacity) / 100;
       bg.style.inset = glass ? '0' : '-' + (a.blur * 2) + 'px';
     } else if (bg) bg.parentNode.removeChild(bg);
+  }
+  /* Pexels asks for the photographer to be named, with a link back */
+  function wallCredit(w) {
+    var old = root.querySelector('.wcredit'); if (old) old.remove();
+    if (w) root.appendChild(h('div', { class: 'wcredit' }, 'Photo by ', h('a', { href: w.by_url, target: '_blank', rel: 'noopener' }, w.by || 'a photographer'), ' on ', h('a', { href: w.link, target: '_blank', rel: 'noopener' }, 'Pexels')));
+  }
+  /* today's photo; the server asks Pexels at most once a day, the page looks again every hour for the new day */
+  function loadWall() {
+    clearTimeout(S.wallT);
+    if (!S.L.appearance.pexels || !S.L.appearance.pexels.on) { if (S.wall) { S.wall = null; applyLook(); } return; }
+    api('wallpaper').then(function (j) {
+      S.wall = j.url ? j : null; S.wallErr = j.error || '';
+      if (!S.drawer) applyLook();
+      S.wallT = setTimeout(loadWall, 3600000);
+    });
   }
   // "system" follows the OS switching between light and dark while the page is open
   if (DARK_OS) { var osChange = function () { if (S.L && S.L.appearance && S.L.appearance.mode === 'system' && !S.drawer) applyLook(); }; if (DARK_OS.addEventListener) DARK_OS.addEventListener('change', osChange); else DARK_OS.addListener(osChange); }
@@ -429,6 +450,7 @@
     if (board) boardMount(); else packHalves();
     paintAll(); paintLive(); paintIdent();
     if (!S.selfT) { S.selfT = 1; checkSelf(); }
+    if (S.wallFor !== JSON.stringify(S.L.appearance.pexels)) { S.wallFor = JSON.stringify(S.L.appearance.pexels); loadWall(); }
   }
 
   /* privacy: blurs what you may not want on a screen share or a screenshot, on this browser only */
@@ -644,6 +666,18 @@
     if (mode === 'sm') boardNav();
     boardPaint();
     boardAutoSoon();
+    boardEnter();
+  }
+  /* the cards arrive one after the other, once per page load; any click or key skips it */
+  function boardEnter() {
+    var m = S.L.appearance.motion || 'full';
+    if (S.entered || m === 'off' || m === 'nointro') { S.entered = true; return; }
+    S.entered = true;
+    var b = R.board; b.classList.add('enter');
+    [].forEach.call(b.querySelectorAll('.gc'), function (e, i) { e.style.setProperty('--i', Math.min(i, 24)); });
+    var done = function () { b.classList.remove('enter'); document.removeEventListener('pointerdown', done, true); document.removeEventListener('keydown', done, true); };
+    document.addEventListener('pointerdown', done, true); document.addEventListener('keydown', done, true);
+    setTimeout(done, 1100);
   }
   /* phones: one tab at a time, not one very long page */
   function boardNav() {
@@ -2738,7 +2772,7 @@
       });
     });
     var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
-      h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), h('span', { class: 'grow' }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')),
+      h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), settingsSearch(D, function (x) { goTo(x); }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')),
       h('div', { class: 'dmain' }, tabs, bodyEl),
       h('div', { class: 'df' }, saveB, prevB, btn('Discard', function () { if (!D.dirty) close(true); else confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }), status));
     var bg = h('div', { class: 'drawer-bg', onclick: function () { close(); } });
@@ -2810,15 +2844,114 @@
       bodyEl.scrollTop = 0;
     }
     D.render = render;
+    /* a search result: its page, its folded panel opened, then scrolled to and marked */
+    function goTo(x) {
+      D.tab = x.tab; paintTabs(); render();
+      var els = bodyEl.querySelectorAll('.set>h3,.fld>label,.switch,.oi b,.oi .t,.oi span');
+      var el = [].filter.call(els, function (e) { return setText(e) === x.label; })[0]; if (!el) return;
+      for (var p = el.parentNode; p && p !== bodyEl; p = p.parentNode) if (p.hidden && p.previousElementSibling) {
+        var b = p.previousElementSibling.querySelector('.sec-opt'); if (b) b.click();
+      }
+      var box = el.closest('.fld,.oi,.switch,.set') || el;
+      box.scrollIntoView({ block: 'center' });
+      box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
+      var f = box.querySelector('input,select,textarea'); if (f && f.focus) f.focus({ preventScroll: true });
+    }
+    D.pages = function () {
+      // every page drawn off screen, so the search knows exactly what Settings holds
+      var out = [], noop = function () {};
+      SET_NAV.forEach(function (g) { g[1].forEach(function (id) { var t = h('div'); SET_PAGES[id][2](t, D, noop); out.push({ tab: id, el: t }); }); });
+      render();
+      return out;
+    };
     paintTabs(); render();
     api('settings').then(function (j) {
       if (j.error) { status.textContent = j.error; return; }
-      D.cfg = j.config; D.creds = Array.isArray(j.creds) ? {} : j.creds; D.shared = j.shared || []; D.zones = j.zones || {}; D.types = j.types; prevB.disabled = false; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
+      D.cfg = j.config; D.pexelsKey = !!j.pexels_key; D.creds = Array.isArray(j.creds) ? {} : j.creds; D.shared = j.shared || []; D.zones = j.zones || {}; D.types = j.types; prevB.disabled = false; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
       ['docker', 'vms'].forEach(function (k) { if (Array.isArray(D.cfg[k].items)) D.cfg[k].items = {}; });
       status.textContent = 'Changes apply after saving.';
       render();
       setTimeout(function () { var f = tabs.querySelector('.on'); if (f) f.focus(); }, 0);
     });
+  }
+  /* the search in Settings: an index of everything on its pages, with suggestions under the box */
+  function setText(e) {
+    var c = e.cloneNode(true); [].forEach.call(c.querySelectorAll('input,select,textarea,button,svg'), function (x) { x.remove(); });
+    return c.textContent.replace(/\s+/g, ' ').trim();
+  }
+  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font zoom scale bigger', density: 'compact spacing', accent: 'colour color', colours: 'theme dark light mode color', 'card board (beta)': 'drag grid layout classic',
+    wallpaper: 'background image picture blur', 'daily wallpaper': 'pexels random photo background', animations: 'motion effects transitions skip speed reduce smooth', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'use the translucent effect': 'glass frosted apple transparent', 'glass blur': 'frosted', 'glass opacity': 'transparency frosted', 'glass saturation': 'vibrant colour', saturation: 'wallpaper background colour vibrant', contrast: 'wallpaper background', opacity: 'wallpaper background fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
+    'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
+  var SET_POPULAR = ['Corner radius', 'Text size', 'Density', 'Card board (beta)', 'Wallpaper', 'Dashboard password'];
+  function settingsIndex(D) {
+    var out = [], seen = {};
+    function add(tab, label, where, hint) {
+      if (!label || label.length > 70 || seen[tab + label]) return; seen[tab + label] = 1;
+      var k = (SET_WORDS[label.toLowerCase()] || '') + ' ' + (hint || '');
+      out.push({ tab: tab, label: label, where: where, l: label.toLowerCase(), k: (where + ' ' + k).toLowerCase() });
+    }
+    D.pages().forEach(function (p) {
+      var page = SET_PAGES[p.tab][0];
+      add(p.tab, page, 'Page');
+      [].forEach.call(p.el.querySelectorAll('.set'), function (b) {
+        var title = b.querySelector('h3'), name = title ? title.textContent.trim() : '', hint = b.querySelector('.hint');
+        add(p.tab, name, page, hint ? hint.textContent : '');
+        [].forEach.call(b.querySelectorAll('.fld>label'), function (l) { var c = l.parentNode.querySelector('.hint'); add(p.tab, setText(l), page + ' › ' + name, c ? c.textContent : ''); });
+        [].forEach.call(b.querySelectorAll('.switch'), function (l) { add(p.tab, setText(l), page + ' › ' + name); });
+      });
+    });
+    return out;
+  }
+  function settingsSearch(D, go) {
+    var list = h('div', { class: 'ss', id: 'und-ss', role: 'listbox', 'aria-label': 'Settings found', hidden: true }), index = null, rows = [], sel = -1;
+    var inp = h('input', { type: 'search', placeholder: 'Search settings', 'aria-label': 'Search settings', role: 'combobox', 'aria-controls': 'und-ss', 'aria-expanded': 'false', 'aria-autocomplete': 'list', autocomplete: 'off',
+      oninput: show, onfocus: show, onkeydown: function (e) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); mark(sel + (e.key === 'ArrowDown' ? 1 : -1)); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (rows[Math.max(0, sel)]) pick(rows[Math.max(0, sel)]); }
+        else if (e.key === 'Escape' && !list.hidden) { e.stopPropagation(); hide(); }
+      } });
+    function hide() { list.hidden = true; inp.setAttribute('aria-expanded', 'false'); }
+    function mark(i) {
+      if (!rows.length) return; sel = (i + rows.length) % rows.length;
+      [].forEach.call(list.querySelectorAll('.ss-i'), function (e, n) { e.classList.toggle('sel', n === sel); e.setAttribute('aria-selected', n === sel ? 'true' : 'false'); if (n === sel) e.scrollIntoView({ block: 'nearest' }); });
+    }
+    function pick(x) {
+      var rec = LS.get('setRecent', []).filter(function (l) { return l !== x.label; }); rec.unshift(x.label); LS.set('setRecent', rec.slice(0, 3));
+      inp.value = ''; hide(); go(x);
+    }
+    function score(x, q, words) {
+      if (x.l === q) return 0;
+      if (x.l.indexOf(q) === 0) return 1;
+      if ((' ' + x.l).indexOf(' ' + q) >= 0) return 2;
+      var all = ' ' + x.l + ' ' + x.k;
+      if (words.every(function (w) { return all.indexOf(' ' + w) >= 0; })) return 3;      // whole words first: "round" is not "background"
+      if (x.l.indexOf(q) >= 0) return 4;
+      return words.every(function (w) { return all.indexOf(w) >= 0; }) ? 5 : -1;
+    }
+    function show() {
+      if (!D.cfg) return;
+      if (!index) { index = settingsIndex(D); }
+      var q = inp.value.trim().toLowerCase(), head = '';
+      if (q) {
+        var words = q.split(/\s+/);
+        rows = index.map(function (x) { return [score(x, q, words), x]; }).filter(function (p) { return p[0] >= 0; }).sort(function (a, b) { return a[0] - b[0] || a[1].l.length - b[1].l.length; }).slice(0, 8).map(function (p) { return p[1]; });
+      } else {
+        var rec = LS.get('setRecent', []), names = rec.concat(SET_POPULAR.filter(function (n) { return rec.indexOf(n) < 0; })).slice(0, 6);
+        rows = names.map(function (n) { return index.filter(function (x) { return x.label === n; })[0]; }).filter(Boolean);
+        head = rec.length ? 'Recent and suggested' : 'Suggested';
+      }
+      sel = q && rows.length ? 0 : -1;
+      clear(list);
+      if (head) list.appendChild(h('div', { class: 'ss-h' }, head));
+      if (!rows.length) list.appendChild(h('div', { class: 'empty' }, 'No setting matches.'));
+      rows.forEach(function (x, i) {
+        list.appendChild(h('button', { type: 'button', class: 'ss-i' + (i === sel ? ' sel' : ''), role: 'option', 'aria-selected': i === sel ? 'true' : 'false', onmousedown: function (e) { e.preventDefault(); pick(x); } },
+          ic(SET_PAGES[x.tab][1]), h('span', { class: 'ell' }, h('b', { class: 'ell' }, x.label.split(' · ')[0]), h('span', { class: 'muted xs ell' }, x.where))));
+      });
+      list.hidden = false; inp.setAttribute('aria-expanded', 'true');
+    }
+    inp.addEventListener('blur', function () { setTimeout(hide, 120); });
+    return h('div', { class: 'ssb' }, ic('search'), inp, list);
   }
   /* small form helpers */
   function F(label, input, hint) { return h('div', { class: 'fld' }, h('label', null, label), input, hint ? h('div', { class: 'hint' }, hint) : null); }
@@ -2838,7 +2971,7 @@
   }
   var SET_PAGES = {
     dashboard: ['Sections & apps', 'grid', tabDashboard],
-    appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Spacing', 'Wallpaper'])],
+    appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Spacing', 'Translucent Effect', 'Daily wallpaper', 'Wallpaper'])],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['Refresh & display', 'clock', tabSystem],
     ignored: ['Ignored alerts', 'mute', tabIgnored],
@@ -3102,6 +3235,7 @@
     };
     b.appendChild(set('Spacing', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
       F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
+      F('Animations', sIn(a, 'motion', dirty, [['full', 'Full'], ['fast', 'Fast'], ['nointro', 'Skip the opening'], ['off', 'Off']], preview), 'Skip the opening keeps the small transitions and shows the dashboard at once. Pressing anything also skips it.'),
       F('Corner radius', rng('radius', 0, 28, ' px', 'Corner radius'), 'How round the cards are on the card board, from square to 28 px.'),
       F('Text size', sIn(a, 'text_size', dirty, [['s', 'Small'], ['m', 'Normal'], ['l', 'Large']]), 'On the card board. Text also follows the size of your screen.'),
       F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'),
@@ -3116,10 +3250,33 @@
       return h('div', { class: 'inl' }, h('input', { type: 'range', min: lo, max: hi, value: a[k], 'aria-label': lab, style: { flex: '1' },
         oninput: function (e) { a[k] = +e.target.value; txt(out, a[k] + unit); dirty(); preview(); } }), out);
     }
+    function resetTo(vals) { return btn('Reset', function () { Object.keys(vals).forEach(function (k) { a[k] = vals[k]; }); dirty(); preview(); D.render(); }, 'sm', 'restart', 'Back to the standard values'); }
+    b.appendChild(set('Translucent Effect', 'See-through glass cards that blur and tint what is behind them. Best with a wallpaper. Uses more graphics power on older devices.',
+      h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!a.translucent, onchange: function (e) { a.translucent = e.target.checked; dirty(); preview(); } }), 'Use the Translucent Effect'),
+      h('div', { class: 'grid2', style: { 'margin-top': '10px' } },
+        F('Glass blur', rng('glass_blur', 0, 60, ' px', 'Glass blur')), F('Glass opacity', rng('glass_opacity', 10, 95, ' %', 'Glass opacity'), 'Lower shows more of what is behind.'), F('Glass saturation', rng('glass_saturation', 100, 250, ' %', 'Glass saturation'))),
+      resetTo({ glass_blur: 26, glass_opacity: 42, glass_saturation: 170 })));
+    var px = a.pexels, keyIn = h('input', { type: 'password', autocomplete: 'off', placeholder: D.pexelsKey ? 'stored (leave empty to keep)' : 'Paste your Pexels API key', 'aria-label': 'Pexels API key' }), keyNote = h('div', { class: 'hint', role: 'status' });
+    b.appendChild(set('Daily wallpaper', 'A new photo every day from Pexels, chosen by the server. It replaces the image below while this is on. Blur and brightness apply to it too.',
+      h('div', { class: 'grid2' },
+        F('New photo every day', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: px.on, onchange: function (e) { px.on = e.target.checked; dirty(); } }), 'From Pexels')),
+        F('Search for', tIn(px, 'query', dirty, 'nature wallpaper')),
+        F('Main colour', sIn(px, 'color', dirty, [['', 'Any']].concat(['black', 'gray', 'white', 'red', 'orange', 'yellow', 'green', 'turquoise', 'blue', 'violet', 'pink', 'brown'].map(function (c) { return [c, c[0].toUpperCase() + c.slice(1)]; })))),
+        F('Pexels API key', h('div', { class: 'inl' }, h('div', { style: { flex: '1', 'min-width': '150px' } }, keyIn), btn('Save key', function () {
+          if (!keyIn.value.trim()) return;
+          api('pexels_key', { key: keyIn.value.trim() }).then(function (j) {
+            if (j.error) { txt(keyNote, j.error); return; }
+            D.pexelsKey = true; keyIn.value = ''; keyIn.placeholder = 'stored (leave empty to keep)'; txt(keyNote, 'Saved. It stays on the server.');
+          });
+        }, 'sm')), h('div', null, 'Free at ', h('a', { href: 'https://www.pexels.com/api/', target: '_blank', rel: 'noopener' }, 'pexels.com/api'), '. Kept on the server only.', keyNote))),
+      S.wallErr ? h('div', { class: 'banner bad' }, S.wallErr) : null));
     b.appendChild(set('Wallpaper', 'Optional image behind the dashboard (https:// or a path served by Unraid).', h('div', { class: 'grid2' },
       F('Image URL', tIn(a, 'background', pd, 'https://…')),
       F('Blur', sIn(a, 'blur_target', dirty, [['wallpaper', 'The whole wallpaper'], ['cards', 'Only behind the cards (frosted glass)']], preview), 'Frosted glass keeps the picture sharp and blurs it only where cards sit on it.'),
       F('Blur strength', rng('blur', 0, 40, ' px', 'Blur strength')),
+      F('Saturation', rng('wall_saturation', 0, 200, ' %', 'Wallpaper saturation'), '0 is black and white.'),
+      F('Contrast', rng('wall_contrast', 50, 150, ' %', 'Wallpaper contrast')),
+      F('Opacity', rng('wall_opacity', 10, 100, ' %', 'Wallpaper opacity'), 'Lower fades it into the theme\'s background.'),
       F('Brightness', rng('brightness', 0, 100, '%', 'Wallpaper brightness'), '0% is black, 100% the picture as it is.'))));
     var ta = h('textarea', { rows: 14, spellcheck: 'false', 'aria-label': 'Custom CSS', placeholder: '/* Scoped to UnDash automatically. Examples: */\n.card { border-radius: 12px; }\n.metric .mv { font-size: 26px; }\n--radius: 12px;' });
     ta.value = D.css || '';

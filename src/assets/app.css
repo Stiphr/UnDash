@@ -137,7 +137,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .sections.host{display:none}
 .und .bwrap{position:relative}
 .und .board{--gg:10px;--rp:20px;position:relative;height:calc(var(--rows,0)*var(--rp) - var(--gg))}
-.und .gc{position:absolute;left:calc(var(--x)*(100% + var(--gg))/var(--cols));top:calc(var(--y)*var(--rp));width:calc(var(--w)*(100% + var(--gg))/var(--cols) - var(--gg));height:calc(var(--h)*var(--rp) - var(--gg));transition:left .18s ease,top .18s ease,width .18s ease,height .18s ease;min-width:0}
+.und .gc{position:absolute;left:calc(var(--x)*(100% + var(--gg))/var(--cols));top:calc(var(--y)*var(--rp));width:calc(var(--w)*(100% + var(--gg))/var(--cols) - var(--gg));height:calc(var(--h)*var(--rp) - var(--gg));transition:left var(--t2,.18s) ease,top var(--t2,.18s) ease,width var(--t2,.18s) ease,height var(--t2,.18s) ease;min-width:0}
 .und .gc[hidden]{display:none}
 .und .gc-c{height:100%;min-width:0;overflow:hidden;border-radius:var(--radius)}
 .und .gc-c>*{height:100%;box-sizing:border-box;width:100%}
@@ -790,8 +790,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 }
 
 /* ===== the card board's design: one type scale, one spacing scale, cards that fit their content ===== */
-.und.bui{zoom:var(--ts,1);--r2:calc(var(--radius)*.62);--gg:10px;--shadow:none;--safe-x:clamp(10px,1.3vw,22px);--safe-y:0px;min-height:100vh;min-height:100dvh;font-size:14px}
-.und.bui .btn{border-radius:999px!important}
+.und.bui{zoom:var(--ts,1);--r2:calc(var(--radius)*.75);--gg:10px;--shadow:none;--safe-x:clamp(10px,1.3vw,22px);--safe-y:0px;min-height:100vh;min-height:100dvh;font-size:14px}
+.und.bui .btn{border-radius:var(--radius)!important}
 .und.bui .gc{container-type:inline-size}
 
 /* header */
@@ -800,9 +800,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .brand .logo{width:32px;height:32px}
 .und.bui .und-name{font-size:17px;font-weight:650;letter-spacing:-.01em;white-space:nowrap}
 .und.bui .top .search{flex:1 1 240px;max-width:520px;margin:0 auto}
-.und.bui .top .search input{border-radius:999px!important;height:38px;background:var(--panel)}
+.und.bui .top .search input{border-radius:var(--radius)!important;height:38px;background:var(--panel)}
 .und.bui .top .acts{flex-wrap:nowrap;margin-left:auto}
-.und.bui .live{height:38px;padding:0 6px 0 12px;background:var(--panel)}
+.und.bui .live{height:38px;padding:0 6px 0 12px;background:var(--panel);border-radius:var(--radius)}
 .und.bui .sbox{border-radius:var(--radius)}
 
 /* every card */
@@ -894,8 +894,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 
 /* Settings and dialogs, in the board's design */
 .und.bui .drawer-bg{background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
-.und.bui .drawer{top:10px;right:10px;bottom:10px;width:min(1060px,calc(100% - 20px));background:var(--bg);border:1px solid var(--line-2);border-radius:calc(var(--radius) + 4px);overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.55)}
-.und.bui .drawer .dh{padding:12px 18px;background:var(--panel);min-height:58px}
+.und.bui .drawer{inset:0;margin:auto;width:min(1080px,calc(100% - 48px));height:min(840px,calc(100% - 48px));animation:und-pop var(--t2,.14s) cubic-bezier(.2,.8,.3,1);background:var(--bg);border:1px solid var(--line-2);border-radius:calc(var(--radius) + 4px);overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+.und.bui .drawer .dh{position:relative;z-index:5;gap:12px;padding:12px 18px;background:var(--panel);min-height:58px;flex-wrap:wrap}
 .und.bui .drawer .dh svg:first-child{width:18px;height:18px;color:var(--muted)}
 .und.bui .drawer .dh h2{font-size:17px;font-weight:650;letter-spacing:-.01em}
 .und.bui .drawer .dt{flex-basis:216px;padding:12px 10px;gap:2px;background:var(--panel);border-right:1px solid var(--line)}
@@ -926,7 +926,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .menu{border-radius:var(--r2);padding:4px}.und.bui .menu button{border-radius:calc(var(--r2)*.7)!important}
 .und.bui .toast{border-radius:var(--r2)}
 @media (max-width:700px){
-  .und.bui .drawer{inset:0;width:100%;border:0;border-radius:0}
+  .und.bui .drawer{inset:0;margin:0;width:100%;height:100%;border:0;border-radius:0}
   .und.bui .drawer .dh{padding-top:calc(10px + env(safe-area-inset-top))}
   .und.bui .drawer .dt{flex-basis:auto;padding:8px 10px;gap:4px;background:var(--panel);border-right:0;border-bottom:1px solid var(--line);scrollbar-width:none}
   .und.bui .drawer .dt button{border-radius:999px!important;padding:8px 14px!important}
@@ -965,3 +965,100 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .ipick button{border-radius:var(--r2);background:var(--panel-2);border-color:transparent}
 .und.bui .ipick button:hover,.und.bui .ipick button:focus-visible{border-color:var(--accent)}
 .und.bui .gc-t .btn{min-width:26px}
+
+/* Settings: opens in the middle, with a search */
+@keyframes und-pop{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
+.und .ssb{position:relative;flex:1 1 200px;max-width:440px;margin:0 auto;min-width:0}
+.und .ssb>svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--faint);pointer-events:none}
+.und .ssb>input{width:100%;padding-left:33px!important}
+.und .ss{position:absolute;left:0;right:0;top:calc(100% + 6px);max-height:min(60vh,380px);overflow:auto;padding:4px;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius,10px);box-shadow:0 14px 40px rgba(0,0,0,.45)}
+.und .ss[hidden]{display:none}
+.und .ss-h{font-size:12px;color:var(--faint);padding:6px 10px 4px}
+.und .ss-i{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:var(--r2,6px);cursor:pointer}
+.und .ss-i svg{width:15px;height:15px;color:var(--muted);flex:none}
+.und .ss-i>.ell{display:flex;flex-direction:column;min-width:0}.und .ss-i b{font-size:13.5px;font-weight:550;color:var(--title)}
+.und .ss-i:hover,.und .ss-i.sel{background:var(--accent-soft)}
+.und.bui .fld.flash,.und.bui .oi.flash,.und.bui .set.flash,.und.bui .switch.flash{border-radius:var(--r2)}
+@media (max-width:700px){.und .ssb{order:3;flex:1 0 100%;max-width:none}.und.bui .drawer .dh h2{flex:1}}
+
+/* credit for the daily wallpaper */
+.und .wcredit{position:fixed;left:12px;bottom:10px;z-index:30;font-size:11px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.45);padding:3px 8px;border-radius:var(--r2,6px);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.und .wcredit a{color:#fff;text-decoration:underline}
+@media (max-width:700px){.und.bui .wcredit{bottom:calc(72px + env(safe-area-inset-bottom))}}
+
+/* Translucent Effect: glass that tints and blurs what is behind it */
+.und.bui.translucent{--g-fill:color-mix(in srgb,#101116 calc(var(--g-op,42%) + 14%),transparent);--g-fill-2:rgba(255,255,255,.07);--g-line:rgba(255,255,255,.13);--g-shine:rgba(255,255,255,.14);--g-blur:brightness(.62) saturate(var(--g-sat,170%)) blur(var(--g-bl,26px))}
+.und.bui.translucent[data-mode=light]{--g-fill:color-mix(in srgb,#fff calc(var(--g-op,42%) + 30%),transparent);--g-fill-2:rgba(255,255,255,.5);--g-line:rgba(255,255,255,.7);--g-shine:rgba(255,255,255,.8);--g-blur:brightness(1.35) saturate(var(--g-sat,170%)) blur(var(--g-bl,26px))}
+.und.bui.translucent:not(.has-bg){background:radial-gradient(60vw 60vw at 12% 8%,color-mix(in srgb,var(--accent) 34%,transparent),transparent 62%),radial-gradient(55vw 55vw at 88% 30%,rgba(70,110,255,.26),transparent 62%),radial-gradient(60vw 60vw at 45% 100%,rgba(150,70,220,.22),transparent 62%),var(--bg);background-attachment:fixed}
+.und.bui.translucent .gc-c>.sec,.und.bui.translucent .gc-c>.mw,.und.bui.translucent .gc-c>.card.w,.und.bui.translucent .gc-m .stat,.und.bui.translucent .gc-c>.alink,.und.bui.translucent .top,.und.bui.translucent .bbar,.und.bui.translucent .mnav,.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .menu,.und.bui.translucent .ss{background:var(--g-fill);border-color:var(--g-line);-webkit-backdrop-filter:var(--g-blur);backdrop-filter:var(--g-blur);box-shadow:inset 0 1px 0 var(--g-shine),0 8px 28px rgba(0,0,0,.16)}
+.und.bui.translucent .top{box-shadow:none;border-bottom-color:var(--g-line)}
+.und.bui.translucent .drawer .dh,.und.bui.translucent .drawer .dt,.und.bui.translucent .drawer .df{background:rgba(127,127,127,.06)}
+.und.bui.translucent .set{background:var(--g-fill-2);border-color:var(--g-line)}
+.und.bui.translucent .gc-c>.sec .card,.und.bui.translucent .blk,.und.bui.translucent .ac .blk,.und.bui.translucent .gc-playing .plist>.pl,.und.bui.translucent .alert,.und.bui.translucent .alert.crit,.und.bui.translucent .olist .oi,.und.bui.translucent .ipick button{background:var(--g-fill-2)}
+.und.bui.translucent .top .search input,.und.bui.translucent .live{background:var(--g-fill-2)}
+@media (prefers-reduced-transparency:reduce){.und.bui.translucent .gc-c>.sec,.und.bui.translucent .gc-c>.mw,.und.bui.translucent .gc-c>.card.w,.und.bui.translucent .gc-m .stat{background:var(--panel);-webkit-backdrop-filter:none;backdrop-filter:none}}
+
+/* section titles on a wallpaper: the card is the backdrop, so no chip behind them */
+.und.bui.has-bg .gc-c>.sec>.sec-h h2,.und.bui.has-bg .gc-c>.sec>.sec-h .tools>.muted,.und.bui.has-bg .gc-c>.sec>.sec-h .tools>span:not(:empty){background:none!important;padding:0!important;box-shadow:none!important;-webkit-backdrop-filter:none;backdrop-filter:none}
+.und.bui.translucent .arr,.und.bui.translucent .arr>.aitem,.und.bui.translucent .dls{background:transparent}
+
+/* animations: one speed for everything, set by Settings > Theme > Animations */
+.und.bui{--t1:.14s;--t2:.22s;--t3:.42s}
+.und.bui[data-motion=fast]{--t1:.07s;--t2:.1s;--t3:.2s}
+@keyframes und-in{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes und-fade{from{opacity:0}to{opacity:1}}
+@keyframes und-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.und.bui .board.enter .gc{animation:und-in var(--t3) cubic-bezier(.2,.8,.3,1) both;animation-delay:calc(var(--i,0)*22ms)}
+.und.bui .board.flow.enter .gc{animation-delay:calc(var(--i,0)*12ms)}
+.und.bui .gc-c>.sec,.und.bui .gc-c>.mw,.und.bui .gc-c>.card.w,.und.bui .gc-m .stat,.und.bui .blk,.und.bui .pl,.und.bui .btn,.und.bui .ipick button{transition:border-color var(--t1) ease,background-color var(--t1) ease,transform var(--t1) ease,box-shadow var(--t2) ease,opacity var(--t1) ease}
+.und.bui .gc-m .stat:hover,.und.bui .gc-c>.card.w:hover{transform:translateY(-1px)}
+.und.bui .btn:active:not(:disabled){transform:scale(.97)}
+.und.bui .meter i,.und.bui .stat .bar i{transition:width var(--t3) ease}
+.und.bui .modal-bg,.und.bui .drawer-bg{animation:und-fade var(--t2) ease both}
+.und.bui .modal{animation:und-pop var(--t2) cubic-bezier(.2,.8,.3,1) both}
+.und.bui .menu,.und.bui .ss:not([hidden]),.und.bui .sbox:not([hidden]),.und.bui .bdetail:not([hidden]){animation:und-pop var(--t1) ease-out both;transform-origin:top}
+.und.bui .toast,.und.bui .upbar,.und.bui .alert{animation:und-rise var(--t2) ease-out both}
+.und.bui .drawer .db>*{animation:und-rise var(--t2) ease-out both}
+.und.bui .board.flow .gc.on{animation:und-fade var(--t2) ease both}
+.und.bui .board.edit .gc{transition-duration:var(--t1)}
+.und.bui .mnav button,.und.bui .drawer .dt button{transition:background-color var(--t1) ease,color var(--t1) ease}
+.und.bui[data-motion=off] *,.und.bui[data-motion=off] *::before,.und.bui[data-motion=off] *::after{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){.und.bui *,.und.bui *::before,.und.bui *::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}}
+
+/* header: one floating bar; logo, search and buttons sit on it instead of being blocks of their own */
+.und.bui .top{top:8px;margin:8px 0 12px;padding:7px 10px;gap:10px;background:color-mix(in srgb,var(--panel) 90%,transparent);border:1px solid var(--line);border-radius:calc(var(--radius) + 4px);box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.und.bui .top .brand,.und.bui.has-bg .top .brand{background:none!important;border:0!important;padding:0!important;box-shadow:none!important;-webkit-backdrop-filter:none;backdrop-filter:none}
+.und.bui .brand .logo{width:30px;height:30px;border-radius:var(--radius)}
+.und.bui .und-sub{gap:4px}
+.und.bui .und-sub .vchip{border:0;background:color-mix(in srgb,var(--text) 7%,transparent);color:var(--muted);font-size:11.5px;border-radius:calc(var(--r2)*.8)}
+.und.bui .top .search input,.und.bui.has-bg .top .search input{height:36px;background:color-mix(in srgb,var(--text) 6%,transparent)!important;border:1px solid transparent!important;box-shadow:none!important;-webkit-backdrop-filter:none;backdrop-filter:none;color:var(--text)}
+.und.bui .top .search input:focus{border-color:var(--accent)!important;background:color-mix(in srgb,var(--text) 9%,transparent)!important}
+.und.bui .top .search input::placeholder{color:var(--muted)}
+.und.bui .top .acts{gap:2px}
+.und.bui .top .live,.und.bui.has-bg .top .live{height:36px;margin-right:6px;padding:0 4px 0 10px;background:color-mix(in srgb,var(--text) 6%,transparent)!important;border:0!important;box-shadow:none!important;-webkit-backdrop-filter:none;backdrop-filter:none;color:var(--muted)}
+.und.bui .top .acts .btn,.und.bui.has-bg .top .acts .btn{background:transparent!important;border-color:transparent!important;box-shadow:none!important;-webkit-backdrop-filter:none;backdrop-filter:none;color:var(--muted)!important;min-width:36px;height:36px}
+.und.bui .top .acts .btn:hover{background:color-mix(in srgb,var(--text) 10%,transparent)!important;color:var(--title)!important}
+.und.bui .top .acts .btn.on,.und.bui .top .acts .btn.priv.on{background:var(--accent-soft)!important;color:var(--accent-text)!important}
+.und.bui.translucent .top{background:var(--g-fill);border-color:var(--g-line);box-shadow:inset 0 1px 0 var(--g-shine),0 8px 28px rgba(0,0,0,.16)}
+.und.bui.translucent .top .search input,.und.bui.translucent .top .live{background:rgba(127,127,127,.12)!important}
+.und.bui.translucent .und-sub .vchip{background:rgba(127,127,127,.14)}
+.und.bui .bbar{top:70px}
+@media (max-width:700px){
+  .und.bui .top{top:calc(4px + env(safe-area-inset-top));margin:6px 0 10px;padding:8px}
+  .und.bui .top .live{width:30px;margin-right:0;padding:0;justify-content:center}
+}
+
+/* Translucent Effect: legible on any wallpaper. The theme's colours are set on the root, so these go one level down */
+.und.bui.translucent .bwrap,.und.bui.translucent .top,.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .menu{--text:#f4f4f7;--title:#fff;--muted:rgba(255,255,255,.76);--faint:rgba(255,255,255,.58);--line:rgba(255,255,255,.13);--line-2:rgba(255,255,255,.2)}
+.und.bui.translucent[data-mode=light] .bwrap,.und.bui.translucent[data-mode=light] .top,.und.bui.translucent[data-mode=light] .drawer,.und.bui.translucent[data-mode=light] .modal,.und.bui.translucent[data-mode=light] .menu{--text:#14151a;--title:#000;--muted:rgba(0,0,0,.68);--faint:rgba(0,0,0,.54);--line:rgba(0,0,0,.1);--line-2:rgba(0,0,0,.16)}
+.und.bui.translucent[data-mode=light] .gc-c>.sec .card,.und.bui.translucent[data-mode=light] .blk,.und.bui.translucent[data-mode=light] .ac .blk,.und.bui.translucent[data-mode=light] .gc-playing .plist>.pl,.und.bui.translucent[data-mode=light] .alert,.und.bui.translucent[data-mode=light] .alert.crit,.und.bui.translucent[data-mode=light] .olist .oi,.und.bui.translucent[data-mode=light] .ipick button{background:rgba(255,255,255,.46)}
+.und.bui.translucent .aico,.und.bui.translucent .ico,.und.bui.translucent .mh img,.und.bui.translucent .gc svg:not(.sp svg){filter:drop-shadow(0 0 1px rgba(255,255,255,.28))}
+.und.bui.translucent[data-mode=light] .aico,.und.bui.translucent[data-mode=light] .ico,.und.bui.translucent[data-mode=light] .mh img,.und.bui.translucent[data-mode=light] .gc svg:not(.sp svg){filter:drop-shadow(0 0 1px rgba(0,0,0,.35))}
+.und.bui.translucent .top .btn,.und.bui.translucent .top .acts .btn{color:var(--text)!important}
+.und.bui.translucent .btn:not(.pri):not(.solid){background:rgba(127,127,127,.14)!important;border-color:var(--line-2)!important;color:var(--text)!important}
+.und.bui.translucent .top .acts .btn:not(.on){background:transparent!important;border-color:transparent!important}
+.und.bui.translucent .badge.plain{border-color:var(--line-2);color:var(--text)}
+.und.bui.translucent input[type=text],.und.bui.translucent input[type=number],.und.bui.translucent input[type=url],.und.bui.translucent input[type=password],.und.bui.translucent select,.und.bui.translucent textarea{background:rgba(127,127,127,.14)!important;color:var(--text)!important;border-color:var(--line-2)!important}
+.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .ss,.und.bui.translucent .menu{--g-op:78%}
+.und.bui.translucent select option{background:#1c1d22;color:#f4f4f7}
+.und.bui.translucent[data-mode=light] select option{background:#fff;color:#14151a}

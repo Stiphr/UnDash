@@ -970,7 +970,13 @@ $c = und_default_config(); $c['dashboard']['board']['lg'] = [['i' => 'arr', 'x' 
 t('a saved board survives loading the settings', und_normalize($c)['dashboard']['board']['lg'][0]['x'] === 2);
 
 $c = und_default_config(); $c['appearance']['radius'] = 500;
-t('the corner radius stays inside its limits', und_normalize($c)['appearance']['radius'] === 28 && und_default_config()['appearance']['radius'] === 16);
+t('the corner radius stays inside its limits', und_normalize($c)['appearance']['radius'] === 28 && und_default_config()['appearance']['radius'] === 8);
+t('the Translucent Effect is off by default', und_default_config()['appearance']['translucent'] === false && und_normalize(['appearance' => ['translucent' => 1]] + und_default_config())['appearance']['translucent'] === true);
+$m = und_default_config(); $m['appearance']['motion'] = 'warp';
+t('an unknown animation setting falls back to full', und_normalize($m)['appearance']['motion'] === 'full');
+$m = und_default_config(); $m['appearance']['glass_opacity'] = 0; $m['appearance']['wall_saturation'] = 900; $m['appearance']['glass_blur'] = -5;
+$ma = und_normalize($m)['appearance'];
+t('the glass and wallpaper controls stay inside their limits', $ma['glass_opacity'] === 10 && $ma['wall_saturation'] === 200 && $ma['glass_blur'] === 0 && $ma['wall_contrast'] === 100, json_encode($ma));
 $c['appearance']['radius'] = -9;
 t('a negative corner radius becomes square', und_normalize($c)['appearance']['radius'] === 0);
 

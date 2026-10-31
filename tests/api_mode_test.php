@@ -190,6 +190,30 @@ $GLOBALS['ANSWER'] = ['json' => ['data' => []]];
 und_alerts_check();
 t('the background alert check does not count as an open page', !is_file(UND_TMP . '/viewer'));
 
+// the daily wallpaper
+$GLOBALS['UND_TEST_ENV'] = ['PEXELS_API_KEY' => 'PXKEY123456'];
+$pxc = ['appearance' => ['pexels' => ['on' => true, 'query' => 'nature wallpaper', 'color' => 'black']]];
+$pxn = 0; $pxh = null; $pxu = '';
+$photo = function ($n) { return ['id' => $n, 'url' => 'https://www.pexels.com/photo/x-' . $n . '/', 'photographer' => 'P' . $n, 'photographer_url' => 'https://www.pexels.com/@p' . $n, 'src' => ['large2x' => 'https://images.pexels.com/photos/' . $n . '/a.jpeg?w=1880']]; };
+$saved = $GLOBALS['UND_HTTP_MOCK'];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use (&$pxn, &$pxh, &$pxu, $photo) { $pxn++; $pxh = $o['headers'] ?? []; $pxu = $url; $j = ['photos' => [$photo(1), $photo(2), $photo(3)]]; return ['code' => 200, 'body' => json_encode($j), 'json' => $j, 'err' => '', 'headers' => []]; };
+@unlink(und_pexels_file());
+$w = und_pexels($pxc, '2026-11-01');
+t('a Pexels photo comes back with its credit', strpos((string)($w['url'] ?? ''), 'https://images.pexels.com/') === 0 && $w['by'] !== '' && strpos($w['by_url'], 'https://www.pexels.com/') === 0, json_encode($w));
+t('the search asks for landscape, the colour and the words, with the key only in the header', strpos($pxu, 'orientation=landscape') !== false && strpos($pxu, 'color=black') !== false && strpos($pxu, 'query=nature+wallpaper') !== false && strpos($pxu, 'PXKEY') === false && $pxh['Authorization'] === 'PXKEY123456', $pxu);
+t('the key never reaches the page', strpos(json_encode($w), 'PXKEY') === false);
+und_pexels($pxc, '2026-11-01');
+t('Pexels is asked once a day', $pxn === 1, (string)$pxn);
+und_pexels($pxc, '2026-11-02');
+t('a new day asks again', $pxn === 2);
+$GLOBALS['UND_HTTP_MOCK'] = function () { return ['code' => 500, 'body' => '', 'json' => null, 'err' => '', 'headers' => []]; };
+$w2 = und_pexels($pxc, '2026-11-03');
+t('when Pexels fails, the last photo stays up with the reason', !empty($w2['url']) && !empty($w2['error']), json_encode($w2));
+$GLOBALS['UND_TEST_ENV'] = [];
+t('no key: a clear message', strpos(und_pexels($pxc)['error'] ?? '', 'API key') !== false);
+t('switched off: nothing is asked', und_pexels(['appearance' => ['pexels' => ['on' => false]]]) === ['off' => true]);
+unset($GLOBALS['UND_TEST_ENV']); $GLOBALS['UND_HTTP_MOCK'] = $saved;
+
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);
