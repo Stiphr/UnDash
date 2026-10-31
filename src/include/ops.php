@@ -15,9 +15,12 @@ function und_lock($target) {
 }
 function und_unlock($fp) { if (is_resource($fp)) { @flock($fp, LOCK_UN); @fclose($fp); } }
 
-/** Append to the recent-operation history (newest 100, kept in RAM until reboot). Messages are redacted. */
+/** The recent-operation history: in RAM in the plugin (no flash wear), in /config in the Docker version, where /tmp is lost with every image update. */
+function und_history_file() { return und_api_mode() ? und_data_dir() . '/history.json' : und_tmp('history.json'); }
+
+/** Append to the history (newest 100). Messages are redacted. */
 function und_history_add($kind, $target, $op, $ok, $msg = '') {
-  $f = und_tmp('history.json');
+  $f = und_history_file();
   $fp = @fopen($f . '.lock', 'c');
   if ($fp) flock($fp, LOCK_EX);
   $h = und_read_json($f, []);
@@ -25,7 +28,7 @@ function und_history_add($kind, $target, $op, $ok, $msg = '') {
   und_write_json($f, array_slice($h, -100));
   if ($fp) { flock($fp, LOCK_UN); fclose($fp); }
 }
-function und_history() { return array_reverse(und_read_json(und_tmp('history.json'), [])); }
+function und_history() { return array_reverse(und_read_json(und_history_file(), [])); }
 
 /* ---------- server power ---------- */
 

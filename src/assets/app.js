@@ -201,6 +201,15 @@
   /* a browser opens at most 6 connections to one server: app and media reads share 4 of them, so the live refresh and clicks never queue behind a slow app */
   var BG = /^(media|arr|dl|service|playing|requests|health|self_update|alert_history|history|storage|os_status)$/, BGQ = [], bgRun = 0;
   function bgNext() { while (bgRun < 4 && BGQ.length) { bgRun++; BGQ.shift()().then(function () { bgRun--; bgNext(); }); } }
+  /* UnDash was updated or restarted, so this page's session is gone: it loads again by itself, unless Settings has edits open */
+  function staleSession() {
+    var at = 0; try { at = +sessionStorage.getItem('undReload') || 0; } catch (e) { /* no storage: reload anyway */ }
+    if (!S.drawer && Date.now() - at > 30000) {
+      try { sessionStorage.setItem('undReload', Date.now()); } catch (e) { /* see above */ }
+      location.reload();
+    }
+    return { error: 'UnDash restarted. Reload the page.', auth: true };
+  }
   function send(action, data, timeoutMs) {
     var fd = new URLSearchParams(); fd.append('action', action);   // urlencoded: multipart POSTs hang on Unraid's web server
     fd.append('csrf_token', window.UND_CSRF || '');
@@ -210,6 +219,7 @@
     return fetch(API, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-Token': window.UND_CSRF || '' }, signal: ctl ? ctl.signal : undefined }).then(function (r) {
       clearTimeout(to);
       if (r.status === 401) return { error: 'Signed out. Reload the page to sign in again.', auth: true };
+      if (r.status === 403) return r.clone().text().then(function (t) { return /CSRF/.test(t) ? staleSession() : r.json().catch(function () { return { error: t || 'Refused (HTTP 403).' }; }); });
       return r.json().catch(function () { return { error: 'Unexpected answer from the server (HTTP ' + r.status + ').' }; }).then(function (j) { if (!r.ok && !j.error) j.error = 'Request failed (HTTP ' + r.status + ').'; return j; });
     }).catch(function (e) { clearTimeout(to); return { error: e && e.name === 'AbortError' ? 'The server took too long to answer.' : 'Could not reach the server.', offline: true }; });
   }
@@ -3036,7 +3046,7 @@
           clear(res);
           if (!t.ok) { res.appendChild(h('div', { class: 'banner bad' }, t.error || 'The connection failed.')); return; }
           res.appendChild(h('div', { class: 'banner ok' }, 'Connected to ' + t.hostname + ' (Unraid ' + t.unraid + ', API ' + t.api + ').'));
-          res.appendChild(h('div', { class: 'kv2 sm' }, Object.keys(t.access).map(function (k) { return [h('span', null, k), h('span', { class: t.access[k] === 'ok' ? 't-ok' : 't-bad' }, t.access[k] === 'ok' ? 'readable' : t.access[k])]; })));
+          res.appendChild(h('div', { class: 'kv2 sm' }, Object.keys(t.access).map(function (k) { var y = t.access[k] === 'ok', opt = !y && (t.optional || {})[k]; return [h('span', null, k), h('span', { class: y ? 't-ok' : opt ? 'muted' : 't-bad', title: opt ? t.access[k] : null }, y ? 'readable' : opt || t.access[k])]; })));
         });
       }
     });
