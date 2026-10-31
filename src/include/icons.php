@@ -45,14 +45,17 @@ function und_icon_index() {
   return $idx;
 }
 
-/** Up to $max icons for a search: [['v' => value for the Icon field, 'n' => name, 's' => source], ...], best matches first. */
-function und_icon_search($q, $max = 60) {
+/** A page of icons, best matches first: ['icons' => [['v' => value for the Icon field, 'n' => name, 's' => source], ...], 'total' =>, 'more' =>].
+ *  $src: '' | selfhst | di. $style: '' | light | dark (selfh.st only, icons that have that version). $browse lists everything when there is no search. */
+function und_icon_search($q, $max = 60, $offset = 0, $src = '', $style = '', $browse = false) {
   $q = strtolower(trim((string)$q));
   $q = preg_replace('/[^a-z0-9 ._-]/', '', $q);
-  if ($q === '') return ['icons' => []];
+  if ($q === '' && !$browse) return ['icons' => []];
+  $style = in_array($style, ['light', 'dark'], true) ? $style : '';
   $idx = und_icon_index();
   $key = str_replace([' ', '_', '.'], '-', $q);
   $score = function ($ref, $name, $tags) use ($q, $key) {
+    if ($q === '') return 1;
     $n = strtolower($name);
     if ($ref === $key || $n === $q) return 0;
     if (strpos($ref, $key) === 0 || strpos($n, $q) === 0) return 1;
@@ -61,20 +64,23 @@ function und_icon_search($q, $max = 60) {
     return -1;
   };
   $hits = []; $seen = [];
-  foreach ($idx['sh'] as $x) {
+  foreach ($src === 'di' ? [] : $idx['sh'] as $x) {
+    if ($style !== '' && empty($x[$style === 'light' ? 4 : 5])) continue;
     $s = $score($x[0], $x[1], $x[2]);
     if ($s < 0) continue;
     $seen[$x[0]] = 1;
-    $hits[] = [$s, strlen($x[0]), ['v' => 'sh-' . $x[0] . ($x[3] ? '' : '.png'), 'n' => $x[1], 's' => 'selfh.st']];
+    $hits[] = [$s, strlen($x[0]), ['v' => 'sh-' . $x[0] . ($style !== '' ? '-' . $style : '') . ($x[3] ? '' : '.png'), 'n' => $x[1], 's' => 'selfh.st']];
   }
-  foreach ($idx['di'] as $x) {
+  foreach ($src === 'selfhst' || $style !== '' ? [] : $idx['di'] as $x) {
     if (isset($seen[$x[0]])) continue;           // the same icon is already listed from selfh.st
     $s = $score($x[0], $x[0], '');
     if ($s < 0) continue;
     $hits[] = [$s + 0.5, strlen($x[0]), ['v' => $x[0] . '.' . $x[1], 'n' => $x[0], 's' => 'dashboard-icons']];
   }
-  usort($hits, function ($a, $b) { return $a[0] <=> $b[0] ?: $a[1] <=> $b[1] ?: strcmp($a[2]['v'], $b[2]['v']); });
-  return ['icons' => array_column(array_slice($hits, 0, max(1, min(200, (int)$max))), 2), 'more' => count($hits) > $max];
+  if ($q === '') usort($hits, function ($a, $b) { return strcasecmp($a[2]['n'], $b[2]['n']); });
+  else usort($hits, function ($a, $b) { return $a[0] <=> $b[0] ?: $a[1] <=> $b[1] ?: strcmp($a[2]['v'], $b[2]['v']); });
+  $max = max(1, min(200, (int)$max)); $offset = max(0, (int)$offset); $total = count($hits);
+  return ['icons' => array_column(array_slice($hits, $offset, $max), 2), 'total' => $total, 'more' => $total > $offset + $max];
 }
 
 /** Which of these selfh.st names exist, and in which forms: ['radarr' => 'svg,light,dark,png', ...]. Names that are not
