@@ -1321,3 +1321,14 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .upt i.on{background:var(--ok)}
 .und.bui .gc-m .stat:has(.upt){justify-content:flex-start;padding-bottom:calc(var(--cp) + 18px)}
 
+/* hidden buttons take no room from the name; they make room only while shown */
+.und.bui .gc-c>.sec .ci{position:relative}
+.und.bui .ci .acts{position:absolute;right:4px;top:50%;transform:translateY(-50%)}
+.und.bui .ci:hover .cn,.und.bui .ci:focus-within .cn{padding-right:30px}
+.und.bui .gc-vms .ci:hover .cn,.und.bui .gc-vms .ci:focus-within .cn{padding-right:112px}
+@media (hover:none){.und.bui .ci .cn{padding-right:34px}.und.bui .gc-vms .ci .cn{padding-right:116px}}
+/* app stats share the line by what they need, so a long value such as 1.7 MiB/s is not cut */
+.und.bui .blocks,.und.bui .ac .blocks,.und.bui .ac .blocks.even{display:flex;flex-wrap:wrap;gap:6px 14px;align-content:flex-end;align-items:flex-end}
+.und.bui .blk,.und.bui .ac .blk,.und.bui .ac .blk:first-child,.und.bui .ac .blocks.even .blk:nth-child(3){flex:1 1 auto;width:auto}
+.und.bui .blk .l,.und.bui .ac .blk .l{white-space:nowrap}
+
