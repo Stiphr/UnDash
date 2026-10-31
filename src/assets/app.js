@@ -1826,7 +1826,9 @@
       if (D.layout !== 'cards') r.list.appendChild(r.rows);
     }
     r.foot = h('div', { class: 'more' });
-    r.body.appendChild(r.list); r.body.appendChild(r.foot);
+    r.body.appendChild(r.list);
+    // on the board it sits beside the count, so it costs no row of its own
+    if (boardOn()) r.el.querySelector('.sec-h').insertBefore(r.foot, r.tools); else r.body.appendChild(r.foot);
     r.map = {};
   };
   function toggleSelected(name) {

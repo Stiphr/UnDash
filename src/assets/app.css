@@ -1222,3 +1222,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .gc-docker .sec-b{margin:0 -8px;padding:0 8px}.und.bui .gc-docker .cgrid{margin:0 -8px}
 .und.bui .gc-c>.sec>.sec-b>:last-child{margin-bottom:0}
 .und.bui .switch input[type=checkbox]:checked::after{background:var(--accent-ink)}
+.und.bui .sec-h>.more{padding:0;margin-left:-4px}.und.bui .sec-h>.more:empty{display:none}.und.bui .sec-h>.more .allb{padding:3px 6px;font-size:12.5px}
+
+/* app stats: one line across the card, sitting at the bottom when the card is stretched */
+.und.bui .blocks,.und.bui .ac .blocks,.und.bui .ac .blocks.even{grid-template-columns:repeat(auto-fit,minmax(56px,1fr));gap:6px 12px;align-content:end}
+.und.bui .blk:last-child:nth-child(odd){grid-column:auto}
+.und.bui .blk .l,.und.bui .ac .blk .l{white-space:normal;overflow:visible;line-height:1.2}
