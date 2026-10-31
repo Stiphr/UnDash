@@ -15,7 +15,8 @@ require UND_ROOT . '/include/lib.php';
 require UND_ROOT . '/include/auth.php';
 $pass = 0; $fail = 0;
 function t($n, $c, $d = '') { global $pass, $fail; if ($c) $pass++; else { $fail++; echo "FAIL $n" . ($d !== '' ? " -- $d" : '') . "\n"; } }
-function clear_cache() { foreach (glob(UND_TMP . '/api-*.json') ?: [] as $f) unlink($f); }
+function clear_cache() { foreach (glob(UND_TMP . '/api-*') ?: [] as $f) unlink($f); }
+function clear_cache_keep_none() { foreach (glob(UND_TMP . '/api-*.json') ?: [] as $f) unlink($f); }
 
 t('caps hide what the API cannot do', und_caps()['power'] === false && und_caps()['os_update'] === false && und_caps()['docker_stats'] === false && und_caps()['mode'] === 'api');
 t('settings live in /config (UNDASH_CONFIG)', und_store_dir() === UND_DIR);
@@ -121,7 +122,7 @@ t('the name comes from Info, and vars (a permission the setup does not list) is 
 clear_cache(); touch(UND_TMP . '/apipoll.beat'); @unlink(UND_TMP . '/viewer');
 $GLOBALS['SENT'] = [];
 $sys = und_system(und_load_config());
-t('with the poller running a refresh never waits for the slow reads', $slowSent() === 0 && $sys['cpu']['pct'] === 5.0 && $sys['net']['rx'] === null && is_file(UND_TMP . '/viewer'), json_encode([$sys['net'], $slowSent()]));
+t('with the poller running a refresh never waits for the slow reads', $slowSent() === 0 && $sys['cpu']['pct'] === 5.0 && $sys['net']['rx'] === null, json_encode([$sys['net'], $slowSent()]));
 und_api_poll_due();
 t('the poller stores both slow reads', $slowSent() === 2 && is_file(UND_TMP . '/api-net.json') && is_file(UND_TMP . '/api-ident.json'));
 und_api_poll_due();
@@ -167,6 +168,27 @@ $GLOBALS['ANSWER'] = function ($req) use ($ups) {
 clear_cache(); $GLOBALS['UPSQ'] = [];
 $u = und_ups('ups', 500);
 t('an older Unraid API is asked again without the power fields; Settings supplies the rating', count($GLOBALS['UPSQ']) === 2 && $u['load'] === 24.0 && $u['watts'] === 120 && $u['nominal'] === 500);
+
+// no UPS through the API: one failed read, then it is left alone
+$GLOBALS['ANSWER'] = function ($req) { $GLOBALS['UPSQ'][] = $req['query']; return ['json' => ['errors' => [['message' => 'Forbidden resource', 'extensions' => ['code' => 'FORBIDDEN']]], 'data' => null]]; };
+clear_cache(); $GLOBALS['UPSQ'] = [];
+und_api_ups(); clear_cache_keep_none(); und_api_ups();
+t('a UPS the API cannot read is not asked for again and again', count($GLOBALS['UPSQ']) === 1, json_encode($GLOBALS['UPSQ']));
+// a container in a restart loop can be stopped (the API calls it EXITED or RUNNING; only its status says Restarting)
+$GLOBALS['ANSWER'] = function ($req) {
+  if (strpos($req['query'], 'mutation') === 0) { $GLOBALS['MUT'][] = 'stop'; return ['json' => ['data' => ['docker' => ['stop' => ['id' => 'c9', 'state' => 'EXITED']]]]]; }
+  return ['json' => ['data' => ['docker' => ['containers' => [['id' => 'c9', 'names' => ['/loop'], 'state' => 'EXITED', 'status' => 'Restarting (1) 3 seconds ago']]]]]];
+};
+clear_cache(); $GLOBALS['MUT'] = [];
+t('a restarting container can be stopped', isset(und_docker_action('loop', 'stop')['ok']) && $GLOBALS['MUT'] === ['stop']);
+// the action history survives an image update
+und_history_add('docker', 'plex', 'stop', true);
+t('the action history is kept in /config', strpos(und_history_file(), UND_DIR) === 0 && is_file(und_history_file()) && und_history()[0]['target'] === 'plex');
+// only an open page keeps the background reads going, not the once-a-minute alert check
+@unlink(UND_TMP . '/viewer'); touch(UND_TMP . '/apipoll.beat');
+$GLOBALS['ANSWER'] = ['json' => ['data' => []]];
+und_alerts_check();
+t('the background alert check does not count as an open page', !is_file(UND_TMP . '/viewer'));
 
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";

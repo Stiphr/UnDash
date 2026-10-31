@@ -1,3 +1,14 @@
+###0.9.7
+- Docker version: the background network reads stopped running all the time. The once-a-minute alert check counted as an open page, so they never paused when no dashboard was open.
+- Docker version: a UPS the Unraid API cannot read (NUT, or a key without UPS access) is asked for once every 10 minutes instead of every 5 seconds, which filled Unraid's API log with errors. Test connection shows this as optional instead of in red.
+- Docker version: a container in a restart loop can be stopped or restarted. The action was refused because the API reports such a container as exited.
+- Docker version: the action history is kept in /config, so it survives an UnDash update.
+- Docker version: a new API address or key also clears the remembered server name and network data.
+- After UnDash is updated or restarted, an open page loads again by itself instead of failing every refresh until you reload it. It waits if Settings is open.
+- Container icons served over plain http (a LAN address) are no longer blocked.
+- A second update of the same container is recorded in the history (only the first one was).
+- Faster: the dashboard's files are cached by the browser and compressed, and each refresh sends about 8 times less data.
+
 ###0.9.6
 - Docker version: a new API key with the listed permissions no longer leaves the System section empty with "The API key is missing a permission: Forbidden resource". UnDash asked for the server name through a part of the API (vars) that is not on the list; it now uses the host name from Info.
 
