@@ -1422,6 +1422,16 @@
     var l = document.createElementNS(SVGNS, 'path'); l.setAttribute('class', 'l'); l.setAttribute('d', d); l.setAttribute('vector-effect', 'non-scaling-stroke');
     sv.appendChild(a); sv.appendChild(l); t.sp.appendChild(sv);
   }
+  /* uptime has no graph, so the tile shows the last 30 days as ticks: lit for each day the server has been up */
+  function uptimeTicks(sec) {
+    var t = R.overview.tiles.uptime; if (!t || !sec) return;
+    var days = Math.min(30, Math.floor(sec / 86400) + 1);
+    if (t.days === days) return; t.days = days;
+    clear(t.sp); t.el.classList.add('has-sp');
+    var row = h('span', { class: 'upt' });
+    for (var i = 30; i > 0; i--) row.appendChild(h('i', { class: i <= days ? 'on' : '' }));
+    t.sp.appendChild(row);
+  }
   function lvl(p, w, b) { return p === null || p === undefined ? 'na' : p >= b ? 'bad' : p >= w ? 'warn' : 'ok'; }
   function paintOverview(y) {
     var r = R.overview, s = y.system;
@@ -1451,7 +1461,8 @@
     if (S.storage) [].concat(S.storage.parity || [], S.storage.array || [], S.storage.pools || []).forEach(function (d) { if (d.temp !== null && d.temp !== undefined) temps.push(d.temp); });
     var hot = temps.length ? Math.max.apply(null, temps) : null;
     tile('disks', hot === null ? 'n/a' : hot + '°C', hot === null ? 'No disk temperatures (spun down?)' : 'hottest · ' + (a.hot ? a.hot + ' at 50°C+' : 'all below 50°C'), hot === null ? null : Math.min(100, hot / 60 * 100), hot === null ? 'na' : hot >= 55 ? 'bad' : hot >= 50 ? 'warn' : 'ok');
-    tile('uptime', upt(s.uptime), s.uptime ? 'since ' + new Date((s.now - s.uptime) * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '', null, '');
+    tile('uptime', upt(s.uptime), s.uptime ? 'up since ' + new Date((s.now - s.uptime) * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '', null, '');
+    uptimeTicks(s.uptime);
     var u = y.ups;
     if (R.overview.tiles.ups) { R.overview.tiles.ups.el.hidden = !u; if (u) tile('ups', pct(u.charge), u.status + (u.load !== null ? ' · load ' + pct(u.load) + (u.watts !== null && u.watts !== undefined ? ' (' + u.watts + ' W)' : '') : u.watts ? ' · ' + u.watts + ' W' : '') + (u.runtime ? ' · ' + Math.round(u.runtime / 60) + ' min' : ''), u.charge, u.charge < 30 ? 'bad' : u.charge < 60 || !/online/i.test(u.status) ? 'warn' : 'ok'); }
     var cores = s.cpu.cores || [];
