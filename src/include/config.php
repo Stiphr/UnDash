@@ -78,7 +78,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => false, 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'pexels' => ['on' => false, 'query' => 'nature wallpaper', 'color' => 'black'], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'pexels' => ['on' => false, 'query' => 'nature wallpaper', 'color' => 'black'], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -314,7 +314,30 @@ function und_migrate(array $c) {
 }
 
 /** Colour themes (palettes in assets/app.js). AMOLED and Fluent Dark are dark only. */
-function und_theme_ids() { return ['default', 'amoled', 'minimal', 'zinc', 'wave', 'dragon', 'catppuccin', 'nord', 'tokyo', 'fluent']; }
+function und_theme_ids() { return ['default', 'amoled', 'minimal', 'wave', 'catppuccin', 'nord']; }
+
+/** Themes made or imported by the user: colours only as hex values, CSS cleaned like the custom CSS, look values inside their limits. */
+function und_themes_clean($list) {
+  $out = []; $seen = []; $limits = und_look_limits();
+  foreach (array_slice(is_array($list) ? $list : [], 0, 30) as $t) {
+    if (!is_array($t) || !preg_match('/^c-[a-z0-9]{8}$/', (string)($t['id'] ?? '')) || isset($seen[$t['id']])) continue;
+    $seen[$t['id']] = 1;
+    $colors = [];
+    foreach (['bg' => '#14151a', 'panel' => '#1c1d22', 'text' => '#f0f0f3', 'muted' => '#a0a1ab', 'line' => '#2c2d33', 'accent' => '#e8622c'] as $k => $def)
+      $colors[$k] = preg_match('/^#[0-9a-f]{6}$/i', (string)($t['colors'][$k] ?? '')) ? strtolower($t['colors'][$k]) : $def;
+    $look = [];
+    foreach ($limits as $k => $r) if (isset($t['look'][$k])) $look[$k] = max($r[0], min($r[1], (int)$t['look'][$k]));
+    if (isset($t['look']['translucent'])) $look['translucent'] = !empty($t['look']['translucent']);
+    $out[] = ['id' => $t['id'], 'name' => und_clip(trim((string)($t['name'] ?? 'My theme')), 40) ?: 'My theme', 'mode' => ($t['mode'] ?? '') === 'light' ? 'light' : 'dark', 'colors' => $colors, 'look' => $look ?: new stdClass(), 'css' => und_clip(und_sanitize_css((string)($t['css'] ?? '')), 60000)];
+  }
+  return $out;
+}
+
+/** lo, hi and default of the look sliders: the extremes still leave the dashboard readable. */
+function und_look_limits() {
+  return ['radius' => [0, 28, 8], 'glass_blur' => [0, 60, 26], 'glass_opacity' => [10, 95, 42], 'glass_saturation' => [100, 250, 170], 'glass_exposure' => [40, 160, 100], 'glass_contrast' => [50, 150, 100],
+          'wall_saturation' => [0, 200, 100], 'wall_contrast' => [50, 150, 100], 'wall_opacity' => [10, 100, 100]];
+}
 
 function und_hex($c, $d) { return preg_match('/^#[0-9a-fA-F]{6}$/', (string)$c) ? strtolower($c) : $d; }
 
@@ -339,15 +362,14 @@ function und_normalize(array $c) {
   $a = array_intersect_key($a, $d['appearance']);
   // the old "light" theme is the default palette in light mode
   if ($a['theme'] === 'light') { $a['theme'] = 'default'; if (!isset($c['appearance']['mode'])) $a['mode'] = 'light'; }
-  $a['theme'] = in_array($a['theme'], und_theme_ids(), true) ? $a['theme'] : 'default';
+  $a['custom_themes'] = und_themes_clean($a['custom_themes'] ?? []);
+  $a['theme'] = ['zinc' => 'minimal', 'dragon' => 'wave', 'tokyo' => 'nord', 'fluent' => 'default'][$a['theme']] ?? $a['theme'];   // themes that were too close to another one
+  $a['theme'] = in_array($a['theme'], array_merge(und_theme_ids(), array_column($a['custom_themes'], 'id')), true) ? $a['theme'] : 'default';
   $a['mode'] = in_array($a['mode'], ['dark', 'light', 'system'], true) ? $a['mode'] : 'dark';
   $a['accent'] = $a['accent'] === '' ? '' : und_hex($a['accent'], '');   // empty = the theme's own accent
   $a['density'] = in_array($a['density'], ['compact', 'comfortable', 'expanded'], true) ? $a['density'] : 'comfortable';
-  $a['radius'] = max(0, min(28, (int)($a['radius'] ?? 8)));
-  $a['translucent'] = !empty($a['translucent']);
-  // lo, hi and default: the extremes still leave the dashboard readable
-  foreach (['glass_blur' => [0, 60, 26], 'glass_opacity' => [10, 95, 42], 'glass_saturation' => [100, 250, 170], 'wall_saturation' => [0, 200, 100], 'wall_contrast' => [50, 150, 100], 'wall_opacity' => [10, 100, 100]] as $k => $r)
-    $a[$k] = max($r[0], min($r[1], (int)($a[$k] ?? $r[2])));
+  $a['translucent'] = array_key_exists('translucent', $a) ? !empty($a['translucent']) : true;
+  foreach (und_look_limits() as $k => $r) $a[$k] = max($r[0], min($r[1], (int)($a[$k] ?? $r[2])));
   $a['motion'] = in_array($a['motion'] ?? '', ['full', 'fast', 'nointro', 'off'], true) ? $a['motion'] : 'full';
   $px = is_array($a['pexels'] ?? null) ? $a['pexels'] : [];
   $a['pexels'] = ['on' => !empty($px['on']), 'query' => und_clip(trim((string)($px['query'] ?? 'nature wallpaper')), 80) ?: 'nature wallpaper', 'color' => in_array($px['color'] ?? 'black', UND_PEXELS_COLORS, true) ? (string)($px['color'] ?? 'black') : 'black'];

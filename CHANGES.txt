@@ -14,7 +14,12 @@
 - Translucent Effect (Settings > Theme): glass cards that blur and tint what is behind them, for dark and light themes. Its blur, opacity and saturation are adjustable, and the wallpaper gets saturation, contrast and opacity beside blur and brightness, all with safe limits. Without a wallpaper the page gets a soft colour wash for the glass to show.
 - Smooth animations: cards arrive in turn, and Settings, dialogs, menus, toasts and tabs move gently. Settings > Theme > Animations sets Full, Fast, Skip the opening or Off, any click or key skips the opening, and the system's reduced motion setting is respected.
 - Header redesigned as one floating bar, also on wallpapers and with the Translucent Effect.
-- Phones get a bottom tab bar (Home, Media, Apps, Docker, Health) instead of one long page, larger touch targets and a compact header.
+- Golden Gate look: system fonts, soft depth, a sunset wash for the glass, Mac style controls, and Settings as a window with grouped rows. The Translucent Effect is on by default.
+- Six distinct themes: Golden Gate, Midnight, Mono, Kanagawa, Catppuccin and Nord. Zinc Blue, Kanagawa Dragon, Tokyo Night and Fluent move to the closest one.
+- Make your own themes with a colour editor and optional CSS, and import or export them as files, with the current look. Custom CSS can be imported and exported as a .css file too.
+- Separate Cards and Background controls: blur, opacity, exposure, saturation and contrast for each. Link cards are larger.
+- Open buttons: a quiet arrow instead of a labelled button, and a Media card's title opens its app.
+- Phones get a floating tab bar (Home, Media, Apps, Docker, Health) instead of one long page, larger touch targets and a compact header.
 - Settings > Theme > Card board turns it off and brings back the classic sections, unchanged.
 
 ###0.9.7
