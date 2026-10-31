@@ -57,7 +57,7 @@ docker run -d --name UnDash --restart unless-stopped -p 9099:9099 \
 
 **4. First start.** Open `http://YOUR_SERVER_IP:9099`.
 - **Set a password (recommended):** enter the one-time setup code from the container log (**Docker > UnDash > Logs**) and choose a password of 10+ characters.
-- **Continue without a password:** skips the code. Anyone who can reach the port can then use the dashboard. You can add a password later in **Settings > Connection**.
+- **Continue without a password:** skips the code. Anyone who can reach the port can then use the dashboard. You can add a password later in **Settings > Server connection**.
   Without a password UnDash only answers at the server's IP address or name (`tower`, `tower.local`), so another web page cannot reach it through a host name of its own. Opening it through another name, such as a reverse proxy's, needs a password or that name in `UNDASH_ALLOWED_HOSTS`.
 
 To update, use **Update** in the Docker tab. UnDash shows a badge next to its version when a new release is out.
@@ -78,7 +78,7 @@ Everything is set up in **Settings** (the gear at the top right, or press `,`); 
 
 ### Add apps
 
-1. Go to **Settings > Sections & apps** and press **Add app**.
+1. Go to **Settings > Apps & cards** and press **Add app**.
 2. Pick the app type. Search, or browse by group. Containers UnDash recognises (Radarr, Plex, qBittorrent and so on) are listed first under **Found on your server**, with the name, address and icon already filled in:
 
    | Group | App types |
@@ -112,14 +112,14 @@ Apps in the **Apps** section sit in groups. Open **Apps > Groups and apps** to a
 
 Containers and VMs need no setup: UnDash lists everything it finds on the server through the Unraid API (Docker version) or Unraid itself (plugin). Choose which ones the dashboard shows:
 
-1. Go to **Settings > Sections & apps**.
+1. Go to **Settings > Apps & cards**.
 2. Open **Containers > Containers and view** (or **Virtual machines > VMs and view**).
 3. Under **Containers on the dashboard**, tick the ones to show. **Select all**, **Running only** and **None** act on everything the filter box lists, so you can type `arr` and press **Select all** to add every Arr container at once. New containers show until you untick them.
 4. Per container you can also set a **display name**, an **icon**, **favorite** (star, also shown in the **Favorites** section) and whether it is **checked for updates** (arrow).
 5. Pick the **layout** (compact grid, table or cards), **sort order**, what each container shows (CPU, memory, uptime, image) and which ones show by default: running, all, or **Selected**.
 6. Press **Save**.
 
-The list stays empty until UnDash can read the server. In the Docker version, check **Settings > Connection** and that the API key has read access to *Docker* and *VMs* (see [Install](#docker-container)).
+The list stays empty until UnDash can read the server. In the Docker version, check **Settings > Server connection** and that the API key has read access to *Docker* and *VMs* (see [Install](#docker-container)).
 
 On the dashboard, the gear on each container or VM has the controls: start, stop, restart, update, logs, **Show in "Selected"** and **Hide from the dashboard**. Click the icon or name to open its web UI.
 
@@ -127,7 +127,7 @@ On the dashboard, the gear on each container or VM has the controls: start, stop
 
 The dashboard is made of sections: **System**, **Alerts**, **Favorites**, **Media**, **Arr Stack**, **Downloads**, **Now playing**, **Requests**, **Endpoint health**, **Containers**, **Virtual machines** and **Apps**. Each app you add is a widget card inside one of them.
 
-1. In **Settings > Sections & apps**, under **Sections**:
+1. In **Settings > Apps & cards**, under **Sections**:
    - tick a section to show it, untick to hide it;
    - drag it to change the order;
    - set it to **Full width** or **Half width** (two half-width sections sit side by side on wide screens).
@@ -144,29 +144,29 @@ The dashboard is made of sections: **System**, **Alerts**, **Favorites**, **Medi
 
 3. Press **Save**.
 
-App widgets refresh every 15 seconds and the system every 2 seconds; change both in **Settings > Refresh & display**.
+App widgets refresh every 15 seconds and the system every 2 seconds; change both in **Settings > General**.
 
 ### Pick a look
 
-**Settings > Theme**: theme, light / dark / system mode, accent colour, spacing and wallpaper. **Settings > Custom CSS** for anything else.
+**Settings > Appearance**: theme, light / dark / system mode, accent colour, spacing and wallpaper. **Settings > Custom CSS** for anything else.
 
 ### Start from the example
 
 [`examples/config.yaml`](examples/config.yaml) is a complete working setup: 7 groups, 31 apps, all sections, Default theme, with no keys, passwords or real addresses.
 
-1. Download it, then go to **Settings > Backup & import > Import** and choose the file. You see what it contains before anything changes, and a backup is taken first.
-2. In **Settings > Sections & apps**, change each address (`192.168.1.10` is a placeholder) and add the API keys; apps still missing one are marked. Remove the apps you don't run.
+1. Download it, then go to **Settings > Backup & restore > Import** and choose the file. You see what it contains before anything changes, and a backup is taken first.
+2. In **Settings > Apps & cards**, change each address (`192.168.1.10` is a placeholder) and add the API keys; apps still missing one are marked. Remove the apps you don't run.
 
 ## Settings at a glance
 
 | Where | What |
 |---|---|
-| Settings > Sections & apps | what the dashboard shows: sections, their options and your apps |
-| Settings > Theme / Custom CSS | how it looks |
-| Settings > Refresh & display | refresh interval (default 2 s), what the search box searches, search engine, title |
-| Settings > Ignored alerts | alerts you have ignored |
-| Settings > Connection | Docker: Unraid API and dashboard password. Plugin: settings folder and the 9099 port |
-| Settings > Backup & import | export and import `config.yaml` and `.env`, automatic backups, import from another dashboard |
+| Settings > Apps & cards | what the dashboard shows: sections, their options and your apps |
+| Settings > Appearance / Custom CSS | how it looks |
+| Settings > General | refresh interval (default 2 s), what the search box searches, search engine, title |
+| Settings > Alerts | alerts you have ignored |
+| Settings > Server connection | Docker: Unraid API and dashboard password. Plugin: settings folder and the 9099 port |
+| Settings > Backup & restore | export and import `config.yaml` and `.env`, automatic backups, import from another dashboard |
 
 UnDash keeps two files in its config folder (`/config` in Docker, `/mnt/user/appdata/undash` for the plugin):
 
