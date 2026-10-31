@@ -1362,3 +1362,16 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 }
 
 @media (max-width:700px){.und.bui .dlh{flex-wrap:wrap}.und.bui .dlh .an{flex:1 1 0;min-width:0}.und.bui .dlh>.grow{display:none}.und.bui .dlh>.badge{order:9;flex-basis:100%;margin:-6px 0 0 36px}}
+
+/* the header sits the same distance from the top as from the sides */
+@media (min-width:701px){.und.bui .top{top:var(--safe-y);margin:0 0 var(--gg)}.und.bui .bbar{top:calc(var(--safe-y) + 62px)}}
+/* a Media card's count goes to the right edge */
+.und.bui .mw .mh>.grow{display:none}
+.und.bui .mw .mh>.count{margin-left:auto;order:2}
+.und.bui .mw .mh>a,.und.bui .mw .mh>span:last-child:not(.count){order:3}
+/* zoom */
+.und .zoomf{display:flex;flex-direction:column;gap:6px;min-width:0}
+.und .zticks{display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.und .zticks .on{color:var(--ok);font-weight:600}
+.und.bui .ci svg.logo{padding:0!important;background:none!important;box-shadow:none!important;border-radius:23%;width:30px;height:30px;flex:none}
+
