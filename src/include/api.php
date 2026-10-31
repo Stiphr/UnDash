@@ -5,7 +5,7 @@
  * On the standalone port, standalone/router.php checks the Unraid login (or UnDash's own session) and its CSRF token first.
  */
 require_once __DIR__ . '/lib.php';
-require_once __DIR__ . '/auth.php';      // the Docker version's password (Settings > Connection)
+require_once __DIR__ . '/auth.php';      // the Docker version's password (Settings > Server connection)
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -279,7 +279,7 @@ switch ($action) {
 
   /* ---- import / export / backups ---- */
   case 'export': {
-    if ($P('kind') === 'env' && und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true)) fail('Set a dashboard password first (Settings > Connection): without one, anyone on your network could download every key.', 403);
+    if ($P('kind') === 'env' && und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true)) fail('Set a dashboard password first (Settings > Server connection): without one, anyone on your network could download every key.', 403);
     out(und_export($P('kind') === 'env' ? 'env' : 'config'));
   }
   case 'import_check':  { $r = und_import_parse($P('file')); if (isset($r['error'])) fail($r['error']); out(['summary' => $r['summary']]); }

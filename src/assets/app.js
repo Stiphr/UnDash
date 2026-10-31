@@ -135,7 +135,7 @@
     } });
   }
 
-  /* Container and VM icons from selfh.st, by name (Settings > Theme > Icons): "binhex-qbittorrentvpn" and
+  /* Container and VM icons from selfh.st, by name (Settings > Appearance > Icons): "binhex-qbittorrentvpn" and
      "lscr.io/linuxserver/radarr:latest" become qbittorrentvpn / qbittorrent and radarr. The server says which names exist
      (and in which forms), so the browser does not try URLs that are not there; Unraid's own icon is the next choice. */
   var ICON_PRE = /^(binhex|linuxserver|lscr|hotio|ich777|official)[-_]/;
@@ -224,7 +224,7 @@
     if (!S.drawer && Date.now() - at > 30000) {
       try { sessionStorage.setItem('undReload', Date.now()); } catch (e) { /* see above */ }
       location.reload();
-    }
+    } else if (!S.drawer && !S.reloadT) S.reloadT = setTimeout(function () { location.reload(); }, 30000 - (Date.now() - at));      // restarted twice in a row
     return { error: 'UnDash restarted. Reload the page.', auth: true };
   }
   function send(action, data, timeoutMs) {
@@ -429,7 +429,7 @@
     var wall = a.daily && a.daily.on && S.wall && S.wall.url ? S.wall.url : a.background;
     root.classList.toggle('has-bg', !!wall);
     // wallpaper blur: the whole picture, or only what shows through the (then see-through) cards
-    // the margin around the dashboard: automatic, or what Settings > Theme says
+    // the margin around the dashboard: automatic, or what Settings > Appearance says
     if (S.L && boardOn()) boardScale(a); else ['x', 'y'].forEach(function (k) { var v = a['safe_' + k]; if (v === undefined || v < 0) root.style.removeProperty('--safe-' + k); else root.style.setProperty('--safe-' + k, v + 'px'); });
     var glass = !!wall && a.blur_target === 'cards';
     root.classList.toggle('glass', glass);
@@ -518,7 +518,7 @@
       if (board) sec.collapsed = false;                  // a card has no collapsed state; the saved one is kept for the classic layout
       if (sec.visible && (!board || want[sec.id])) buildSection(sec);
     });
-    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Sections & apps.'));
+    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Apps & cards.'));
     if (R.bell) R.bell.hidden = !R.alerts;
     if (R.bell && R.alerts && R.health) R.alerts.tools.insertBefore(btn('Endpoints', function () { alertClose(); endpointsDialog(); }, 'ghost sm', 'web', 'Every address UnDash checks, and how it answered'), R.alerts.tools.firstChild);
     if (board && (window.UND_STANDALONE || S.full)) root.appendChild(h('div', { class: 'edgef', 'aria-hidden': 'true' }));
@@ -790,7 +790,7 @@
   function boardTs() { return parseFloat(root.style.getPropertyValue('--ts')) || 1; }
   function boardAutoZoom() {
     var w = window.innerWidth, m = boardMode(), cl = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
-    return m === 'lg' ? cl(w / 1600, 0.86, 1.35) : m === 'md' ? cl(w / 1000, 0.9, 1.05) : 1;
+    return m === 'lg' ? cl(Math.pow(w / 1600, 0.3), 0.88, 1.3) : m === 'md' ? cl(w / 1000, 0.9, 1.05) : 1;
   }
   function boardScale(a) {
     a = a || (S.drawer && S.drawer.cfg ? S.drawer.cfg : S.L).appearance;      // Settings shows its unsaved values while it is open
@@ -1151,7 +1151,7 @@
   if (NARROW) (NARROW.addEventListener ? NARROW.addEventListener('change', function () { balanceHalves(); }) : NARROW.addListener(balanceHalves));
 
   /* ---- search box: a list under it with the apps, containers and VMs that match, a web search and movies and series to request
-     (Overseerr / Jellyseerr). What it searches is set in Settings > Refresh & display; the dashboard itself stays as it is. ---- */
+     (Overseerr / Jellyseerr). What it searches is set in Settings > General; the dashboard itself stays as it is. ---- */
   var ENGINES = { duckduckgo: ['DuckDuckGo', 'https://duckduckgo.com/?q='], google: ['Google', 'https://www.google.com/search?q='], bing: ['Bing', 'https://www.bing.com/search?q='],
     startpage: ['Startpage', 'https://www.startpage.com/do/search?q='], brave: ['Brave Search', 'https://search.brave.com/search?q='] };
   function hasSeerr() { var f = null; S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (!f && s.type === 'overseerr') f = s; }); }); return f; }
@@ -1418,7 +1418,7 @@
     r.detail = h('div', { class: 'detail', hidden: true });
     r.stale = h('div', { class: 'stale', hidden: true, role: 'status' });
     r.body.appendChild(r.stale); r.body.appendChild(r.bar); r.body.appendChild(r.detail);
-    if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Sections & apps).'));
+    if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Apps & cards).'));
     r.open = LS.get('detail', '');
   };
   function toggleDetail(id) {
@@ -1692,8 +1692,8 @@
     clear(r.list);
     txt(r.count, out.length ? String(out.length) : '');
     r.ign.hidden = !hidden; clear(r.ign); r.ign.appendChild(ic('mute')); r.ign.appendChild(document.createTextNode(hidden + ' ignored'));
-    r.ign.title = 'Alerts hidden by ignore rules. Open Settings > Ignored alerts.';
-    // nothing wrong: the whole section steps aside (ignored alerts and the history are under Settings > Ignored alerts)
+    r.ign.title = 'Alerts hidden by ignore rules. Open Settings > Alerts.';
+    // nothing wrong: the whole section steps aside (ignored alerts and the history are under Settings > Alerts)
     r.el.hidden = !out.length;
     paintBell(out);
     if (!out.length) { if (r.pop) r.list.appendChild(h('div', { class: 'empty' }, 'All clear. Nothing needs your attention.')); return; }
@@ -1734,7 +1734,7 @@
     var f = durField(true), err = h('div', { class: 'muted sm', role: 'alert' }), m, lab = ALERT_CAT[x.cat];
     m = modal('Ignore all “' + lab + '” alerts', h('div', null,
       h('p', null, 'This hides every “' + lab + '” alert, for every ' + (x.cat.indexOf('docker.') === 0 ? 'container' : x.cat.indexOf('disk.') === 0 ? 'disk' : 'occurrence') + ', including ones that appear later, not just this one.'),
-      h('p', { class: 'muted sm' }, 'UnDash keeps checking; the alerts come back when you restore them in Settings > Ignored alerts or the time runs out.'),
+      h('p', { class: 'muted sm' }, 'UnDash keeps checking; the alerts come back when you restore them in Settings > Alerts or the time runs out.'),
       h('label', { class: 'muted sm' }, 'Ignore'), f.el, err),
       [btn('Cancel', function () { m.close(); }), btn('Ignore all', function () { var v = f.value(); if (v === null) { txt(err, 'Choose between 5 minutes and 366 days.'); return; } m.close(); ignoreAdd('type', x, v); }, 'danger solid')]);
   }
@@ -1826,7 +1826,7 @@
     var m = { running: ['running', 'ok'], exited: ['stopped', 'off'], paused: ['paused', 'warn'], restarting: ['restarting', 'warn'], created: ['created', 'off'], dead: ['dead', 'bad'], removing: ['removing', 'warn'] }[c.state] || [c.state, 'off'];
     return h('span', { class: 'badge ' + m[1] }, m[0]);
   }
-  /* an update counts unless update checks are off (Settings > Sections & apps > Containers), for all or for this container */
+  /* an update counts unless update checks are off (Settings > Apps & cards > Containers), for all or for this container */
   function updOn(c) { return c.update === 'available' && S.L.docker.update_check !== false && !pref('docker', c.name).no_update; }
   function dUpdBadge(c) {
     if (c.job === 'update_failed') return h('span', { class: 'badge bad', title: 'The last update failed; see the logs' }, 'update failed');
@@ -1883,7 +1883,7 @@
     var D = S.L.docker, i = D.selected.indexOf(name), first = !D.selected.length;
     if (i >= 0) D.selected.splice(i, 1); else D.selected.push(name);
     api('prefs', { kind: 'docker_view', value: { selected: D.selected } }).then(function (j) { if (j.error) toast(j.error, true); });
-    toast(i >= 0 ? name + ' removed from "Selected"' : name + ' added to "Selected"' + (first ? '. Pick "Selected" as the default view in Settings > Sections & apps > Containers.' : ''));
+    toast(i >= 0 ? name + ' removed from "Selected"' : name + ' added to "Selected"' + (first ? '. Pick "Selected" as the default view in Settings > Apps & cards > Containers.' : ''));
     shell();
   }
   function setLayout(kind, l) { S.L[kind].layout = l; api('prefs', { kind: kind + '_view', value: { layout: l } }); shell(); }
@@ -2328,7 +2328,7 @@
       x.el = h('div', { class: 'mw card' }, h('div', { class: 'mh' }, h('h3', null, MEDIA[id][0]), x.count, h('span', { class: 'grow' }), x.link), x.row);
       r.w[id] = x; r.grid.appendChild(x.el);
     });
-    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Sections & apps > Media).'));
+    if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Apps & cards > Media).'));
     r.body.classList.add('mbody');
     r.body.appendChild(r.grid);
     clearTimeout(S.mediaTimer); loadMedia(true);
@@ -2438,7 +2438,7 @@
     var sig = JSON.stringify(j); if (r.sig === sig) return; r.sig = sig;
     clear(r.list); clear(r.sum);
     if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
-    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Plex, Emby, Jellyfin or Tautulli in Settings > Sections & apps to see who is watching.')); txt(r.count, ''); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Plex, Emby, Jellyfin or Tautulli in Settings > Apps & cards to see who is watching.')); txt(r.count, ''); return; }
     var bw = 0, tc = 0;
     j.streams.forEach(function (x) { if (x.bandwidth) bw += x.bandwidth; if (x.method === 'transcode') tc++; });
     txt(r.count, j.streams.length ? String(j.streams.length) : '');
@@ -2478,7 +2478,7 @@
     var sig = JSON.stringify([j, S.busy]); if (r.sig === sig) return; r.sig = sig;
     clear(r.list); clear(r.link);
     if (j.error) { r.list.appendChild(h('div', { class: 'empty err-t' }, j.error)); return; }
-    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Overseerr or Jellyseerr in Settings > Sections & apps to see and approve requests here.')); txt(r.count, ''); return; }
+    if (j.unconfigured) { r.list.appendChild(h('div', { class: 'empty' }, 'Add Overseerr or Jellyseerr in Settings > Apps & cards to see and approve requests here.')); txt(r.count, ''); return; }
     txt(r.count, j.pending ? j.pending + ' pending' : '');
     (j.apps || []).forEach(function (a) {
       if (a.error) r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error));
@@ -2539,7 +2539,7 @@
     txt(r.count, j.total ? String(j.total) : '');
     var sig = JSON.stringify(j.rows); if (r.sig === sig) return; r.sig = sig;
     clear(r.rows);
-    if (!j.rows.length) { r.rows.appendChild(h('div', { class: 'empty' }, 'Nothing to probe yet: add links to your apps (Settings > Sections & apps) or give containers a web UI.')); return; }
+    if (!j.rows.length) { r.rows.appendChild(h('div', { class: 'empty' }, 'Nothing to probe yet: add links to your apps (Settings > Apps & cards) or give containers a web UI.')); return; }
     j.rows.forEach(function (x) {
       r.rows.appendChild(h('div', { class: 'hrow ' + x.level, role: 'row', 'data-name': x.name },
         h('span', { class: 'hn', role: 'cell' }, h('span', { class: 'sdot ' + x.level, role: 'img', 'aria-label': x.level }), img(iconUrl(x.icon), 'aico', x.kind === 'container' ? 'box' : 'tag'),
@@ -2556,7 +2556,7 @@
   BUILD.arr = function (r) {
     var apps = zoneApps('arr');
     r.list = h('div', { class: 'panel arr', role: 'list' }); r.rows = {};
-    if (!apps.length) r.list.appendChild(h('div', { class: 'empty' }, 'No Arr apps yet. Add Radarr, Sonarr, Prowlarr… in Settings > Sections & apps.'));
+    if (!apps.length) r.list.appendChild(h('div', { class: 'empty' }, 'No Arr apps yet. Add Radarr, Sonarr, Prowlarr… in Settings > Apps & cards.'));
     apps.forEach(function (s) {
       var x = { s: s, dot: h('span', { class: 'sdot na', role: 'img', 'aria-label': 'checking' }), state: h('span', { class: 'ell' }, 'Checking…'), info: h('span', { class: 'ai' }), chev: h('span', { class: 'achev', hidden: true }, ic('chev')), det: h('div', { class: 'adet', hidden: true }) };
       var tog = h('button', { type: 'button', class: 'arow', 'aria-expanded': 'false', onclick: function () { if (x.chev.hidden) return; x.det.hidden = !x.det.hidden; tog.setAttribute('aria-expanded', x.det.hidden ? 'false' : 'true'); if (R.cards) boardAutoSoon(); } },
@@ -2626,7 +2626,7 @@
   BUILD.downloads = function (r) {
     var apps = zoneApps('downloads');
     r.list = h('div', { class: 'dls' }); r.c = {};
-    if (!apps.length) r.list.appendChild(h('div', { class: 'card empty' }, 'No download clients yet. Add qBittorrent, qui or SABnzbd in Settings > Sections & apps.'));
+    if (!apps.length) r.list.appendChild(h('div', { class: 'card empty' }, 'No download clients yet. Add qBittorrent, qui or SABnzbd in Settings > Apps & cards.'));
     apps.forEach(function (s) {
       var x = { s: s, head: h('div', { class: 'dlh' }), body: h('div', { class: 'dlb' }, h('div', { class: 'muted sm' }, 'Loading…')) };
       x.el = h('div', { class: 'card dl', 'data-name': s.name }, x.head, x.body);
@@ -2693,7 +2693,7 @@
   BUILD.apps = function (r) {
     var A = S.L.apps, closed = LS.get('closed', {});
     var groups = S.L.groups.map(function (g) { return { g: g, s: g.services.filter(function (s) { return s.zone === 'apps' && !s.hidden && (A.links || s.type !== 'link'); }) }; }).filter(function (x) { return x.s.length; });
-    if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No other apps to show. Add Plex, Immich, AdGuard… in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Sections & apps'), '.')); return; }
+    if (!groups.length) { r.body.appendChild(h('div', { class: 'card empty' }, 'No other apps to show. Add Plex, Immich, AdGuard… in ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); openSettings('services'); } }, 'Settings > Apps & cards'), '.')); return; }
     if (groups.length > 1) r.tools.appendChild(h('div', { class: 'seg', role: 'group', 'aria-label': 'Grouping' },
       h('button', { type: 'button', class: A.headers ? 'on' : '', title: 'Apps in their groups, with the group names', 'aria-pressed': A.headers ? 'true' : 'false', onclick: function () { setAppGroups(true); } }, 'Groups'),
       h('button', { type: 'button', class: A.headers ? '' : 'on', title: 'All apps in one grid', 'aria-pressed': A.headers ? 'false' : 'true', onclick: function () { setAppGroups(false); } }, 'One grid')));
@@ -2706,7 +2706,7 @@
     } else groups.forEach(function (x) {
       var gr = x.g, shut = gr.header && closed[gr.id], wrap = h('div', { class: 'grp' + (shut ? ' closed' : '') }), gd = grid(), links = h('div', { class: 'alinks' });
       if (gr.header) wrap.appendChild(h('h3', null, h('button', { type: 'button', class: 'gt', 'aria-expanded': shut ? 'false' : 'true', onclick: function (e) { closed[gr.id] = !closed[gr.id]; LS.set('closed', closed); wrap.classList.toggle('closed'); e.currentTarget.setAttribute('aria-expanded', closed[gr.id] ? 'false' : 'true'); } }, ic('chev'), gr.name),
-        gear('group ' + gr.name, function () { return [['Rename group…', 'edit', function () { renameGroup(gr); }], ['Hide the group name', 'eyeoff', function () { groupPref(gr, { header: false }, 'Group name hidden. Show it again in Settings > Sections & apps > Apps.'); }], 'hr', ['Show all apps in one grid', 'grid', function () { setAppGroups(false); }]]; })));
+        gear('group ' + gr.name, function () { return [['Rename group…', 'edit', function () { renameGroup(gr); }], ['Hide the group name', 'eyeoff', function () { groupPref(gr, { header: false }, 'Group name hidden. Show it again in Settings > Apps & cards > Apps.'); }], 'hr', ['Show all apps in one grid', 'grid', function () { setAppGroups(false); }]]; })));
       x.s.forEach(function (s) { (s.type === 'link' ? links : gd).appendChild(widget(s)); });
       if (gd.childNodes.length) wrap.appendChild(gd);
       if (links.childNodes.length) wrap.appendChild(links);
@@ -3054,7 +3054,7 @@
     var c = e.cloneNode(true); [].forEach.call(c.querySelectorAll('input,select,textarea,button,svg'), function (x) { x.remove(); });
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
-  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
+  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
     wallpaper: 'background image picture blur', 'daily wallpaper': 'wikimedia commons nature city cars random photo background', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
     'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
   var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Daily wallpaper', 'Animations', 'Dashboard password'];
@@ -3144,16 +3144,16 @@
     };
   }
   var SET_PAGES = {
-    dashboard: ['Sections & apps', 'grid', tabDashboard],
-    appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Cards', 'Background', 'Daily wallpaper', 'Spacing'])],
+    dashboard: ['Apps & cards', 'grid', tabDashboard],
+    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Card style', 'Background', 'Daily wallpaper', 'Layout & size'])],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
-    system: ['Refresh & display', 'clock', tabSystem],
-    ignored: ['Ignored alerts', 'mute', tabIgnored],
-    config: ['Connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }],
-    backup: ['Backup & import', 'download', configCommon]
+    system: ['General', 'clock', tabSystem],
+    ignored: ['Alerts', 'mute', tabIgnored],
+    config: ['Server connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }],
+    backup: ['Backup & restore', 'download', configCommon]
   };
-  var SET_NAV = [['Dashboard', ['dashboard', 'appearance', 'css']], ['Behaviour', ['system', 'ignored']], ['Server', ['config', 'backup']]];
-  /* older page names (links in messages) open Sections & apps with that part unfolded */
+  var SET_NAV = [['Dashboard', ['dashboard', 'appearance', 'css']], ['Preferences', ['system', 'ignored']], ['Server', ['config', 'backup']]];
+  /* older page names (links in messages) open Apps & cards with that part unfolded */
   var SET_ALIAS = { layout: ['dashboard'], media: ['dashboard', 'media'], containers: ['dashboard', 'docker'], services: ['dashboard', 'apps'] };
   function set(title, hint) { var b = h('section', { class: 'set' }, h('h3', null, title), hint ? h('p', { class: 'hint' }, hint) : null); for (var i = 2; i < arguments.length; i++) add(b, arguments[i]); return b; }
   /* reorderable list: drag the handle (mouse) or use the arrow buttons (keyboard, touch); below(x) can add a panel under a row */
@@ -3173,7 +3173,7 @@
     }));
   }
 
-  /* Settings > Sections & apps: the dashboard's sections in order, each with its own options folded under it.
+  /* Settings > Apps & cards: the dashboard's sections in order, each with its own options folded under it.
      Apps are listed in the section they show in; "Find an app" opens every section that has a match. */
   var SEC_OPTS = { overview: 'Tiles and apps', media: 'Columns and apps', arr: 'Apps', downloads: 'Clients', requests: 'View', apps: 'Groups and apps', docker: 'Containers and view', vms: 'VMs and view' };
   function tabDashboard(b, D, dirty) {
@@ -3260,7 +3260,7 @@
     var page = list.filter(function (s) { return s.id === D.sub; })[0];
     if (page) {
       txt(b.querySelector('.dtitle'), TITLES[page.id]);
-      b.insertBefore(h('button', { type: 'button', class: 'sback', onclick: function () { D.sub = null; D.render(); } }, ic('chev'), 'Sections & apps'), b.querySelector('.dtitle'));
+      b.insertBefore(h('button', { type: 'button', class: 'sback', onclick: function () { D.sub = null; D.render(); } }, ic('chev'), 'Apps & cards'), b.querySelector('.dtitle'));
       b.appendChild(set('On the dashboard', SEC_DESC[page.id],
         F('Show this card', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: shown(page), onchange: function (e) { page.visible = e.target.checked; dirty(); } }), TITLES[page.id])),
         F('Width in Smart arrange', sIn(page, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']]))));
@@ -3487,7 +3487,7 @@
     var col, hex, cur = a.accent || themeAccent(a);
     hex = h('input', { type: 'text', value: cur, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
     col = h('input', { type: 'color', value: cur, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
-    b.appendChild(set('Colours', 'Pick a colour theme and whether it is light, dark or follows your system; every theme has both. Status colours (green, amber, red) stay readable in every theme.',
+    b.appendChild(set('Theme', 'Pick a colour theme and whether it is light, dark or follows your system; every theme has both. Status colours (green, amber, red) stay readable in every theme.',
       h('div', { class: 'inl', style: { 'margin-bottom': '12px' } }, h('span', { class: 'muted sm' }, 'Mode'), modeSeg), tw,
       h('div', { class: 'inl', style: { 'margin-top': '12px' } }, btn('New theme', function () { editTheme(null); }, 'sm', 'plus', 'Start from the theme you are using'),
         chosen() ? btn('Edit theme', function () { editTheme(chosen().custom); }, 'sm', 'edit') : null, h('span', { class: 'grow' }),
@@ -3514,7 +3514,7 @@
       return F(lab, h('div', { class: 'inl' }, h('label', { class: 'switch', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: auto, onchange: function (e) {
         a[k] = e.target.checked ? -1 : +r.value; r.disabled = e.target.checked; txt(out, e.target.checked ? 'smart' : a[k] + ' px'); dirty(); preview(); } }), 'Smart'), r, out));
     };
-    b.appendChild(set('Spacing', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
+    b.appendChild(set('Layout & size', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
       F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
       F('Animations', sIn(a, 'motion', dirty, [['full', 'Full'], ['fast', 'Fast'], ['nointro', 'Skip the opening'], ['off', 'Off']], preview), 'Skip the opening keeps the small transitions and shows the dashboard at once. Pressing anything also skips it.'),
       F('Corner radius', rng('radius', 0, 28, ' px', 'Corner radius'), 'How round the cards are on the card board, from square to 28 px.'),
@@ -3534,7 +3534,7 @@
         oninput: function (e) { a[k] = +e.target.value; txt(out, a[k] + unit); dirty(); preview(); } }), out);
     }
     function resetTo(vals) { return btn('Reset', function () { Object.keys(vals).forEach(function (k) { a[k] = vals[k]; }); dirty(); preview(); D.render(); }, 'sm', 'restart', 'Back to the standard values'); }
-    b.appendChild(set('Cards', 'How the cards look over what is behind them. These are separate from the background below.',
+    b.appendChild(set('Card style', 'How the cards look over what is behind them. These are separate from the background below.',
       F('Translucent Effect', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!a.translucent, onchange: function (e) { a.translucent = e.target.checked; dirty(); preview(); } }), 'See-through glass cards'), 'The other card controls need this on. It uses more graphics power on older devices.'),
       h('div', { class: 'grid2' }, F('Card blur', rng('glass_blur', 0, 60, ' px', 'Card blur')), F('Card opacity', rng('glass_opacity', 10, 95, ' %', 'Card opacity'), 'Lower shows more of what is behind.'),
         F('Card exposure', rng('glass_exposure', 40, 160, ' %', 'Card exposure')), F('Card saturation', rng('glass_saturation', 100, 250, ' %', 'Card saturation')), F('Card contrast', rng('glass_contrast', 50, 150, ' %', 'Card contrast'))),
@@ -3604,7 +3604,7 @@
   function appZone(D, s) { return s.type === 'customapi' && /get_recently_added/.test(s.url || '') ? 'media' : (D.zones || {})[s.type] || 'apps'; }
   function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : t === 'homeassistant' ? 'Access token' : t === 'speedtest' ? 'API token' : t === 'releases' ? 'GitHub token' : 'API key', username: 'Username', password: 'Password' }[k]; }
 
-  /* the app lists in Settings > Sections & apps: one per section (zone), plus the groups of the Apps section.
+  /* the app lists in Settings > Apps & cards: one per section (zone), plus the groups of the Apps section.
      Every list redraws together, so moving or finding an app updates all of them. */
   function appsEditor(D, dirty, after) {
     var E = { q: '', draws: [] }, redraw = function () { E.draw(); };
@@ -3632,7 +3632,7 @@
           });
         }, 'sm ghost danger', 'trash', 'Remove ' + s.name));
     }
-    /* every app at a glance, on the first page of Sections & apps */
+    /* every app at a glance, on the first page of Apps & cards */
     E.grid = function () {
       var box = h('div', { class: 'appg', role: 'list' });
       E.draws.push(function () {
@@ -4174,7 +4174,7 @@
           var missing = j.vars.filter(function (v) { return !v.set && !v.stored; });
           prev.appendChild(h('div', { class: 'banner ok' }, j.groups + ' groups and ' + j.services + ' apps found.'));
           j.warnings.forEach(function (w) { prev.appendChild(h('div', { class: 'banner' }, w)); });
-          if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' value' + (missing.length > 1 ? 's are' : ' is') + ' not in the pasted .env: ' + missing.map(function (v) { return v.name; }).join(', ') + '. Paste the .env too, or fill in those addresses and keys in Settings > Sections & apps afterwards.'));
+          if (missing.length) prev.appendChild(h('div', { class: 'banner' }, missing.length + ' value' + (missing.length > 1 ? 's are' : ' is') + ' not in the pasted .env: ' + missing.map(function (v) { return v.name; }).join(', ') + '. Paste the .env too, or fill in those addresses and keys in Settings > Apps & cards afterwards.'));
           prev.appendChild(h('div', { class: 'kv2 sm' }, j.layout.map(function (g) { return [h('span', null, g.name), h('span', null, g.services.join(', '))]; })));
           prev.appendChild(h('div', { style: { 'margin-top': '10px' } }, btn('Import and replace my apps', function () {
             confirmBox('Replace your apps?', 'Your current apps and groups are replaced. Theme, sections, container and VM preferences and saved keys stay. A backup is taken first.', 'Import', true).then(function (y) {
@@ -4193,7 +4193,7 @@
   // g then a letter jumps to a section (it opens a collapsed one); ? lists everything
   var GOTO = { o: 'overview', a: 'alerts', f: 'favorites', m: 'media', s: 'arr', d: 'downloads', n: 'playing', q: 'requests', p: 'apps', c: 'docker', v: 'vms', h: 'health' };
   function jumpTo(id) {
-    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Sections & apps).', true); return; }
+    var r = R[id]; if (!r) { toast((TITLES[id] || id) + ' is hidden (Settings > Apps & cards).', true); return; }
     if (r.pop) { alertPop(); return; }
     if (R.cards) boardReveal(id);
     if (r.sec.collapsed) r.el.querySelector('.sec-h h2 button').click();

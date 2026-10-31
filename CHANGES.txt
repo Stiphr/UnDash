@@ -3,8 +3,8 @@
 - Keyboard: arrow keys move the focused card, Shift + arrows resize it, Delete removes it, Ctrl+Z undoes.
 - Desktop and tablet keep separate layouts; a phone shows the cards in order at their natural height. A new app appears by itself, and a card with nothing to show (no alerts) closes its gap.
 - Smart arrange lays the cards out in the classic dashboard's order, from your section order and widths, and keeps doing so as apps and alerts come and go. Moving a card by hand switches it off until you press it again.
-- New design for the board: near-black page, large rounded cards, one type scale. Cards are as tall as their content by default and grow into any empty space beside or below them, numbers scale with their card, and all text follows the screen size (Settings > Theme > Text size adjusts it).
-- Settings > Theme > Corner radius sets how round the cards and buttons are, from square to 28 px. The default is 8 px.
+- New design for the board: near-black page, large rounded cards, one type scale. Cards are as tall as their content by default and grow into any empty space beside or below them, numbers scale with their card, and all text follows the screen size (Settings > Appearance > Text size adjusts it).
+- Settings > Appearance > Corner radius sets how round the cards and buttons are, from square to 28 px. The default is 8 px.
 - Settings search finds any option as you type, with suggestions and your recent picks, and takes you to it. Settings and dialogs match the board: a panel in the middle of the screen, clearer navigation, roomier forms and toggle switches. On a phone Settings is full screen.
 - Privacy button at the top right: blurs movie and series names and posters, what is playing, requests, torrent names and the server name, until you turn it off. It is remembered in this browser.
 - Now playing is the one place for streams: app cards show stats instead of repeating them, and Tautulli's card has streams, direct, transcoding and bandwidth. Several streams sit side by side, each with who is watching, and the header counts the people.
@@ -12,11 +12,11 @@
 - Alerts left the board: a button in the header names the problem in its colour, and opens the list with Ignore and History. With nothing wrong it is a quiet bell.
 - Five new themes in the spirit of qui's: Autobrr, The Kyle, Napster, Nightwalker and Swizzin, with their own palettes for the glass cards. Mono is rebuilt in clean greys with a soft light from above.
 - Every card has the same inner margin on all four sides.
-- Settings > Theme > Zoom level: Auto fits the dashboard to the screen and window, or pick 50 to 200%. Smart margins keep the same gap at the top and sides as the window changes.
+- Settings > Appearance > Zoom level: Auto fits the dashboard to the screen and window, or pick 50 to 200%. Smart margins keep the same gap at the top and sides as the window changes.
 - Virtual machines look like the Containers list. Clicking a VM's icon or name opens its console in its own window; in the Docker version that works when one VM is running, and with several it opens Unraid's VMs page.
-- Settings > Sections & apps is rebuilt: all your apps first, with what needs setting up at the top; simple rows with a switch for each card, and a page of its own for its options. Technical options are under Advanced.
+- Settings > Apps & cards is rebuilt: all your apps first, with what needs setting up at the top; simple rows with a switch for each card, and a page of its own for its options. Technical options are under Advanced.
 - App stats run in one line across the card, so the cards are shorter. Show all sits beside the Containers count.
-- Every theme has its own gradient background, with a switch under Settings > Theme > Background.
+- Every theme has its own gradient background, with a switch under Settings > Appearance > Background.
 - Nothing is boxed inside a card any more: Now playing, Requests, Downloads and app stats sit on the card, split by thin lines.
 - New Arr Stack: numbers in aligned columns, status under the name, and a row opens only when there is more to see, with the worst problems first.
 - Uptime shows the last 30 days as ticks, lit for each day the server has been up.
@@ -24,14 +24,14 @@
 - Endpoint health no longer has a card or phone tab. An address that stops answering shows in Alerts, and Endpoints there lists them all.
 - Containers are a small, plain list: no box around each one, and the gear appears when you point at it. Show all is a simple link.
 - Found on your server has a Refresh button, and lists other running containers with a web page: one click adds a shortcut.
-- Icons sit in rounded boxes, the same shape for every app, so dark logos show on dark themes. Settings > Theme > Icon boxes turns this off.
+- Icons sit in rounded boxes, the same shape for every app, so dark logos show on dark themes. Settings > Appearance > Icon boxes turns this off.
 - Emby, autobrr, ArchiSteamFarm, Twitch Drops Miner and PostgreSQL have their own one-colour icons that follow the theme.
 - An app's or container's own SVG icon takes the theme's text colour. Selfh.st icons keep their colours.
 - First load shows a moving line and placeholders instead of Waiting for data.
 - Scrolling fades the page out under the header: a soft blur with the Translucent Effect, a colour fade without it.
-- Daily wallpaper: a new photo every day from Wikimedia Commons, with no key or account. Pick Nature, Cityscape, Cars, Mountains, Ocean or Night sky, or type your own words (Settings > Theme > Daily wallpaper). The author and licence are shown in the corner.
-- Translucent Effect (Settings > Theme): glass cards that blur and tint what is behind them, for dark and light themes. Its blur, opacity and saturation are adjustable, and the wallpaper gets saturation, contrast and opacity beside blur and brightness, all with safe limits. Without a wallpaper the page gets a soft colour wash for the glass to show.
-- Smooth animations: cards arrive in turn, and Settings, dialogs, menus, toasts and tabs move gently. Settings > Theme > Animations sets Full, Fast, Skip the opening or Off, any click or key skips the opening, and the system's reduced motion setting is respected.
+- Daily wallpaper: a new photo every day from Wikimedia Commons, with no key or account. Pick Nature, Cityscape, Cars, Mountains, Ocean or Night sky, or type your own words (Settings > Appearance > Daily wallpaper). The author and licence are shown in the corner.
+- Translucent Effect (Settings > Appearance): glass cards that blur and tint what is behind them, for dark and light themes. Its blur, opacity and saturation are adjustable, and the wallpaper gets saturation, contrast and opacity beside blur and brightness, all with safe limits. Without a wallpaper the page gets a soft colour wash for the glass to show.
+- Smooth animations: cards arrive in turn, and Settings, dialogs, menus, toasts and tabs move gently. Settings > Appearance > Animations sets Full, Fast, Skip the opening or Off, any click or key skips the opening, and the system's reduced motion setting is respected.
 - Header redesigned as one floating bar, also on wallpapers and with the Translucent Effect.
 - Golden Gate look: system fonts, soft depth, a sunset wash for the glass, Mac style controls, and Settings as a window with grouped rows. The Translucent Effect is on by default.
 - Six distinct themes: Golden Gate, Midnight, Mono, Kanagawa, Catppuccin and Nord. Zinc Blue, Kanagawa Dragon, Tokyo Night and Fluent move to the closest one.
@@ -39,7 +39,7 @@
 - Separate Cards and Background controls: blur, opacity, exposure, saturation and contrast for each. Link cards are larger.
 - Open buttons: a quiet arrow instead of a labelled button, and a Media card's title opens its app.
 - Phones get a floating tab bar (Home, Media, Apps, Docker, Health) instead of one long page, larger touch targets and a compact header.
-- Settings > Theme > Card board turns it off and brings back the classic sections, unchanged.
+- Settings > Appearance > Card board turns it off and brings back the classic sections, unchanged.
 
 ###0.9.7
 - Docker version: the background network reads stopped running all the time. The once-a-minute alert check counted as an open page, so they never paused when no dashboard was open.
