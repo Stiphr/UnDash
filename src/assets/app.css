@@ -1332,3 +1332,19 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .blk,.und.bui .ac .blk,.und.bui .ac .blk:first-child,.und.bui .ac .blocks.even .blk:nth-child(3){flex:1 1 auto;width:auto}
 .und.bui .blk .l,.und.bui .ac .blk .l{white-space:nowrap}
 
+/* our own drawings take the theme's text colour everywhere */
+.und img[src^="data:image/svg"]{filter:brightness(0) invert(1)!important;opacity:.95}
+.und[data-mode=light] img[src^="data:image/svg"]{filter:brightness(0)!important;opacity:.85}
+/* a link card made tall by a saved layout stands as a tile, not a strip */
+.und.bui .board:not(.flow) .gc-l .gc-c{container:lnk/size}
+@container lnk (min-height:92px){.und.bui .gc-c>.alink{flex-direction:column;justify-content:center;gap:10px;padding:10px;text-align:center}.und.bui .gc-c>.alink img,.und.bui .gc-c>.alink .aico,.und.bui .gc-c>.alink .ph{width:46px!important;height:46px!important;padding:8px}}
+.und.bui .board.measuring .gc-l .gc-c{container-type:normal}
+/* Now playing: the title, then the bar, then the details, with no line above the first row */
+.und.bui .gc-playing .pl .pt{gap:7px}
+.und.bui .gc-playing .pl .pl0{align-items:center}
+.und.bui .gc-playing .pl .pl1 b{font-size:14.5px;font-weight:600}
+.und.bui .gc-playing .pl .meter{order:1;height:3px;border-radius:3px}
+.und.bui .gc-playing .pl .pl3{order:2;gap:4px 10px}
+.und.bui .gc-playing .pl .pl2{order:3}
+.und.bui .gc-playing .plist>.pl:only-child,.und.bui .rqlist>.rq:first-child,.und.bui .dls>.card.dl:first-child{border-top:0;padding-top:0}
+
