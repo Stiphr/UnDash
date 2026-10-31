@@ -1426,6 +1426,10 @@
     var r = R.overview, s = y.system;
     var stale = S.lastOk && Date.now() - S.lastOk > Math.max(10000, S.L.general.refresh * 3000);
     r.stale.hidden = !stale && S.conn === 'ok';
+    // the first load: a moving line and placeholders on the board, words only when something is wrong
+    var waiting = !S.lastOk && !S.connErr && !!R.cards;
+    root.classList.toggle('waiting', waiting);
+    if (waiting) r.stale.hidden = true;
     if (!r.stale.hidden) txt(r.stale, S.lastOk ? 'Stale: last update ' + clock(S.lastOk) + (S.connErr ? ' · ' + S.connErr : '') : (S.connErr || 'Waiting for data…'));
     r.bar.classList.toggle('is-stale', !!stale);
     if (!s) return;
@@ -3174,22 +3178,22 @@
       vms: function () { return [boardOn() ? null : h('div', { class: 'grid2' }, F('Layout', sIn(c.vms, 'layout', dirty, [['list', 'List'], ['cards', 'Cards']]))), sub('VMs on the dashboard', 'Tick the VMs to show; new ones show until you untick them. Star = favorite.'), namesList(c, dirty, 'vms')]; }
     };
     function sub(t, hint) { return h('div', { class: 'sub-h' }, h('b', null, t), hint ? h('span', { class: 'hint' }, hint) : null); }
-    b.appendChild(h('div', { class: 'ae-bar' }, filter, h('span', { class: 'grow' }),
-      btn('Add app', function () { addApp(D, null, null, function () { ed.draw(); }, dirty); }, 'pri sm', 'plus')));
-    var foundBox = b.appendChild(h('div'));
+    var board = boardOn(), foundBox = h('div');
+    if (!board) { b.appendChild(h('div', { class: 'ae-bar' }, filter, h('span', { class: 'grow' }),
+      btn('Add app', function () { addApp(D, null, null, function () { ed.draw(); }, dirty); }, 'pri sm', 'plus'))); b.appendChild(foundBox); }
     ed.draws.push(function () {
       var fs = foundApps(D), others = otherApps(D);
       clear(foundBox);
       if (ed.q || D.hideFound) return;
       var again = btn('Refresh', function () { rescan(D, again, function () { ed.draw(); }); }, 'sm ghost', 'restart', 'Look for containers added since this page opened');
       foundBox.appendChild(h('div', { class: 'found-bar' },
-        h('div', { class: 'ae-h' }, h('b', null, 'Found on your server'), h('span', { class: 'muted sm' }, fs.length ? fs.length + ' container' + (fs.length > 1 ? 's' : '') + ' UnDash can read. Pick one, then paste its key.' : 'No new containers that UnDash can read.'),
+        h('div', { class: 'ae-h' }, h('b', null, 'Found on your server'), h('span', { class: 'muted sm' }, fs.length ? fs.length + ' container' + (fs.length > 1 ? 's' : '') + ' UnDash can show live stats for. Pick one to connect it.' : 'Nothing new to connect.'),
           h('span', { class: 'grow' }), again, btn('', function () { D.hideFound = true; ed.draw(); }, 'sm ghost', 'x', 'Hide this list until Settings is opened again')),
         !fs.length ? null : h('div', { class: 'tpick found' }, fs.map(function (f) { return foundBtn(D, f, function () { addFound(D, f, null, function () { ed.draw(); }, dirty); }); })),
-        !others.length ? null : h('button', { type: 'button', class: 'allb', 'aria-expanded': D.showOther ? 'true' : 'false', onclick: function () { D.showOther = !D.showOther; ed.draw(); } }, (D.showOther ? 'Hide ' : 'Show ') + others.length + ' more, to add as links', ic('chev')),
-        others.length && D.showOther ? h('div', { class: 'tpick found' }, others.map(function (f) { return foundBtn(D, f, function () { addFound(D, f, null, function () { ed.draw(); }, dirty); }); })) : null));
+        !others.length ? null : h('button', { type: 'button', class: 'allb', 'aria-expanded': D.showOther ? 'true' : 'false', onclick: function () { D.showOther = !D.showOther; ed.draw(); } }, (D.showOther ? 'Hide ' : 'Show ') + others.length + ' more. One click adds a shortcut', ic('chev')),
+        others.length && D.showOther ? h('div', { class: 'tpick found' }, others.map(function (f) { return foundBtn(D, f, function () { addLink(D, f, dirty, function () { ed.draw(); }); }); })) : null));
     });
-    if (boardOn()) { boardCardsSet(b, D, dirty, ed, opts, panels, chevs, open, paint, filter); sharedValues(b, D, dirty); ed.draw(); return; }
+    if (board) { boardSettings(b, D, dirty, ed, opts, foundBox); return; }
     b.appendChild(set('Sections', 'Tick the sections to show, drag to reorder, and open one for its options and apps. Half-width sections sit side by side on wide screens. Keys and passwords stay in .env on the server, never in the browser.',
       orderList(c.dashboard.sections, function (s) {
         var o = SEC_OPTS[s.id];
@@ -3203,34 +3207,51 @@
     sharedValues(b, D, dirty);
     ed.draw();
   }
-  /* the board's version: the layout itself is edited on the dashboard, so this page only says what is on it and what each card holds */
+  /* the board's version, laid out like iPhone Settings: all the apps first, then the cards, and a page of its own for each card's options.
+     Moving and resizing happens on the dashboard itself. */
   var SEC_ICON = { overview: 'server', favorites: 'star', media: 'play', arr: 'tag', downloads: 'download', playing: 'play', requests: 'plus', apps: 'grid', docker: 'box', vms: 'vm' };
-  function boardCardsSet(b, D, dirty, ed, opts, panels, chevs, open, paint, filter) {
+  function boardSettings(b, D, dirty, ed, opts, foundSet) {
     var c = D.cfg, bd = c.dashboard.board, top = { alerts: 1, health: 1 };
     var list = c.dashboard.sections.filter(function (s) { return !top[s.id]; }), rest = c.dashboard.sections.filter(function (s) { return top[s.id]; });
     var sync = function () { c.dashboard.sections = list.concat(rest); dirty(); };
     var shown = function (s) { return s.visible && (bd.hidden || []).indexOf(s.id) < 0; };
-    var turn = function (s, on) { s.visible = on; if (on) bd.hidden = (bd.hidden || []).filter(function (i) { return i !== s.id; }); dirty(); };
-    var sw = function (s, label) { return h('label', { class: 'switch cw', title: 'Show ' + label }, h('input', { type: 'checkbox', checked: shown(s), 'aria-label': 'Show ' + label, onchange: function (e) { turn(s, e.target.checked); } })); };
+    var sw = function (s, label) { return h('label', { class: 'switch cw', title: 'Show ' + label }, h('input', { type: 'checkbox', checked: shown(s), 'aria-label': 'Show ' + label, onchange: function (e) { s.visible = e.target.checked; if (s.visible) bd.hidden = (bd.hidden || []).filter(function (i) { return i !== s.id; }); dirty(); } })); };
     var apps = function (id) { var n = 0; c.groups.forEach(function (g) { g.services.forEach(function (x) { if (appZone(D, x) === id) n++; }); }); return n; };
-    b.appendChild(set('Layout', 'Cards are moved and resized on the dashboard itself.',
-      h('div', { class: 'lrow' }, h('span', { class: 'grow muted sm' }, (bd.lg || []).length ? 'Your own arrangement' : 'Smart arrange keeps the cards in order, without gaps'),
-        btn('Edit layout', function () { D.close(); setTimeout(function () { if (!S.drawer) boardEdit(); }, 60); }, 'sm', 'edit'))));
-    b.appendChild(set('Cards', 'Switch a card on or off, and open it for its apps and options. Smart arrange follows this order: drag a row to change it.',
+    var page = list.filter(function (s) { return s.id === D.sub; })[0];
+    if (page) {
+      txt(b.querySelector('.dtitle'), TITLES[page.id]);
+      b.insertBefore(h('button', { type: 'button', class: 'sback', onclick: function () { D.sub = null; D.render(); } }, ic('chev'), 'Sections & apps'), b.querySelector('.dtitle'));
+      b.appendChild(set('On the dashboard', SEC_DESC[page.id],
+        F('Show this card', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: shown(page), onchange: function (e) { page.visible = e.target.checked; dirty(); } }), TITLES[page.id])),
+        F('Width in Smart arrange', sIn(page, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']]))));
+      if (opts[page.id]) b.appendChild(h('section', { class: 'set sub' }, opts[page.id]()));
+      ed.draw();
+      return;
+    }
+    var chips = h('div', { class: 'seg', role: 'group', 'aria-label': 'Show apps from' });
+    var zones = [['', 'All']].concat(['arr', 'downloads', 'media', 'overview', 'apps'].filter(function (z) { return apps(z); }).map(function (z) { return [z, ZONE_NAME[z].replace(' overview', '')]; }));
+    var paintChips = function () { clear(chips); zones.forEach(function (z) { chips.appendChild(h('button', { type: 'button', class: (ed.zoneF || '') === z[0] ? 'on' : '', 'aria-pressed': (ed.zoneF || '') === z[0] ? 'true' : 'false', onclick: function () { ed.zoneF = z[0]; D.appz = z[0]; paintChips(); ed.draw(); } }, z[1])); }); };
+    ed.zoneF = D.appz || ''; paintChips();
+    var find = h('input', { type: 'search', placeholder: 'Find an app…', 'aria-label': 'Find an app', value: ed.q, oninput: function () { ed.q = find.value.trim().toLowerCase(); ed.draw(); } });
+    b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Apps'), h('span', { class: 'grow' }), btn('Add app', function () { addApp(D, null, null, function () { ed.draw(); }, dirty); }, 'pri sm', 'plus')),
+      h('div', { class: 'ae-bar' }, find, chips), ed.grid(), foundSet));
+    b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Cards'), h('span', { class: 'grow' }),
+      btn('Edit layout', function () { D.close(); setTimeout(function () { if (!S.drawer) boardEdit(); }, 60); }, 'sm', 'edit', 'Move and resize the cards on the dashboard')),
+      h('p', { class: 'hint' }, 'Turn on what you want on your dashboard. Open a card to choose what it shows.'),
       h('div', { class: 'cardl' }, orderList(list, function (s) {
         var n = apps(s.id);
-        chevs[s.id] = h('button', { type: 'button', class: 'crow', 'aria-controls': 'und-so-' + s.id, onclick: function () { open[s.id] = !open[s.id]; if (ed.q) { ed.q = ''; filter.value = ''; ed.draw(); } else paint(); } },
+        return [h('button', { type: 'button', class: 'crow', title: 'Options for ' + TITLES[s.id], onclick: function () { D.sub = s.id; D.render(); } },
           h('span', { class: 'cri' }, ic(SEC_ICON[s.id] || 'grid')), h('span', { class: 'crt' }, h('b', null, TITLES[s.id]), h('span', { class: 'muted xs ell' }, SEC_DESC[s.id])),
-          n ? h('span', { class: 'muted xs nowrap' }, n + (n === 1 ? ' app' : ' apps')) : null, ic('chev'));
-        return [chevs[s.id], sw(s, TITLES[s.id])];
-      }, sync, D.render, function (s) {
-        return (panels[s.id] = h('div', { class: 'sec-opts', id: 'und-so-' + s.id, hidden: true },
-          h('div', { class: 'grid2' }, F('Width in Smart arrange', sIn(s, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']]))), opts[s.id] ? opts[s.id]() : null));
-      }))));
-    b.appendChild(set('At the top', 'These have no card. They appear in the Alerts button when something needs you.',
+          n ? h('span', { class: 'muted xs nowrap' }, n + (n === 1 ? ' app' : ' apps')) : null, ic('chev')), sw(s, TITLES[s.id])];
+      }, sync, D.render))));
+    b.appendChild(set('Alerts', 'No card needed: the button at the top tells you when something is wrong.',
       h('div', { class: 'cardl' }, h('div', { class: 'olist' }, rest.map(function (s) {
         return h('div', { class: 'oi' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(s.id === 'alerts' ? 'bell' : 'web')), h('span', { class: 'crt' }, h('b', null, s.id === 'alerts' ? 'Alerts' : 'Endpoint checks'), h('span', { class: 'muted xs ell' }, s.id === 'alerts' ? SEC_DESC.alerts : 'Tells you when an app\'s address stops answering'))), sw(s, TITLES[s.id]));
       })))));
+    var adv = h('div');
+    sharedValues(adv, D, dirty);
+    if (adv.childNodes.length) b.appendChild(h('details', { class: 'adv' }, h('summary', null, 'Advanced'), adv));
+    ed.draw();
   }
   function dockerOpts(c, dirty) {
     var D2 = c.docker;
@@ -3557,6 +3578,28 @@
           });
         }, 'sm ghost danger', 'trash', 'Remove ' + s.name));
     }
+    /* every app at a glance, on the first page of Sections & apps */
+    E.grid = function () {
+      var box = h('div', { class: 'appg', role: 'list' });
+      E.draws.push(function () {
+        var needs = function (x) { var T = D.types[x.s.type] || [x.s.type, [], false], k = (D.creds[x.s.id] || {}).key; return T[2] && !String(x.s.url || '').trim() ? 'No address yet' : (T[1] || []).indexOf('key') >= 0 && !KEY_OPT[x.s.type] && !k ? 'Needs its ' + credLabel(x.s.type, 'key').toLowerCase() : ''; };
+        var list = entries().filter(function (x) { return hit(x) && (!E.zoneF || appZone(D, x.s) === E.zoneF); });
+        list = list.filter(needs).concat(list.filter(function (x) { return !needs(x); }));       // what still needs setting up comes first
+        clear(box);
+        if (!list.length) { box.appendChild(h('div', { class: 'empty' }, E.q ? 'No app matches.' : 'No apps yet. Add one, or pick from what was found below.')); return; }
+        list.forEach(function (x) {
+          var s = x.s, T = D.types[s.type] || [s.type, [], false], warn = needs(x), edit = function () { editService(D, s, x.g, false, redraw, dirty); };
+          var more = btn('', function () {
+            menu(more, [['Edit…', 'edit', edit], [s.hidden ? 'Show on dashboard' : 'Hide from dashboard', s.hidden ? 'eye' : 'eyeoff', function () { s.hidden = !s.hidden; dirty(); redraw(); }], 'hr',
+              ['Remove…', 'trash', function () { confirmBox('Remove ' + s.name + '?', 'It leaves the dashboard when you save. Its stored key and password are deleted with it.', 'Remove', true).then(function (y) { if (!y) return; x.g.services.splice(x.g.services.indexOf(s), 1); delete D.creds[s.id]; dirty(); redraw(); }); }, 'danger']]);
+          }, 'sm ghost', 'gear', 'More for ' + s.name);
+          box.appendChild(h('div', { class: 'appt' + (s.hidden ? ' off' : ''), role: 'listitem' },
+            h('button', { type: 'button', class: 'appb', onclick: edit, title: 'Edit ' + s.name }, img(iconUrl(s.icon), '', 'web'),
+              h('span', { class: 'crt' }, h('b', { class: 'ell' }, s.name || T[0]), h('span', { class: 'xs ell ' + (warn ? 't-warn' : 'muted') }, warn || (s.hidden ? 'Hidden' : T[0].replace(/ \(.*\)$/, ''))))), more));
+        });
+      });
+      return box;
+    };
     /* the apps of one section other than Apps */
     E.zone = function (z) {
       var box = h('div', { class: 'ae-sec' });
@@ -3705,11 +3748,11 @@
     var have = [];
     D.cfg.groups.forEach(function (g) { g.services.forEach(function (s) { have.push(s); }); });
     return (((S.live || {}).docker || {}).containers || []).map(function (c) {
-      if (c.state !== 'running' || foundType(c)) return null;
+      if (c.state !== 'running' || foundType(c) || /^undash(-|$)/i.test(c.name)) return null;
       var url = origin(c.webui), hp = 0;
       if (!url) { Object.keys(c.ports || {}).forEach(function (k) { if (!hp && !NOT_WEB[parseInt(k, 10)]) hp = c.ports[k]; }); if (hp) url = 'http://' + location.hostname + ':' + hp; }
       if (!url || have.some(function (s) { return origin(s.url || s.href) === url || portOf(s.url || s.href) === portOf(url) || String(s.name).toLowerCase() === c.name.toLowerCase(); })) return null;
-      return { c: c, t: 'link', name: c.name, url: url, href: url, icon: 'sh-' + c.name.toLowerCase() };
+      return { c: c, t: 'link', name: c.name, url: url, href: url, icon: c.icon || 'sh-' + c.name.toLowerCase() };
     }).filter(Boolean).sort(function (a, b) { return a.name.localeCompare(b.name); });
   }
   function foundApps(D) {
@@ -3737,6 +3780,13 @@
     var g = group || D.cfg.groups.filter(function (x) { return appZone(D, { type: f.t }) !== 'apps' || x.services.some(function (s) { return appZone(D, s) === 'apps'; }); })[0] || D.cfg.groups[0];
     if (!g) { g = { id: rid(), name: 'Apps', columns: 4, header: true, services: [] }; D.cfg.groups.push(g); }
     editService(D, { id: rid(), name: f.name, type: f.t, icon: f.icon || appIcon(f.t), href: f.href, url: f.url, description: '', hidden: false, favorite: false, span: 1, fields: [], options: {} }, g, true, after, dirty);
+  }
+  /* a container with no reader needs nothing filled in: one click puts it on the dashboard as a shortcut */
+  function addLink(D, f, dirty, redraw) {
+    var g = D.cfg.groups.filter(function (x) { return x.services.some(function (s) { return appZone(D, s) === 'apps'; }); })[0] || D.cfg.groups[0];
+    if (!g) { g = { id: rid(), name: 'Apps', columns: 4, header: true, services: [] }; D.cfg.groups.push(g); }
+    g.services.push({ id: rid(), name: f.name, type: 'link', icon: f.icon, href: f.href, url: f.url, description: '', hidden: false, favorite: false, span: 1, fields: [], options: {} });
+    dirty(); redraw(); toast(f.name + ' added. Save to keep it.');
   }
   function foundBtn(D, f, onpick) {
     return h('button', { type: 'button', title: 'Add ' + f.c.name + (f.url ? ' (' + f.url + ')' : ''), onclick: onpick },
