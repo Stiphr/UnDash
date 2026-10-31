@@ -99,8 +99,21 @@
   }
   function day(ts) { return new Date(ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' }); }
   function clock(ts) { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+  /* our own one-colour drawings for apps whose logos do not suit a theme: found by the app or container name, and coloured by the theme */
+  var GLYPHS = [
+    [/emby/i, '<path fill-rule="evenodd" d="M32 3 61 32 32 61 3 32ZM25 20v24l20-12Z"/>'],
+    [/archisteamfarm/i, '<path d="M30 60V24h4v36zM32 4c5.500 5 5.500 12 0 18-5.500-6-5.500-13 0-18zM29 30c-8-1-13-6-14-13 8 1 13 6 14 13zM35 30c8-1 13-6 14-13-8 1-13 6-14 13zM29 42c-8-1-13-6-14-13 8 1 13 6 14 13zM35 42c8-1 13-6 14-13-8 1-13 6-14 13zM29 54c-8-1-13-6-14-13 8 1 13 6 14 13zM35 54c8-1 13-6 14-13-8 1-13 6-14 13z"/>'],
+    [/twitch.?drops/i, '<g fill="none" stroke="#000" stroke-linecap="round" stroke-width="6"><path d="M12 24C24 7 44 7 58 26"/><path d="M36 14 10 58"/></g>'],
+    [/postgres/i, '<g fill="none" stroke="#000" stroke-width="5"><ellipse cx="32" cy="15" rx="21" ry="9"/><path d="M11 15v34c0 5 9.400 9 21 9s21-4 21-9V15M11 32c0 5 9.400 9 21 9s21-4 21-9"/></g>'],
+    [/autobrr/i, '<ellipse cx="29" cy="38" rx="19" ry="12" transform="rotate(-12 29 38)"/><circle cx="48" cy="29" r="9"/><circle cx="9" cy="39" r="4"/><path d="M45 23C42 13 35 7 27 5c1 9 7 16 14 21zM51 21c1-8-2-14-8-19-2 7-1 14 3 20zM36 46l11 11h-7L27 49zM20 46 7 56h8l14-7z"/>']
+  ];
+  function glyphUrl(text) {
+    for (var i = 0; i < GLYPHS.length; i++) if (GLYPHS[i][0].test(text)) return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' + GLYPHS[i][1] + '</svg>');
+    return '';
+  }
   function iconUrl(i) {
     if (!i) return '';
+    var gl = glyphUrl(i); if (gl) return gl;
     if (/^https?:\/\//.test(i)) return i;
     if (i[0] === '/') return (UNRAID && !/^\/(state|plugins\/dynamix\.vm\.manager)\//.test(i) ? UNRAID : '') + i;
     var m;
@@ -157,6 +170,7 @@
     }, 300);
   }
   function objIcon(name, image, own, cls, fb) {
+    var gl = glyphUrl(name + ' ' + image); if (gl) return img(gl, cls, fb);
     var mode = (S.L && S.L.appearance.icon_mode) || 'color';
     if (mode === 'off') return img(iconUrl(own), cls, fb);
     var slugs = iconSlugs(name, image), m = icoMap().m, hit = null;
@@ -2428,7 +2442,7 @@
   function playRow(x, icon) {
     var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
     return h('div', { class: 'pl' + (icon ? '' : ' in') + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
-      icon ? img(iconUrl(x.icon), 'aico', 'play') : null,
+      icon && !R.cards ? img(iconUrl(x.icon), 'aico', 'play') : null,
       h('div', { class: 'pt' },
         h('div', { class: 'pl0' }, h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null), icon && x.user ? userChip(x.user) : null),
         h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [icon ? '' : x.user, x.device, x.app].filter(Boolean).join(' · '))),
