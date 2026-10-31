@@ -152,7 +152,7 @@ switch ($action) {
   case 'os_update':     { $r = und_os_update(); if (isset($r['error'])) fail($r['error']); und_history_add('server', 'Unraid OS', 'update', true, 'install started'); out($r); }
   case 'storage':       out(und_storage());
   case 'container_sources': out(und_container_sources());
-  case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'))); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
+  case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'), (int)$P('offset', '0'), $P('src'), $P('style'), $P('browse') === '1')); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
   case 'icon_slugs':    { $l = json_decode($P('slugs', '[]'), true); try { out(und_icon_slugs(is_array($l) ? $l : [])); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
 
   /* ---- settings ---- */
@@ -209,7 +209,8 @@ switch ($action) {
       foreach ($cfg['groups'] as &$g) if ($g['id'] === $key) $g = array_merge($g, array_intersect_key($val, ['name' => 1, 'header' => 1]));
       unset($g);
     } elseif ($kind === 'service') {
-      foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) if ($s['id'] === $key) $s = array_merge($s, array_intersect_key($val, ['favorite' => 1, 'hidden' => 1]));
+      if (isset($val['icon']) && !preg_match('#^[A-Za-z0-9:/._%~+-]{0,300}$#', (string)$val['icon'])) fail('That is not an icon name or address.');
+      foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) if ($s['id'] === $key) $s = array_merge($s, array_intersect_key($val, ['favorite' => 1, 'hidden' => 1, 'icon' => 1]));
       unset($g, $s);
     } else fail('Unknown preference.');
     if (!und_save_config($cfg, false)) fail('Could not save.', 500);

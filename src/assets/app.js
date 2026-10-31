@@ -795,11 +795,17 @@
   function boardChrome(el, it, c) {
     el.tabIndex = 0;
     el.appendChild(h('div', { class: 'gc-t' }, h('span', { class: 'ell' }, c.t),
+      it.i.indexOf('app:') === 0 ? btn('', function () { boardIcon(it.i.slice(4), c.t); }, 'sm ghost', 'tag', 'Change the icon') : null,
       btn('', function () { boardFit([it.i]); }, 'sm ghost', 'fit', 'Fit the height to the content'),
       btn('', function () { boardRemove(it.i); }, 'sm ghost', 'x', 'Remove from the board')));
     ['e', 's', 'se'].forEach(function (d) { el.appendChild(h('span', { class: 'rh ' + d, 'data-rh': d, 'aria-hidden': 'true' })); });
     el.addEventListener('pointerdown', boardPointer);
     el.addEventListener('keydown', boardKey);
+  }
+  function boardIcon(id, name) {
+    iconPicker(name, function (v) {
+      api('prefs', { kind: 'service', key: id, value: { icon: v } }).then(function (j) { if (j.error) { toast(j.error, true); return; } S.L = j.layout; shell(); });
+    });
   }
   function boardItem(i) { return S.edit.list.filter(function (c) { return c.i === i; })[0]; }
   function boardRemove(i) {
@@ -1526,7 +1532,7 @@
     out.forEach(function (x) {
       var mb = x.cat ? h('button', { type: 'button', class: 'btn ghost sm', 'aria-haspopup': 'menu', title: 'Ignore this alert', 'aria-label': 'Ignore: ' + x.msg, onclick: function (e) { ignoreMenu(e.currentTarget, x); } }, ic('mute'), 'Ignore') : null;
       r.list.appendChild(h('div', { class: 'alert ' + x.lv + (x.crit ? ' crit' : ''), role: x.crit ? 'alert' : null, 'data-alert': x.cat ? x.cat + ':' + x.res : null },
-        x.crit ? ic('warn') : null, h('span', { class: 'grow' }, x.crit ? h('b', null, x.msg) : x.msg), x.btn ? btn(x.btn[0], x.btn[1], x.crit ? 'sm danger solid' : 'sm') : null, mb));
+        x.crit || R.cards ? ic(x.lv === 'info' ? 'info' : 'warn') : null, h('span', { class: 'grow' }, x.crit ? h('b', null, x.msg) : x.msg), x.btn ? btn(x.btn[0], x.btn[1], x.crit ? 'sm danger solid' : 'sm') : null, mb));
     });
   }
   function durText(sec) { return sec === 'permanent' ? 'permanently' : sec % 86400 === 0 ? 'for ' + sec / 86400 + ' day' + (sec > 86400 ? 's' : '') : sec % 3600 === 0 ? 'for ' + sec / 3600 + ' hour' + (sec > 3600 ? 's' : '') : 'for ' + Math.round(sec / 60) + ' minutes'; }
@@ -1792,6 +1798,7 @@
         'hr', ['Logs', 'logs', function () { logs(c.name); }], ['Details', 'info', function () { inspect(c.name); }], 'hr',
         [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('docker', c.name, { favorite: !p.favorite }); }],
         [S.L.docker.selected.indexOf(c.name) >= 0 ? 'Remove from "Selected"' : 'Show in "Selected"', 'check', function () { toggleSelected(c.name); }],
+        ['Change icon…', 'tag', function () { iconPicker(p.label || c.name, function (v) { savePref('docker', c.name, { icon: v }); }, p.icon || '-'); }],
         [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('docker', c.name, { hidden: !p.hidden }); }],
         S.L.docker.update_check !== false ? [p.no_update ? 'Check this container for updates' : 'Don\'t check this container for updates', 'up', function () { savePref('docker', c.name, { no_update: !p.no_update }); }] : null,
         ['Customize…', 'edit', function () { customize('docker', c); }]];
@@ -2086,6 +2093,7 @@
         .concat(x.ops.map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' || o === 'stop' ? 'danger' : '', b]; }))
         .concat([x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
           [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('vms', x.name, { favorite: !p.favorite }); }],
+          ['Change icon…', 'tag', function () { iconPicker(p.label || x.name, function (v) { savePref('vms', x.name, { icon: v }); }, p.icon || '-'); }],
           [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('vms', x.name, { hidden: !p.hidden }); }],
           ['Customize…', 'edit', function () { customize('vms', x); }]]);
     }));
@@ -2236,19 +2244,24 @@
     var bw = 0, tc = 0;
     j.streams.forEach(function (x) { if (x.bandwidth) bw += x.bandwidth; if (x.method === 'transcode') tc++; });
     txt(r.count, j.streams.length ? String(j.streams.length) : '');
-    if (j.streams.length) r.sum.appendChild(document.createTextNode((tc ? tc + ' transcoding · ' : '') + (bw ? rate(bw / 8) : '')));
+    var who = {}; j.streams.forEach(function (x) { if (x.user) who[x.user] = 1; }); var people = Object.keys(who).length;
+    if (j.streams.length) r.sum.appendChild(document.createTextNode([people > 1 ? people + ' people' : '', tc ? tc + ' transcoding' : '', bw ? rate(bw / 8) : ''].filter(Boolean).join(' · ')));
     (j.apps || []).filter(function (a) { return a.error; }).forEach(function (a) { r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error)); });
     if (!j.streams.length) { r.list.appendChild(h('div', { class: 'empty' }, 'Nothing is playing right now.')); return; }
     j.streams.forEach(function (x) { r.list.appendChild(playRow(x, true)); });
   }
   /* one stream, as in Now playing; app cards use it without the app icon. Custom API streams may only have title, user, pos and dur. */
+  function userChip(name) {
+    var n = 0; for (var i = 0; i < name.length; i++) n = (n * 31 + name.charCodeAt(i)) % 360;
+    return h('span', { class: 'pu', title: name }, h('i', { style: { background: 'hsl(' + n + ' 55% 42%)' }, 'aria-hidden': 'true' }, name.charAt(0).toUpperCase()), h('span', { class: 'ell' }, name));
+  }
   function playRow(x, icon) {
     var m = METHOD[x.method], p = x.dur ? Math.min(100, 100 * x.pos / x.dur) : 0;
     return h('div', { class: 'pl' + (icon ? '' : ' in') + (x.state === 'paused' ? ' paused' : ''), role: 'listitem', 'data-name': x.title },
       icon ? img(iconUrl(x.icon), 'aico', 'play') : null,
       h('div', { class: 'pt' },
-        h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null),
-        h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [x.user, x.device, x.app].filter(Boolean).join(' · '))),
+        h('div', { class: 'pl0' }, h('div', { class: 'pl1' }, h('b', { class: 'ell', title: x.title + (x.sub ? ' · ' + x.sub : '') }, x.title), x.sub ? h('span', { class: 'muted sm ell' }, x.sub) : null), icon && x.user ? userChip(x.user) : null),
+        h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [icon ? '' : x.user, x.device, x.app].filter(Boolean).join(' · '))),
         x.dur ? h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { class: 'acc', style: { width: p + '%' } })) : null,
         h('div', { class: 'pl3 xs' }, x.dur ? h('span', { class: 'num muted' }, dur(x.pos) + ' / ' + dur(x.dur)) : null,
           m ? h('span', { class: 'badge ' + m[1] }, m[0]) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
@@ -2582,7 +2595,7 @@
         cb.appendChild(cal);
       }
     }
-    if (r.streams) {
+    if (r.streams && !R.playing) {                       // with the Now playing section streams are shown there, once
       if (!r.streams.length) cb.appendChild(h('div', { class: 'muted sm', style: { 'margin-top': '6px' } }, r.empty || 'No active streams'));
       else cb.appendChild(h('div', { class: 'plist in', role: 'list' }, r.streams.map(function (x) { return playRow(x, false); })));
     }
@@ -3232,27 +3245,44 @@
     return E;
   }
 
-  /* search selfh.st and dashboard-icons (the server keeps their name lists) and pick one; onpick gets the Icon field value */
-  function iconPicker(q0, onpick) {
-    var grid = h('div', { class: 'ipick' }), note = h('div', { class: 'muted sm', role: 'status' }), t = null, seq = 0, m;
-    var find = h('input', { type: 'search', value: q0 || '', placeholder: 'Search icons… (plex, nas, home)', 'aria-label': 'Search icons', oninput: function () { clearTimeout(t); t = setTimeout(look, 250); } });
-    function look() {
-      var q = find.value.trim(), my = ++seq;
-      if (!q) { clear(grid); txt(note, 'Type a name to search about 5,000 icons.'); return; }
-      txt(note, 'Searching…');
-      api('icons', { q: q, max: 80 }).then(function (r) {
+  /* the icon selector: browse or search selfh.st and dashboard-icons (the server keeps their name lists); onpick gets the Icon field value.
+     cur (optional, '-' for none set) adds "Use the automatic icon". Pages load as you scroll. */
+  function iconPicker(q0, onpick, cur) {
+    var grid = h('div', { class: 'ipick' }), note = h('div', { class: 'muted sm', role: 'status' }), t = null, seq = 0, m, st = { src: '', style: '', off: 0, more: false, busy: false }, PAGE = 90;
+    var find = h('input', { type: 'search', value: q0 || '', placeholder: 'Search about 5,000 icons…', 'aria-label': 'Search icons', oninput: function () { clearTimeout(t); t = setTimeout(function () { look(true); }, 220); } });
+    function seg(k, opts, label) {
+      var box = h('div', { class: 'seg', role: 'group', 'aria-label': label }), bs = opts.map(function (o) {
+        return h('button', { type: 'button', class: st[k] === o[0] ? 'on' : '', 'aria-pressed': st[k] === o[0] ? 'true' : 'false', onclick: function () {
+          st[k] = o[0]; bs.forEach(function (b, i) { var on = opts[i][0] === o[0]; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+          look(true);
+        } }, o[1]);
+      });
+      bs.forEach(function (b) { box.appendChild(b); });
+      return box;
+    }
+    function look(fresh) {
+      if (fresh) { st.off = 0; clear(grid); grid.scrollTop = 0; }
+      var my = ++seq; st.busy = true;
+      if (fresh) txt(note, 'Loading…');
+      api('icons', { q: find.value.trim(), max: PAGE, offset: st.off, src: st.src, style: st.style, browse: 1 }, 25000).then(function (r) {
         if (my !== seq) return;
-        clear(grid);
+        st.busy = false;
         if (r.error) { txt(note, r.error); return; }
-        txt(note, r.icons.length ? (r.more ? 'The first ' + r.icons.length + ' matches. Type more to narrow it down.' : r.icons.length + ' match' + (r.icons.length > 1 ? 'es' : '')) : 'No icon matches. An image URL works too.');
+        st.more = !!r.more; st.off += r.icons.length;
+        txt(note, r.total ? r.total.toLocaleString() + ' icon' + (r.total > 1 ? 's' : '') : 'No icon matches. An image address works too.');
         r.icons.forEach(function (x) {
-          grid.appendChild(h('button', { type: 'button', title: x.n + ' (' + x.s + ': ' + x.v + ')', onclick: function () { m.close(); onpick(x.v); } },
-            img(iconUrl(x.v), '', 'web'), h('span', { class: 'ell' }, x.n)));
+          grid.appendChild(h('button', { type: 'button', title: x.n + ' (' + x.s + ')', onclick: function () { m.close(); onpick(x.v); } }, img(iconUrl(x.v), '', 'web'), h('span', { class: 'ell' }, x.n)));
         });
+        if (st.more && grid.scrollHeight <= grid.clientHeight + 40) look(false);
       });
     }
-    m = modal('Pick an icon', h('div', null, h('div', { style: { 'margin-bottom': '8px' } }, find), note, grid), [btn('Cancel', function () { m.close(); })], true);
-    look();
+    grid.addEventListener('scroll', function () { if (st.more && !st.busy && grid.scrollTop + grid.clientHeight > grid.scrollHeight - 300) look(false); });
+    var foot = [btn('Cancel', function () { m.close(); })];
+    if (cur !== undefined) foot.unshift(btn('Use the automatic icon', function () { m.close(); onpick(''); }, '', 'restart'));
+    m = modal('Choose an icon', h('div', { class: 'ipk' }, find, h('div', { class: 'ipf' }, seg('src', [['', 'All'], ['selfhst', 'selfh.st'], ['di', 'Dashboard Icons']], 'Source'),
+      seg('style', [['', 'Colour'], ['light', 'Light'], ['dark', 'Dark']], 'Version'), h('span', { class: 'grow' }), note), grid), foot, true);
+    look(true);
+    setTimeout(function () { find.focus(); find.select(); }, 0);
   }
 
   /* the releases widget: tick containers to follow the GitHub repository each comes from (its image's source label) */

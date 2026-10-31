@@ -253,7 +253,10 @@ function und_tautulli($s, array $q) {
 }
 
 function und_w_tautulli($s) {
-  return ['streams' => und_streams_tautulli(und_tautulli($s, ['cmd' => 'get_activity'])), 'empty' => 'No active streams'];
+  $d = und_tautulli($s, ['cmd' => 'get_activity']);
+  return ['blocks' => [und_b('streams', 'Streams', (int)($d['stream_count'] ?? 0)), und_b('direct', 'Direct', (int)($d['stream_count_direct_play'] ?? 0) + (int)($d['stream_count_direct_stream'] ?? 0)),
+                       und_b('transcode', 'Transcoding', (int)($d['stream_count_transcode'] ?? 0)), und_b('bandwidth', 'Bandwidth', (int)($d['total_bandwidth'] ?? 0) * 125, 'rate')],
+          'streams' => und_streams_tautulli($d), 'empty' => 'No active streams'];
 }
 
 function und_w_tautulli_recent($s) {

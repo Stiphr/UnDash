@@ -7,6 +7,9 @@
 - Settings > Theme > Corner radius sets how round the cards are, from square to 28 px.
 - Settings and dialogs match the board: a floating rounded panel, clearer navigation, roomier forms and toggle switches. On a phone Settings is full screen.
 - Privacy button at the top right: blurs movie and series names and posters, what is playing, requests, torrent names and the server name, until you turn it off. It is remembered in this browser.
+- Now playing is the one place for streams: app cards show stats instead of repeating them, and Tautulli's card has streams, direct, transcoding and bandwidth. Several streams sit side by side, each with who is watching, and the header counts the people.
+- Icon selector: browse every selfh.st and Dashboard Icons icon without searching, filter by source, choose colour, light or dark, and load more as you scroll. Open it from a container's or VM's menu, or the icon button on an app card in Edit layout.
+- Alerts: calmer rows with a tinted icon.
 - Phones get a bottom tab bar (Home, Media, Apps, Docker, Health) instead of one long page, larger touch targets and a compact header.
 - Settings > Theme > Card board turns it off and brings back the classic sections, unchanged.
 
