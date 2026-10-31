@@ -980,6 +980,7 @@ t('a saved board survives loading the settings', und_normalize($c)['dashboard'][
 
 $c = und_default_config(); $c['appearance']['radius'] = 500;
 t('the corner radius stays inside its limits', und_normalize($c)['appearance']['radius'] === 28 && und_default_config()['appearance']['radius'] === 8);
+t('icon boxes are on by default and can be turned off', und_default_config()['appearance']['icon_box'] === true && und_normalize(['appearance' => ['icon_box' => false]])['appearance']['icon_box'] === false && und_normalize([])['appearance']['icon_box'] === true);
 t('the gradient background is on by default and can be turned off', und_default_config()['appearance']['gradient'] === true && und_normalize(['appearance' => ['gradient' => false]])['appearance']['gradient'] === false && und_normalize([])['appearance']['gradient'] === true);
 t('the Translucent Effect is on by default and can be turned off', und_default_config()['appearance']['translucent'] === true && und_normalize(['appearance' => ['translucent' => false]] + und_default_config())['appearance']['translucent'] === false);
 $m = und_default_config(); $m['appearance']['motion'] = 'warp';

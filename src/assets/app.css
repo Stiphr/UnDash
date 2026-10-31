@@ -1304,3 +1304,13 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .drawer .dh>.btn.ic:hover,.und.bui.translucent .drawer .dh>.btn.ic:not(.pri):not(.solid):hover{background:color-mix(in srgb,var(--text) 18%,transparent)!important;color:var(--title)!important}
 .und.bui .drawer .dh>.btn.ic svg{width:13px;height:13px}
 
+/* icons as on an iPhone: the logo inside a rounded box, the same shape for every app. Settings > Theme > Icon boxes */
+.und.bui.ibox :is(.aico,.ci .cico,.appb img,.appb .ph,.tpick img,.tpick .ph,.alink img,.alink .ph,.pl>.ph){box-sizing:border-box;padding:12%;border-radius:23%;background:linear-gradient(160deg,color-mix(in srgb,var(--text) 24%,transparent),color-mix(in srgb,var(--text) 12%,transparent));box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--text) 22%,transparent),0 1px 2px rgba(0,0,0,.22);object-fit:contain}
+.und.bui.ibox .ci .cico,.und.bui.ibox .ci span.cico{width:30px;height:30px}
+.und.bui.ibox .dlh .aico{width:28px;height:28px}
+.und.bui.ibox .appb img,.und.bui.ibox .appb .ph{width:32px;height:32px}
+.und.bui.ibox .tpick img,.und.bui.ibox .tpick .ph{width:28px;height:28px}
+.und.bui.ibox .gc-c>.alink .aico,.und.bui.ibox .gc-c>.alink img,.und.bui.ibox .gc-c>.alink .ph{width:30px;height:30px}
+.und.bui.ibox .ac .ch .aico{width:32px;height:32px;border-radius:23%}
+.und.bui.ibox .gc-playing .pl>.aico{width:34px;height:34px}
+
