@@ -574,29 +574,38 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 /* Arr Stack */
 .und .arr{display:flex;flex-direction:column}
 .und .aitem{border-bottom:1px solid var(--line)}.und .aitem:last-child{border-bottom:0}
-.und .aline{display:flex;align-items:center;gap:6px;padding:0 8px 0 0}
-.und button.arow{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;min-height:44px}
-.und button.arow:hover{background:var(--panel-2)}.und button.arow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.und .arr{container-type:inline-size}
+.und .aline{display:flex;align-items:center;gap:4px;padding:0 6px 0 0}
+.und button.arow{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:9px 10px;min-height:54px;cursor:default}
+.und .aline:has(.achev:not([hidden])) button.arow{cursor:pointer}
+.und .aline:has(.achev:not([hidden])) button.arow:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}.und button.arow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .und .aico{width:20px;height:20px;object-fit:contain;flex:none;border-radius:4px}
+.und .arr .aico{width:30px;height:30px;border-radius:8px}
 .und span.aico{display:flex;align-items:center;justify-content:center;color:var(--faint)}.und span.aico svg{width:14px;height:14px}
-.und .an{font-weight:600;color:var(--title);white-space:nowrap;min-width:90px}
+.und .an{font-weight:600;color:var(--title);white-space:nowrap}
+.und .ahd{flex:0 0 32%;min-width:0;display:flex;flex-direction:column;gap:1px}
+.und .asub{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;color:var(--muted)}
 .und .sdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--off)}
 .und .sdot.ok{background:var(--ok)}.und .sdot.warn{background:var(--warn)}.und .sdot.bad{background:var(--bad)}
-.und .ai{flex:1;min-width:0;display:flex;gap:10px;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden}
-.und .ai .st b{color:var(--text);font-weight:600}
-.und .ax{flex:none}
-.und .adet{padding:4px 12px 12px 38px;display:flex;flex-direction:column;gap:6px}
-.und .adet .blocks{margin:0}
-.und .aiss{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.und .ai{flex:1;min-width:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.und .ai .st{display:flex;flex-direction:column;min-width:0;font-size:11.5px;color:var(--muted)}
+.und .ai .st b,.und .amore b{color:var(--title);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25}
+.und .amore{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.und .amore b{font-size:12.5px}
+.und .achev{flex:none;display:flex;color:var(--faint)}.und .achev[hidden]{visibility:hidden;display:flex}.und .achev svg{width:15px;height:15px;transform:rotate(-90deg);transition:transform .14s ease}
+.und button.arow[aria-expanded=true] .achev svg{transform:none}
+.und .adet{padding:0 12px 12px 52px;display:flex;flex-direction:column;gap:6px}
+.und .aiss{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
 .und .aiss:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.und .ais{display:flex;align-items:baseline;gap:8px;padding:6px 10px;font-size:12px;min-width:0}.und .ais+.ais{border-top:1px solid var(--line)}
-.und .ais>.badge{flex:none;font-size:10.5px;line-height:15px;padding:0 6px}
+.und .ais{display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:12.5px;min-width:0}
+.und .ais>.sdot{width:6px;height:6px;transform:translateY(-2px)}
 .und .ais-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border-radius:3px}.und .ais-t:focus-visible{outline:2px solid var(--accent)}
 .und .ais.open .ais-t{white-space:normal;overflow-wrap:anywhere}
 .und .ais-t b{color:var(--text);font-weight:600}
+.und .ais-k{flex:none;font-size:11.5px;color:var(--warn)}.und .ais.bad .ais-k{color:var(--bad)}
+@container (max-width:430px){.und button.arow{flex-wrap:wrap;gap:6px 12px}.und .ahd{flex:1 1 0}.und .ai{order:3;flex:1 0 100%;padding-left:42px}.und .adet{padding-left:52px}}
 /* stretched to match the section beside it: the rows share the extra height */
 .und .sec.fill .arr>.aitem{flex:1 0 auto;display:flex;flex-direction:column;justify-content:center}.und .sec.fill .arr>.aitem>.aline{flex:1 0 auto}
-.und[data-density=compact] button.arow{padding:6px 10px;min-height:36px}.und[data-density=expanded] button.arow{padding:12px 14px;min-height:52px}
+.und[data-density=compact] button.arow{padding:5px 10px;min-height:44px}.und[data-density=expanded] button.arow{padding:12px 14px;min-height:62px}
 
 /* download clients */
 .und .dls{display:flex;flex-direction:column;gap:var(--gap)}
@@ -989,12 +998,11 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 /* Translucent Effect: glass that tints and blurs what is behind it */
 .und.bui.translucent{--g-fill:color-mix(in srgb,#101116 calc(var(--g-op,42%) + 14%),transparent);--g-fill-2:rgba(255,255,255,.07);--g-line:rgba(255,255,255,.13);--g-shine:rgba(255,255,255,.14);--g-blur:brightness(calc(.62*var(--g-exp,1))) contrast(var(--g-con,1)) saturate(var(--g-sat,170%)) blur(var(--g-bl,26px))}
 .und.bui.translucent[data-mode=light]{--g-fill:color-mix(in srgb,#fff calc(var(--g-op,42%) + 30%),transparent);--g-fill-2:rgba(255,255,255,.5);--g-line:rgba(255,255,255,.7);--g-shine:rgba(255,255,255,.8);--g-blur:brightness(calc(1.35*var(--g-exp,1))) contrast(var(--g-con,1)) saturate(var(--g-sat,170%)) blur(var(--g-bl,26px))}
-.und.bui.translucent:not(.has-bg){background:radial-gradient(60vw 60vw at 12% 8%,color-mix(in srgb,var(--accent) 34%,transparent),transparent 62%),radial-gradient(55vw 55vw at 88% 30%,rgba(70,110,255,.26),transparent 62%),radial-gradient(60vw 60vw at 45% 100%,rgba(150,70,220,.22),transparent 62%),var(--bg);background-attachment:fixed}
-.und.bui.translucent .gc-c>.sec,.und.bui.translucent .gc-c>.mw,.und.bui.translucent .gc-c>.card.w,.und.bui.translucent .gc-m .stat,.und.bui.translucent .gc-c>.alink,.und.bui.translucent .top,.und.bui.translucent .bbar,.und.bui.translucent .mnav,.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .menu,.und.bui.translucent .ss{background:var(--g-fill);border-color:var(--g-line);-webkit-backdrop-filter:var(--g-blur);backdrop-filter:var(--g-blur);box-shadow:inset 0 1px 0 var(--g-shine),0 8px 28px rgba(0,0,0,.16)}
+.und.bui.translucent .gc-c>.sec,.und.bui.translucent .gc-c>.mw,.und.bui.translucent .gc-c>.card.w,.und.bui.translucent .gc-m .stat,.und.bui.translucent .gc-c>.alink,.und.bui.translucent .top,.und.bui.translucent .bbar,.und.bui.translucent .mnav,.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .menu,.und.bui.translucent .ss,.und.bui.translucent .anc{background:var(--g-fill);border-color:var(--g-line);-webkit-backdrop-filter:var(--g-blur);backdrop-filter:var(--g-blur);box-shadow:inset 0 1px 0 var(--g-shine),0 8px 28px rgba(0,0,0,.16)}
 .und.bui.translucent .top{box-shadow:none;border-bottom-color:var(--g-line)}
 .und.bui.translucent .drawer .dh,.und.bui.translucent .drawer .dt,.und.bui.translucent .drawer .df{background:rgba(127,127,127,.06)}
 .und.bui.translucent .set{background:var(--g-fill-2);border-color:var(--g-line)}
-.und.bui.translucent .gc-c>.sec .card,.und.bui.translucent .blk,.und.bui.translucent .ac .blk,.und.bui.translucent .gc-playing .plist>.pl,.und.bui.translucent .alert,.und.bui.translucent .alert.crit,.und.bui.translucent .olist .oi,.und.bui.translucent .ipick button{background:var(--g-fill-2)}
+.und.bui.translucent .olist .oi,.und.bui.translucent .ipick button{background:var(--g-fill-2)}
 .und.bui.translucent .top .search input,.und.bui.translucent .live{background:var(--g-fill-2)}
 @media (prefers-reduced-transparency:reduce){.und.bui.translucent .gc-c>.sec,.und.bui.translucent .gc-c>.mw,.und.bui.translucent .gc-c>.card.w,.und.bui.translucent .gc-m .stat{background:var(--panel);-webkit-backdrop-filter:none;backdrop-filter:none}}
 
@@ -1049,9 +1057,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 }
 
 /* Translucent Effect: legible on any wallpaper. The theme's colours are set on the root, so these go one level down */
-.und.bui.translucent .bwrap,.und.bui.translucent .top,.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .menu{--text:#f4f4f7;--title:#fff;--muted:rgba(255,255,255,.76);--faint:rgba(255,255,255,.58);--line:rgba(255,255,255,.13);--line-2:rgba(255,255,255,.2)}
-.und.bui.translucent[data-mode=light] .bwrap,.und.bui.translucent[data-mode=light] .top,.und.bui.translucent[data-mode=light] .drawer,.und.bui.translucent[data-mode=light] .modal,.und.bui.translucent[data-mode=light] .menu{--text:#14151a;--title:#000;--muted:rgba(0,0,0,.68);--faint:rgba(0,0,0,.54);--line:rgba(0,0,0,.1);--line-2:rgba(0,0,0,.16)}
-.und.bui.translucent[data-mode=light] .gc-c>.sec .card,.und.bui.translucent[data-mode=light] .blk,.und.bui.translucent[data-mode=light] .ac .blk,.und.bui.translucent[data-mode=light] .gc-playing .plist>.pl,.und.bui.translucent[data-mode=light] .alert,.und.bui.translucent[data-mode=light] .alert.crit,.und.bui.translucent[data-mode=light] .olist .oi,.und.bui.translucent[data-mode=light] .ipick button{background:rgba(255,255,255,.46)}
+.und.bui.translucent .bwrap,.und.bui.translucent .top,.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .menu,.und.bui.translucent .anc{--text:#f4f4f7;--title:#fff;--muted:rgba(255,255,255,.76);--faint:rgba(255,255,255,.58);--line:rgba(255,255,255,.13);--line-2:rgba(255,255,255,.2)}
+.und.bui.translucent[data-mode=light] .bwrap,.und.bui.translucent[data-mode=light] .top,.und.bui.translucent[data-mode=light] .drawer,.und.bui.translucent[data-mode=light] .modal,.und.bui.translucent[data-mode=light] .menu,.und.bui.translucent[data-mode=light] .anc{--text:#14151a;--title:#000;--muted:rgba(0,0,0,.68);--faint:rgba(0,0,0,.54);--line:rgba(0,0,0,.1);--line-2:rgba(0,0,0,.16)}
+.und.bui.translucent[data-mode=light] .olist .oi,.und.bui.translucent[data-mode=light] .ipick button{background:rgba(255,255,255,.46)}
 .und.bui.translucent .aico,.und.bui.translucent .ico,.und.bui.translucent .mh img,.und.bui.translucent .gc svg:not(.sp svg){filter:drop-shadow(0 0 1px rgba(255,255,255,.28))}
 .und.bui.translucent[data-mode=light] .aico,.und.bui.translucent[data-mode=light] .ico,.und.bui.translucent[data-mode=light] .mh img,.und.bui.translucent[data-mode=light] .gc svg:not(.sp svg){filter:drop-shadow(0 0 1px rgba(0,0,0,.35))}
 .und.bui.translucent .top .btn,.und.bui.translucent .top .acts .btn{color:var(--text)!important}
@@ -1059,7 +1067,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui.translucent .top .acts .btn:not(.on){background:transparent!important;border-color:transparent!important}
 .und.bui.translucent .badge.plain{border-color:var(--line-2);color:var(--text)}
 .und.bui.translucent input[type=text],.und.bui.translucent input[type=number],.und.bui.translucent input[type=url],.und.bui.translucent input[type=password],.und.bui.translucent select,.und.bui.translucent textarea{background:rgba(127,127,127,.14)!important;color:var(--text)!important;border-color:var(--line-2)!important}
-.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .ss,.und.bui.translucent .menu{--g-op:78%}
+.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .ss,.und.bui.translucent .menu,.und.bui.translucent .anc{--g-op:78%}
 .und.bui.translucent select option{background:#1c1d22;color:#f4f4f7}
 .und.bui.translucent[data-mode=light] select option{background:#fff;color:#14151a}
 
@@ -1072,8 +1080,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 /* the premium finish: system type, soft depth, Golden Gate colour, System Settings rows */
 .und.bui{--font:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;--ease:cubic-bezier(.32,.72,0,1);font-family:var(--font);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;letter-spacing:-.003em}
 .und.bui .gc-m .stat .v,.und.bui .und-name,.und.bui .drawer .dtitle{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Inter,sans-serif}
-.und.bui.translucent[data-theme=default]:not(.has-bg){background:radial-gradient(70vw 50vw at 88% 100%,rgba(236,126,58,.55),transparent 68%),radial-gradient(60vw 50vw at 10% 100%,rgba(176,62,58,.42),transparent 70%),linear-gradient(170deg,#141b2b 0%,#232238 42%,#4a2a3a 76%,#7d3f33 100%);background-attachment:fixed}
-.und.bui.translucent[data-theme=default][data-mode=light]:not(.has-bg){background:radial-gradient(70vw 50vw at 85% 100%,rgba(244,158,92,.6),transparent 68%),radial-gradient(60vw 50vw at 10% 90%,rgba(231,120,110,.34),transparent 70%),linear-gradient(170deg,#cfdcea 0%,#e7e6ea 46%,#f5dfd0 100%);background-attachment:fixed}
 .und.bui .gc-c>.sec,.und.bui .gc-c>.mw,.und.bui .gc-c>.card.w,.und.bui .gc-m .stat{box-shadow:0 1px 2px rgba(0,0,0,.14),0 8px 24px rgba(0,0,0,.1)}
 .und.bui .board.enter .gc{animation-timing-function:var(--ease)}
 .und.bui .modal,.und.bui .drawer{animation-timing-function:var(--ease)}
@@ -1127,3 +1133,91 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 
 .und.bui .drawer .set>.fld>label.switch,.und.bui .drawer .set>.grid2>.fld>label.switch{grid-column:2;grid-row:1/span 2;font-size:13px;color:var(--muted)}
 @media (max-width:700px){.und.bui .drawer .set>.fld>label.switch,.und.bui .drawer .set>.grid2>.fld>label.switch{grid-column:1;grid-row:auto;margin-top:6px}}
+
+/* the background: the theme's gradient, with a little grain so it does not band */
+.und.bui.mesh:not(.has-bg){background:none;isolation:isolate}
+.und.bui.mesh:not(.has-bg)::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"),var(--mesh)}
+
+/* one surface per card: what is inside a card sits on it directly, split by thin lines */
+.und.bui .gc-c>.sec .panel,.und.bui .gc-c>.sec .card,.und.bui .gc-c>.sec .rqlist.text{background:none;border:0;border-radius:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+.und.bui .gc-c>.sec .card:hover{border-color:transparent}
+.und.bui .gc-c .htab .hh,.und.bui .gc-c .panel .rowh{background:none}
+.und.bui .blocks,.und.bui .ac .blocks,.und.bui .ac .blocks.even{gap:10px 14px;grid-auto-rows:auto;align-content:space-between}
+.und.bui .blk,.und.bui .ac .blk,.und.bui .ac .blk:first-child,.und.bui .ac .blocks.even .blk:nth-child(3){background:none;padding:0;border-radius:0;align-items:flex-start;justify-content:center}
+.und.bui .blk .l,.und.bui .ac .blk .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.und.bui .gc-playing .plist,.und.bui .rqlist,.und.bui .dls{overflow:hidden;gap:0}
+.und.bui .gc-playing .plist{gap:0 24px}
+.und.bui .gc-playing .plist>.pl,.und.bui .rqlist>.rq,.und.bui .rqlist>.rq.line,.und.bui .gc-c>.sec .dls>.card.dl{margin-top:-1px;background:none;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none;padding:10px 0}
+.und.bui .rqlist>.rq.line{padding:7px 0}
+.und.bui .rqlist.text{padding:0}
+.und.bui .rqp{border:0}
+.und.bui .gc-c .badge{border:0;background:none;padding:0;line-height:18px}
+.und.bui .gc-c .badge.plain{color:var(--muted)}
+.und.bui .gc-c .badge b{color:var(--text);font-weight:600}
+.und.bui .dl .chips{gap:2px 12px}
+.und.bui .dlspeed{gap:16px}.und.bui .dlspeed b{font-size:15px}
+.und.bui .gc-c .dlh .btn,.und.bui.translucent .gc-c .dlh .btn:not(.pri):not(.solid){background:transparent!important;border-color:transparent!important;box-shadow:none!important}
+.und.bui .gc-c .dlh .btn:hover{background:var(--accent-soft)!important;color:var(--accent-text)!important}
+.und.bui .gc-m .stat .bar{display:none}
+
+/* Arr Stack on a card */
+.und.bui .aitem{border-bottom:0;border-top:1px solid var(--line)}.und.bui .aitem:first-child{border-top:0}
+.und.bui button.arow{border-radius:var(--r2)}
+
+/* alerts: a button in the header that says what is wrong, and a list under it */
+.und .bell{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:7px;flex:none;height:36px;min-width:36px;max-width:230px;padding:0 10px;margin-right:4px;border-radius:calc(var(--r2) + 1px);font-size:13px;font-weight:550;color:var(--muted);cursor:pointer;transition:background-color var(--t1,.14s) ease}
+.und .bell[hidden]{display:none}
+.und .bell svg{width:16px;height:16px;flex:none}
+.und .bell .bt{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.und .bell .bt:empty{display:none}
+.und .bell:hover{background:color-mix(in srgb,var(--text) 10%,transparent);color:var(--title)}
+.und .bell:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.und .bell.bad{background:var(--bad-soft);color:var(--bad)}.und .bell.warn{background:var(--warn-soft);color:var(--warn)}.und .bell.info{background:var(--accent-soft);color:var(--accent-text)}
+.und .bell.bad:hover,.und .bell.warn:hover,.und .bell.info:hover{filter:brightness(1.15)}
+.und .anc{position:fixed;z-index:75;width:min(440px,calc(100vw - 16px));max-height:min(72vh,560px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line-2);border-radius:calc(var(--radius) + 6px);box-shadow:0 24px 60px rgba(0,0,0,.45);overflow:hidden;animation:und-pop var(--t1,.14s) ease-out both;transform-origin:top right}
+.und .anc[hidden]{display:none}
+.und .anc-h{display:flex;align-items:center;gap:8px;padding:12px 14px 10px}.und .anc-h>b{font-size:15px;font-weight:600;color:var(--title)}
+.und .anc-h .tools{margin-left:auto;display:flex;gap:4px;align-items:center}
+.und.bui .anc .alerts{overflow-y:auto;padding:0 14px 6px;gap:0;scrollbar-width:thin}
+.und.bui .anc .alert,.und.bui .anc .alert.crit{display:grid;grid-template-columns:30px auto auto 1fr;gap:8px 10px;padding:12px 0;background:none;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none;animation:none}
+.und.bui .anc .alert .grow{grid-column:2/-1;min-width:0}.und.bui .anc .alert .btn{grid-row:2}.und.bui .anc .alert .btn:first-of-type{grid-column:2}
+.und.bui .anc .alert .grow b{font-weight:550}
+.und .anc .empty{padding:18px 0 22px;text-align:center}
+@media (max-width:1100px){.und .bell .bt{max-width:150px}}
+@media (max-width:700px){
+  .und .bell{margin-right:0;padding:0 8px;max-width:150px}
+  .und .anc{left:8px!important;right:8px!important;width:auto}
+}
+.und .tp-r{display:flex;align-items:center;justify-content:space-between;gap:8px}
+
+/* containers: a calm list of names, not a wall of boxes; the gear comes up when you reach for it */
+.und.bui .cgrid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0 14px}
+.und.bui .cgrid.fixed{grid-template-columns:repeat(var(--cc),minmax(0,1fr))}
+.und.bui .gc-c>.sec .ci{gap:10px;min-height:42px;padding:5px 4px 5px 8px;background:none;border:0;border-radius:var(--r2);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;transition:background-color var(--t1,.14s) ease}
+.und.bui .gc-c>.sec .ci:hover,.und.bui .gc-c>.sec .ci:focus-within{background:color-mix(in srgb,var(--text) 7%,transparent)}
+.und.bui .ci .cico,.und.bui .ci span.cico{width:26px;height:26px;border-radius:6px;background:none}
+.und.bui .ci .cname{font-size:13px;font-weight:500;gap:6px;color:var(--text)}
+.und.bui .ci .cname .sdot{width:6px;height:6px}
+.und.bui .ci .cs{font-size:11.5px}
+.und.bui .ci .acts{opacity:0;transition:opacity var(--t1,.14s) ease}
+.und.bui .ci:hover .acts,.und.bui .ci:focus-within .acts{opacity:1}
+@media (hover:none){.und.bui .ci .acts{opacity:.7}}
+.und.bui.translucent .ci .acts .btn:not(.pri):not(.solid){background:transparent!important;border-color:transparent!important}
+.und .allb{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:3px;padding:6px 10px;font-size:13px;font-weight:500;color:var(--accent-text);border-radius:var(--r2);cursor:pointer}
+.und .allb svg{width:14px;height:14px;transform:rotate(-90deg);transition:transform var(--t1,.14s) ease}
+.und .allb:hover svg{transform:rotate(-90deg) translateY(2px)}
+.und .allb:focus-visible{outline:2px solid var(--accent)}
+.und.bui .more{padding:8px 0 0}
+
+.und.bui.translucent a.btn.ic.ghost,.und.bui.translucent.has-bg a.btn.ic.ghost{background:transparent!important;border-color:transparent!important;color:var(--muted)!important}
+.und.bui.translucent a.btn.ic.ghost:hover{background:var(--accent-soft)!important;color:var(--accent-text)!important}
+.und.bui .anc .alert .btn:nth-of-type(2){grid-column:3}
+
+/* one inner margin on all four sides of every card */
+.und.bui{--cp:14px}
+.und.bui .gc-c>.sec,.und.bui .gc-c>.card.w,.und.bui .gc-m .stat{padding:var(--cp)}
+.und.bui .gc-c>.mw{padding:var(--cp) 6px}.und.bui .gc-c>.mw>.mh{padding:0 8px 8px}
+.und.bui .ac .ch{margin-bottom:12px}
+.und.bui .ac .ch a.btn.ic.ghost,.und.bui .gc-c>.sec>.sec-h a.btn.ic.ghost,.und.bui .dlh a.btn.ic.ghost,.und.bui .gc-c>.mw>.mh a.btn.ic.ghost{margin-right:-6px}
+.und.bui .gc-arr .sec-b{margin:0 -10px;padding:0 10px}.und.bui .arr{margin:0 -10px}.und.bui .aline{padding-right:4px}
+.und.bui .gc-docker .sec-b{margin:0 -8px;padding:0 8px}.und.bui .gc-docker .cgrid{margin:0 -8px}
+.und.bui .gc-c>.sec>.sec-b>:last-child{margin-bottom:0}
