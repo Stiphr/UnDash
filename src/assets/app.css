@@ -1228,3 +1228,4 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .blocks,.und.bui .ac .blocks,.und.bui .ac .blocks.even{grid-template-columns:repeat(auto-fit,minmax(56px,1fr));gap:6px 12px;align-content:end}
 .und.bui .blk:last-child:nth-child(odd){grid-column:auto}
 .und.bui .blk .l,.und.bui .ac .blk .l{white-space:normal;overflow:visible;line-height:1.2}
+.und.bui .gc-vms .sec-b{margin:0 -8px;padding:0 8px}.und.bui .gc-vms .cgrid{margin:0 -8px}

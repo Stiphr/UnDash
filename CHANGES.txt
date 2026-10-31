@@ -12,6 +12,7 @@
 - Alerts left the board: a button in the header names the problem in its colour, and opens the list with Ignore and History. With nothing wrong it is a quiet bell.
 - Five new themes in the spirit of qui's: Autobrr, The Kyle, Napster, Nightwalker and Swizzin, with their own palettes for the glass cards. Mono is rebuilt in clean greys with a soft light from above.
 - Every card has the same inner margin on all four sides.
+- Virtual machines look like the Containers list. Clicking a VM's icon or name opens its console in its own window; in the Docker version that works when one VM is running, and with several it opens Unraid's VMs page.
 - App stats run in one line across the card, so the cards are shorter. Show all sits beside the Containers count.
 - Every theme has its own gradient background, with a switch under Settings > Theme > Background.
 - Nothing is boxed inside a card any more: Now playing, Requests, Downloads and app stats sit on the card, split by thin lines.
