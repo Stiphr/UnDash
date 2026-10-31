@@ -1012,6 +1012,25 @@ t('a job whose process died ends as failed', $j['state'] === 'done' && $j['code'
 t('a job that never started ends as failed', und_job($log)['state'] === 'done');
 $GLOBALS['UND_SPAWN_MOCK'] = $mock;
 
+group('accent and wallpaper');
+t('the accent follows the theme by default', und_default_config()['appearance']['accent_mode'] === 'theme' && und_normalize([])['appearance']['accent_mode'] === 'theme');
+t('a saved accent colour from before accent modes counts as a custom one', und_normalize(['appearance' => ['accent' => '#123456']])['appearance']['accent_mode'] === 'custom');
+t('the accent can follow the wallpaper', und_normalize(['appearance' => ['accent_mode' => 'auto']])['appearance']['accent_mode'] === 'auto');
+t('custom without a colour falls back to the theme; unknown modes too', und_normalize(['appearance' => ['accent_mode' => 'custom', 'accent' => '']])['appearance']['accent_mode'] === 'theme' && und_normalize(['appearance' => ['accent_mode' => 'rainbow']])['appearance']['accent_mode'] === 'theme');
+t('the uploaded picture is a valid background, other words are not', und_normalize(['appearance' => ['background' => 'custom']])['appearance']['background'] === 'custom' && und_normalize(['appearance' => ['background' => 'mine']])['appearance']['background'] === '');
+$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAFklEQVR42mNk+M9Qz0AEYBxVSF+FAAhKDveksOjmAAAAAElFTkSuQmCC');
+t('a PNG is recognised by its bytes, a text file is not', und_wall_type($png) === 'png' && und_wall_type("\xFF\xD8\xFF\xE0") === 'jpg' && und_wall_type('RIFF1234WEBPVP8 ') === 'webp' && und_wall_type('<svg onload=alert(1)>') === null);
+t('a text file is refused as a wallpaper', isset(und_wall_upload(base64_encode(str_repeat('<svg>', 40)))['error']));
+t('an empty upload is refused', isset(und_wall_upload('')['error']));
+t('a picture larger than the limit is refused', isset(und_wall_upload(base64_encode(str_repeat('x', UND_WALL_MAX_BYTES + 1)))['error']));
+$up = und_wall_upload('data:image/png;base64,' . base64_encode($png));
+t('a real PNG is stored under its own type with its size', !empty($up['ok']) && $up['width'] === 16 && is_file(und_wall_custom_dir() . '/custom.png') && (fileperms(und_wall_custom_dir() . '/custom.png') & 0777) === 0600, json_encode($up));
+t('the browser learns that a picture exists, not where it is', und_wall_custom_view()['set'] === true && !isset(und_wall_custom_view()['file']));
+t('removing the picture leaves nothing behind', !empty(und_wall_remove()['ok']) && und_wall_custom() === null && und_wall_custom_view()['set'] === false);
+t('numbers brought back inside their limits are reported', und_clamped(['general' => ['refresh' => 9999, 'title' => 'x'], 'appearance' => ['radius' => 99]], und_normalize(['general' => ['refresh' => 9999], 'appearance' => ['radius' => 99]])) === ['general.refresh' => [9999, 300], 'appearance.radius' => [99, 28]]);
+t('nothing is reported when every number is inside its limits', und_clamped(['general' => ['refresh' => 5]], und_normalize(['general' => ['refresh' => 5]])) === []);
+t('TLS checks are off unless asked for', und_tls_verify() === false);
+
 rmrf($SANDBOX);
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

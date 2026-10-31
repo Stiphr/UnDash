@@ -156,6 +156,8 @@ if ($uri === '/assets/boot.js') {
   exit;
 }
 if ($uri === '/images/undash.png') { header('Content-Type: image/png'); header('Cache-Control: max-age=86400'); readfile(UND_ROOT . '/images/undash.png'); exit; }
+// the wallpaper uploaded in Settings > Appearance (signed-in browsers only: it is above this line's session check)
+if ($uri === '/wallpaper') { und_wall_serve(); exit; }
 
 // container and VM icons that Unraid itself serves from these two folders
 $icons = ['/state/plugins/dynamix.docker.manager/images/' => '/usr/local/emhttp/state/plugins/dynamix.docker.manager/images/',

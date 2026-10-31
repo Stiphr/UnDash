@@ -53,7 +53,7 @@ function und_health_probe(array $targets) {
   foreach ($targets as $i => $t) {
     $ch = curl_init($t['url']);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 5,
-      CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => 0, CURLOPT_USERAGENT => 'UnDash/' . UND_VERSION . ' (health check)', CURLOPT_NOSIGNAL => true,
+      CURLOPT_SSL_VERIFYPEER => und_tls_verify(), CURLOPT_SSL_VERIFYHOST => und_tls_verify() ? 2 : 0, CURLOPT_USERAGENT => 'UnDash/' . UND_VERSION . ' (health check)', CURLOPT_NOSIGNAL => true,
       CURLOPT_WRITEFUNCTION => function ($c, $data) { return 0; }]);      // stop after the headers: the status is all we need
     curl_multi_add_handle($mh, $ch); $hs[$i] = $ch;
   }

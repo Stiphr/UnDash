@@ -12,6 +12,10 @@
 
 /* ---------- HTTP ---------- */
 
+/** Certificates of the apps UnDash reads are not checked by default: on a LAN they are mostly self-signed. UNDASH_TLS_VERIFY=1
+ *  turns the check on for every https:// address (apps behind a reverse proxy with real certificates). */
+function und_tls_verify() { static $v = null; if ($v === null) $v = in_array(strtolower((string)getenv('UNDASH_TLS_VERIFY')), ['1', 'true', 'yes', 'on'], true); return $v; }
+
 function und_http($method, $url, array $o = []) {
   if (isset($GLOBALS['UND_HTTP_MOCK'])) { $r = call_user_func($GLOBALS['UND_HTTP_MOCK'], $method, $url, $o); if (is_array($r)) return $r; }
   if (!preg_match('#^https?://#i', $url)) return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'The URL must start with http:// or https://', 'headers' => []];
@@ -22,7 +26,7 @@ function und_http($method, $url, array $o = []) {
   curl_setopt_array($ch, [
     CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
     CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => (int)($o['timeout'] ?? 10), CURLOPT_HTTPHEADER => $headers,
-    CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => 0,     // LAN apps mostly use self-signed certificates
+    CURLOPT_SSL_VERIFYPEER => und_tls_verify(), CURLOPT_SSL_VERIFYHOST => und_tls_verify() ? 2 : 0,
     CURLOPT_USERAGENT => 'UnDash/' . UND_VERSION, CURLOPT_ENCODING => '',
     CURLOPT_HEADERFUNCTION => function ($c, $h) use (&$resp) { $p = explode(':', $h, 2); if (count($p) === 2) $resp[strtolower(trim($p[0]))][] = trim($p[1]); return strlen($h); },
   ]);
@@ -151,7 +155,7 @@ function und_w_prowlarr($s) {
   $st = und_api_cached('prowlarr-' . md5($s['url'] . $s['key']), 600, function () use ($s) { return und_get(und_u($s['url'], '/api/v1/indexerstats'), und_arr_h($s) + ['timeout' => 30]); });
   $t = ['g' => 0, 'q' => 0, 'fg' => 0, 'fq' => 0];
   foreach ((array)($st['indexers'] ?? []) as $i) { $t['g'] += (int)($i['numberOfGrabs'] ?? 0); $t['q'] += (int)($i['numberOfQueries'] ?? 0); $t['fg'] += (int)($i['numberOfFailedGrabs'] ?? 0); $t['fq'] += (int)($i['numberOfFailedQueries'] ?? 0); }
-  return ['blocks' => [und_b('numberOfGrabs', 'Grabs', $t['g']), und_b('numberOfQueries', 'Queries', $t['q']), und_b('numberOfFailGrabs', 'Fail grabs', $t['fg']), und_b('numberOfFailQueries', 'Fail queries', $t['fq'])]];
+  return ['blocks' => [und_b('numberOfGrabs', 'Grabs', $t['g']), und_b('numberOfQueries', 'Queries', $t['q']), und_b('numberOfFailGrabs', 'Failed grabs', $t['fg']), und_b('numberOfFailQueries', 'Failed queries', $t['fq'])]];
 }
 
 function und_w_overseerr($s) {
