@@ -175,7 +175,7 @@ if ($uri === '/' || $uri === '/index.html') {
   $v = (int)@filemtime(UND_ROOT . '/assets/app.js');
   header('Content-Type: text/html; charset=utf-8');
   header('Cache-Control: no-store');
-  echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
+  echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b0c0f">',
        '<title>UnDash</title><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/assets/app.css?v=', $v, '">',
        '</head><body class="und-page"><div id="und" class="und"><div class="und-loading">Loading UnDash…</div></div>',
        '<script src="/assets/boot.js"></script><script src="/assets/app.js?v=', $v, '"></script></body></html>';

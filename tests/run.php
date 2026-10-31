@@ -960,7 +960,7 @@ unset($GLOBALS['UND_HTTP_MOCK']);
 
 group('card board');
 $b = und_board_clean(['on' => false, 'compact' => 0, 'hidden' => ['alerts', 'bad id!', 'app:a1b2c3d4'], 'lg' => [['i' => 'm:cpu', 'x' => 30, 'y' => -2, 'w' => 99, 'h' => 0], ['i' => 'm:cpu', 'x' => 1], ['i' => '<script>', 'x' => 1], 'junk']]);
-t('the board keeps only ids and numbers, inside the grid', $b['on'] === false && $b['compact'] === false && $b['lg'] === [['i' => 'm:cpu', 'x' => 0, 'y' => 0, 'w' => 24, 'h' => 1]] && $b['hidden'] === ['alerts', 'app:a1b2c3d4'], json_encode($b));
+t('the board keeps only ids and numbers, inside the grid', $b['on'] === false && $b['compact'] === false && $b['lg'] === [['i' => 'm:cpu', 'x' => 0, 'y' => 0, 'w' => 24, 'h' => 1, 'a' => false]] && $b['hidden'] === ['alerts', 'app:a1b2c3d4'], json_encode($b));
 t('the board is on by default', und_board_clean(null)['on'] === true && und_default_config()['dashboard']['board']['lg'] === []);
 $c = und_default_config(); $c['dashboard']['board']['lg'] = [['i' => 'arr', 'x' => 2, 'y' => 3, 'w' => 6, 'h' => 9]];
 t('a saved board survives loading the settings', und_normalize($c)['dashboard']['board']['lg'][0]['x'] === 2);
