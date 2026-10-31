@@ -471,7 +471,7 @@
       }); });
       else {
         var size = { alerts: [24, 6], favorites: [24, 8], arr: [12, 20], downloads: [12, 16], playing: [12, 10], requests: [12, 16], docker: [24, 24], vms: [12, 10], health: [12, 14] }[sec.id] || [12, 10];
-        out.push({ i: sec.id, t: TITLES[sec.id], s: sec.id, w: size[0], h: size[1], minw: 4, minh: 3, maxh: sec.id === 'docker' || sec.id === 'health' ? 40 : 60 });
+        out.push({ i: sec.id, t: TITLES[sec.id], s: sec.id, w: size[0], h: size[1], minw: 4, minh: 3, maxh: sec.id === 'docker' || sec.id === 'health' ? 100 : 60 });
       }
     });
     return out;
@@ -547,12 +547,14 @@
   function boardSmart(cards, cols) {
     var by = {}, out = [], H = function (c) { return S.nat[c.i] || c.h; }, half = cols / 2, tight = cols === 12 && window.innerWidth < 900;
     cards.forEach(function (c) { (by[c.s] = by[c.s] || []).push(c); });
+    /* rows of at most k, shared out evenly: seven apps are rows of 4 and 3, never 6 and one stretched across the board */
     function rows(list, k, x0, width, y) {
-      for (var n = 0; n < list.length; n += k) {
-        var row = list.slice(n, n + k), each = Math.floor(width / row.length), extra = width - each * row.length, x = x0;
+      var n = 0, count = Math.ceil(list.length / k);
+      for (var r = 0; r < count; r++) {
+        var size = Math.ceil((list.length - n) / (count - r)), row = list.slice(n, n + size), each = Math.floor(width / size), extra = width - each * size, x = x0;
         var tall = Math.max.apply(null, row.map(H));
         row.forEach(function (c, j) { var w = each + (j < extra ? 1 : 0); out.push({ i: c.i, x: x, y: y, w: w, h: tall, a: true }); x += w; });
-        y += tall;
+        y += tall; n += size;
       }
       return y;
     }
