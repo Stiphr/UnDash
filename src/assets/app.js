@@ -407,9 +407,11 @@
     var acts = h('div', { class: 'acts' }, R.live,
       R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
       window.UND_STANDALONE ? null : btn('', toggleFull, 'focus' + (S.full ? ' on' : ''), 'full', S.full ? 'Exit focus mode' : 'Focus mode (hide Unraid\'s menu)'),
+      R.priv = btn('', togglePrivacy, 'priv', 'eye', 'Blur titles, posters, torrents and the server name'),
       boardOn() ? btn('', boardEdit, 'bedit', 'edit', 'Edit layout') : null,
       btn('', openSettings, '', 'gear', 'Settings'));
     R.srvBtn.setAttribute('aria-haspopup', 'menu');
+    paintPrivacy();
     root.appendChild(h('header', { class: 'top' },
       h('div', { class: 'brand' }, logo(), h('div', { class: 'ell' }, h('h1', { class: 'und-name' }, g.title || 'UnDash'),
         R.sub = h('div', { class: 'und-sub' }))),
@@ -428,6 +430,18 @@
     paintAll(); paintLive(); paintIdent();
     if (!S.selfT) { S.selfT = 1; checkSelf(); }
   }
+
+  /* privacy: blurs what you may not want on a screen share or a screenshot, on this browser only */
+  function paintPrivacy() {
+    var on = !!LS.get('privacy', false);
+    root.classList.toggle('privacy', on);
+    if (!R.priv) return;
+    R.priv.classList.toggle('on', on); R.priv.setAttribute('aria-pressed', on ? 'true' : 'false');
+    var t = on ? 'Show sensitive details' : 'Blur titles, posters, torrents and the server name';
+    R.priv.title = t; R.priv.setAttribute('aria-label', t);
+    clear(R.priv).appendChild(ic(on ? 'eyeoff' : 'eye'));
+  }
+  function togglePrivacy() { LS.set('privacy', !LS.get('privacy', false)); paintPrivacy(); }
 
   /* ---- title bar: server, Unraid version and UnDash version, each with a badge when a newer one exists ---- */
   function checkSelf() { api('self_update').then(function (j) { if (!j.error || j.latest) { S.self = j; paintIdent(); } setTimeout(checkSelf, 6 * 3600 * 1000); }); }
