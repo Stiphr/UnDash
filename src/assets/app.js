@@ -51,7 +51,7 @@
     up: 'M12 19V5M5 12l7-7 7 7', web: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
     sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
     moon: 'M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z', check: 'M5 12l4 4 10-10', power: 'M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0',
-    full: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', screen: 'M3 4h18v12H3zM8 20h8M12 16v4', edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
+    undo: 'M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-2', redo: 'M15 7l5 5-5 5M20 12H9a5 5 0 0 0 0 10h2', fit: 'M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4', full: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', screen: 'M3 4h18v12H3zM8 20h8M12 16v4', edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
     trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13', upar: 'M12 6l-6 6h12z', dnar: 'M12 18l6-6H6z', plus: 'M12 5v14M5 12h14', x: 'M6 6l12 12M18 6L6 18',
     gear: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
     dots: 'M5 12h.01M12 12h.01M19 12h.01', star: 'M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z',
@@ -404,17 +404,22 @@
     var acts = h('div', { class: 'acts' }, R.live,
       R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
       window.UND_STANDALONE ? null : btn('', toggleFull, 'focus' + (S.full ? ' on' : ''), 'full', S.full ? 'Exit focus mode' : 'Focus mode (hide Unraid\'s menu)'),
+      boardOn() ? btn('', boardEdit, 'bedit', 'edit', 'Edit layout') : null,
       btn('', openSettings, '', 'gear', 'Settings'));
     R.srvBtn.setAttribute('aria-haspopup', 'menu');
     root.appendChild(h('header', { class: 'top' },
       h('div', { class: 'brand' }, logo(), h('div', { class: 'ell' }, h('h1', { class: 'und-name' }, g.title || 'UnDash'),
         R.sub = h('div', { class: 'und-sub' }))),
       R.search ? h('div', { class: 'search' }, ic('search'), R.search, R.sbox = h('div', { class: 'sbox', id: 'und-sbox', hidden: true, role: 'listbox', 'aria-label': 'Search results' })) : h('span', { class: 'grow' }), acts));
-    R.sections = h('main', { class: 'sections' }); R.noMatch = null;
+    var board = boardOn(), want = board ? boardWants() : null;
+    R.sections = h('main', { class: 'sections' + (board ? ' host' : '') }); R.noMatch = null;
     root.appendChild(R.sections);
-    S.L.dashboard.sections.forEach(function (sec) { if (sec.visible) buildSection(sec); });
+    S.L.dashboard.sections.forEach(function (sec) {
+      if (board) sec.collapsed = false;                  // a card has no collapsed state; the saved one is kept for the classic layout
+      if (sec.visible && (!board || want[sec.id])) buildSection(sec);
+    });
     if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Sections & apps.'));
-    packHalves();
+    if (board) boardMount(); else packHalves();
     paintAll(); paintLive(); paintIdent();
     if (!S.selfT) { S.selfT = 1; checkSelf(); }
   }
@@ -437,6 +442,337 @@
     R.sub.appendChild(h('span', { class: 'vchip' }, 'UnDash ' + S.boot.version, me.newer ? h('a', { class: 'upd', href: me.url, target: '_blank', rel: 'noopener',
       title: 'UnDash ' + me.latest + ' is available. ' + (S.boot.caps.mode === 'api' ? 'Update the UnDash container in Unraid\'s Docker tab.' : 'Update it under Plugins in Unraid.') }, ic('up'), me.latest + ' available') : null));
   }
+
+  /* ---- the card board: every card can be moved and resized in Edit layout. The sections are built as always and their parts
+     moved into cards, so the live refresh paints them wherever they are. Grid: 24 columns (12 on a tablet), a row every 20 px;
+     phones stack the cards in order. Removed cards stay in dashboard.board.hidden, so a new app still shows up by itself. ---- */
+  var BOARD_ROW = 20, BOARD_GAP = 10, BOARD_COLS = { lg: 24, md: 12 };
+  var MD = window.matchMedia ? window.matchMedia('(max-width:1100px)') : null, SM = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
+  function boardOn() { return !!(S.L.dashboard.board && S.L.dashboard.board.on); }
+  function boardMode() { return SM && SM.matches ? 'sm' : MD && MD.matches ? 'md' : 'lg'; }
+  /* every card that exists now, in the classic order */
+  function boardCards() {
+    var out = [], d = S.L.dashboard, api = S.boot.caps.mode === 'api';
+    d.sections.forEach(function (sec) {
+      if (!sec.visible) return;
+      if (sec.id === 'overview') d.metrics.forEach(function (m) { if (m.visible && MET[m.id] && !((m.id === 'load' || m.id === 'path') && api)) out.push({ i: 'm:' + m.id, t: MET[m.id][0], s: 'overview', w: 3, h: 5, minw: 2, minh: 3 }); });
+      else if (sec.id === 'media') { var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; }); MEDIA_ORDER.forEach(function (id) { if (vis[id] !== false) out.push({ i: 'media:' + id, t: MEDIA[id][0], s: 'media', w: 6, h: 18, minw: 3, minh: 6 }); }); }
+      else if (sec.id === 'apps') S.L.groups.forEach(function (g) { g.services.forEach(function (x) {
+        if (x.zone !== 'apps' || x.hidden || (x.type === 'link' && !S.L.apps.links)) return;
+        out.push({ i: 'app:' + x.id, t: x.name, s: 'apps', w: x.type === 'link' ? 3 : 4, h: x.type === 'link' ? 2 : 7, minw: 2, minh: 2 });
+      }); });
+      else {
+        var size = { alerts: [24, 6], favorites: [24, 8], arr: [12, 20], downloads: [12, 16], playing: [12, 10], requests: [12, 16], docker: [24, 24], vms: [12, 10], health: [12, 14] }[sec.id] || [12, 10];
+        out.push({ i: sec.id, t: TITLES[sec.id], s: sec.id, w: size[0], h: size[1], minw: 4, minh: 3 });
+      }
+    });
+    return out;
+  }
+  /* which sections to build: System and Apps always (their parts are painted even off the board), the others when a card needs them */
+  function boardWants() {
+    var bd = S.L.dashboard.board, gone = {}, want = { overview: 1 }; (bd.hidden || []).forEach(function (i) { gone[i] = 1; });
+    boardCards().forEach(function (c) { if (c.s === 'apps' || !gone[c.i]) want[c.s] = 1; });
+    return want;
+  }
+  function gHit(a, b) { return a.i !== b.i && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h; }
+  function gCopy(l) { return l.map(function (c) { return { i: c.i, x: c.x, y: c.y, w: c.w, h: c.h }; }); }
+  /* the first free spot, top left first */
+  function gPlace(list, c, cols) {
+    c.w = Math.min(c.w, cols);
+    for (var y = 0; y < 6000; y++) for (var x = 0; x + c.w <= cols; x++) {
+      c.x = x; c.y = y;
+      if (!list.some(function (o) { return gHit(c, o); })) { list.push(c); return c; }
+    }
+    return c;
+  }
+  /* cards rise until something stops them; on equal rows the one in hand ($first) goes first */
+  function gCompact(list, first) {
+    var done = [];
+    list.slice().sort(function (a, b) { return a.y - b.y || (a.i === first ? -1 : b.i === first ? 1 : a.x - b.x); }).forEach(function (c) {
+      while (c.y > 0) { c.y--; if (done.some(function (o) { return gHit(c, o); })) { c.y++; break; } }
+      done.push(c);
+    });
+    return list;
+  }
+  /* the card goes where asked; the card it covers most swaps into the spot just left ($from) when it fits there, anything else moves down */
+  function gMove(list, id, to, compact, cols, from) {
+    var c = list.filter(function (x) { return x.i === id; })[0]; if (!c) return list;
+    c.w = Math.max(1, Math.min(cols, to.w)); c.h = Math.max(1, to.h); c.x = Math.max(0, Math.min(cols - c.w, to.x)); c.y = Math.max(0, to.y);
+    var hits = list.filter(function (o) { return gHit(c, o); });
+    if (from && hits.length) {
+      var area = function (z) { return (Math.min(c.x + c.w, z.x + z.w) - Math.max(c.x, z.x)) * (Math.min(c.y + c.h, z.y + z.h) - Math.max(c.y, z.y)); };
+      var o = hits.reduce(function (m, z) { return area(z) > area(m) ? z : m; }), was = { x: o.x, y: o.y };
+      o.x = Math.min(from.x, cols - o.w); o.y = from.y;
+      if (gHit(o, c) || list.some(function (z) { return gHit(o, z); })) { o.x = was.x; o.y = was.y; }
+    }
+    var queue = [c], n = 0;
+    while (queue.length && n++ < 4000) {
+      var a = queue.shift();
+      list.forEach(function (o) { if (o !== c && gHit(a, o)) { o.y = a.y + a.h; queue.push(o); } });
+    }
+    return compact ? gCompact(list, id) : list;
+  }
+  function boardSeed(cards, cols) {
+    var list = [];
+    cards.forEach(function (c) { gPlace(list, { i: c.i, x: 0, y: 0, w: Math.min(c.w, cols), h: c.h }, cols); });
+    return list;
+  }
+  /* the saved layout for this screen size, without cards that no longer exist and with new ones added */
+  function boardLayout(mode, hidden) {
+    var bd = S.L.dashboard.board, cols = BOARD_COLS[mode === 'sm' ? 'lg' : mode], cards = boardCards(), have = {}, gone = {};
+    cards.forEach(function (c) { have[c.i] = c; }); hidden.forEach(function (i) { gone[i] = 1; });
+    var src = bd[mode === 'sm' ? 'lg' : mode] || [];
+    if (!src.length && mode === 'md' && (bd.lg || []).length) {
+      var half = []; gCopy(bd.lg).sort(function (a, b) { return a.y - b.y || a.x - b.x; }).forEach(function (c) {
+        c.w = Math.max(2, Math.ceil(c.w / 2)); gPlace(half, c, cols);
+      });
+      src = half;
+    }
+    var list = gCopy(src).filter(function (c) { return have[c.i] && !gone[c.i]; }), on = {};
+    if (!list.length && !(bd.hidden || []).length) return boardSeed(cards.filter(function (c) { return !gone[c.i]; }), cols);
+    list.forEach(function (c) { on[c.i] = 1; c.w = Math.min(c.w, cols); c.x = Math.min(c.x, cols - c.w); });
+    cards.forEach(function (c) { if (!on[c.i] && !gone[c.i]) gPlace(list, { i: c.i, x: 0, y: 0, w: Math.min(c.w, cols), h: c.h }, cols); });
+    return list;
+  }
+  function boardPart(c) {
+    var p = c.i.split(':'), r = R[c.s];
+    if (p[0] === 'm') return R.overview && R.overview.tiles[p[1]] ? R.overview.tiles[p[1]].el : null;
+    if (p[0] === 'media') return r && r.w[p[1]] ? r.w[p[1]].el : null;
+    if (p[0] === 'app') return R.sections.querySelector('[data-sid="' + p[1] + '"]');
+    return r ? r.el : null;
+  }
+  function boardMount() {
+    var bd = S.L.dashboard.board, mode = boardMode(), E = S.edit;
+    R.packs = []; R.cards = {};
+    if (mode === 'sm' && E) { S.edit = E = null; }
+    var hidden = E ? E.hidden : (bd.hidden || []).slice(), list = E ? E.list : boardLayout(mode, hidden);
+    R.grid = list;
+    R.board = h('div', { class: 'board' + (mode === 'sm' ? ' flow' : '') + (E ? ' edit' : '') });
+    R.board.style.setProperty('--cols', String(BOARD_COLS[mode === 'sm' ? 'lg' : mode]));
+    if (mode === 'sm') list = gCopy(list).sort(function (a, b) { return a.y - b.y || a.x - b.x; });
+    var cards = {}; boardCards().forEach(function (c) { cards[c.i] = c; });
+    if (R.overview) { R.overview.open = ''; R.overview.detail.hidden = true; }
+    list.forEach(function (it) {
+      var c = cards[it.i], part = c && boardPart(c); if (!part) return;
+      var el = h('div', { class: 'gc gc-' + it.i.split(':')[0], 'data-i': it.i }, h('div', { class: 'gc-c' }, part));
+      if (part.classList && part.classList.contains('sec')) part.classList.add('fill');
+      R.cards[it.i] = { el: el, part: part, c: c };
+      if (E) boardChrome(el, it, c);
+      R.board.appendChild(el);
+    });
+    R.boardWrap = h('div', { class: 'bwrap' }, E ? boardBar() : null, R.overview ? R.overview.stale : null, R.board);
+    root.insertBefore(R.boardWrap, R.sections);
+    S.boardHide = '';
+    boardPaint();
+  }
+  function boardQuiet(p) { return p.hidden || p.style.display === 'none'; }
+  /* a card with nothing to say (no alerts) leaves the board for now, and the ones under it close the gap */
+  function boardSync() {
+    var sig = Object.keys(R.cards).filter(function (i) { return boardQuiet(R.cards[i].part); }).join();
+    if (sig !== S.boardHide) { S.boardHide = sig; boardPaint(); }
+  }
+  function boardPaint() {
+    var E = S.edit, list = R.grid, compact = E ? E.compact : S.L.dashboard.board.compact;
+    if (!E && S.boardHide) {
+      list = gCopy(R.grid).filter(function (c) { return !(R.cards[c.i] && boardQuiet(R.cards[c.i].part)); });
+      if (compact) gCompact(list);
+    }
+    var seen = {}, bottom = 0;
+    list.forEach(function (c) {
+      var x = R.cards[c.i]; if (!x) return; seen[c.i] = 1;
+      x.el.hidden = false;
+      x.el.style.setProperty('--x', c.x); x.el.style.setProperty('--y', c.y); x.el.style.setProperty('--w', c.w); x.el.style.setProperty('--h', c.h);
+      x.el.setAttribute('aria-label', x.c.t + (E ? ', column ' + (c.x + 1) + ', row ' + (c.y + 1) + ', ' + c.w + ' by ' + c.h : ''));
+      bottom = Math.max(bottom, c.y + c.h);
+    });
+    Object.keys(R.cards).forEach(function (i) { if (!seen[i]) R.cards[i].el.hidden = true; });
+    R.board.style.setProperty('--rows', bottom);
+    if (E) boardTools();
+  }
+  /* the System tiles are cards, so a tile's details open under it */
+  function boardDetail() {
+    var r = R.overview, d = r.detail, t = r.tiles[r.open];
+    if (d.parentNode !== R.boardWrap) { d.classList.add('bdetail'); R.boardWrap.appendChild(d); }
+    if (!r.open || !t) return;
+    var w = R.boardWrap.getBoundingClientRect(), b = t.el.getBoundingClientRect(), wide = Math.min(760, w.width);
+    d.style.top = b.bottom - w.top + 6 + 'px';
+    d.style.left = Math.max(0, Math.min(b.left - w.left, w.width - wide)) + 'px';
+    d.style.width = wide + 'px';
+  }
+  document.addEventListener('pointerdown', function (e) {
+    var r = R.overview; if (!R.cards || !r || !r.open || !e.target.closest) return;
+    if (!e.target.closest('.bdetail') && !e.target.closest('.gc-m')) toggleDetail(r.open);
+  });
+
+  /* ---- Edit layout: drag a card, drag its edges, or use the keyboard; nothing is saved until Save ---- */
+  function boardEdit() {
+    if (boardMode() === 'sm') { toast('Edit the layout on a larger screen. A phone shows the cards in that order.', true); return; }
+    var bd = S.L.dashboard.board;
+    S.edit = { mode: boardMode(), hidden: (bd.hidden || []).slice(), list: null, compact: bd.compact, undo: [], redo: [], dirty: false };
+    S.edit.list = boardLayout(S.edit.mode, S.edit.hidden);
+    boardRemount();
+  }
+  function boardRemount() {
+    if (R.boardWrap && R.boardWrap.parentNode) {
+      // the parts go back first: they stay in the page's own host while their cards are rebuilt
+      Object.keys(R.cards).forEach(function (i) { var p = R.cards[i].part; if (p) R.sections.appendChild(p); });
+      if (R.overview) R.sections.appendChild(R.overview.stale);
+      if (R.overview) R.sections.appendChild(R.overview.detail);
+      R.boardWrap.parentNode.removeChild(R.boardWrap);
+    }
+    boardMount(); paintAll();
+  }
+  function boardCols() { return BOARD_COLS[S.edit.mode]; }
+  function boardMark() { var E = S.edit; E.undo.push({ list: gCopy(E.list), hidden: E.hidden.slice() }); if (E.undo.length > 60) E.undo.shift(); E.redo = []; E.dirty = true; }
+  function boardStep(from, to) {
+    var E = S.edit, st = from.pop(); if (!st) return;
+    to.push({ list: gCopy(E.list), hidden: E.hidden.slice() });
+    var rebuild = st.hidden.join() !== E.hidden.join();
+    E.list = st.list; E.hidden = st.hidden; E.dirty = true;
+    if (rebuild) boardRemount(); else { R.grid = E.list; boardPaint(); }
+  }
+  function boardBar() {
+    var E = S.edit;
+    R.bUndo = btn('', function () { boardStep(E.undo, E.redo); }, 'sm', 'undo', 'Undo (Ctrl+Z)');
+    R.bRedo = btn('', function () { boardStep(E.redo, E.undo); }, 'sm', 'redo', 'Redo (Ctrl+Shift+Z)');
+    R.bAdd = btn('Add card', boardAdd, 'sm', 'plus', 'Put a removed card back');
+    var snap = h('input', { type: 'checkbox', checked: E.compact, onchange: function (e) { boardMark(); E.compact = e.target.checked; if (E.compact) gCompact(E.list); boardPaint(); } });
+    return h('div', { class: 'bbar', role: 'toolbar', 'aria-label': 'Edit layout' }, h('b', null, 'Edit layout'), h('span', { class: 'muted xs bhint' }, 'Drag cards and their edges. Arrow keys move, Shift + arrows resize.'), h('span', { class: 'grow' }),
+      R.bAdd, R.bUndo, R.bRedo, h('label', { class: 'switch', title: 'Cards rise to fill the space above them. Off: they stay exactly where you put them.' }, snap, 'Snap up'),
+      btn('Fit all', boardFitAll, 'sm', 'fit', 'Size every card to its content'),
+      btn('Reset', boardReset, 'sm', 'restart', 'Back to the standard layout, with every card'),
+      btn('Cancel', boardCancel, 'sm'), btn('Save', boardSave, 'sm pri'));
+  }
+  function boardTools() {
+    var E = S.edit; if (!R.bUndo) return;
+    R.bUndo.disabled = !E.undo.length; R.bRedo.disabled = !E.redo.length; R.bAdd.disabled = !E.hidden.length;
+  }
+  function boardChrome(el, it, c) {
+    el.tabIndex = 0;
+    el.appendChild(h('div', { class: 'gc-t' }, h('span', { class: 'ell' }, c.t),
+      btn('', function () { boardFit([it.i]); }, 'sm ghost', 'fit', 'Fit the height to the content'),
+      btn('', function () { boardRemove(it.i); }, 'sm ghost', 'x', 'Remove from the board')));
+    ['e', 's', 'se'].forEach(function (d) { el.appendChild(h('span', { class: 'rh ' + d, 'data-rh': d, 'aria-hidden': 'true' })); });
+    el.addEventListener('pointerdown', boardPointer);
+    el.addEventListener('keydown', boardKey);
+  }
+  function boardItem(i) { return S.edit.list.filter(function (c) { return c.i === i; })[0]; }
+  function boardRemove(i) {
+    var E = S.edit; boardMark();
+    E.list = E.list.filter(function (c) { return c.i !== i; }); E.hidden.push(i);
+    if (E.compact) gCompact(E.list);
+    boardRemount();
+  }
+  function boardAdd() {
+    var E = S.edit, all = {}, m; boardCards().forEach(function (c) { all[c.i] = c; });
+    var rows = E.hidden.filter(function (i) { return all[i]; }).map(function (i) {
+      return h('button', { type: 'button', class: 'badd', onclick: function () {
+        m.close(); boardMark();
+        E.hidden = E.hidden.filter(function (x) { return x !== i; });
+        gPlace(E.list, { i: i, x: 0, y: 0, w: Math.min(all[i].w, boardCols()), h: all[i].h }, boardCols());
+        boardRemount();
+        var x = R.cards[i]; if (x) { x.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); x.el.focus({ preventScroll: true }); }
+      } }, ic('plus'), all[i].t);
+    });
+    m = modal('Add a card', rows.length ? h('div', { class: 'badds' }, rows) : h('div', { class: 'empty' }, 'Every card is on the board.'), [btn('Close', function () { m.close(); })]);
+  }
+  /* the height the card's content wants, in rows */
+  function boardNatural(i) {
+    var x = R.cards[i]; if (!x) return 0;
+    x.el.classList.add('meas'); var px = x.el.offsetHeight; x.el.classList.remove('meas');
+    return Math.max(x.c.minh, Math.min(60, Math.ceil((px + BOARD_GAP) / BOARD_ROW)));
+  }
+  function boardFit(ids) {
+    var E = S.edit; boardMark();
+    ids.forEach(function (i) { var c = boardItem(i), n = boardNatural(i); if (c && n) gMove(E.list, i, { x: c.x, y: c.y, w: c.w, h: n }, E.compact, boardCols()); });
+    boardPaint();
+  }
+  function boardFitAll() { boardFit(Object.keys(R.cards).filter(function (i) { return i.indexOf('m:') !== 0; })); }
+  function boardReset() {
+    var E = S.edit; boardMark();
+    E.hidden = []; E.list = boardSeed(boardCards(), boardCols());
+    boardRemount();
+  }
+  function boardCancel() {
+    var done = function () { S.edit = null; boardRemount(); };
+    if (!S.edit.dirty) return done();
+    confirmBox('Discard your layout changes?', 'The board goes back to how it was saved.', 'Discard', true).then(function (y) { if (y) done(); });
+  }
+  function boardSave() {
+    var E = S.edit, v = { hidden: E.hidden, compact: E.compact }; v[E.mode] = E.list;
+    api('prefs', { kind: 'board', value: v }).then(function (j) {
+      if (j.error) { toast(j.error, true); return; }
+      S.L = j.layout; S.edit = null; shell(); toast('Layout saved');
+    });
+  }
+  function boardKey(e) {
+    var d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key], i = e.currentTarget.getAttribute('data-i');
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); boardRemove(i); return; }
+    if (!d) return;
+    e.preventDefault(); boardMark();
+    var c = boardItem(i), rows = e.shiftKey ? 1 : 2, to = e.shiftKey ? { x: c.x, y: c.y, w: Math.max(R.cards[i].c.minw, c.w + d[0]), h: Math.max(R.cards[i].c.minh, c.h + d[1]) }
+      : { x: c.x + d[0], y: c.y + d[1] * rows, w: c.w, h: c.h };
+    gMove(S.edit.list, i, to, S.edit.compact, boardCols());
+    boardPaint();
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!S.edit || !(e.ctrlKey || e.metaKey) || (e.key || '').toLowerCase() !== 'z' || root.querySelector('.modal-bg')) return;
+    e.preventDefault();
+    if (e.shiftKey) boardStep(S.edit.redo, S.edit.undo); else boardStep(S.edit.undo, S.edit.redo);
+  });
+  /* one drag: the list is worked out again from where it started, so cards pushed aside return when the card moves on */
+  function boardPointer(e) {
+    if (e.button || e.target.closest('button')) return;
+    var E = S.edit, el = e.currentTarget, i = el.getAttribute('data-i'), it = boardItem(i), rh = e.target.getAttribute('data-rh');
+    if (!it) return;
+    var start = gCopy(E.list), c0 = { x: it.x, y: it.y, w: it.w, h: it.h }, card = R.cards[i].c, cols = boardCols();
+    var box = R.board.getBoundingClientRect(), cw = (box.width + BOARD_GAP) / cols;
+    var sx = e.clientX, sy = e.clientY, sy0 = window.scrollY, moved = false, last = '', px = 0, py = 0, tm = 0, ph = null;
+    el.setPointerCapture(e.pointerId);
+    function calc() {
+      var dx = px - sx, dy = py - sy + window.scrollY - sy0, to = { x: c0.x, y: c0.y, w: c0.w, h: c0.h };
+      if (rh) {
+        if (rh !== 's') to.w = Math.max(card.minw, Math.min(cols - c0.x, c0.w + Math.round(dx / cw)));
+        if (rh !== 'e') to.h = Math.max(card.minh, c0.h + Math.round(dy / BOARD_ROW));
+      } else { to.x = c0.x + Math.round(dx / cw); to.y = c0.y + Math.round(dy / BOARD_ROW); }
+      if (!rh) el.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      var sig = [to.x, to.y, to.w, to.h].join();
+      if (sig === last) return; last = sig;
+      E.list = gCopy(start); R.grid = E.list;
+      gMove(E.list, i, to, E.compact, cols, rh ? null : c0);
+      boardPaint();
+      var now = boardItem(i);
+      ['x', 'y', 'w', 'h'].forEach(function (k) { ph.style.setProperty('--' + k, now[k]); });
+      if (!rh) { var f = R.cards[i].el; f.style.setProperty('--x', c0.x); f.style.setProperty('--y', c0.y); }
+    }
+    function edge() {
+      var v = py < 70 ? -14 : py > window.innerHeight - 70 ? 14 : 0;
+      if (v) { window.scrollBy(0, v); calc(); }
+      tm = requestAnimationFrame(edge);
+    }
+    function move(ev) {
+      px = ev.clientX; py = ev.clientY;
+      if (!moved) {
+        if (Math.abs(px - sx) + Math.abs(py - sy) < 5) return;
+        moved = true; boardMark(); E.undo[E.undo.length - 1].list = gCopy(start);
+        ph = h('div', { class: 'gph' }); R.board.appendChild(ph);
+        el.classList.add('drag'); root.classList.add('dragging'); tm = requestAnimationFrame(edge);
+      }
+      calc();
+    }
+    function up(ev) {
+      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      cancelAnimationFrame(tm); root.classList.remove('dragging');
+      if (!moved) return;
+      if (ph && ph.parentNode) ph.parentNode.removeChild(ph);
+      el.classList.remove('drag'); el.style.transform = '';
+      if (ev.type === 'pointercancel') { E.undo.pop(); E.list = start; R.grid = start; }
+      boardPaint();
+    }
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  }
+  if (MD) [MD, SM].forEach(function (q) { if (q.addEventListener) q.addEventListener('change', function () { if (R.cards && S.L) { if (S.edit && boardMode() === S.edit.mode) return; S.edit = null; boardRemount(); } }); });
 
   /* Half-width sections next to each other go into two columns, each section into the shorter one (in order), so a short
      section does not leave a hole beside a tall one. Re-balanced when content loads or a section collapses. */
@@ -678,6 +1014,7 @@
     var body = h('div', { class: 'sec-b', id: 'und-sec-' + sec.id });
     var el = h('section', { class: 'sec' + (sec.width === 'half' ? ' half' : '') + (sec.collapsed ? ' closed' : ''), 'data-sec': sec.id, 'aria-label': TITLES[sec.id] },
       h('div', { class: 'sec-h' }, h('h2', null, h('button', { type: 'button', 'aria-expanded': sec.collapsed ? 'false' : 'true', 'aria-controls': 'und-sec-' + sec.id, onclick: function (e) {
+        if (R.cards) return;
         sec.collapsed = !sec.collapsed; el.classList.toggle('closed', sec.collapsed); e.currentTarget.setAttribute('aria-expanded', sec.collapsed ? 'false' : 'true');
         api('prefs', { kind: 'section', key: sec.id, value: { collapsed: sec.collapsed } });
         if (!sec.collapsed) paintAll();
@@ -764,6 +1101,7 @@
     if (R.docker && open('docker')) paintDocker(y);
     if (R.vms && open('vms')) paintVms(y);
     paintCounts(y);
+    if (R.cards) boardSync();
     // ResizeObserver does not run in a background tab; the live refresh catches up instead
     if (R.packs && R.packs.length) balanceHalves();
   }
@@ -803,6 +1141,7 @@
     var r = R.overview; r.open = r.open === id ? '' : id; LS.set('detail', r.open);
     for (var k in r.tiles) r.tiles[k].el.setAttribute('aria-expanded', k === r.open ? 'true' : 'false');
     r.detailSig = null; paintDetail(S.live || {});
+    if (R.cards) boardDetail();
   }
   function tile(id, val, sub, p, lvl) {
     var t = R.overview.tiles[id]; if (!t) return;
@@ -1984,7 +2323,7 @@
       h('button', { type: 'button', class: A.headers ? 'on' : '', title: 'Apps in their groups, with the group names', 'aria-pressed': A.headers ? 'true' : 'false', onclick: function () { setAppGroups(true); } }, 'Groups'),
       h('button', { type: 'button', class: A.headers ? '' : 'on', title: 'All apps in one grid', 'aria-pressed': A.headers ? 'false' : 'true', onclick: function () { setAppGroups(false); } }, 'One grid')));
     var grid = function () { var g = h('div', { class: 'agrid' + (A.columns ? ' fixed' : ''), role: 'list' }); if (A.columns) g.style.setProperty('--ac', String(A.columns)); return g; };
-    if (!A.headers) {
+    if (!A.headers || boardOn()) {
       var all = grid(), links = h('div', { class: 'alinks' });
       groups.forEach(function (x) { x.s.forEach(function (s) { (s.type === 'link' ? links : all).appendChild(widget(s)); }); });
       if (all.childNodes.length) r.body.appendChild(all);
@@ -2020,10 +2359,10 @@
   function widget(s) {
     var u = iconUrl(s.icon), href = s.href_resolved || '';
     if (s.type === 'link') {
-      return h(href ? 'a' : 'span', { class: 'alink', href: href || null, target: href ? '_blank' : null, rel: href ? 'noopener' : null, title: s.description || href, 'data-name': s.name }, img(u, 'aico', 'tag'), s.name);
+      return h(href ? 'a' : 'span', { class: 'alink', 'data-sid': s.id, href: href || null, target: href ? '_blank' : null, rel: href ? 'noopener' : null, title: s.description || href, 'data-name': s.name }, img(u, 'aico', 'tag'), s.name);
     }
     var nm = href ? h('a', { class: 'nm', href: href, target: '_blank', rel: 'noopener' }, s.name) : h('span', { class: 'nm' }, s.name);
-    var c = h('div', { class: 'card w ac wait' + (s.span === 2 ? ' span2' : ''), id: 'w-' + s.id, 'data-name': s.name, role: 'listitem' },
+    var c = h('div', { class: 'card w ac wait' + (s.span === 2 ? ' span2' : ''), id: 'w-' + s.id, 'data-sid': s.id, 'data-name': s.name, role: 'listitem' },
       h('div', { class: 'ch' }, img(u, 'aico', 'tag'), nm, h('span', { class: 'sdot na', role: 'img', 'aria-label': 'loading' }), h('span', { class: 'sub' }),
         href ? h('a', { class: 'btn ic sm ghost', href: href, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('web')) : null),
       s.description ? h('div', { class: 'desc' }, s.description) : null,
@@ -2597,6 +2936,7 @@
     };
     b.appendChild(set('Spacing', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
       F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
+      F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'),
       F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
         'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
       F('Container and VM icons', sIn(a, 'icon_mode', function () { dirty(); }, [['color', 'selfh.st, in colour'], ['auto', 'selfh.st, light or dark to suit the theme'], ['light', 'selfh.st, light'], ['dark', 'selfh.st, dark'], ['off', 'Unraid\'s own icons']], preview),
