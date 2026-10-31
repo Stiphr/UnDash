@@ -36,7 +36,7 @@ function und_types() {
   ];
 }
 
-/** The card board: on, snap cards upward (compact), a layout per screen size ([{i, x, y, w, h}]; lg 24 columns, md 12) and the
+/** The card board: on, snap cards upward (compact), a layout per screen size ([{i, x, y, w, h, a}]; lg 24 columns, md 12; a = height follows the content) and the
  *  cards taken off it. Empty layouts are worked out by the page, which knows the cards. Only ids and numbers are kept. */
 function und_board_clean($b) {
   $b = is_array($b) ? $b : [];
@@ -47,7 +47,7 @@ function und_board_clean($b) {
       if (!is_array($c) || !$id($c['i'] ?? null) || isset($seen[$c['i']])) continue;
       $seen[$c['i']] = 1;
       $w = max(1, min($cols, (int)($c['w'] ?? 1)));
-      $out[] = ['i' => $c['i'], 'x' => max(0, min($cols - $w, (int)($c['x'] ?? 0))), 'y' => max(0, min(5000, (int)($c['y'] ?? 0))), 'w' => $w, 'h' => max(1, min(200, (int)($c['h'] ?? 1)))];
+      $out[] = ['i' => $c['i'], 'x' => max(0, min($cols - $w, (int)($c['x'] ?? 0))), 'y' => max(0, min(5000, (int)($c['y'] ?? 0))), 'w' => $w, 'h' => max(1, min(200, (int)($c['h'] ?? 1))), 'a' => !empty($c['a'])];
     }
     return $out;
   };
@@ -78,7 +78,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -343,6 +343,7 @@ function und_normalize(array $c) {
   $a['mode'] = in_array($a['mode'], ['dark', 'light', 'system'], true) ? $a['mode'] : 'dark';
   $a['accent'] = $a['accent'] === '' ? '' : und_hex($a['accent'], '');   // empty = the theme's own accent
   $a['density'] = in_array($a['density'], ['compact', 'comfortable', 'expanded'], true) ? $a['density'] : 'comfortable';
+  $a['text_size'] = in_array($a['text_size'] ?? '', ['s', 'm', 'l'], true) ? $a['text_size'] : 'm';
   $a['background'] = preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(0, min(100, (int)$a['brightness']));
   // the margin around the dashboard in px; -1 = automatic
