@@ -49,7 +49,7 @@
     array: 'M4 6h16M4 12h16M4 18h16', swap: 'M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4', tag: 'M3 12V3h9l9 9-9 9zM7.5 7.5h.01',
     play: 'M7 4l13 8-13 8z', pause: 'M7 4h4v16H7zM14 4h4v16h-4z', stop: 'M6 6h12v12H6z',
     restart: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7', logs: 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5', info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01',
-    up: 'M12 19V5M5 12l7-7 7 7', web: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
+    up: 'M12 19V5M5 12l7-7 7 7', open: 'M7 17L17 7M8 7h9v9', web: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
     sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
     moon: 'M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z', check: 'M5 12l4 4 10-10', power: 'M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0',
     undo: 'M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-2', redo: 'M15 7l5 5-5 5M20 12H9a5 5 0 0 0 0 10h2', fit: 'M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4', full: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', screen: 'M3 4h18v12H3zM8 20h8M12 16v4', edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
@@ -297,32 +297,39 @@
      keys: bg panel p2 (inner panel) bar (strip / hover) field line l2 (strong line) text muted faint title accent
            [ok warn bad info] (status colours; when missing, the standard ones for dark or light are used) */
   var THEMES = {
-    default: { name: 'Default', dark: { bg: '#1d1b1b', panel: '#232121', p2: '#1b1919', bar: '#2a2828', field: '#181616', line: '#343131', l2: '#454141', text: '#ece9e9', muted: '#a19c9c', faint: '#7f7977', title: '#ffffff', accent: '#f15a2c' },
+    default: { name: 'Golden Gate', dark: { bg: '#1d1b1b', panel: '#232121', p2: '#1b1919', bar: '#2a2828', field: '#181616', line: '#343131', l2: '#454141', text: '#ece9e9', muted: '#a19c9c', faint: '#7f7977', title: '#ffffff', accent: '#f15a2c' },
       light: { bg: '#f3f4f6', panel: '#ffffff', p2: '#f6f7f9', bar: '#f0f1f4', field: '#ffffff', line: '#e2e3e8', l2: '#cdd0d6', text: '#1d1f24', muted: '#5b606b', faint: '#80858f', title: '#111318', accent: '#e0491b' } },
-    amoled: { name: 'AMOLED', dark: { bg: '#000000', panel: '#0b0b0b', p2: '#070707', bar: '#141414', field: '#050505', line: '#202020', l2: '#2e2e2e', text: '#f2f2f2', muted: '#a8a8a8', faint: '#767676', title: '#ffffff', accent: '#f15a2c' },
+    amoled: { name: 'Midnight', dark: { bg: '#000000', panel: '#0b0b0b', p2: '#070707', bar: '#141414', field: '#050505', line: '#202020', l2: '#2e2e2e', text: '#f2f2f2', muted: '#a8a8a8', faint: '#767676', title: '#ffffff', accent: '#f15a2c' },
       light: { bg: '#ffffff', panel: '#ffffff', p2: '#f7f7f7', bar: '#f0f0f0', field: '#ffffff', line: '#e3e3e3', l2: '#c9c9c9', text: '#000000', muted: '#4a4a4a', faint: '#777777', title: '#000000', accent: '#e0491b' } },
-    minimal: { name: 'Minimal', dark: { bg: '#0a0a0a', panel: '#171717', p2: '#121212', bar: '#262626', field: '#0f0f0f', line: '#262626', l2: '#3a3a3a', text: '#fafafa', muted: '#a3a3a3', faint: '#737373', title: '#ffffff', accent: '#e5e5e5' },
+    minimal: { name: 'Mono', dark: { bg: '#0a0a0a', panel: '#171717', p2: '#121212', bar: '#262626', field: '#0f0f0f', line: '#262626', l2: '#3a3a3a', text: '#fafafa', muted: '#a3a3a3', faint: '#737373', title: '#ffffff', accent: '#e5e5e5' },
       light: { bg: '#fafafa', panel: '#ffffff', p2: '#f5f5f5', bar: '#f5f5f5', field: '#ffffff', line: '#e5e5e5', l2: '#d4d4d4', text: '#0a0a0a', muted: '#737373', faint: '#a3a3a3', title: '#0a0a0a', accent: '#171717' } },
-    zinc: { name: 'Zinc Blue', dark: { bg: '#09090b', panel: '#18181b', p2: '#131316', bar: '#27272a', field: '#0f0f12', line: '#27272a', l2: '#3f3f46', text: '#fafafa', muted: '#a1a1aa', faint: '#71717a', title: '#ffffff', accent: '#3b82f6' },
-      light: { bg: '#f4f4f5', panel: '#ffffff', p2: '#fafafa', bar: '#f4f4f5', field: '#ffffff', line: '#e4e4e7', l2: '#d4d4d8', text: '#09090b', muted: '#52525b', faint: '#a1a1aa', title: '#09090b', accent: '#2563eb' } },
-    wave: { name: 'Kanagawa Wave', dark: { bg: '#1f1f28', panel: '#2a2a37', p2: '#232330', bar: '#363646', field: '#1a1a22', line: '#363646', l2: '#54546d', text: '#dcd7ba', muted: '#a8a48f', faint: '#727169', title: '#ece7cb', accent: '#7e9cd8', ok: '#98bb6c', warn: '#e6c384', bad: '#e46876', info: '#7fb4ca' },
-      light: { bg: '#e5ddb0', panel: '#f2ecbc', p2: '#ece5b6', bar: '#e7dba0', field: '#f7f1c8', line: '#d5cea3', l2: '#c7bf93', text: '#545464', muted: '#6f6e66', faint: '#8a8980', title: '#43436c', accent: '#4d699b', ok: '#6f894e', warn: '#836f4a', bad: '#c84053', info: '#4e8ca2' } },
-    dragon: { name: 'Kanagawa Dragon', dark: { bg: '#181616', panel: '#1d1c19', p2: '#12120f', bar: '#282727', field: '#0d0c0c', line: '#282727', l2: '#393836', text: '#c5c9c5', muted: '#a6a69c', faint: '#737c73', title: '#e0e2df', accent: '#8ba4b0', ok: '#87a987', warn: '#c4b28a', bad: '#c4746e', info: '#8ea4a2' },
+    wave: { name: 'Kanagawa', dark: { bg: '#1f1f28', panel: '#2a2a37', p2: '#232330', bar: '#363646', field: '#1a1a22', line: '#363646', l2: '#54546d', text: '#dcd7ba', muted: '#a8a48f', faint: '#727169', title: '#ece7cb', accent: '#7e9cd8', ok: '#98bb6c', warn: '#e6c384', bad: '#e46876', info: '#7fb4ca' },
       light: { bg: '#e5ddb0', panel: '#f2ecbc', p2: '#ece5b6', bar: '#e7dba0', field: '#f7f1c8', line: '#d5cea3', l2: '#c7bf93', text: '#545464', muted: '#6f6e66', faint: '#8a8980', title: '#43436c', accent: '#4d699b', ok: '#6f894e', warn: '#836f4a', bad: '#c84053', info: '#4e8ca2' } },
     catppuccin: { name: 'Catppuccin', dark: { bg: '#11111b', panel: '#1e1e2e', p2: '#181825', bar: '#313244', field: '#181825', line: '#313244', l2: '#45475a', text: '#cdd6f4', muted: '#a6adc8', faint: '#7f849c', title: '#e6ebff', accent: '#cba6f7', ok: '#a6e3a1', warn: '#f9e2af', bad: '#f38ba8', info: '#89b4fa' },
       light: { bg: '#dce0e8', panel: '#eff1f5', p2: '#e6e9ef', bar: '#ccd0da', field: '#e6e9ef', line: '#ccd0da', l2: '#bcc0cc', text: '#4c4f69', muted: '#6c6f85', faint: '#8c8fa1', title: '#4c4f69', accent: '#8839ef', ok: '#40a02b', warn: '#b76d0b', bad: '#d20f39', info: '#1e66f5' } },
     nord: { name: 'Nord', dark: { bg: '#2e3440', panel: '#3b4252', p2: '#353b49', bar: '#434c5e', field: '#2b303b', line: '#434c5e', l2: '#4c566a', text: '#e5e9f0', muted: '#aeb6c4', faint: '#7b88a1', title: '#eceff4', accent: '#88c0d0', ok: '#a3be8c', warn: '#ebcb8b', bad: '#bf616a', info: '#81a1c1' },
-      light: { bg: '#e5e9f0', panel: '#eceff4', p2: '#e8ecf2', bar: '#d8dee9', field: '#f2f4f8', line: '#d8dee9', l2: '#c2cad8', text: '#2e3440', muted: '#4c566a', faint: '#7b88a1', title: '#2e3440', accent: '#5e81ac', ok: '#5c7d43', warn: '#9a7417', bad: '#bf616a', info: '#5e81ac' } },
-    tokyo: { name: 'Tokyo Night', dark: { bg: '#16161e', panel: '#1a1b26', p2: '#1f2030', bar: '#292e42', field: '#13131a', line: '#292e42', l2: '#3b4261', text: '#c0caf5', muted: '#a9b1d6', faint: '#565f89', title: '#dfe5ff', accent: '#7aa2f7', ok: '#9ece6a', warn: '#e0af68', bad: '#f7768e', info: '#7dcfff' },
-      light: { bg: '#d0d5e3', panel: '#e1e2e7', p2: '#d6d8df', bar: '#c4c8da', field: '#e9e9ec', line: '#c4c8da', l2: '#a8aecb', text: '#3760bf', muted: '#6172b0', faint: '#8990b3', title: '#2d4f9e', accent: '#2e7de9', ok: '#587539', warn: '#8c6c3e', bad: '#f52a65', info: '#007197' } },
-    fluent: { name: { dark: 'Fluent Dark', light: 'Fluent Light' }, dark: { bg: '#0b0d12', panel: 'rgba(24,24,27,.45)', p2: 'rgba(255,255,255,.03)', bar: 'rgba(255,255,255,.06)', field: 'rgba(0,0,0,.3)', line: 'rgba(255,255,255,.08)', l2: 'rgba(255,255,255,.14)', text: '#e2e8f0', muted: '#94a3b8', faint: '#64748b', title: '#f8fafc', accent: '#3b82f6' },
-      light: { bg: '#eef2f8', panel: 'rgba(255,255,255,.6)', p2: 'rgba(255,255,255,.45)', bar: 'rgba(15,23,42,.05)', field: 'rgba(255,255,255,.75)', line: 'rgba(15,23,42,.09)', l2: 'rgba(15,23,42,.16)', text: '#1e293b', muted: '#475569', faint: '#94a3b8', title: '#0f172a', accent: '#2563eb' } }
+      light: { bg: '#e5e9f0', panel: '#eceff4', p2: '#e8ecf2', bar: '#d8dee9', field: '#f2f4f8', line: '#d8dee9', l2: '#c2cad8', text: '#2e3440', muted: '#4c566a', faint: '#7b88a1', title: '#2e3440', accent: '#5e81ac', ok: '#5c7d43', warn: '#9a7417', bad: '#bf616a', info: '#5e81ac' } }
   };
   var STATUS = { dark: { ok: '#4ec38b', warn: '#e8b33c', bad: '#ff6b5e', info: '#79a0ee', off: '#8a8484' }, light: { ok: '#14804a', warn: '#8a5a00', bad: '#c4332a', info: '#2457c5', off: '#6f7480' } };
   var DARK_OS = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+  /* the six colours of any theme, as plain hex, for the theme maker and the export file */
+  function applyBase(p, mode, a) {
+    var d = mode === 'light' ? BOARD_LIGHT : BOARD_DARK, q = a.theme === 'default' && S.L && boardOn() ? d : p, hx = function (k) { return /^#[0-9a-f]{6}$/i.test(q[k]) ? q[k] : d[k]; };
+    return { bg: hx('bg'), panel: hx('panel'), text: hx('text'), muted: hx('muted'), line: hx('line'), accent: a.accent || hx('accent') };
+  }
   function themeName(t, mode) { return typeof t.name === 'string' ? t.name : t.name[mode] || t.name.dark; }
+  /* themes made or imported in Settings: six colours are enough, the rest is worked out from them */
+  function customPalette(t) {
+    var c = t.colors, bg = hexRgb(c.bg), pn = hexRgb(c.panel), tx = hexRgb(c.text), ln = hexRgb(c.line), m = t.mode === 'light' ? [0, 0, 0] : [255, 255, 255];
+    return { bg: c.bg, panel: c.panel, p2: mix(pn, bg, 0.5), bar: mix(pn, m, 0.06), field: mix(bg, pn, 0.3), line: c.line, l2: mix(ln, tx, 0.18), text: c.text, muted: c.muted, faint: mix(hexRgb(c.muted), bg, 0.3), title: c.text, accent: c.accent };
+  }
+  function syncThemes(a) {
+    Object.keys(THEMES).forEach(function (k) { if (k.indexOf('c-') === 0) delete THEMES[k]; });
+    (a.custom_themes || []).forEach(function (t) { var p = customPalette(t); THEMES[t.id] = { name: t.name, dark: p, light: p, force: t.mode, custom: t }; });
+  }
   function lookMode(a) {
     var t = THEMES[a.theme] || THEMES.default;
+    if (t.force) return t.force;
     if (!t.light) return 'dark';
     if (a.mode === 'system') return DARK_OS && DARK_OS.matches ? 'light' : 'dark';
     return a.mode === 'light' ? 'light' : 'dark';
@@ -330,6 +337,7 @@
   function themeAccent(a) { var t = THEMES[a.theme] || THEMES.default; return (t[lookMode(a)] || t.dark).accent; }
   function applyLook(a) {
     a = a || S.L.appearance;
+    syncThemes(a);
     var t = THEMES[a.theme] || THEMES.default, mode = lookMode(a), p = t[mode] || t.dark, st = STATUS[mode], light = mode === 'light';
     root.setAttribute('data-theme', THEMES[a.theme] ? a.theme : 'default');
     root.setAttribute('data-mode', mode);
@@ -339,8 +347,9 @@
     root.classList.toggle('translucent', !!a.translucent);
     root.setAttribute('data-motion', a.motion || 'full');
     var set = function (k, v) { root.style.setProperty(k, v); };
-    set('--g-bl', (a.glass_blur === undefined ? 26 : a.glass_blur) + 'px'); set('--g-op', (a.glass_opacity === undefined ? 42 : a.glass_opacity) + '%'); set('--g-sat', (a.glass_saturation === undefined ? 170 : a.glass_saturation) + '%');
-    if (S.L && boardOn() && a.theme === 'default' && !light) p = Object.assign({}, p, BOARD_DARK);
+    var look = function (k, d) { return a[k] === undefined ? d : a[k]; };
+    set('--g-bl', look('glass_blur', 26) + 'px'); set('--g-op', look('glass_opacity', 42) + '%'); set('--g-sat', look('glass_saturation', 170) + '%'); set('--g-exp', look('glass_exposure', 100) / 100); set('--g-con', look('glass_contrast', 100) / 100);
+    if (S.L && boardOn() && a.theme === 'default') p = Object.assign({}, p, light ? BOARD_LIGHT : BOARD_DARK);
     if (S.L && boardOn()) set('--radius', Math.max(0, Math.min(28, a.radius === undefined ? 8 : +a.radius || 0)) + 'px'); else root.style.removeProperty('--radius');
     [['--bg', 'bg'], ['--panel', 'panel'], ['--panel-2', 'p2'], ['--bar', 'bar'], ['--field', 'field'], ['--line', 'line'], ['--line-2', 'l2'], ['--text', 'text'], ['--muted', 'muted'], ['--faint', 'faint'], ['--title', 'title']]
       .forEach(function (x) { set(x[0], p[x[1]]); });
@@ -396,6 +405,8 @@
   if (DARK_OS) { var osChange = function () { if (S.L && S.L.appearance && S.L.appearance.mode === 'system' && !S.drawer) applyLook(); }; if (DARK_OS.addEventListener) DARK_OS.addEventListener('change', osChange); else DARK_OS.addListener(osChange); }
   /* custom CSS is nested under .und (CSS nesting), so it styles UnDash only; it is text, never markup */
   function applyCss(css) {
+    var ap = S.L && (S.drawer && S.drawer.cfg ? S.drawer.cfg.appearance : S.L.appearance), ct = ap && THEMES[ap.theme] && THEMES[ap.theme].custom;
+    if (ct && ct.css) css = ct.css + '\n' + (css || '');
     var st = document.getElementById('und-custom-css');
     if (!css) { if (st) st.parentNode.removeChild(st); return; }
     if (!st) { st = document.createElement('style'); st.id = 'und-custom-css'; document.head.appendChild(st); }
@@ -488,7 +499,8 @@
      moved into cards, so the live refresh paints them wherever they are. Grid: 24 columns (12 on a tablet), a row every 20 px;
      phones stack the cards in order. Removed cards stay in dashboard.board.hidden, so a new app still shows up by itself. ---- */
   var BOARD_ROW = 20, BOARD_GAP = 10, BOARD_COLS = { lg: 24, md: 12 };
-  var BOARD_DARK = { bg: '#0b0c0f', panel: '#141519', p2: '#0f1013', bar: '#1c1d22', field: '#0e0f12', line: '#24252b', l2: '#34353c', text: '#e8e8ed', muted: '#9c9da8', faint: '#70717c' };
+  var BOARD_DARK = { bg: '#101114', panel: '#1b1c20', p2: '#141518', bar: '#26272c', field: '#131417', line: '#2c2d33', l2: '#3c3d44', text: '#f2f2f4', muted: '#a3a4ad', faint: '#74757f', accent: '#ec6a35' };
+  var BOARD_LIGHT = { bg: '#eceef1', panel: '#ffffff', p2: '#f4f5f7', bar: '#ebedf0', field: '#ffffff', line: '#dcdfe4', l2: '#c8ccd3', text: '#1d1d1f', muted: '#5f6168', faint: '#86878f', accent: '#d9531e' };
   var BOARD_TABS = [['home', 'Home', 'server'], ['media', 'Media', 'play'], ['apps', 'Apps', 'grid'], ['docker', 'Docker', 'box'], ['health', 'Health', 'check']];
   function boardTab(s) { return { media: 'media', arr: 'apps', downloads: 'apps', apps: 'apps', docker: 'docker', vms: 'docker', health: 'health' }[s] || 'home'; }
   var MD = window.matchMedia ? window.matchMedia('(max-width:1100px)') : null, SM = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
@@ -503,7 +515,7 @@
       else if (sec.id === 'media') { var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; }); MEDIA_ORDER.forEach(function (id) { if (vis[id] !== false) out.push({ i: 'media:' + id, t: MEDIA[id][0], s: 'media', w: 6, h: 18, minw: 3, minh: 6 }); }); }
       else if (sec.id === 'apps') S.L.groups.forEach(function (g) { g.services.forEach(function (x) {
         if (x.zone !== 'apps' || x.hidden || (x.type === 'link' && !S.L.apps.links)) return;
-        out.push({ i: 'app:' + x.id, t: x.name, s: 'apps', w: x.type === 'link' ? 3 : 4, h: x.type === 'link' ? 2 : 7, minw: 2, minh: 2 });
+        out.push({ i: 'app:' + x.id, t: x.name, s: 'apps', link: x.type === 'link', w: x.type === 'link' ? 4 : 4, h: x.type === 'link' ? 3 : 7, minw: 2, minh: 3 });
       }); });
       else {
         var size = { alerts: [24, 6], favorites: [24, 8], arr: [12, 20], downloads: [12, 16], playing: [12, 10], requests: [12, 16], docker: [24, 24], vms: [12, 10], health: [12, 14] }[sec.id] || [12, 10];
@@ -599,8 +611,8 @@
       if (id === 'overview') return rows(list, cols === 24 ? 8 : tight ? 4 : 6, x0, width, y);
       if (id === 'media') return rows(list, wide && !tight ? 4 : 2, x0, width, y);
       if (id === 'apps') {
-        var tiles = list.filter(function (c) { return c.h > 2; }), links = list.filter(function (c) { return c.h <= 2; });
-        return rows(links, wide ? (cols === 24 ? 8 : 4) : 2, x0, width, rows(tiles, wide ? (cols === 24 ? 6 : 3) : 2, x0, width, y));
+        var tiles = list.filter(function (c) { return !c.link; }), links = list.filter(function (c) { return c.link; });
+        return rows(links, wide ? (cols === 24 ? 6 : 3) : 2, x0, width, rows(tiles, wide ? (cols === 24 ? 6 : 3) : 2, x0, width, y));
       }
       return rows(list, 1, x0, width, y);
     }
@@ -2186,7 +2198,9 @@
     x.last = j;
     var sig = JSON.stringify(j); if (x.sig === sig) return; x.sig = sig;
     clear(x.row); clear(x.link);
-    if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
+    var mt = x.el.querySelector('h3');
+    if (R.cards) { clear(mt); mt.appendChild(j.app && j.app.href ? h('a', { class: 'mhl', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name }, MEDIA[k][0], ic('open')) : document.createTextNode(MEDIA[k][0])); }
+    else if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
     if (j.error && !(j.items || []).length) { x.row.appendChild(h('div', { class: 'empty ' + (j.unconfigured ? '' : 'err-t') }, j.error)); txt(x.count, ''); return; }
     var items = k.indexOf('episodes') > 0 ? groupEps(j.items || [], k.indexOf('upcoming') === 0) : j.items || [];
     txt(x.count, String(j.items.length));
@@ -2318,6 +2332,7 @@
     txt(r.count, j.pending ? j.pending + ' pending' : '');
     (j.apps || []).forEach(function (a) {
       if (a.error) r.list.appendChild(h('div', { class: 'empty err-t' }, a.name + ': ' + a.error));
+      else if (a.href && j.apps.length === 1 && R.cards) r.link.appendChild(h('a', { class: 'btn ic sm ghost', href: a.href, target: '_blank', rel: 'noopener', title: 'Open ' + a.name, 'aria-label': 'Open ' + a.name }, ic('open')));
       else if (a.href && j.apps.length === 1) r.link.appendChild(h('a', { class: 'btn sm ghost', href: a.href, target: '_blank', rel: 'noopener', title: 'Open ' + a.name }, h('span', { class: 'lbl' }, a.name), ic('web')));
     });
     if (!j.items.length) { r.list.appendChild(h('div', { class: 'empty' }, 'No requests yet.')); return; }
@@ -2389,7 +2404,7 @@
       var x = { s: s, dot: h('span', { class: 'sdot na', role: 'img', 'aria-label': 'checking' }), info: h('span', { class: 'ai' }, 'Checking…'), extra: h('span', { class: 'ax' }), det: h('div', { class: 'adet', hidden: true }) };
       var tog = h('button', { type: 'button', class: 'arow', 'aria-expanded': 'false', onclick: function () { x.det.hidden = !x.det.hidden; tog.setAttribute('aria-expanded', x.det.hidden ? 'false' : 'true'); } },
         img(iconUrl(s.icon), 'aico', 'tag'), h('span', { class: 'an' }, s.name), x.dot, x.info, x.extra);
-      x.el = h('div', { class: 'aitem', role: 'listitem', 'data-name': s.name }, h('div', { class: 'aline' }, tog, s.href_resolved ? h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('web')) : null), x.det);
+      x.el = h('div', { class: 'aitem', role: 'listitem', 'data-name': s.name }, h('div', { class: 'aline' }, tog, s.href_resolved ? h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('open')) : null), x.det);
       r.rows[s.id] = x; r.list.appendChild(x.el);
     });
     r.body.appendChild(r.list);
@@ -2482,7 +2497,7 @@
     x.head.appendChild(h('span', { class: 'badge ' + st[1] }, busy || (j.unconfigured && !j.preview ? 'Not configured' : st[0])));
     x.head.appendChild(h('span', { class: 'grow' }));
     if (j.online && j.can_pause) x.head.appendChild(btn('', function () { dlAct(s, id, paused ? 'resume' : 'pause'); }, 'sm' + (paused ? ' okc' : ''), paused ? 'play' : 'pause', (paused ? 'Resume all in ' : 'Pause all in ') + s.name));
-    if (s.href_resolved) x.head.appendChild(h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('web')));
+    if (s.href_resolved) x.head.appendChild(h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('open')));
     if (busy) x.head.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
     if (j.error) { x.body.appendChild(h('div', { class: j.preview ? 'sm muted' : 'sm t-bad' }, j.error)); return; }
     var c = j.counts || {};
@@ -2564,7 +2579,7 @@
     var nm = href ? h('a', { class: 'nm', href: href, target: '_blank', rel: 'noopener' }, s.name) : h('span', { class: 'nm' }, s.name);
     var c = h('div', { class: 'card w ac wait' + (s.span === 2 ? ' span2' : ''), id: 'w-' + s.id, 'data-sid': s.id, 'data-name': s.name, role: 'listitem' },
       h('div', { class: 'ch' }, img(u, 'aico', 'tag'), nm, h('span', { class: 'sdot na', role: 'img', 'aria-label': 'loading' }), h('span', { class: 'sub' }),
-        href ? h('a', { class: 'btn ic sm ghost', href: href, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('web')) : null),
+        href ? h('a', { class: 'btn ic sm ghost', href: href, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('open')) : null),
       s.description ? h('div', { class: 'desc' }, s.description) : null,
       h('div', { class: 'cb' }, NATIVE[s.type] ? h('div', { class: 'muted sm' }, 'Shown in the overview now; you can remove this widget.') : h('div', { class: 'muted sm' }, 'Loading…')));
     var prev = S.svc[s.id]; if (prev) setTimeout(function () { paintService(s, prev); }, 0);
@@ -2879,10 +2894,10 @@
     var c = e.cloneNode(true); [].forEach.call(c.querySelectorAll('input,select,textarea,button,svg'), function (x) { x.remove(); });
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
-  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font zoom scale bigger', density: 'compact spacing', accent: 'colour color', colours: 'theme dark light mode color', 'card board (beta)': 'drag grid layout classic',
-    wallpaper: 'background image picture blur', 'daily wallpaper': 'pexels random photo background', animations: 'motion effects transitions skip speed reduce smooth', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'use the translucent effect': 'glass frosted apple transparent', 'glass blur': 'frosted', 'glass opacity': 'transparency frosted', 'glass saturation': 'vibrant colour', saturation: 'wallpaper background colour vibrant', contrast: 'wallpaper background', opacity: 'wallpaper background fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
+  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font zoom scale bigger', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
+    wallpaper: 'background image picture blur', 'daily wallpaper': 'pexels random photo background', animations: 'motion effects transitions skip speed reduce smooth', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
     'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
-  var SET_POPULAR = ['Corner radius', 'Text size', 'Density', 'Card board (beta)', 'Wallpaper', 'Dashboard password'];
+  var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Daily wallpaper', 'Animations', 'Dashboard password'];
   function settingsIndex(D) {
     var out = [], seen = {};
     function add(tab, label, where, hint) {
@@ -2964,14 +2979,13 @@
   function pick(build, titles) {
     return function (b, D, dirty) {
       var tmp = h('div'); build(tmp, D, dirty);
-      [].slice.call(tmp.children).forEach(function (el) {
-        var t = el.querySelector('h3'); if (t && titles.indexOf(t.textContent) >= 0) b.appendChild(el);
-      });
+      var kids = [].slice.call(tmp.children);
+      titles.forEach(function (want) { kids.forEach(function (el) { var t = el.querySelector('h3'); if (t && t.textContent === want) b.appendChild(el); }); });
     };
   }
   var SET_PAGES = {
     dashboard: ['Sections & apps', 'grid', tabDashboard],
-    appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Spacing', 'Translucent Effect', 'Daily wallpaper', 'Wallpaper'])],
+    appearance: ['Theme', 'sun', pick(tabAppearance, ['Colours', 'Cards', 'Background', 'Daily wallpaper', 'Spacing'])],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['Refresh & display', 'clock', tabSystem],
     ignored: ['Ignored alerts', 'mute', tabIgnored],
@@ -3209,20 +3223,65 @@
       modeSeg.appendChild(h('button', { type: 'button', role: 'radio', class: a.mode === m[0] ? 'on' : '', 'aria-checked': a.mode === m[0] ? 'true' : 'false', onclick: function () { a.mode = m[0]; dirty(); preview(); D.render(); } }, ic(m[2]), m[1]));
     });
     var tw = h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Theme' });
+    syncThemes(a);
     Object.keys(THEMES).forEach(function (id) {
       var t = THEMES[id], p = t[lookMode({ theme: id, mode: a.mode })] || t.dark;
       tw.appendChild(h('button', { type: 'button', class: 'theme' + (a.theme === id ? ' on' : ''), role: 'radio', 'aria-checked': a.theme === id ? 'true' : 'false',
         title: t.light ? 'Light and dark' : 'Dark only',
-        onclick: function () { a.theme = id; a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); } },
-        h('span', { class: 'pv', style: { background: id === 'fluent' ? 'radial-gradient(120% 90% at 0% 0%, rgba(59,130,246,.35), transparent 60%), ' + p.bg : p.bg } },
+        onclick: function () { a.theme = id; a.accent = ''; if (t.custom) Object.assign(a, t.custom.look); hex.value = col.value = themeAccent(a); dirty(); preview(); applyCss(a.css_enabled ? D.css : ''); D.render(); } },
+        h('span', { class: 'pv', style: { background: id === 'default' ? 'linear-gradient(150deg,#22324c,#7a3d3a 62%,#ec8a3f)' : p.bg } },
           h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.accent, flex: '0 0 18%' } })),
-        h('span', { class: 'tn' }, h('b', null, themeName(t, lookMode({ theme: id, mode: a.mode }))), t.light ? null : h('span', { class: 'muted xs' }, 'dark only'))));
+        h('span', { class: 'tn' }, h('b', null, themeName(t, lookMode({ theme: id, mode: a.mode }))), t.custom ? h('span', { class: 'muted xs' }, 'yours') : t.light ? null : h('span', { class: 'muted xs' }, 'dark only'))));
     });
+    function chosen() { var t = THEMES[a.theme] || THEMES.default; return t.custom ? t : null; }
+    function fileName(n) { return (n || 'theme').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'theme'; }
+    function getFile(accept, done) {
+      var f = h('input', { type: 'file', accept: accept, style: { display: 'none' } });
+      f.onchange = function () { var x = f.files[0]; if (!x) return; if (x.size > 400000) { toast('That file is too big.', true); return; } var r = new FileReader(); r.onload = function () { done(String(r.result), x.name); }; r.readAsText(x); };
+      root.appendChild(f); f.click(); setTimeout(function () { f.remove(); }, 60000);
+    }
+    function saveFile(name, text, type) { var l = h('a', { href: URL.createObjectURL(new Blob([text], { type: type })), download: name }); root.appendChild(l); l.click(); l.remove(); }
+    function lookNow() { var o = { translucent: !!a.translucent }; ['radius', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity'].forEach(function (k) { o[k] = a[k]; }); return o; }
+    function exportTheme() {
+      var c = chosen(), m = lookMode(a), p = (THEMES[a.theme] || THEMES.default)[m], base = applyBase(p, m, a);
+      var t = c ? c.custom : { name: themeName(THEMES[a.theme] || THEMES.default, m), mode: m, colors: base, css: '' };
+      saveFile(fileName(t.name) + '.undash-theme.json', JSON.stringify({ undash_theme: 1, name: t.name, mode: t.mode, colors: t.colors, look: lookNow(), css: t.css || '' }, null, 2), 'application/json');
+    }
+    function addTheme(t) {
+      a.custom_themes = (a.custom_themes || []).filter(function (x) { return x.id !== t.id; }).concat([t]);
+      a.theme = t.id; a.accent = ''; Object.assign(a, t.look || {}); syncThemes(a); dirty(); preview(); applyCss(a.css_enabled ? D.css : ''); D.render();
+    }
+    function importTheme() {
+      getFile('.json,application/json', function (text) {
+        var j = null; try { j = JSON.parse(text); } catch (e) { /* reported below */ }
+        if (!j || j.undash_theme !== 1 || !j.colors) { toast('That is not an UnDash theme file.', true); return; }
+        var ok = function () { addTheme({ id: 'c-' + rid(), name: String(j.name || 'Imported theme').slice(0, 40), mode: j.mode === 'light' ? 'light' : 'dark', colors: j.colors, look: j.look || {}, css: String(j.css || '') }); toast('Theme imported. Save to keep it.'); };
+        if (j.css) confirmBox('Import "' + String(j.name || 'theme').slice(0, 40) + '"?', 'This theme includes custom CSS, which can change how the dashboard looks. Only import themes you trust.', 'Import').then(function (y) { if (y) ok(); }); else ok();
+      });
+    }
+    function editTheme(t0) {
+      var nw = !t0, t = nw ? { id: 'c-' + rid(), name: 'My theme', mode: lookMode(a), colors: applyBase((THEMES[a.theme] || THEMES.default)[lookMode(a)], lookMode(a), a), look: lookNow(), css: '' } : JSON.parse(JSON.stringify(t0)), m;
+      var keep = { theme: a.theme, list: a.custom_themes || [] };
+      function live() { a.custom_themes = keep.list.filter(function (x) { return x.id !== t.id; }).concat([t]); a.theme = t.id; syncThemes(a); applyLook(a); }
+      var rows = [['bg', 'Background'], ['panel', 'Cards'], ['text', 'Text'], ['muted', 'Secondary text'], ['line', 'Lines'], ['accent', 'Accent']].map(function (x) {
+        return F(x[1], h('input', { type: 'color', value: t.colors[x[0]], 'aria-label': x[1], oninput: function (e) { t.colors[x[0]] = e.target.value; live(); } }));
+      });
+      var css = h('textarea', { rows: 7, spellcheck: 'false', 'aria-label': 'Theme CSS', placeholder: '/* Optional: CSS that comes with this theme */' }); css.value = t.css || '';
+      var back = function () { a.custom_themes = keep.list; a.theme = keep.theme; syncThemes(a); applyLook(a); };
+      m = modal(nw ? 'New theme' : 'Edit theme', h('div', null, F('Name', tIn(t, 'name', function () {}, 'My theme')),
+        F('Type', sIn(t, 'mode', live, [['dark', 'Dark'], ['light', 'Light']])), h('div', { class: 'tcols' }, rows), F('CSS', css, 'Saved with the theme and exported with it. Your own Custom CSS still applies on top.')),
+        [t0 ? btn('Delete', function () { m.close(); a.custom_themes = keep.list.filter(function (x) { return x.id !== t.id; }); a.theme = keep.theme === t.id ? 'default' : keep.theme; syncThemes(a); dirty(); preview(); D.render(); }, 'danger') : null,
+         btn('Cancel', function () { m.close(); back(); }), btn(nw ? 'Create' : 'Save', function () { m.close(); t.css = css.value; t.name = (t.name || '').trim() || 'My theme'; a.custom_themes = keep.list; addTheme(t); }, 'pri')].filter(Boolean));
+      live();
+    }
     var col, hex, cur = a.accent || themeAccent(a);
     hex = h('input', { type: 'text', value: cur, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
     col = h('input', { type: 'color', value: cur, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
     b.appendChild(set('Colours', 'Pick a colour theme and whether it is light, dark or follows your system; every theme has both. Status colours (green, amber, red) stay readable in every theme.',
       h('div', { class: 'inl', style: { 'margin-bottom': '12px' } }, h('span', { class: 'muted sm' }, 'Mode'), modeSeg), tw,
+      h('div', { class: 'inl', style: { 'margin-top': '12px' } }, btn('New theme', function () { editTheme(null); }, 'sm', 'plus', 'Start from the theme you are using'),
+        chosen() ? btn('Edit theme', function () { editTheme(chosen().custom); }, 'sm', 'edit') : null, h('span', { class: 'grow' }),
+        btn('Import', importTheme, 'sm', 'up', 'Load a theme file'), btn('Export', exportTheme, 'sm', 'download', 'Save the current theme and look as a file')),
       h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex,
         btn(a.accent ? 'Use the theme accent' : 'Theme accent in use', function () { a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); }, 'sm ghost')),
       null));
@@ -3251,11 +3310,11 @@
         oninput: function (e) { a[k] = +e.target.value; txt(out, a[k] + unit); dirty(); preview(); } }), out);
     }
     function resetTo(vals) { return btn('Reset', function () { Object.keys(vals).forEach(function (k) { a[k] = vals[k]; }); dirty(); preview(); D.render(); }, 'sm', 'restart', 'Back to the standard values'); }
-    b.appendChild(set('Translucent Effect', 'See-through glass cards that blur and tint what is behind them. Best with a wallpaper. Uses more graphics power on older devices.',
-      h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!a.translucent, onchange: function (e) { a.translucent = e.target.checked; dirty(); preview(); } }), 'Use the Translucent Effect'),
-      h('div', { class: 'grid2', style: { 'margin-top': '10px' } },
-        F('Glass blur', rng('glass_blur', 0, 60, ' px', 'Glass blur')), F('Glass opacity', rng('glass_opacity', 10, 95, ' %', 'Glass opacity'), 'Lower shows more of what is behind.'), F('Glass saturation', rng('glass_saturation', 100, 250, ' %', 'Glass saturation'))),
-      resetTo({ glass_blur: 26, glass_opacity: 42, glass_saturation: 170 })));
+    b.appendChild(set('Cards', 'How the cards look over what is behind them. These are separate from the background below.',
+      F('Translucent Effect', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!a.translucent, onchange: function (e) { a.translucent = e.target.checked; dirty(); preview(); } }), 'See-through glass cards'), 'The other card controls need this on. It uses more graphics power on older devices.'),
+      h('div', { class: 'grid2' }, F('Card blur', rng('glass_blur', 0, 60, ' px', 'Card blur')), F('Card opacity', rng('glass_opacity', 10, 95, ' %', 'Card opacity'), 'Lower shows more of what is behind.'),
+        F('Card exposure', rng('glass_exposure', 40, 160, ' %', 'Card exposure')), F('Card saturation', rng('glass_saturation', 100, 250, ' %', 'Card saturation')), F('Card contrast', rng('glass_contrast', 50, 150, ' %', 'Card contrast'))),
+      resetTo({ glass_blur: 26, glass_opacity: 42, glass_saturation: 170, glass_exposure: 100, glass_contrast: 100 })));
     var px = a.pexels, keyIn = h('input', { type: 'password', autocomplete: 'off', placeholder: D.pexelsKey ? 'stored (leave empty to keep)' : 'Paste your Pexels API key', 'aria-label': 'Pexels API key' }), keyNote = h('div', { class: 'hint', role: 'status' });
     b.appendChild(set('Daily wallpaper', 'A new photo every day from Pexels, chosen by the server. It replaces the image below while this is on. Blur and brightness apply to it too.',
       h('div', { class: 'grid2' },
@@ -3270,14 +3329,14 @@
           });
         }, 'sm')), h('div', null, 'Free at ', h('a', { href: 'https://www.pexels.com/api/', target: '_blank', rel: 'noopener' }, 'pexels.com/api'), '. Kept on the server only.', keyNote))),
       S.wallErr ? h('div', { class: 'banner bad' }, S.wallErr) : null));
-    b.appendChild(set('Wallpaper', 'Optional image behind the dashboard (https:// or a path served by Unraid).', h('div', { class: 'grid2' },
+    b.appendChild(set('Background', 'Optional image behind the dashboard (https:// or a path served by Unraid).', h('div', { class: 'grid2' },
       F('Image URL', tIn(a, 'background', pd, 'https://…')),
       F('Blur', sIn(a, 'blur_target', dirty, [['wallpaper', 'The whole wallpaper'], ['cards', 'Only behind the cards (frosted glass)']], preview), 'Frosted glass keeps the picture sharp and blurs it only where cards sit on it.'),
-      F('Blur strength', rng('blur', 0, 40, ' px', 'Blur strength')),
-      F('Saturation', rng('wall_saturation', 0, 200, ' %', 'Wallpaper saturation'), '0 is black and white.'),
-      F('Contrast', rng('wall_contrast', 50, 150, ' %', 'Wallpaper contrast')),
-      F('Opacity', rng('wall_opacity', 10, 100, ' %', 'Wallpaper opacity'), 'Lower fades it into the theme\'s background.'),
-      F('Brightness', rng('brightness', 0, 100, '%', 'Wallpaper brightness'), '0% is black, 100% the picture as it is.'))));
+      F('Background blur', rng('blur', 0, 40, ' px', 'Background blur')),
+      F('Saturation', rng('wall_saturation', 0, 200, ' %', 'Background saturation'), '0 is black and white.'),
+      F('Contrast', rng('wall_contrast', 50, 150, ' %', 'Background contrast')),
+      F('Opacity', rng('wall_opacity', 10, 100, ' %', 'Background opacity'), 'Lower fades it into the theme\'s background.'),
+      F('Exposure', rng('brightness', 0, 100, ' %', 'Background exposure'), '0% is black, 100% the picture as it is.')), resetTo({ blur: 4, brightness: 75, wall_saturation: 100, wall_contrast: 100, wall_opacity: 100 })));
     var ta = h('textarea', { rows: 14, spellcheck: 'false', 'aria-label': 'Custom CSS', placeholder: '/* Scoped to UnDash automatically. Examples: */\n.card { border-radius: 12px; }\n.metric .mv { font-size: 26px; }\n--radius: 12px;' });
     ta.value = D.css || '';
     var msg = h('div', { class: 'sm muted', role: 'status' });
@@ -3298,6 +3357,8 @@
       h('div', { class: 'inl', style: { 'margin-bottom': '8px' } },
         h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.css_enabled, onchange: function (e) { a.css_enabled = e.target.checked; dirty(); applyCss(a.css_enabled ? ta.value : ''); } }), 'Enabled'),
         h('label', { class: 'switch' }, live, 'Live preview'), h('span', { class: 'grow' }),
+        btn('Import', function () { var f = h('input', { type: 'file', accept: '.css,text/css,text/plain', style: { display: 'none' } }); f.onchange = function () { var x = f.files[0]; if (!x) return; if (x.size > 200000) { toast('That file is too big.', true); return; } var r = new FileReader(); r.onload = function () { ta.value = String(r.result); ta.dispatchEvent(new Event('input')); toast('CSS imported. Save to keep it.'); }; r.readAsText(x); }; f.click(); }, 'sm', 'up', 'Load a .css file into the editor'),
+        btn('Export', function () { var l = h('a', { href: URL.createObjectURL(new Blob([ta.value], { type: 'text/css' })), download: 'undash-custom.css' }); root.appendChild(l); l.click(); l.remove(); }, 'sm', 'download', 'Save this CSS as a file'),
         btn('Reset', function () { confirmBox('Clear the custom CSS?', 'The editor is emptied; the theme is not affected. Save to keep the change.', 'Clear', true).then(function (y) { if (y) { ta.value = ''; ta.dispatchEvent(new Event('input')); } }); }, 'sm danger', 'trash')),
       ta, h('div', { style: { 'margin-top': '6px' } }, msg)));
     check();

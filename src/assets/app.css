@@ -987,8 +987,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 @media (max-width:700px){.und.bui .wcredit{bottom:calc(72px + env(safe-area-inset-bottom))}}
 
 /* Translucent Effect: glass that tints and blurs what is behind it */
-.und.bui.translucent{--g-fill:color-mix(in srgb,#101116 calc(var(--g-op,42%) + 14%),transparent);--g-fill-2:rgba(255,255,255,.07);--g-line:rgba(255,255,255,.13);--g-shine:rgba(255,255,255,.14);--g-blur:brightness(.62) saturate(var(--g-sat,170%)) blur(var(--g-bl,26px))}
-.und.bui.translucent[data-mode=light]{--g-fill:color-mix(in srgb,#fff calc(var(--g-op,42%) + 30%),transparent);--g-fill-2:rgba(255,255,255,.5);--g-line:rgba(255,255,255,.7);--g-shine:rgba(255,255,255,.8);--g-blur:brightness(1.35) saturate(var(--g-sat,170%)) blur(var(--g-bl,26px))}
+.und.bui.translucent{--g-fill:color-mix(in srgb,#101116 calc(var(--g-op,42%) + 14%),transparent);--g-fill-2:rgba(255,255,255,.07);--g-line:rgba(255,255,255,.13);--g-shine:rgba(255,255,255,.14);--g-blur:brightness(calc(.62*var(--g-exp,1))) contrast(var(--g-con,1)) saturate(var(--g-sat,170%)) blur(var(--g-bl,26px))}
+.und.bui.translucent[data-mode=light]{--g-fill:color-mix(in srgb,#fff calc(var(--g-op,42%) + 30%),transparent);--g-fill-2:rgba(255,255,255,.5);--g-line:rgba(255,255,255,.7);--g-shine:rgba(255,255,255,.8);--g-blur:brightness(calc(1.35*var(--g-exp,1))) contrast(var(--g-con,1)) saturate(var(--g-sat,170%)) blur(var(--g-bl,26px))}
 .und.bui.translucent:not(.has-bg){background:radial-gradient(60vw 60vw at 12% 8%,color-mix(in srgb,var(--accent) 34%,transparent),transparent 62%),radial-gradient(55vw 55vw at 88% 30%,rgba(70,110,255,.26),transparent 62%),radial-gradient(60vw 60vw at 45% 100%,rgba(150,70,220,.22),transparent 62%),var(--bg);background-attachment:fixed}
 .und.bui.translucent .gc-c>.sec,.und.bui.translucent .gc-c>.mw,.und.bui.translucent .gc-c>.card.w,.und.bui.translucent .gc-m .stat,.und.bui.translucent .gc-c>.alink,.und.bui.translucent .top,.und.bui.translucent .bbar,.und.bui.translucent .mnav,.und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .menu,.und.bui.translucent .ss{background:var(--g-fill);border-color:var(--g-line);-webkit-backdrop-filter:var(--g-blur);backdrop-filter:var(--g-blur);box-shadow:inset 0 1px 0 var(--g-shine),0 8px 28px rgba(0,0,0,.16)}
 .und.bui.translucent .top{box-shadow:none;border-bottom-color:var(--g-line)}
@@ -1062,3 +1062,68 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui.translucent .drawer,.und.bui.translucent .modal,.und.bui.translucent .ss,.und.bui.translucent .menu{--g-op:78%}
 .und.bui.translucent select option{background:#1c1d22;color:#f4f4f7}
 .und.bui.translucent[data-mode=light] select option{background:#fff;color:#14151a}
+
+/* app links: real cards, not a thin strip */
+.und.bui .gc-c>.alink{min-height:50px;gap:12px;padding:0 16px;font-size:14.5px;font-weight:550;color:var(--title);border-radius:var(--radius);text-decoration:none}
+.und.bui .gc-c>.alink .aico,.und.bui .gc-c>.alink img,.und.bui .gc-c>.alink .ph{width:26px;height:26px;flex:none;object-fit:contain}
+.und.bui .gc-c>a.alink:hover{border-color:var(--line-2);transform:translateY(-1px)}
+.und.bui.translucent .gc-c>.alink{color:var(--title)}
+
+/* the premium finish: system type, soft depth, Golden Gate colour, System Settings rows */
+.und.bui{--font:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;--ease:cubic-bezier(.32,.72,0,1);font-family:var(--font);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;letter-spacing:-.003em}
+.und.bui .gc-m .stat .v,.und.bui .und-name,.und.bui .drawer .dtitle{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Inter,sans-serif}
+.und.bui.translucent[data-theme=default]:not(.has-bg){background:radial-gradient(70vw 50vw at 88% 100%,rgba(236,126,58,.55),transparent 68%),radial-gradient(60vw 50vw at 10% 100%,rgba(176,62,58,.42),transparent 70%),linear-gradient(170deg,#141b2b 0%,#232238 42%,#4a2a3a 76%,#7d3f33 100%);background-attachment:fixed}
+.und.bui.translucent[data-theme=default][data-mode=light]:not(.has-bg){background:radial-gradient(70vw 50vw at 85% 100%,rgba(244,158,92,.6),transparent 68%),radial-gradient(60vw 50vw at 10% 90%,rgba(231,120,110,.34),transparent 70%),linear-gradient(170deg,#cfdcea 0%,#e7e6ea 46%,#f5dfd0 100%);background-attachment:fixed}
+.und.bui .gc-c>.sec,.und.bui .gc-c>.mw,.und.bui .gc-c>.card.w,.und.bui .gc-m .stat{box-shadow:0 1px 2px rgba(0,0,0,.14),0 8px 24px rgba(0,0,0,.1)}
+.und.bui .board.enter .gc{animation-timing-function:var(--ease)}
+.und.bui .modal,.und.bui .drawer{animation-timing-function:var(--ease)}
+.und.bui :is(.btn,input,select,textarea,button):focus-visible{outline:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 38%,transparent)!important}
+.und.bui ::-webkit-scrollbar{width:8px;height:8px}.und.bui ::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--text) 22%,transparent);border-radius:8px;border:2px solid transparent;background-clip:padding-box}.und.bui ::-webkit-scrollbar-track{background:transparent}
+.und.bui .btn.pri,.und.bui button.btn.pri{background:var(--accent)!important;border-color:transparent!important;color:var(--accent-ink,#fff)!important;font-weight:550}
+.und.bui .seg{border:0;border-radius:calc(var(--r2) + 1px);padding:2px;gap:1px;background:color-mix(in srgb,var(--text) 9%,transparent)}
+.und.bui .seg button{border:0!important;border-radius:var(--r2)!important;padding:4px 10px!important;color:var(--muted)!important;min-height:26px}
+.und.bui .seg button.on{background:var(--panel)!important;color:var(--title)!important;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.und.bui.translucent .seg button.on{background:rgba(127,127,127,.3)!important}
+.und.bui .switch input[type=checkbox]{width:34px;height:20px;background:color-mix(in srgb,var(--text) 22%,transparent)}
+.und.bui .switch input[type=checkbox]::after{width:16px;height:16px;box-shadow:0 1px 2px rgba(0,0,0,.35)}
+.und.bui .switch input[type=checkbox]:checked::after{transform:translateX(14px)}
+/* Settings: a window with a sidebar, and grouped rows with the label left and the control right */
+.und.bui .drawer{box-shadow:0 0 0 .5px rgba(0,0,0,.4),0 30px 80px rgba(0,0,0,.5);-webkit-backdrop-filter:blur(40px) saturate(170%);backdrop-filter:blur(40px) saturate(170%)}
+.und.bui .drawer .dh{min-height:52px;padding:8px 16px;border-bottom:1px solid var(--line)}
+.und.bui .drawer .dmain{min-height:0}
+.und.bui .drawer .dt{flex-basis:230px}
+.und.bui .set{padding:4px 18px 8px;border-radius:calc(var(--radius) + 2px);box-shadow:none}
+.und.bui .set>h3{margin:14px 0 2px}.und.bui .set>.hint{margin:0 0 8px;color:var(--muted)}
+.und.bui .drawer .set>.grid2{display:block}
+.und.bui .drawer .set>.fld,.und.bui .drawer .set>.grid2>.fld{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,300px);column-gap:24px;align-items:center;margin:0;padding:10px 0;border-top:1px solid var(--line)}
+.und.bui .drawer .set>.fld>label,.und.bui .drawer .set>.grid2>.fld>label{grid-column:1;font-size:13.5px}
+.und.bui .drawer .set>.fld>:not(label):not(.hint),.und.bui .drawer .set>.grid2>.fld>:not(label):not(.hint){grid-column:2;grid-row:1/span 2}
+.und.bui .drawer .set>.fld>.hint,.und.bui .drawer .set>.grid2>.fld>.hint{grid-column:1;margin-top:2px}
+.und.bui .drawer .set>.fld .switch,.und.bui .drawer .set>.grid2>.fld .switch{margin:0;justify-content:flex-end;flex-direction:row-reverse}
+.und.bui .drawer .set>.btn{margin:8px 0 8px}
+.und.bui .themes{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))}
+.und.bui button.theme{border-radius:calc(var(--r2) + 2px)!important;padding:6px!important;border-width:1.5px!important}
+.und.bui .theme .pv{border-radius:var(--r2);border:0;height:60px}.und.bui .theme .pv i{border-radius:calc(var(--r2)*.6)}
+.und .tcols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px}
+/* phones: a floating dock */
+@media (max-width:700px){
+  .und.bui .mnav{left:10px;right:10px;bottom:calc(8px + env(safe-area-inset-bottom));padding:5px;border:1px solid var(--line);border-radius:calc(var(--radius) + 10px);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .und.bui .drawer .set>.fld,.und.bui .drawer .set>.grid2>.fld{grid-template-columns:minmax(0,1fr)}
+  .und.bui .drawer .set>.fld>:not(label):not(.hint),.und.bui .drawer .set>.grid2>.fld>:not(label):not(.hint){grid-column:1;grid-row:auto;margin-top:6px}
+  .und.bui .drawer .set>.fld .switch,.und.bui .drawer .set>.grid2>.fld .switch{justify-content:space-between;flex-direction:row-reverse}
+  .und .tcols{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* open a web UI: a quiet arrow that wakes up on hover; a Media card's title is the link */
+.und.bui a.btn.ic.ghost,.und.bui.has-bg a.btn.ic.ghost{width:28px;min-width:28px;min-height:28px;height:28px;padding:0;background:transparent!important;border:0!important;box-shadow:none!important;color:var(--muted)!important;border-radius:calc(var(--r2) + 1px)!important}
+.und.bui a.btn.ic.ghost svg{width:15px;height:15px;transition:transform var(--t1,.14s) ease}
+.und.bui a.btn.ic.ghost:hover{background:var(--accent-soft)!important;color:var(--accent-text)!important}
+.und.bui a.btn.ic.ghost:hover svg{transform:translate(1px,-1px)}
+.und.bui .mhl{display:inline-flex;align-items:center;gap:5px;color:inherit;text-decoration:none;min-width:0}
+.und.bui .mhl svg{width:13px;height:13px;color:var(--muted);opacity:0;transform:translate(-3px,3px);transition:opacity var(--t1,.14s) ease,transform var(--t1,.14s) ease}
+.und.bui .mhl:hover svg,.und.bui .mhl:focus-visible svg{opacity:1;transform:none}
+@media (hover:none){.und.bui .mhl svg{opacity:.7;transform:none}}
+@media (max-width:700px){.und.bui a.btn.ic.ghost,.und.bui.has-bg a.btn.ic.ghost{width:40px;min-width:40px;height:40px;min-height:40px}}
+
+.und.bui .drawer .set>.fld>label.switch,.und.bui .drawer .set>.grid2>.fld>label.switch{grid-column:2;grid-row:1/span 2;font-size:13px;color:var(--muted)}
+@media (max-width:700px){.und.bui .drawer .set>.fld>label.switch,.und.bui .drawer .set>.grid2>.fld>label.switch{grid-column:1;grid-row:auto;margin-top:6px}}

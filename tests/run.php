@@ -43,7 +43,16 @@ t('container update checks are on by default', $dn['update_check'] === true && u
 t('a container can skip the update check', ($dn['items']['plex']['no_update'] ?? null) === true && !isset(((array)$dn['items'])['sonarr']));
 t('unknown themes fall back to default', und_normalize(['groups' => [], 'appearance' => ['theme' => 'midnight']])['appearance']['theme'] === 'default');
 t('the new themes are accepted', und_normalize(['groups' => [], 'appearance' => ['theme' => 'catppuccin', 'mode' => 'system']])['appearance'] ['theme'] === 'catppuccin'
-  && und_normalize(['groups' => [], 'appearance' => ['theme' => 'fluent']])['appearance']['theme'] === 'fluent');
+  && und_normalize(['groups' => [], 'appearance' => ['theme' => 'nord']])['appearance']['theme'] === 'nord');
+t('themes that were removed become the closest one', und_normalize(['groups' => [], 'appearance' => ['theme' => 'tokyo']])['appearance']['theme'] === 'nord' && und_normalize(['groups' => [], 'appearance' => ['theme' => 'zinc']])['appearance']['theme'] === 'minimal'
+  && und_normalize(['groups' => [], 'appearance' => ['theme' => 'dragon']])['appearance']['theme'] === 'wave' && und_normalize(['groups' => [], 'appearance' => ['theme' => 'fluent']])['appearance']['theme'] === 'default');
+$ct = und_normalize(['groups' => [], 'appearance' => ['theme' => 'c-abcd1234', 'custom_themes' => [
+  ['id' => 'c-abcd1234', 'name' => ' Sunset ', 'mode' => 'light', 'colors' => ['bg' => '#FFEEDD', 'accent' => 'red;}body{display:none'], 'look' => ['radius' => 99, 'translucent' => 1, 'evil' => 1], 'css' => '@import url(http://x); .card{color:red}'],
+  ['id' => '../../etc', 'name' => 'x'], 'junk']]])['appearance'];
+$ctt = $ct['custom_themes'];
+t('a custom theme is kept and can be selected', count($ctt) === 1 && $ct['theme'] === 'c-abcd1234' && $ctt[0]['name'] === 'Sunset' && $ctt[0]['mode'] === 'light', json_encode($ct));
+t('a custom theme keeps only clean colours, limits and CSS', $ctt[0]['colors']['bg'] === '#ffeedd' && $ctt[0]['colors']['accent'] === '#e8622c' && $ctt[0]['look']['radius'] === 28 && !isset($ctt[0]['look']['evil']) && strpos($ctt[0]['css'], 'url(') === false && strpos($ctt[0]['css'], '.card') !== false, json_encode($ctt));
+t('a deleted custom theme falls back to the default', und_normalize(['groups' => [], 'appearance' => ['theme' => 'c-00000000']])['appearance']['theme'] === 'default');
 t('mode is dark, light or system', und_normalize(['groups' => [], 'appearance' => ['mode' => 'neon']])['appearance']['mode'] === 'dark'
   && und_normalize(['groups' => [], 'appearance' => ['mode' => 'system']])['appearance']['mode'] === 'system');
 $la = und_normalize(['groups' => [], 'appearance' => ['theme' => 'light', 'accent' => '#123456']])['appearance'];
@@ -971,7 +980,7 @@ t('a saved board survives loading the settings', und_normalize($c)['dashboard'][
 
 $c = und_default_config(); $c['appearance']['radius'] = 500;
 t('the corner radius stays inside its limits', und_normalize($c)['appearance']['radius'] === 28 && und_default_config()['appearance']['radius'] === 8);
-t('the Translucent Effect is off by default', und_default_config()['appearance']['translucent'] === false && und_normalize(['appearance' => ['translucent' => 1]] + und_default_config())['appearance']['translucent'] === true);
+t('the Translucent Effect is on by default and can be turned off', und_default_config()['appearance']['translucent'] === true && und_normalize(['appearance' => ['translucent' => false]] + und_default_config())['appearance']['translucent'] === false);
 $m = und_default_config(); $m['appearance']['motion'] = 'warp';
 t('an unknown animation setting falls back to full', und_normalize($m)['appearance']['motion'] === 'full');
 $m = und_default_config(); $m['appearance']['glass_opacity'] = 0; $m['appearance']['wall_saturation'] = 900; $m['appearance']['glass_blur'] = -5;
