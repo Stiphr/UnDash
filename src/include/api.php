@@ -199,6 +199,8 @@ switch ($action) {
     } elseif ($kind === 'docker_view' || $kind === 'vms_view') {
       $k = $kind === 'docker_view' ? 'docker' : 'vms';
       $cfg[$k] = array_merge($cfg[$k], array_intersect_key($val, ['layout' => 1, 'sort' => 1, 'hide_stopped' => 1, 'view' => 1, 'filter' => 1, 'selected' => 1, 'columns' => 1]));
+    } elseif ($kind === 'board') {
+      $cfg['dashboard']['board'] = und_board_clean(array_intersect_key($val, ['on' => 1, 'compact' => 1, 'lg' => 1, 'md' => 1, 'hidden' => 1]) + (array)($cfg['dashboard']['board'] ?? []));
     } elseif ($kind === 'apps_view') {
       if (isset($val['headers'])) $cfg['apps']['headers'] = (bool)$val['headers'];
     } elseif ($kind === 'group') {

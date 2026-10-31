@@ -133,6 +133,65 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .sec-h h2 button svg{width:15px;height:15px;color:var(--faint);transition:transform .15s}
 .und .sec.closed .sec-h h2 button svg{transform:rotate(-90deg)}.und .sec.closed .sec-b{display:none}
 .und .sec[hidden]{display:none}
+/* the card board */
+.und .sections.host{display:none}
+/* the board's look: near-black page, big soft cards, room to breathe, large numbers, pill buttons */
+.und:has(.board){--radius:18px;--bg:#0b0b0d;--panel:#151517;--bar:#1e1e21;--field:#101012;--line:#232326;--line-2:#303034;--shadow:none}
+.und:has(.board) .btn{border-radius:999px!important}
+.und:has(.board) .top .brand,.und:has(.board) .top .live,.und:has(.board) .top .search input{border-radius:999px}
+.und .gc-c>.sec{padding:14px 16px}
+.und .gc-c>.sec>.sec-h{margin-bottom:10px}
+.und .gc-c>.sec>.sec-h h2,.und .gc-c>.mw>.mh h3{font-size:15px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--title)}
+.und .gc-c>.mw{padding:14px 6px 8px}.und .gc-c>.mw>.mh{padding:0 10px 10px}
+.und .gc-m .stat{padding:12px 16px;border:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+.und .gc-m .stat .sp{height:22px;opacity:.75}
+.und .gc-m .stat .k{font-size:12px;font-weight:500;text-transform:none;letter-spacing:0}
+.und .gc-m .stat .v{font-size:clamp(18px,1.55vw,24px);font-weight:600;letter-spacing:-.02em}
+.und .gc-c .card .card,.und .gc-c>.sec .card{background:color-mix(in srgb,var(--bar) 55%,transparent);border-color:transparent;border-radius:12px}
+.und .gc-c>.card.w{padding:14px 16px}
+.und .bwrap{position:relative}
+.und .board{--gg:10px;--rp:20px;position:relative;height:calc(var(--rows,0)*var(--rp) - var(--gg))}
+.und .gc{position:absolute;left:calc(var(--x)*(100% + var(--gg))/var(--cols));top:calc(var(--y)*var(--rp));width:calc(var(--w)*(100% + var(--gg))/var(--cols) - var(--gg));height:calc(var(--h)*var(--rp) - var(--gg));transition:left .18s ease,top .18s ease,width .18s ease,height .18s ease;min-width:0}
+.und .gc[hidden]{display:none}
+.und .gc-c{height:100%;min-width:0;overflow:hidden;border-radius:var(--radius)}
+.und .gc-c>*{height:100%;box-sizing:border-box;width:100%}
+.und .gc-c>.sec{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;margin:0}
+.und .gc-c>.sec>.sec-h{flex:none}
+.und .gc-c>.sec>.sec-h h2 button{cursor:default}.und .gc-c>.sec>.sec-h h2 button svg{display:none}
+.und .gc-c>.sec>.sec-b{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.und .gc-c>.mw{display:flex;flex-direction:column}.und .gc-c>.mw>.mlist{flex:1;min-height:0;max-height:none!important;height:auto!important}
+.und .gc-c>.card.w{overflow:auto;scrollbar-width:thin}
+.und .gc-c>.alink{display:flex;align-items:center}
+.und .gc-m .stat{margin:0}
+.und .bdetail{position:absolute;z-index:40;max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.und .bbar{position:sticky;top:8px;z-index:50;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:8px 12px;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,.3)}
+.und .board.edit{min-height:60vh;background-image:linear-gradient(to right,color-mix(in srgb,var(--line) 45%,transparent) 1px,transparent 1px);background-size:calc((100% + var(--gg))/var(--cols)) 100%}
+.und .board.edit .gc{cursor:grab;touch-action:none;outline:1px dashed var(--line-2);outline-offset:1px;border-radius:var(--radius)}
+.und .board.edit .gc:focus-visible,.und .board.edit .gc:hover{outline:2px solid var(--accent)}
+.und .board.edit .gc-c{pointer-events:none;user-select:none;opacity:.8}
+.und .board.edit .gc-c>[hidden]{display:flex!important}
+.und .gc-t{position:absolute;top:4px;left:6px;right:6px;display:flex;align-items:center;gap:4px;padding:2px 2px 2px 8px;font-size:12px;font-weight:600;background:var(--bar);border-radius:8px;opacity:0;transition:opacity .12s;min-height:26px}
+.und .gc-t>.ell{flex:1;min-width:0}
+.und .gc:hover>.gc-t,.und .gc:focus-within>.gc-t,.und .gc:focus>.gc-t{opacity:1}
+.und .gc.drag{z-index:30;cursor:grabbing;transition:none;box-shadow:0 14px 34px rgba(0,0,0,.5);opacity:.92}
+.und .gc.meas{height:auto!important;transition:none}
+.und .gc.meas .gc-c,.und .gc.meas .gc-c>*,.und .gc.meas .sec-b,.und .gc.meas .card.w{height:auto!important;overflow:visible!important}
+.und .gc.meas .mlist{max-height:var(--media-h,372px)!important}
+.und .gph{position:absolute;left:calc(var(--x)*(100% + var(--gg))/var(--cols));top:calc(var(--y)*var(--rp));width:calc(var(--w)*(100% + var(--gg))/var(--cols) - var(--gg));height:calc(var(--h)*var(--rp) - var(--gg));background:color-mix(in srgb,var(--accent) 18%,transparent);border:2px dashed var(--accent);border-radius:var(--radius);box-sizing:border-box;transition:left .12s,top .12s,width .12s,height .12s}
+.und .rh{position:absolute;z-index:5;touch-action:none}
+.und .rh.e{top:12px;bottom:12px;right:-4px;width:10px;cursor:ew-resize}
+.und .rh.s{left:12px;right:12px;bottom:-4px;height:10px;cursor:ns-resize}
+.und .rh.se{right:-2px;bottom:-2px;width:18px;height:18px;cursor:nwse-resize;border-right:3px solid var(--accent);border-bottom:3px solid var(--accent);border-radius:0 0 8px 0}
+.und.dragging,.und.dragging *{user-select:none!important}
+.und .badds{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
+.und .badd{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:13px}
+.und .badd:hover,.und .badd:focus-visible{border-color:var(--accent)}.und .badd svg{width:14px;height:14px}
+.und .board.flow{height:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--gg)}
+.und .board.flow .gc{position:static;width:auto;height:auto;grid-column:1/-1}.und .board.flow .gc-m{grid-column:auto}
+.und .board.flow .gc-c{height:auto}.und .board.flow .gc-c>*{height:auto}
+.und .board.flow .gc-c>.sec>.sec-b{overflow:visible}.und .board.flow .gc-c>.mw>.mlist{max-height:var(--media-h,372px)!important}
+@media (max-width:1100px){.und .bhint{display:none}}
+@media (max-width:700px){.und .btn.bedit{display:none!important}}
 /* Settings > Theme > Section names off: no names; a header with buttons keeps them, an empty one goes; collapsed sections keep theirs */
 .und.no-sec-names .sec:not(.closed)>.sec-h>h2{display:none}
 .und.no-sec-names .sec:not(.closed)>.sec-h:not(:has(.tools>:not(:empty):not([hidden]))){display:none}

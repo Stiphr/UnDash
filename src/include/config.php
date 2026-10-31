@@ -36,6 +36,26 @@ function und_types() {
   ];
 }
 
+/** The card board: on, snap cards upward (compact), a layout per screen size ([{i, x, y, w, h}]; lg 24 columns, md 12) and the
+ *  cards taken off it. Empty layouts are worked out by the page, which knows the cards. Only ids and numbers are kept. */
+function und_board_clean($b) {
+  $b = is_array($b) ? $b : [];
+  $id = function ($v) { return is_string($v) && preg_match('/^[a-z]+(:[a-z0-9_]{1,40})?$/', $v); };
+  $list = function ($l, $cols) use ($id) {
+    $out = []; $seen = [];
+    foreach (array_slice(is_array($l) ? $l : [], 0, 300) as $c) {
+      if (!is_array($c) || !$id($c['i'] ?? null) || isset($seen[$c['i']])) continue;
+      $seen[$c['i']] = 1;
+      $w = max(1, min($cols, (int)($c['w'] ?? 1)));
+      $out[] = ['i' => $c['i'], 'x' => max(0, min($cols - $w, (int)($c['x'] ?? 0))), 'y' => max(0, min(5000, (int)($c['y'] ?? 0))), 'w' => $w, 'h' => max(1, min(200, (int)($c['h'] ?? 1)))];
+    }
+    return $out;
+  };
+  return ['on' => array_key_exists('on', $b) ? !empty($b['on']) : true, 'compact' => array_key_exists('compact', $b) ? !empty($b['compact']) : true,
+          'lg' => $list($b['lg'] ?? [], 24), 'md' => $list($b['md'] ?? [], 12),
+          'hidden' => array_values(array_unique(array_filter(array_slice(is_array($b['hidden'] ?? null) ? $b['hidden'] : [], 0, 300), $id)))];
+}
+
 /** Dashboard sections, in their default order. */
 function und_section_ids() { return ['overview', 'alerts', 'favorites', 'media', 'arr', 'downloads', 'playing', 'requests', 'apps', 'docker', 'vms', 'health']; }
 
@@ -63,7 +83,7 @@ function und_default_config() {
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
-    'dashboard' => ['sections' => $sections, 'metrics' => $metrics],
+    'dashboard' => ['sections' => $sections, 'metrics' => $metrics, 'board' => und_board_clean([])],
     'docker' => ['layout' => 'grid', 'view' => 'compact', 'filter' => 'running', 'selected' => [], 'columns' => 0, 'sort' => 'name', 'show' => ['cpu', 'memory', 'update'], 'hide_stopped' => false, 'update_check' => true, 'items' => new stdClass()],
     'vms' => ['layout' => 'list', 'show' => ['status', 'cpus', 'memory'], 'items' => new stdClass()],
     'groups' => [
@@ -418,7 +438,7 @@ function und_normalize(array $c) {
     }
     $groups[] = $out;
   }
-  return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics], 'media' => $media, 'downloads' => $downloads, 'requests' => $requests, 'apps' => $apps,
+  return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics, 'board' => und_board_clean($db['board'] ?? [])], 'media' => $media, 'downloads' => $downloads, 'requests' => $requests, 'apps' => $apps,
           'docker' => $docker, 'vms' => $vms, 'groups' => $groups];
 }
 
