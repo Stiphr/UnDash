@@ -459,7 +459,7 @@
   /* ================= shell ================= */
   function logo() {
     var s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 64 64'); s.setAttribute('class', 'logo'); s.setAttribute('aria-hidden', 'true');
-    [['0', '0', '64', '64', '14', 'var(--accent)', '1'], ['12', '12', '18', '24', '4', '#fff', '1'], ['34', '12', '18', '12', '4', '#fff', '.85'], ['34', '28', '18', '24', '4', '#fff', '1'], ['12', '40', '18', '12', '4', '#fff', '.85']].forEach(function (r) {
+    [['0', '0', '64', '64', '14', 'var(--accent)', '1'], ['12', '12', '18', '24', '4', 'var(--accent-ink)', '1'], ['34', '12', '18', '12', '4', 'var(--accent-ink)', '.85'], ['34', '28', '18', '24', '4', 'var(--accent-ink)', '1'], ['12', '40', '18', '12', '4', 'var(--accent-ink)', '.85']].forEach(function (r) {
       var e = document.createElementNS(SVGNS, 'rect'); e.setAttribute('x', r[0]); e.setAttribute('y', r[1]); e.setAttribute('width', r[2]); e.setAttribute('height', r[3]); e.setAttribute('rx', r[4]); e.setAttribute('fill', r[5]); e.setAttribute('opacity', r[6]); s.appendChild(e);
     });
     return s;

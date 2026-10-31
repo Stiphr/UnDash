@@ -1221,3 +1221,4 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .gc-arr .sec-b{margin:0 -10px;padding:0 10px}.und.bui .arr{margin:0 -10px}.und.bui .aline{padding-right:4px}
 .und.bui .gc-docker .sec-b{margin:0 -8px;padding:0 8px}.und.bui .gc-docker .cgrid{margin:0 -8px}
 .und.bui .gc-c>.sec>.sec-b>:last-child{margin-bottom:0}
+.und.bui .switch input[type=checkbox]:checked::after{background:var(--accent-ink)}
