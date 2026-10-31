@@ -13,6 +13,9 @@
   --ok:#4ec38b;--warn:#e8b33c;--bad:#ff6b5e;--info:#79a0ee;--off:#8a8484;
   --ok-soft:rgba(78,195,139,.13);--warn-soft:rgba(232,179,60,.14);--bad-soft:rgba(255,107,94,.13);
   --shadow:0 1px 2px rgba(0,0,0,.25);--radius:10px;--gap:12px;--pad:14px;
+  /* tokens: a 4 px spacing scale, three radii, the stacking order and one focus ring, so new rules never invent their own */
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--r-sm:6px;--r-md:10px;--r-lg:14px;
+  --z-menu:10002;--z-modal:10000;--z-drawer:9501;--z-toast:10003;--focus:0 0 0 3px color-mix(in srgb,var(--accent) 38%,transparent);
   --font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   color:var(--text);font:14px/1.45 var(--font);margin:0;padding:var(--safe-y) var(--safe-x) calc(var(--safe-y) + 24px);text-align:left;position:relative;isolation:isolate;-webkit-text-size-adjust:100%}
 /* inside Unraid's page a theme with its own background gets a little inner margin; the full-window page always has its own */
@@ -57,7 +60,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .top .search{flex:1 1 220px;max-width:440px;margin-left:auto;position:relative}
 .und .top .search input{width:100%;padding-left:32px!important}
 .und .sbox{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:9000;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);box-shadow:0 12px 32px rgba(0,0,0,.35);max-height:min(70vh,560px);overflow:auto;padding:6px;min-width:min(420px,calc(100vw - 24px))}
-.und[data-theme=fluent] .sbox{background:rgba(17,19,24,.97)}.und[data-theme=fluent][data-mode=light] .sbox{background:rgba(255,255,255,.98)}
 .und .sbox .sb-h{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:4px 6px 8px}.und .sbox .sb-h>svg{width:14px;height:14px;flex:none}
 .und .sbox .sb-r{display:flex;align-items:center;gap:12px;padding:8px;border-radius:calc(var(--radius) - 2px)}
 .und .sbox .sb-r{cursor:pointer;padding:6px 8px;gap:10px}.und .sbox .sb-r.sel{background:var(--bar)}
@@ -726,33 +728,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .pick-list .oi .t{display:flex;align-items:center;gap:6px;flex:1.3 1 0;min-width:70px}
 @media (max-width:600px){.und .pick-list .oi input[type=text]{display:none}}.und .pick-list .oi .t b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* ---------- Fluent Dark: frosted glass with blue accents ---------- */
-.und[data-theme=fluent]{background:radial-gradient(1100px 600px at 0% -10%,rgba(59,130,246,.14),transparent 60%),radial-gradient(900px 520px at 100% 0%,rgba(99,102,241,.10),transparent 60%),var(--bg)}
-.und[data-theme=fluent].has-bg{background:transparent}
-.und[data-theme=fluent] .card,.und[data-theme=fluent] button.stat,.und[data-theme=fluent] .ci,.und[data-theme=fluent] .alert,.und[data-theme=fluent] .panel,.und[data-theme=fluent] .olist{
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:10px;box-shadow:0 4px 6px -1px rgba(0,0,0,.2);transition:background-color .3s,border-color .3s,box-shadow .3s}
-.und[data-theme=fluent] .card:hover,.und[data-theme=fluent] button.stat:hover,.und[data-theme=fluent] .ci:hover,.und[data-theme=fluent] a.mi:hover{background-color:rgba(39,43,48,.5);border-color:rgba(59,130,246,.8);box-shadow:0 0 15px rgba(59,130,246,.3)}
-.und[data-theme=fluent] .sec-h h2,.und[data-theme=fluent] .nm,.und[data-theme=fluent] .cname{font-weight:500}
-.und[data-theme=fluent] .aico,.und[data-theme=fluent] .ci img,.und[data-theme=fluent] .w .ch .ico{background:rgba(255,255,255,.05);border-radius:6px;opacity:.9;transition:transform .3s cubic-bezier(.4,0,.2,1),filter .3s,background-color .3s}
-.und[data-theme=fluent] .card:hover .aico,.und[data-theme=fluent] .ci:hover img,.und[data-theme=fluent] a:hover .aico{opacity:1;background:rgba(59,130,246,.15);transform:scale(1.08);filter:drop-shadow(0 0 6px rgba(59,130,246,.8))}
-.und[data-theme=fluent] .meter,.und[data-theme=fluent] .progress{background:rgba(0,0,0,.3);border-radius:10px;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
-.und[data-theme=fluent] .meter i,.und[data-theme=fluent] .progress i,.und[data-theme=fluent] .stat .bar i{background:linear-gradient(90deg,#1e3a8a,#3b82f6,#60a5fa);border-radius:10px;box-shadow:0 0 8px rgba(59,130,246,.4)}
-.und[data-theme=fluent] .meter i.warn,.und[data-theme=fluent] .stat.warn .bar i{background:linear-gradient(90deg,#92400e,var(--warn))}
-.und[data-theme=fluent] .meter i.bad,.und[data-theme=fluent] .stat.bad .bar i{background:linear-gradient(90deg,#7f1d1d,var(--bad))}
-/* overlays stay solid so text over moving content is readable */
-.und[data-theme=fluent] .modal,.und[data-theme=fluent] .menu,.und[data-theme=fluent] .toast{background:rgba(17,19,24,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-color:rgba(255,255,255,.12)}
-.und[data-theme=fluent] *{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.12) transparent}
-
-/* Fluent Light: the same glass look on a light background */
-.und[data-theme=fluent][data-mode=light]{background:radial-gradient(1100px 600px at 0% -10%,rgba(37,99,235,.12),transparent 60%),radial-gradient(900px 520px at 100% 0%,rgba(99,102,241,.10),transparent 60%),var(--bg)}
-.und[data-theme=fluent][data-mode=light] .card,.und[data-theme=fluent][data-mode=light] button.stat,.und[data-theme=fluent][data-mode=light] .ci,.und[data-theme=fluent][data-mode=light] .alert,.und[data-theme=fluent][data-mode=light] .panel,.und[data-theme=fluent][data-mode=light] .olist{box-shadow:0 4px 12px -4px rgba(15,23,42,.12)}
-.und[data-theme=fluent][data-mode=light] .card:hover,.und[data-theme=fluent][data-mode=light] button.stat:hover,.und[data-theme=fluent][data-mode=light] .ci:hover,.und[data-theme=fluent][data-mode=light] a.mi:hover{background-color:rgba(255,255,255,.85);border-color:rgba(37,99,235,.6);box-shadow:0 0 15px rgba(37,99,235,.18)}
-.und[data-theme=fluent][data-mode=light] .aico,.und[data-theme=fluent][data-mode=light] .ci img,.und[data-theme=fluent][data-mode=light] .w .ch .ico{background:rgba(15,23,42,.04)}
-.und[data-theme=fluent][data-mode=light] .meter,.und[data-theme=fluent][data-mode=light] .progress{background:rgba(15,23,42,.08);box-shadow:inset 0 1px 2px rgba(15,23,42,.12)}
-.und[data-theme=fluent][data-mode=light] .meter i,.und[data-theme=fluent][data-mode=light] .progress i,.und[data-theme=fluent][data-mode=light] .stat .bar i{background:linear-gradient(90deg,#1d4ed8,#3b82f6,#60a5fa);box-shadow:0 0 6px rgba(37,99,235,.3)}
-.und[data-theme=fluent][data-mode=light] .modal,.und[data-theme=fluent][data-mode=light] .menu,.und[data-theme=fluent][data-mode=light] .toast{background:rgba(255,255,255,.97);border-color:rgba(15,23,42,.12)}
-.und[data-theme=fluent][data-mode=light] *{scrollbar-color:rgba(15,23,42,.2) transparent}
-
 /* Settings > Apps editor, type picker, preview bar, export rows */
 .und .ae-bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}.und .ae-bar input[type=search]{flex:1 1 200px;max-width:320px}
 .und .olist .oi-w{border-bottom:1px solid var(--line)}.und .olist .oi-w:last-child{border-bottom:0}.und .olist .oi-w>.oi{border-bottom:0}
@@ -1375,3 +1350,26 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .zticks .on{color:var(--ok);font-weight:600}
 .und.bui .ci svg.logo{padding:0!important;background:none!important;box-shadow:none!important;border-radius:23%;width:30px;height:30px;flex:none}
 
+
+/* ---------- Settings: accent presets, your own wallpaper, values out of range, page header ---------- */
+.und .swatches{display:flex;gap:var(--s2);flex-wrap:wrap}
+.und .sw{all:unset;box-sizing:border-box;width:26px;height:26px;border-radius:50%;background:var(--sw);cursor:pointer;border:2px solid transparent;box-shadow:inset 0 0 0 1px rgba(0,0,0,.22)}
+.und .sw.on{border-color:var(--title);box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--sw)}
+.und .sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.und .acc-pick{gap:var(--s3)}.und .acc-row{margin-top:var(--s2)}
+.und .acc-now{width:18px;height:18px;border-radius:50%;background:var(--accent);flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.22)}
+.und .wallup{display:flex;flex-direction:column;gap:var(--s2);min-width:0}
+.und .wall-pv{display:block;width:100%;max-width:300px;aspect-ratio:16/9;object-fit:cover;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--panel-2)}
+.und .wall-pv.empty{display:grid;place-items:center;color:var(--faint);font-size:12.5px}
+.und .wall-st{font-size:12px;color:var(--muted)}.und .wall-st:empty{display:none}
+.und input.invalid,.und input[aria-invalid=true]{border-color:var(--bad)!important}
+.und .verr{color:var(--bad);font-size:12px}
+.und .dhead{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s4)}.und .dhead .dtitle{margin:0;flex:1;min-width:0}
+.und.bui .drawer .set>.fld>.verr,.und.bui .drawer .set>.grid2>.fld>.verr{grid-column:1;grid-row:auto;margin-top:2px}
+.und.bui .drawer .set>.fld>.wallup,.und.bui .drawer .set>.grid2>.fld>.wallup{grid-column:1/-1;grid-row:auto}
+.und.bui .drawer .set>.fld>.acc-pick,.und.bui .drawer .set>.grid2>.fld>.acc-pick{grid-column:1/-1;grid-row:auto;flex-wrap:wrap}
+.und .df .bad-t{color:var(--bad)}
+/* a card's title never breaks in two on a phone; its tools go to the next line instead */
+@media (max-width:700px){.und.bui .board.flow .gc-c>.sec>.sec-h h2{white-space:nowrap}}
+/* phones: the Settings pages are one scrolling row of pills, not a 230 px tall block */
+@media (max-width:700px){.und.bui .drawer .dt{flex-basis:auto;flex:none;flex-direction:row;overflow-x:auto}.und.bui .drawer .dt .dg{display:none}.und.bui .drawer .dt button{flex:none;white-space:nowrap}}

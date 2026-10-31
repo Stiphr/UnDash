@@ -82,6 +82,8 @@ Environment variables:
 | `UNDASH_PASSWORD` | | dashboard password; when set, it replaces the one chosen in the browser |
 | `UNDASH_PORT` | 9099 | the port inside the container (normally leave it and change the host port) |
 | `PHP_CLI_SERVER_WORKERS` | 12 | parallel requests |
+| `UNDASH_TLS_VERIFY` | | `1` checks the certificate of every https:// app address (off by default: LAN apps mostly use self-signed certificates) |
+| `UNDASH_ALLOWED_HOSTS` | | host names that may open a dashboard that has no password (see the template) |
 
 ## 3. First start
 
@@ -136,4 +138,5 @@ run it by hand or push a version tag.
 * The dashboard password is stored as a hash; 5 wrong attempts lock an address out for 15 minutes; sessions are
   HttpOnly, SameSite=Strict cookies with a CSRF token; a strict Content-Security-Policy is sent.
 * The health check (`/health`) answers "ok" and nothing else.
+* The wallpaper you upload in Settings is checked by its bytes (JPEG, PNG or WebP only, at most 6 MB and 8192 px), kept in `/config/data/wallpaper` with mode 600 and served only to a signed-in browser.
 * Plain HTTP: keep it on your LAN, or put it behind a reverse proxy with HTTPS.
