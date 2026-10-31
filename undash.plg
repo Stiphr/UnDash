@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name    "undash">
 <!ENTITY author  "Stiphr">
-<!ENTITY version "0.9.6">
+<!ENTITY version "0.9.7">
 <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
 <!ENTITY flash   "/boot/config/plugins/&name;">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg">
@@ -10,6 +10,17 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" launch="UnDash" min="6.12.0" icon="undash.png" support="https://github.com/Stiphr/UnDash/issues">
 
 <CHANGES>
+###0.9.7
+- Docker version: the background network reads stopped running all the time. The once-a-minute alert check counted as an open page, so they never paused when no dashboard was open.
+- Docker version: a UPS the Unraid API cannot read (NUT, or a key without UPS access) is asked for once every 10 minutes instead of every 5 seconds, which filled Unraid's API log with errors. Test connection shows this as optional instead of in red.
+- Docker version: a container in a restart loop can be stopped or restarted. The action was refused because the API reports such a container as exited.
+- Docker version: the action history is kept in /config, so it survives an UnDash update.
+- Docker version: a new API address or key also clears the remembered server name and network data.
+- After UnDash is updated or restarted, an open page loads again by itself instead of failing every refresh until you reload it. It waits if Settings is open.
+- Container icons served over plain http (a LAN address) are no longer blocked.
+- A second update of the same container is recorded in the history (only the first one was).
+- Faster: the dashboard's files are cached by the browser and compressed, and each refresh sends about 8 times less data.
+
 ###0.9.6
 - Docker version: a new API key with the listed permissions no longer leaves the System section empty with "The API key is missing a permission: Forbidden resource". UnDash asked for the server name through a part of the API (vars) that is not on the list; it now uses the host name from Info.
 
@@ -252,7 +263,7 @@ $und_v = '?v=' . (int)@filemtime('/usr/local/emhttp/plugins/undash/assets/app.js
 if (!defined('UND_LIB_LOADED')) {
 define('UND_LIB_LOADED', 1);
 
-define('UND_VERSION', '0.9.6');
+define('UND_VERSION', '0.9.7');
 define('UND_NAME',    'UnDash');
 /*
  * Two ways to run the same code:
@@ -344,8 +355,7 @@ function und_bin($name) {
  */
 function und_spawn(array $argv, $log) {
   if (isset($GLOBALS['UND_SPAWN_MOCK'])) { call_user_func($GLOBALS['UND_SPAWN_MOCK'], $argv, $log); return true; }
-  @unlink($log . '.done');
-  @unlink($log . '.pid');
+  foreach (['.done', '.pid', '.recorded'] as $x) @unlink($log . $x);
   @file_put_contents($log, '');
   $cmd = '';
   foreach ($argv as $a) $cmd .= ($cmd === '' ? '' : ' ') . escapeshellarg($a);
@@ -445,7 +455,7 @@ foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', '
 }
 unset($__m, $__f);
 ]]></INLINE>
-<SHA256>ca783835a2c09bd8a4f176899b2afd9490e61b29edc159c7b888aa5ab621a16a</SHA256>
+<SHA256>b855dedc9061254f7f0cab16fb6d8a2a15c7aa3b43e1e664323ac80d87758ab3</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/config.php" Mode="0644">
@@ -2847,9 +2857,12 @@ function und_lock($target) {
 }
 function und_unlock($fp) { if (is_resource($fp)) { @flock($fp, LOCK_UN); @fclose($fp); } }
 
-/** Append to the recent-operation history (newest 100, kept in RAM until reboot). Messages are redacted. */
+/** The recent-operation history: in RAM in the plugin (no flash wear), in /config in the Docker version, where /tmp is lost with every image update. */
+function und_history_file() { return und_api_mode() ? und_data_dir() . '/history.json' : und_tmp('history.json'); }
+
+/** Append to the history (newest 100). Messages are redacted. */
 function und_history_add($kind, $target, $op, $ok, $msg = '') {
-  $f = und_tmp('history.json');
+  $f = und_history_file();
   $fp = @fopen($f . '.lock', 'c');
   if ($fp) flock($fp, LOCK_EX);
   $h = und_read_json($f, []);
@@ -2857,7 +2870,7 @@ function und_history_add($kind, $target, $op, $ok, $msg = '') {
   und_write_json($f, array_slice($h, -100));
   if ($fp) { flock($fp, LOCK_UN); fclose($fp); }
 }
-function und_history() { return array_reverse(und_read_json(und_tmp('history.json'), [])); }
+function und_history() { return array_reverse(und_read_json(und_history_file(), [])); }
 
 /* ---------- server power ---------- */
 
@@ -2934,7 +2947,7 @@ function und_self_update() {
           'checked' => (int)$c['at'], 'error' => $c['error'], 'url' => 'https://github.com/Stiphr/UnDash/releases'];
 }
 ]]></INLINE>
-<SHA256>d5313587bc9ece05b79f0b5275a6cb211ccda8af3e5adb4f6b857b5e4bef6f39</SHA256>
+<SHA256>ce7ed3e733c085076df51bd5b966e0f682231a930db6b8f67dd1881398aad4f9</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/auth.php" Mode="0644">
@@ -3186,6 +3199,7 @@ function und_api_test() {
     $t = und_gql($q, [], 8);
     $out['access'][$k] = isset($t['error']) ? $t['error'] : 'ok';
   }
+  $out['optional'] = ['ups' => 'Not available through the API. Only needed for a UPS that Unraid\'s own UPS service runs; a NUT UPS is read directly.'];
   return $out;
 }
 
@@ -3228,7 +3242,6 @@ function und_api_poller_alive() { clearstatcache(); $b = @filemtime(und_tmp('api
 function und_api_slow($name) {
   list($ttl, $max, $q) = UND_API_SLOW[$name];
   if (!und_api_poller_alive()) return und_api_cached($name, $ttl, function () use ($q) { return und_gql($q); });
-  @touch(und_tmp('viewer'));
   $c = und_read_json(und_tmp('api-' . $name . '.json'), null);
   return is_array($c) && microtime(true) - (float)$c['t'] < $max ? $c['v'] : null;
 }
@@ -3335,6 +3348,9 @@ function und_api_storage() {
 }
 
 function und_api_ups() {
+  // no UPS through the API (a NUT UPS, or no permission): each failed read is an error in Unraid's API log, so it is not asked again for 10 minutes
+  $none = und_tmp('api-ups.none');
+  if (time() - (int)@filemtime($none) < 600) return null;
   // nominalPower and currentPower are in newer API versions only; an older one rejects the whole query, so ask again without them
   $r = und_api_cached('ups', 5, function () {
     $q = 'query { upsDevices { name model status battery { chargeLevel estimatedRuntime } power { loadPercentage%s } } }';
@@ -3342,7 +3358,7 @@ function und_api_ups() {
     return isset($r['error']) && empty($r['auth']) ? und_gql(sprintf($q, '')) : $r;
   });
   $u = $r['data']['upsDevices'][0] ?? null;
-  if (!$u) return null;
+  if (!$u) { @touch($none); return null; }
   return ['source' => 'Unraid API', 'charge' => (float)$u['battery']['chargeLevel'], 'load' => (float)$u['power']['loadPercentage'], 'status' => (string)$u['status'],
           'runtime' => isset($u['battery']['estimatedRuntime']) ? (int)$u['battery']['estimatedRuntime'] : null, 'model' => (string)$u['model'],
           'nominal' => !empty($u['power']['nominalPower']) ? (int)$u['power']['nominalPower'] : null, 'watts' => !empty($u['power']['currentPower']) ? (float)$u['power']['currentPower'] : null];
@@ -3382,12 +3398,12 @@ function und_api_docker_live() {
 
 function und_api_container_id($name) {
   $r = und_api_containers(true);
-  foreach ((array)($r['data']['docker']['containers'] ?? []) as $c) if (ltrim((string)($c['names'][0] ?? ''), '/') === $name) return ['id' => (string)$c['id'], 'state' => strtolower((string)$c['state'])];
+  foreach ((array)($r['data']['docker']['containers'] ?? []) as $c) if (ltrim((string)($c['names'][0] ?? ''), '/') === $name) return ['id' => (string)$c['id'], 'state' => stripos((string)($c['status'] ?? ''), 'restarting') === 0 ? 'restarting' : strtolower((string)$c['state'])];
   return isset($r['error']) ? ['error' => $r['error']] : null;
 }
 
 function und_api_docker_action($name, $op) {
-  $valid = ['start' => ['exited'], 'stop' => ['running', 'paused'], 'restart' => ['running', 'exited'], 'pause' => ['running'], 'unpause' => ['paused'], 'update' => null];
+  $valid = ['start' => ['exited'], 'stop' => ['running', 'paused', 'restarting'], 'restart' => ['running', 'exited', 'restarting'], 'pause' => ['running'], 'unpause' => ['paused'], 'update' => null];
   if (!array_key_exists($op, $valid)) return ['error' => 'Unknown action.'];
   $c = und_api_container_id($name);
   if (!$c) return ['error' => 'There is no container named ' . $name . '.'];
@@ -3491,7 +3507,7 @@ function und_api_vm_action($name, $op) {
   return $ok ? ['ok' => true] : ['error' => $err];
 }
 ]]></INLINE>
-<SHA256>5a4293519126d1e9bc9cad5854ad63b2481a3d5cb2563db2a31f81e027ad6070</SHA256>
+<SHA256>111279020969d845685f83015beacbb7aeecfb0cfc618f2b458a704f7c77d353</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/media.php" Mode="0644">
@@ -3841,7 +3857,6 @@ function und_dl_status(array $cfg, $id) {
                              'size' => (float)($sl['mb'] ?? 0) * 1048576];
         }
         $total = (int)($qq['noofslots_total'] ?? $qq['noofslots'] ?? 0);
-        $failed = 0;
         $out = array_merge($out, ['online' => true, 'down' => (float)($qq['kbpersec'] ?? 0) * 1024, 'up' => null,
           'counts' => ['downloading' => $total && !$paused ? 1 : 0, 'queued' => max(0, $total - ($paused ? 0 : 1)), 'paused' => $paused ? $total : 0, 'completed' => (int)($hist['history']['noofslots'] ?? 0)],
           'state' => $paused ? 'paused' : ($total ? 'downloading' : 'idle'), 'eta' => (string)($qq['timeleft'] ?? ''), 'can_pause' => true, 'paused' => $paused]);
@@ -3883,7 +3898,7 @@ function und_dl_action(array $cfg, $id, $op) {
   }
 }
 ]]></INLINE>
-<SHA256>42cb3007562d68c634a445f2864e5fd4fa87e95408afb351004e59feab52f08f</SHA256>
+<SHA256>f7b2f256c1646ec6d433263b1373e1227dd9066659d1931fe8f8490fefbc3c4f</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/include/ignores.php" Mode="0644">
@@ -4949,6 +4964,8 @@ require_once __DIR__ . '/auth.php';      // the Docker version's password (Setti
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
+// the standalone port has no nginx in front of it: a refresh of 48 KB of JSON shrinks to about 6 KB
+if (defined('UND_STANDALONE') && function_exists('ob_gzhandler')) ob_start('ob_gzhandler');
 header('X-Content-Type-Options: nosniff');
 
 function out($d, $code = 200) { http_response_code($code); echo json_encode($d, JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
@@ -4983,6 +5000,7 @@ switch ($action) {
   /* one call per refresh: system metrics, containers and VMs (each part can be skipped when its section is hidden) */
   case 'live': {
     $cfg = und_load_config();
+    if (und_api_mode()) @touch(und_tmp('viewer'));     // keeps the background reads of unraid_api.php going while a page is open
     $want = array_flip(explode(',', $P('parts', 'system,docker,vms')));
     $r = ['at' => time()];
     if (isset($want['system'])) { $r['system'] = und_system($cfg); if (!und_api_mode() && isset($r['system']['os_update'])) api_os_autocheck($cfg, $r['system']['os_update']); }
@@ -5178,7 +5196,8 @@ switch ($action) {
     $sec['unraid']['url'] = und_clip($url, 300);
     if ($key !== UND_KEEP) $sec['unraid']['key'] = und_clip(trim($key), 300);
     und_save_secrets($sec);
-    foreach (['system', 'containers', 'vms', 'ups'] as $n) @unlink(und_tmp('api-' . $n . '.json'));
+    foreach (['system', 'containers', 'vms', 'ups', 'ident', 'net', 'name'] as $n) @unlink(und_tmp('api-' . $n . '.json'));
+    @unlink(und_tmp('api-ups.none'));
     out(['ok' => true]);
   }
   case 'unraid_test': out(und_api_test());
@@ -5245,7 +5264,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>169bced26e4de06a29aca0ff1026f61e5df94000230eb69b301e9b71bf3947d9</SHA256>
+<SHA256>d3e3871d7f31d4f8a00b55c7b572e5323291600598dd6a862afd66d1d1869c79</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
@@ -5284,7 +5303,19 @@ $method = (string)($_SERVER['REQUEST_METHOD'] ?? 'GET');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
-header("Content-Security-Policy: default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https:");
+header("Content-Security-Policy: default-src 'self'; img-src 'self' http: https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https:");
+
+/** A static file: revalidated by ETag, cached for good when the URL carries its version (?v=), compressed when the browser accepts it. */
+function sa_asset($file, $type) {
+  $v = (string)@filemtime($file);
+  $etag = '"' . $v . '-' . (int)@filesize($file) . '"';
+  header('Content-Type: ' . $type);
+  header('ETag: ' . $etag);
+  header('Cache-Control: ' . (($_GET['v'] ?? '') === $v ? 'public, max-age=31536000, immutable' : 'no-cache'));
+  if (($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) { http_response_code(304); exit; }
+  if (function_exists('ob_gzhandler')) ob_start('ob_gzhandler');
+  readfile($file); exit;
+}
 
 function sa_deny($code, $msg) { http_response_code($code); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
 
@@ -5324,9 +5355,8 @@ if ($uri === '/assets/inter.woff2') {
 }
 if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
   // needed by the sign-in page too; nothing secret in either
-  header('Content-Type: ' . ($uri === '/favicon.png' ? 'image/png' : 'text/css; charset=utf-8'));
-  header('Cache-Control: no-cache');
-  readfile($uri === '/favicon.png' ? UND_ROOT . '/images/undash.png' : UND_ROOT . $uri); exit;
+  if ($uri === '/favicon.png') sa_asset(UND_ROOT . '/images/undash.png', 'image/png');
+  sa_asset(UND_ROOT . $uri, 'text/css; charset=utf-8');
 }
 
 /* ---- without a password, only known host names (see und_host_allowed: DNS rebinding) ---- */
@@ -5404,12 +5434,7 @@ if ($uri === '/api') {
   exit;
 }
 
-if ($uri === '/assets/app.js') {
-  $f = UND_ROOT . $uri;
-  header('Content-Type: ' . (substr($uri, -3) === 'css' ? 'text/css' : 'application/javascript') . '; charset=utf-8');
-  header('Cache-Control: no-cache');
-  readfile($f); exit;
-}
+if ($uri === '/assets/app.js') sa_asset(UND_ROOT . $uri, 'application/javascript; charset=utf-8');
 if ($uri === '/assets/boot.js') {
   // page settings as a script file, so the page needs no inline script (the CSP forbids it)
   header('Content-Type: application/javascript; charset=utf-8');
@@ -5446,7 +5471,7 @@ if ($uri === '/' || $uri === '/index.html') {
 }
 sa_deny(404, 'Not found');
 ]]></INLINE>
-<SHA256>60fa9d83b4e6119e75a6b4d7930d3de1f28f97f4ab5ffcf1dcaf574e81af58a2</SHA256>
+<SHA256>16879949ed9001f6af4fc6979f001ae833a737dfe09966eb91d17b1582b01768</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/scripts/oscheck.php" Mode="0755">
@@ -6493,6 +6518,15 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   /* a browser opens at most 6 connections to one server: app and media reads share 4 of them, so the live refresh and clicks never queue behind a slow app */
   var BG = /^(media|arr|dl|service|playing|requests|health|self_update|alert_history|history|storage|os_status)$/, BGQ = [], bgRun = 0;
   function bgNext() { while (bgRun < 4 && BGQ.length) { bgRun++; BGQ.shift()().then(function () { bgRun--; bgNext(); }); } }
+  /* UnDash was updated or restarted, so this page's session is gone: it loads again by itself, unless Settings has edits open */
+  function staleSession() {
+    var at = 0; try { at = +sessionStorage.getItem('undReload') || 0; } catch (e) { /* no storage: reload anyway */ }
+    if (!S.drawer && Date.now() - at > 30000) {
+      try { sessionStorage.setItem('undReload', Date.now()); } catch (e) { /* see above */ }
+      location.reload();
+    }
+    return { error: 'UnDash restarted. Reload the page.', auth: true };
+  }
   function send(action, data, timeoutMs) {
     var fd = new URLSearchParams(); fd.append('action', action);   // urlencoded: multipart POSTs hang on Unraid's web server
     fd.append('csrf_token', window.UND_CSRF || '');
@@ -6502,6 +6536,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
     return fetch(API, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-Token': window.UND_CSRF || '' }, signal: ctl ? ctl.signal : undefined }).then(function (r) {
       clearTimeout(to);
       if (r.status === 401) return { error: 'Signed out. Reload the page to sign in again.', auth: true };
+      if (r.status === 403) return r.clone().text().then(function (t) { return /CSRF/.test(t) ? staleSession() : r.json().catch(function () { return { error: t || 'Refused (HTTP 403).' }; }); });
       return r.json().catch(function () { return { error: 'Unexpected answer from the server (HTTP ' + r.status + ').' }; }).then(function (j) { if (!r.ok && !j.error) j.error = 'Request failed (HTTP ' + r.status + ').'; return j; });
     }).catch(function (e) { clearTimeout(to); return { error: e && e.name === 'AbortError' ? 'The server took too long to answer.' : 'Could not reach the server.', offline: true }; });
   }
@@ -9328,7 +9363,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
           clear(res);
           if (!t.ok) { res.appendChild(h('div', { class: 'banner bad' }, t.error || 'The connection failed.')); return; }
           res.appendChild(h('div', { class: 'banner ok' }, 'Connected to ' + t.hostname + ' (Unraid ' + t.unraid + ', API ' + t.api + ').'));
-          res.appendChild(h('div', { class: 'kv2 sm' }, Object.keys(t.access).map(function (k) { return [h('span', null, k), h('span', { class: t.access[k] === 'ok' ? 't-ok' : 't-bad' }, t.access[k] === 'ok' ? 'readable' : t.access[k])]; })));
+          res.appendChild(h('div', { class: 'kv2 sm' }, Object.keys(t.access).map(function (k) { var y = t.access[k] === 'ok', opt = !y && (t.optional || {})[k]; return [h('span', null, k), h('span', { class: y ? 't-ok' : opt ? 'muted' : 't-bad', title: opt ? t.access[k] : null }, y ? 'readable' : opt || t.access[k])]; })));
         });
       }
     });
@@ -9508,7 +9543,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   });
 })();
 ]]></INLINE>
-<SHA256>6ec4ebe9f94ef21dc33bd831d27084a9a6e2831cd48745fa001f3bd57353e786</SHA256>
+<SHA256>af182a61cc7cede09aefe11ec9660ac8a6e6ea4e27a7333db0a71cb4cbddf21b</SHA256>
 </FILE>
 
 <FILE Run="/bin/bash">
