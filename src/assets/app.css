@@ -1325,8 +1325,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .gc-c>.sec .ci{position:relative}
 .und.bui .ci .acts{position:absolute;right:4px;top:50%;transform:translateY(-50%)}
 .und.bui .ci:hover .cn,.und.bui .ci:focus-within .cn{padding-right:30px}
-.und.bui .gc-vms .ci:hover .cn,.und.bui .gc-vms .ci:focus-within .cn{padding-right:112px}
-@media (hover:none){.und.bui .ci .cn{padding-right:34px}.und.bui .gc-vms .ci .cn{padding-right:116px}}
+.und.bui .gc-vms .ci:hover .cn,.und.bui .gc-vms .ci:focus-within .cn{padding-right:64px}
+@media (hover:none){.und.bui .ci .cn{padding-right:34px}.und.bui .gc-vms .ci .cn{padding-right:68px}}
 /* app stats share the line by what they need, so a long value such as 1.7 MiB/s is not cut */
 .und.bui .blocks,.und.bui .ac .blocks,.und.bui .ac .blocks.even{display:flex;flex-wrap:wrap;gap:6px 14px;align-content:flex-end;align-items:flex-end}
 .und.bui .blk,.und.bui .ac .blk,.und.bui .ac .blk:first-child,.und.bui .ac .blocks.even .blk:nth-child(3){flex:1 1 auto;width:auto}
@@ -1347,4 +1347,17 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .gc-playing .pl .pl3{order:2;gap:4px 10px}
 .und.bui .gc-playing .pl .pl2{order:3}
 .und.bui .gc-playing .plist>.pl:only-child,.und.bui .rqlist>.rq:first-child,.und.bui .dls>.card.dl:first-child{border-top:0;padding-top:0}
+
+/* a card's few tools stay on the title's line in a narrow card; only Containers has enough to need a line of its own */
+@container (max-width:460px){.und.bui .gc:not(.gc-docker) .gc-c>.sec>.sec-h{flex-wrap:nowrap}.und.bui .gc:not(.gc-docker) .gc-c>.sec>.sec-h .tools{width:auto;margin-left:auto;flex:none}}
+/* phones */
+@media (max-width:700px){
+  .und.bui .top .brand{flex:none;min-width:0}
+  .und.bui .top .brand>.ell{display:none}
+  .und.bui .top .acts{flex:1 1 0;min-width:0;justify-content:flex-end}
+  .und.bui .top .acts>.btn,.und.bui .top .acts>.live{flex:none}
+  .und .bell{flex:0 1 auto;min-width:36px;max-width:none;margin-right:auto}
+  .und.bui .board.flow .gc-c>.alink{padding:0 10px;gap:8px;font-size:13px;white-space:normal;line-height:1.15;overflow:hidden}
+  .und.bui .board.flow .gc-c>.sec>.sec-h .tools>.muted{white-space:nowrap}
+}
 

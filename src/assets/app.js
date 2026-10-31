@@ -2237,7 +2237,7 @@
   /* a VM on the board: a row like a container's. Its icon and name open the console */
   function vCell(x, p, a, vw, vt, b) {
     var on = x.state === 'running', st = vStateBadge(x.state, b);
-    if (vw) a.insertBefore(btn(vConsole(vw) ? 'Console' : 'VMs page', function () { vOpen(vw); }, 'sm ghost', 'screen', vt), a.firstChild);
+    if (vw) a.insertBefore(btn('', function () { vOpen(vw); }, 'sm ghost', 'screen', vt), a.firstChild);
     return h('div', { class: 'ci st-' + (on ? 'running' : 'exited') + (b ? ' busy' : ''), role: 'listitem', 'data-name': x.name }, vA(vw, vt, vIcon(x, p, 'cico')),
       h('div', { class: 'cn' }, h('span', { class: 'cname ell' }, h('span', { class: 'sdot ' + (on ? 'ok' : 'na'), 'aria-hidden': 'true' }), vA(vw, vt, p.label || x.name), p.favorite ? ic('star', true) : null),
         h('span', { class: 'cs' }, h('span', null, st.textContent), x.cpus ? h('span', null, x.cpus + ' vCPU') : null, x.memory ? h('span', null, bytes(x.memory)) : null)), a);
