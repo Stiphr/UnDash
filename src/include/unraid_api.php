@@ -59,6 +59,7 @@ function und_api_test() {
     $t = und_gql($q, [], 8);
     $out['access'][$k] = isset($t['error']) ? $t['error'] : 'ok';
   }
+  $out['optional'] = ['ups' => 'Not available through the API. Only needed for a UPS that Unraid\'s own UPS service runs; a NUT UPS is read directly.'];
   return $out;
 }
 
@@ -101,7 +102,6 @@ function und_api_poller_alive() { clearstatcache(); $b = @filemtime(und_tmp('api
 function und_api_slow($name) {
   list($ttl, $max, $q) = UND_API_SLOW[$name];
   if (!und_api_poller_alive()) return und_api_cached($name, $ttl, function () use ($q) { return und_gql($q); });
-  @touch(und_tmp('viewer'));
   $c = und_read_json(und_tmp('api-' . $name . '.json'), null);
   return is_array($c) && microtime(true) - (float)$c['t'] < $max ? $c['v'] : null;
 }
@@ -208,6 +208,9 @@ function und_api_storage() {
 }
 
 function und_api_ups() {
+  // no UPS through the API (a NUT UPS, or no permission): each failed read is an error in Unraid's API log, so it is not asked again for 10 minutes
+  $none = und_tmp('api-ups.none');
+  if (time() - (int)@filemtime($none) < 600) return null;
   // nominalPower and currentPower are in newer API versions only; an older one rejects the whole query, so ask again without them
   $r = und_api_cached('ups', 5, function () {
     $q = 'query { upsDevices { name model status battery { chargeLevel estimatedRuntime } power { loadPercentage%s } } }';
@@ -215,7 +218,7 @@ function und_api_ups() {
     return isset($r['error']) && empty($r['auth']) ? und_gql(sprintf($q, '')) : $r;
   });
   $u = $r['data']['upsDevices'][0] ?? null;
-  if (!$u) return null;
+  if (!$u) { @touch($none); return null; }
   return ['source' => 'Unraid API', 'charge' => (float)$u['battery']['chargeLevel'], 'load' => (float)$u['power']['loadPercentage'], 'status' => (string)$u['status'],
           'runtime' => isset($u['battery']['estimatedRuntime']) ? (int)$u['battery']['estimatedRuntime'] : null, 'model' => (string)$u['model'],
           'nominal' => !empty($u['power']['nominalPower']) ? (int)$u['power']['nominalPower'] : null, 'watts' => !empty($u['power']['currentPower']) ? (float)$u['power']['currentPower'] : null];
@@ -255,12 +258,12 @@ function und_api_docker_live() {
 
 function und_api_container_id($name) {
   $r = und_api_containers(true);
-  foreach ((array)($r['data']['docker']['containers'] ?? []) as $c) if (ltrim((string)($c['names'][0] ?? ''), '/') === $name) return ['id' => (string)$c['id'], 'state' => strtolower((string)$c['state'])];
+  foreach ((array)($r['data']['docker']['containers'] ?? []) as $c) if (ltrim((string)($c['names'][0] ?? ''), '/') === $name) return ['id' => (string)$c['id'], 'state' => stripos((string)($c['status'] ?? ''), 'restarting') === 0 ? 'restarting' : strtolower((string)$c['state'])];
   return isset($r['error']) ? ['error' => $r['error']] : null;
 }
 
 function und_api_docker_action($name, $op) {
-  $valid = ['start' => ['exited'], 'stop' => ['running', 'paused'], 'restart' => ['running', 'exited'], 'pause' => ['running'], 'unpause' => ['paused'], 'update' => null];
+  $valid = ['start' => ['exited'], 'stop' => ['running', 'paused', 'restarting'], 'restart' => ['running', 'exited', 'restarting'], 'pause' => ['running'], 'unpause' => ['paused'], 'update' => null];
   if (!array_key_exists($op, $valid)) return ['error' => 'Unknown action.'];
   $c = und_api_container_id($name);
   if (!$c) return ['error' => 'There is no container named ' . $name . '.'];

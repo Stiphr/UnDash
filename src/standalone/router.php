@@ -15,7 +15,19 @@ $method = (string)($_SERVER['REQUEST_METHOD'] ?? 'GET');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
-header("Content-Security-Policy: default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https:");
+header("Content-Security-Policy: default-src 'self'; img-src 'self' http: https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https:");
+
+/** A static file: revalidated by ETag, cached for good when the URL carries its version (?v=), compressed when the browser accepts it. */
+function sa_asset($file, $type) {
+  $v = (string)@filemtime($file);
+  $etag = '"' . $v . '-' . (int)@filesize($file) . '"';
+  header('Content-Type: ' . $type);
+  header('ETag: ' . $etag);
+  header('Cache-Control: ' . (($_GET['v'] ?? '') === $v ? 'public, max-age=31536000, immutable' : 'no-cache'));
+  if (($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) { http_response_code(304); exit; }
+  if (function_exists('ob_gzhandler')) ob_start('ob_gzhandler');
+  readfile($file); exit;
+}
 
 function sa_deny($code, $msg) { http_response_code($code); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
 
@@ -55,9 +67,8 @@ if ($uri === '/assets/inter.woff2') {
 }
 if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
   // needed by the sign-in page too; nothing secret in either
-  header('Content-Type: ' . ($uri === '/favicon.png' ? 'image/png' : 'text/css; charset=utf-8'));
-  header('Cache-Control: no-cache');
-  readfile($uri === '/favicon.png' ? UND_ROOT . '/images/undash.png' : UND_ROOT . $uri); exit;
+  if ($uri === '/favicon.png') sa_asset(UND_ROOT . '/images/undash.png', 'image/png');
+  sa_asset(UND_ROOT . $uri, 'text/css; charset=utf-8');
 }
 
 /* ---- without a password, only known host names (see und_host_allowed: DNS rebinding) ---- */
@@ -135,12 +146,7 @@ if ($uri === '/api') {
   exit;
 }
 
-if ($uri === '/assets/app.js') {
-  $f = UND_ROOT . $uri;
-  header('Content-Type: ' . (substr($uri, -3) === 'css' ? 'text/css' : 'application/javascript') . '; charset=utf-8');
-  header('Cache-Control: no-cache');
-  readfile($f); exit;
-}
+if ($uri === '/assets/app.js') sa_asset(UND_ROOT . $uri, 'application/javascript; charset=utf-8');
 if ($uri === '/assets/boot.js') {
   // page settings as a script file, so the page needs no inline script (the CSP forbids it)
   header('Content-Type: application/javascript; charset=utf-8');
