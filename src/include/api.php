@@ -36,7 +36,7 @@ switch ($action) {
   case 'boot': {
     $cfg = und_load_config(); $loc = und_loc();
     out(['version' => UND_VERSION, 'layout' => und_layout_view($cfg), 'types' => und_types(), 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
-         'server' => und_server_identity(),
+         'server' => und_server_identity(), 'wall' => und_wall_custom_view(),
          'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes' && !und_api_mode(), 'caps' => und_caps(),
          'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null,
          'auth' => und_api_mode() ? und_auth_kind() : 'unraid']);
@@ -154,12 +154,17 @@ switch ($action) {
   case 'container_sources': out(und_container_sources());
   case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'), (int)$P('offset', '0'), $P('src'), $P('style'), $P('browse') === '1')); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
   case 'wallpaper':     out(und_wall(und_load_config()));
+  /* your own wallpaper: the picture is checked (type, size, dimensions) before it replaces the old one */
+  case 'wallpaper_upload': { $r = und_wall_upload($P('data')); if (isset($r['error'])) fail($r['error'], 422); und_history_add('server', 'Wallpaper', 'upload', true, $r['width'] . 'x' . $r['height']); out($r); }
+  case 'wallpaper_remove': { und_wall_remove(); out(['ok' => true]); }
   case 'icon_slugs':    { $l = json_decode($P('slugs', '[]'), true); try { out(und_icon_slugs(is_array($l) ? $l : [])); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
 
   /* ---- settings ---- */
   case 'settings': {
     $cfg = und_load_config(); $loc = und_loc();
     out(['config' => $cfg, 'creds' => und_creds_view($cfg), 'shared' => und_shared_view($cfg), 'types' => und_types(), 'keep' => UND_KEEP, 'css' => und_load_css(),
+         'defaults' => array_intersect_key(und_normalize(und_default_config()), ['general' => 1, 'appearance' => 1, 'media' => 1, 'downloads' => 1, 'requests' => 1, 'apps' => 1, 'docker' => 1, 'vms' => 1]),
+         'wall' => und_wall_custom_view(), 'limits' => ['wallpaper_mb' => UND_WALL_MAX_BYTES / 1048576],
          'loc' => $loc, 'store' => und_store_dir(), 'flash' => UND_DIR, 'metrics' => und_metric_ids(), 'sections' => und_section_ids(),
          'zones' => array_map(function ($t) { return und_zone(['type' => $t]); }, array_combine(array_keys(und_types()), array_keys(und_types())))]);
   }
@@ -180,9 +185,10 @@ switch ($action) {
     if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
     if (!und_save_config($norm)) fail('Could not write the configuration directory. Check that ' . und_store_dir() . ' is writable.', 500);
     if (!und_env_write($env)) fail('Could not write the .env file in ' . und_store_dir() . '.', 500);
-    if (isset($_POST['css'])) und_save_css($P('css'), false);
+    if (isset($_POST['css']) && !und_save_css($P('css'), false)) fail('The settings were saved, but the custom CSS could not be written to ' . und_store_dir() . '.', 500);
     und_backup('settings saved');
-    out(['ok' => true]);
+    // numbers outside their range were kept inside it: say so, instead of saving something other than what was typed in silence
+    out(['ok' => true, 'adjusted' => und_clamped($cfg, $norm)]);
   }
   /* small preference changes made on the dashboard itself (favourite, hide, collapse, layout): no backup, no secrets */
   case 'prefs': {
@@ -190,7 +196,8 @@ switch ($action) {
     $cfg = und_load_config();
     $kind = $P('kind'); $key = $P('key'); $val = $J('value') ?: [];
     if ($kind === 'docker' || $kind === 'vms') {
-      if ($key === '' || strlen($key) > 200) fail('Invalid name.');
+      // the same names the server accepts for an action: nothing else can become a key in config.yaml
+      if ($kind === 'docker' ? !und_valid_container($key) : !und_valid_vm($key)) fail('Invalid name.');
       $items = (array)$cfg[$kind]['items'];
       $items[$key] = array_merge((array)($items[$key] ?? []), array_intersect_key($val, ['label' => 1, 'icon' => 1, 'description' => 1, 'hidden' => 1, 'favorite' => 1, 'no_update' => 1]));
       $cfg[$kind]['items'] = $items;
@@ -301,8 +308,10 @@ switch ($action) {
     out(und_hp_apply($c));
   }
   case 'reset': {
+    if ($P('confirm') !== 'yes') fail('Confirm restoring the default settings.');
     und_backup('before reset');
-    und_save_config(und_default_config(), false);
+    if (!und_save_config(und_default_config(), false)) fail('Could not write the configuration directory. Check that ' . und_store_dir() . ' is writable.', 500);
+    und_history_add('server', 'Settings', 'reset', true, 'defaults restored');
     out(['ok' => true]);
   }
 }

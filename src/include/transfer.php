@@ -96,7 +96,7 @@ function und_import_apply($raw) {
   if ($f['kind'] === 'env') {
     $env = und_env();
     foreach ($f['env'] as $k => $v) $env[$k] = $v;
-    und_env_write($env);
+    if (!und_env_write($env)) return ['error' => 'The .env file could not be written. Check that ' . und_store_dir() . ' is writable.'];
     return ['ok' => true, 'backup' => $bk];
   }
   if (!und_save_config($f['config'], false)) return ['error' => 'Could not write the configuration directory.'];
@@ -109,6 +109,6 @@ function und_import_apply($raw) {
   $env = und_env(); $before = $env;
   foreach ($f['env'] as $k => $v) if (!isset($env[$k]) || $env[$k] === '') $env[$k] = $v;
   foreach (array_keys(und_cfg_refs($f['config'])) as $n) if (!isset($env[$n]) && $n !== 'UNRAID_IP') $env[$n] = '';
-  if ($env !== $before) und_env_write($env);
+  if ($env !== $before && !und_env_write($env)) return ['error' => 'The settings were imported, but the .env file could not be written. Check that ' . und_store_dir() . ' is writable.', 'backup' => $bk];
   return ['ok' => true, 'backup' => $bk];
 }

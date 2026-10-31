@@ -78,7 +78,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'icon_box' => true, 'zoom' => 0, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'daily' => ['on' => false, 'topic' => 'nature', 'custom' => ''], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'accent_mode' => 'theme', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'icon_box' => true, 'zoom' => 0, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'daily' => ['on' => false, 'topic' => 'nature', 'custom' => ''], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -234,10 +234,11 @@ function und_restore($id) {
   und_backup('before restoring ' . $id);
   if ((int)$j['undash_backup'] >= 2) {
     // both files exactly as they were
-    if (is_string($j['yaml'] ?? null) && $j['yaml'] !== '') und_store_write('config.yaml', $j['yaml']);
-    if (is_string($j['env'] ?? null)) und_store_write('.env', $j['env'], true);
+    $ok = true;
+    if (is_string($j['yaml'] ?? null) && $j['yaml'] !== '') $ok = und_store_write('config.yaml', $j['yaml']);
+    if ($ok && is_string($j['env'] ?? null)) $ok = und_store_write('.env', $j['env'], true);
     und_store_reset();
-    return ['ok' => true];
+    return $ok ? ['ok' => true] : ['error' => 'The backup could not be written to ' . und_store_dir() . '. Check that the folder is writable.'];
   }
   // a backup from before config.yaml: convert it like the old files
   $conv = und_store_convert(und_normalize(und_migrate(is_array($j['config'] ?? null) ? $j['config'] : und_default_config())), (array)($j['secrets']['vars'] ?? []), (array)($j['secrets']['svc'] ?? []));
@@ -367,6 +368,11 @@ function und_normalize(array $c) {
   $a['theme'] = in_array($a['theme'], array_merge(und_theme_ids(), array_column($a['custom_themes'], 'id')), true) ? $a['theme'] : 'default';
   $a['mode'] = in_array($a['mode'], ['dark', 'light', 'system'], true) ? $a['mode'] : 'dark';
   $a['accent'] = $a['accent'] === '' ? '' : und_hex($a['accent'], '');   // empty = the theme's own accent
+  // where the accent colour comes from: the theme, the wallpaper (worked out in the browser) or the colour above.
+  // Settings saved before this existed: a colour means "custom", none means "theme".
+  $am = (string)($c['appearance']['accent_mode'] ?? '');
+  $a['accent_mode'] = in_array($am, ['theme', 'auto', 'custom'], true) ? $am : ($a['accent'] !== '' ? 'custom' : 'theme');
+  if ($a['accent_mode'] === 'custom' && $a['accent'] === '') $a['accent_mode'] = 'theme';
   $a['density'] = in_array($a['density'], ['compact', 'comfortable', 'expanded'], true) ? $a['density'] : 'comfortable';
   $a['translucent'] = array_key_exists('translucent', $a) ? !empty($a['translucent']) : true;
   $a['gradient'] = array_key_exists('gradient', $a) ? !empty($a['gradient']) : true;
@@ -380,7 +386,8 @@ function und_normalize(array $c) {
   $topic = (string)($w['topic'] ?? 'nature');
   $a['daily'] = ['on' => !empty($w['on']), 'topic' => $topic === 'custom' || isset(UND_WALL_TOPICS[$topic]) ? $topic : 'nature', 'custom' => und_clip(trim((string)($w['custom'] ?? '')), 80)];
   $a['text_size'] = in_array($a['text_size'] ?? '', ['s', 'm', 'l'], true) ? $a['text_size'] : 'm';
-  $a['background'] = preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
+  // an address, a path Unraid serves, or "custom" for the picture uploaded in Settings (kept in data/wallpaper)
+  $a['background'] = $a['background'] === 'custom' || preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(0, min(100, (int)$a['brightness']));
   // the margin around the dashboard in px; -1 = automatic
   foreach (['safe_x', 'safe_y'] as $k) $a[$k] = (int)$a[$k] < 0 ? -1 : min(200, (int)$a[$k]);
@@ -477,6 +484,30 @@ function und_normalize(array $c) {
   }
   return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics, 'board' => und_board_clean($db['board'] ?? [])], 'media' => $media, 'downloads' => $downloads, 'requests' => $requests, 'apps' => $apps,
           'docker' => $docker, 'vms' => $vms, 'groups' => $groups];
+}
+
+/**
+ * Which numbers a save had to bring back inside their limits: ['general.refresh' => [sent, kept], ...]. The normalised
+ * configuration is what is saved; this tells the browser so a value outside its range is never changed in silence.
+ */
+function und_clamped(array $sent, array $norm) {
+  $out = [];
+  $check = function ($path, array $keys) use ($sent, $norm, &$out) {
+    $s = $sent; $n = $norm;
+    foreach (explode('.', $path) as $p) { $s = is_array($s) && isset($s[$p]) ? $s[$p] : null; $n = is_array($n) && isset($n[$p]) ? $n[$p] : null; }
+    if (!is_array($s) || !is_array($n)) return;
+    foreach ($keys as $k) {
+      if (!array_key_exists($k, $s) || !is_numeric($s[$k]) || !isset($n[$k])) continue;
+      if ((float)$s[$k] != (float)$n[$k]) $out[$path . '.' . $k] = [$s[$k] + 0, $n[$k]];
+    }
+  };
+  $check('general', ['refresh', 'refresh_services', 'os_check_hours', 'ups_watts']);
+  $check('appearance', array_merge(array_keys(und_look_limits()), ['blur', 'brightness', 'safe_x', 'safe_y']));
+  $check('media', ['count', 'days_ahead']);
+  $check('downloads', ['items']);
+  $check('apps', ['columns']);
+  $check('docker', ['columns']);
+  return $out;
 }
 
 /** Serialises read-change-write of config.json (two quick dashboard clicks must not lose one). Released when the request ends. */
