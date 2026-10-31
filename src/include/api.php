@@ -9,6 +9,8 @@ require_once __DIR__ . '/auth.php';      // the Docker version's password (Setti
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
+// the standalone port has no nginx in front of it: a refresh of 48 KB of JSON shrinks to about 6 KB
+if (defined('UND_STANDALONE') && function_exists('ob_gzhandler')) ob_start('ob_gzhandler');
 header('X-Content-Type-Options: nosniff');
 
 function out($d, $code = 200) { http_response_code($code); echo json_encode($d, JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
@@ -43,6 +45,7 @@ switch ($action) {
   /* one call per refresh: system metrics, containers and VMs (each part can be skipped when its section is hidden) */
   case 'live': {
     $cfg = und_load_config();
+    if (und_api_mode()) @touch(und_tmp('viewer'));     // keeps the background reads of unraid_api.php going while a page is open
     $want = array_flip(explode(',', $P('parts', 'system,docker,vms')));
     $r = ['at' => time()];
     if (isset($want['system'])) { $r['system'] = und_system($cfg); if (!und_api_mode() && isset($r['system']['os_update'])) api_os_autocheck($cfg, $r['system']['os_update']); }
@@ -238,7 +241,8 @@ switch ($action) {
     $sec['unraid']['url'] = und_clip($url, 300);
     if ($key !== UND_KEEP) $sec['unraid']['key'] = und_clip(trim($key), 300);
     und_save_secrets($sec);
-    foreach (['system', 'containers', 'vms', 'ups'] as $n) @unlink(und_tmp('api-' . $n . '.json'));
+    foreach (['system', 'containers', 'vms', 'ups', 'ident', 'net', 'name'] as $n) @unlink(und_tmp('api-' . $n . '.json'));
+    @unlink(und_tmp('api-ups.none'));
     out(['ok' => true]);
   }
   case 'unraid_test': out(und_api_test());

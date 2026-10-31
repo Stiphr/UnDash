@@ -72,6 +72,15 @@ file_put_contents("$SB/php/sess_$sid", 'unraid_login|i:' . time() . ';');
 $r = req('GET', '/', ['Cookie: unraid_' . md5('tower.local') . "=$sid"]);
 t('an Unraid login is accepted directly', $r['code'] === 200 && strpos(implode(';', $r['h']['set-cookie'] ?? []), 'undash_sid=') !== false);
 t('logout ends the session', req('GET', '/logout', [$C])['code'] === 303 && req('POST', '/api', [$C, "X-CSRF-Token: $csrf", 'Content-Type: application/x-www-form-urlencoded'], 'action=history')['code'] === 401);
+// static files
+$ac = req('GET', '/assets/app.css');
+$etag = $ac['h']['etag'][0] ?? '';
+t('a static file has an ETag and is revalidated', $ac['code'] === 200 && $etag !== '' && ($ac['h']['cache-control'][0] ?? '') === 'no-cache', json_encode($ac['h']));
+t('an unchanged static file is answered with 304', req('GET', '/assets/app.css', ["If-None-Match: $etag"])['code'] === 304);
+$ver = trim(explode('-', trim($etag, '"'))[0]);
+t('a versioned URL is cached for good', strpos(req('GET', "/assets/app.css?v=$ver")['h']['cache-control'][0] ?? '', 'immutable') !== false);
+t('a static file is compressed when the browser accepts it', (req('GET', '/assets/app.css', ['Accept-Encoding: gzip'])['h']['content-encoding'][0] ?? '') === 'gzip');
+t('icons over plain http may load', strpos($ac['h']['content-security-policy'][0] ?? '', "img-src 'self' http: https: data:") !== false);
 proc_terminate($proc); proc_close($proc);
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";

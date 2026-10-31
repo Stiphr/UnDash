@@ -104,8 +104,7 @@ function und_bin($name) {
  */
 function und_spawn(array $argv, $log) {
   if (isset($GLOBALS['UND_SPAWN_MOCK'])) { call_user_func($GLOBALS['UND_SPAWN_MOCK'], $argv, $log); return true; }
-  @unlink($log . '.done');
-  @unlink($log . '.pid');
+  foreach (['.done', '.pid', '.recorded'] as $x) @unlink($log . $x);
   @file_put_contents($log, '');
   $cmd = '';
   foreach ($argv as $a) $cmd .= ($cmd === '' ? '' : ' ') . escapeshellarg($a);

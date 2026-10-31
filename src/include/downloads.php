@@ -135,7 +135,6 @@ function und_dl_status(array $cfg, $id) {
                              'size' => (float)($sl['mb'] ?? 0) * 1048576];
         }
         $total = (int)($qq['noofslots_total'] ?? $qq['noofslots'] ?? 0);
-        $failed = 0;
         $out = array_merge($out, ['online' => true, 'down' => (float)($qq['kbpersec'] ?? 0) * 1024, 'up' => null,
           'counts' => ['downloading' => $total && !$paused ? 1 : 0, 'queued' => max(0, $total - ($paused ? 0 : 1)), 'paused' => $paused ? $total : 0, 'completed' => (int)($hist['history']['noofslots'] ?? 0)],
           'state' => $paused ? 'paused' : ($total ? 'downloading' : 'idle'), 'eta' => (string)($qq['timeleft'] ?? ''), 'can_pause' => true, 'paused' => $paused]);
