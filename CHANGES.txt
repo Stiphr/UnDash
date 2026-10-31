@@ -4,12 +4,16 @@
 - Desktop and tablet keep separate layouts; a phone shows the cards in order at their natural height. A new app appears by itself, and a card with nothing to show (no alerts) closes its gap.
 - Smart arrange lays the cards out in the classic dashboard's order, from your section order and widths, and keeps doing so as apps and alerts come and go. Moving a card by hand switches it off until you press it again.
 - New design for the board: near-black page, large rounded cards, one type scale. Cards are as tall as their content by default and grow into any empty space beside or below them, numbers scale with their card, and all text follows the screen size (Settings > Theme > Text size adjusts it).
-- Settings > Theme > Corner radius sets how round the cards are, from square to 28 px.
-- Settings and dialogs match the board: a floating rounded panel, clearer navigation, roomier forms and toggle switches. On a phone Settings is full screen.
+- Settings > Theme > Corner radius sets how round the cards and buttons are, from square to 28 px. The default is 8 px.
+- Settings search finds any option as you type, with suggestions and your recent picks, and takes you to it. Settings and dialogs match the board: a panel in the middle of the screen, clearer navigation, roomier forms and toggle switches. On a phone Settings is full screen.
 - Privacy button at the top right: blurs movie and series names and posters, what is playing, requests, torrent names and the server name, until you turn it off. It is remembered in this browser.
 - Now playing is the one place for streams: app cards show stats instead of repeating them, and Tautulli's card has streams, direct, transcoding and bandwidth. Several streams sit side by side, each with who is watching, and the header counts the people.
 - Icon selector: browse every selfh.st and Dashboard Icons icon without searching, filter by source, choose colour, light or dark, and load more as you scroll. Open it from a container's or VM's menu, or the icon button on an app card in Edit layout.
 - Alerts: calmer rows with a tinted icon.
+- Daily wallpaper: a new photo every day from Pexels, by your own search and colour (Settings > Theme > Daily wallpaper). It needs a free Pexels API key, which stays on the server, and credits the photographer.
+- Translucent Effect (Settings > Theme): glass cards that blur and tint what is behind them, for dark and light themes. Its blur, opacity and saturation are adjustable, and the wallpaper gets saturation, contrast and opacity beside blur and brightness, all with safe limits. Without a wallpaper the page gets a soft colour wash for the glass to show.
+- Smooth animations: cards arrive in turn, and Settings, dialogs, menus, toasts and tabs move gently. Settings > Theme > Animations sets Full, Fast, Skip the opening or Off, any click or key skips the opening, and the system's reduced motion setting is respected.
+- Header redesigned as one floating bar, also on wallpapers and with the Translucent Effect.
 - Phones get a bottom tab bar (Home, Media, Apps, Docker, Health) instead of one long page, larger touch targets and a compact header.
 - Settings > Theme > Card board turns it off and brings back the classic sections, unchanged.
 
