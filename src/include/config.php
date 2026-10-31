@@ -78,7 +78,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'daily' => ['on' => false, 'topic' => 'nature', 'custom' => ''], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'icon_box' => true, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'daily' => ['on' => false, 'topic' => 'nature', 'custom' => ''], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -370,6 +370,7 @@ function und_normalize(array $c) {
   $a['density'] = in_array($a['density'], ['compact', 'comfortable', 'expanded'], true) ? $a['density'] : 'comfortable';
   $a['translucent'] = array_key_exists('translucent', $a) ? !empty($a['translucent']) : true;
   $a['gradient'] = array_key_exists('gradient', $a) ? !empty($a['gradient']) : true;
+  $a['icon_box'] = array_key_exists('icon_box', $a) ? !empty($a['icon_box']) : true;
   foreach (und_look_limits() as $k => $r) $a[$k] = max($r[0], min($r[1], (int)($a[$k] ?? $r[2])));
   $a['motion'] = in_array($a['motion'] ?? '', ['full', 'fast', 'nointro', 'off'], true) ? $a['motion'] : 'full';
   // the wallpaper used to come from Pexels: a saved search carries over as custom words
