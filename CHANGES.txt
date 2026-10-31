@@ -7,7 +7,7 @@
 - After UnDash is updated or restarted, an open page loads again by itself instead of failing every refresh until you reload it. It waits if Settings is open.
 - Container icons served over plain http (a LAN address) are no longer blocked.
 - A second update of the same container is recorded in the history (only the first one was).
-- Faster: the dashboard's files are cached by the browser and compressed, and each refresh sends about 8 times less data.
+- Faster: the dashboard's files are cached by the browser and compressed, and each refresh sends about 5 times less data.
 
 ###0.9.6
 - Docker version: a new API key with the listed permissions no longer leaves the System section empty with "The API key is missing a permission: Forbidden resource". UnDash asked for the server name through a part of the API (vars) that is not on the list; it now uses the host name from Info.

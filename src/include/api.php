@@ -9,7 +9,7 @@ require_once __DIR__ . '/auth.php';      // the Docker version's password (Setti
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
-// the standalone port has no nginx in front of it: a refresh of 48 KB of JSON shrinks to about 6 KB
+// the standalone port has no nginx in front of it: a refresh of 38 KB of JSON shrinks to about 8 KB
 if (defined('UND_STANDALONE') && function_exists('ob_gzhandler')) ob_start('ob_gzhandler');
 header('X-Content-Type-Options: nosniff');
 

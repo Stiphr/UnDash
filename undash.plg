@@ -19,7 +19,7 @@
 - After UnDash is updated or restarted, an open page loads again by itself instead of failing every refresh until you reload it. It waits if Settings is open.
 - Container icons served over plain http (a LAN address) are no longer blocked.
 - A second update of the same container is recorded in the history (only the first one was).
-- Faster: the dashboard's files are cached by the browser and compressed, and each refresh sends about 8 times less data.
+- Faster: the dashboard's files are cached by the browser and compressed, and each refresh sends about 5 times less data.
 
 ###0.9.6
 - Docker version: a new API key with the listed permissions no longer leaves the System section empty with "The API key is missing a permission: Forbidden resource". UnDash asked for the server name through a part of the API (vars) that is not on the list; it now uses the host name from Info.
@@ -4964,7 +4964,7 @@ require_once __DIR__ . '/auth.php';      // the Docker version's password (Setti
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
-// the standalone port has no nginx in front of it: a refresh of 48 KB of JSON shrinks to about 6 KB
+// the standalone port has no nginx in front of it: a refresh of 38 KB of JSON shrinks to about 8 KB
 if (defined('UND_STANDALONE') && function_exists('ob_gzhandler')) ob_start('ob_gzhandler');
 header('X-Content-Type-Options: nosniff');
 
@@ -5264,7 +5264,7 @@ switch ($action) {
 }
 fail('Unknown action.');
 ]]></INLINE>
-<SHA256>d3e3871d7f31d4f8a00b55c7b572e5323291600598dd6a862afd66d1d1869c79</SHA256>
+<SHA256>a61986a67ab638f3539152e88c842711683b09797c1cbcf6b0a619e37e8e2f00</SHA256>
 </FILE>
 
 <FILE Name="&emhttp;/handoff.php" Mode="0644">
