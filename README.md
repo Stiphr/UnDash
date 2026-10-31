@@ -148,7 +148,7 @@ App widgets refresh every 15 seconds and the system every 2 seconds; change both
 
 ### Pick a look
 
-**Settings > Appearance**: theme, light / dark / system mode, accent colour, spacing and wallpaper. **Settings > Custom CSS** for anything else.
+**Settings > Appearance**: theme, light / dark / system mode, accent colour, spacing and wallpaper. The accent can follow the theme, be a colour of your own, or be taken from the wallpaper: UnDash reads a small copy of the picture in your browser and picks its main colour, toned so buttons and links stay readable. For the background choose the theme's gradient, a plain colour, a picture from an address, or **your own picture** (JPEG, PNG or WebP; it is scaled down in your browser and kept in the configuration folder, never sent anywhere). **Settings > Advanced > Custom CSS** for anything else.
 
 ### Start from the example
 
@@ -162,11 +162,12 @@ App widgets refresh every 15 seconds and the system every 2 seconds; change both
 | Where | What |
 |---|---|
 | Settings > Apps & cards | what the dashboard shows: sections, their options and your apps |
-| Settings > Appearance / Custom CSS | how it looks |
+| Settings > Appearance | how it looks: theme, accent colour, background and wallpaper, size and spacing; Restore defaults puts the page back |
 | Settings > General | refresh interval (default 2 s), what the search box searches, search engine, title |
 | Settings > Alerts | alerts you have ignored |
 | Settings > Server connection | Docker: Unraid API and dashboard password. Plugin: settings folder and the 9099 port |
-| Settings > Backup & restore | export and import `config.yaml` and `.env`, automatic backups, import from another dashboard |
+| Settings > Backup & restore | export and import `config.yaml` and `.env`, automatic backups, import from another dashboard, restore all defaults |
+| Settings > Advanced | Custom CSS, and About: version, where the files are, action and alert history |
 
 UnDash keeps two files in its config folder (`/config` in Docker, `/mnt/user/appdata/undash` for the plugin):
 
@@ -183,6 +184,8 @@ Keyboard: `/` search · `r` refresh · `p` pause · `,` settings · `?` all shor
 - The Docker image runs unprivileged as uid 99, with no Docker socket: everything goes through the Unraid API with the key you scope.
 - Sessions are HttpOnly with CSRF protection and a strict Content-Security-Policy; wrong passwords are rate-limited.
 - Port 9099 is plain HTTP. Use it on your LAN, or put a reverse proxy with HTTPS in front.
+- Certificates of the apps UnDash reads are not checked by default (LAN apps mostly use self-signed ones). Set `UNDASH_TLS_VERIFY=1` in the container settings to check them.
+- Numbers typed into Settings are checked before they can be saved; a value the server still has to bring inside its limits is named after saving, never changed in silence.
 
 More detail: [docs/DOCKER.md](docs/DOCKER.md) (Docker version) · [docs/CONFIG.md](docs/CONFIG.md) (settings file format).
 

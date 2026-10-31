@@ -248,7 +248,10 @@
     var bg = h('div', { class: 'modal-bg', onmousedown: function (e) { if (e.target === bg) close(); } });
     var hid = 'und-m' + Math.random().toString(36).slice(2, 8);
     var m = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': hid, tabindex: '-1' }, h('h3', { id: hid }, title), body, foot ? h('div', { class: 'foot' }, foot) : null);
-    function close() { if (!bg.parentNode) return; bg.parentNode.removeChild(bg); document.removeEventListener('keydown', key, true); if (m.onclose) m.onclose(); if (last && last.focus) try { last.focus(); } catch (e) { /* gone */ } }
+    // what is behind a dialog is out of reach for a screen reader too
+    [].forEach.call(root.children, function (el) { if (!el.classList.contains('modal-bg') && !el.classList.contains('toasts')) { el.setAttribute('data-inert', (parseInt(el.getAttribute('data-inert') || '0', 10) + 1)); el.setAttribute('aria-hidden', 'true'); } });
+    var uninert = function () { [].forEach.call(root.children, function (el) { var n = parseInt(el.getAttribute('data-inert') || '0', 10) - 1; if (n > 0) el.setAttribute('data-inert', n); else if (el.hasAttribute('data-inert')) { el.removeAttribute('data-inert'); el.removeAttribute('aria-hidden'); } }); };
+    function close() { if (!bg.parentNode) return; bg.parentNode.removeChild(bg); uninert(); document.removeEventListener('keydown', key, true); if (m.onclose) m.onclose(); if (last && last.focus) try { last.focus(); } catch (e) { /* gone */ } }
     function key(e) {
       var all = root.querySelectorAll('.modal-bg');
       if (all[all.length - 1] !== bg) return;          // only the top-most dialog reacts
@@ -392,6 +395,80 @@
     return a.mode === 'light' ? 'light' : 'dark';
   }
   function themeAccent(a) { var t = THEMES[a.theme] || THEMES.default; return (t[lookMode(a)] || t.dark).accent; }
+  /* the wallpaper in use: today's photo, the picture uploaded in Settings (served by UnDash itself), or an address */
+  function wallUrl(a) {
+    if (a.daily && a.daily.on && S.wall && S.wall.url) return S.wall.url;
+    if (a.background === 'custom') { var w = (S.boot && S.boot.wall) || {}; return w.set ? (API.indexOf('/plugins/') === 0 ? '/plugins/undash/wall.php' : '/wallpaper') + '?v=' + w.v : ''; }
+    return a.background || '';
+  }
+  /* ---- accent from the wallpaper: worked out in this browser from a 64 px copy of the picture, never sent anywhere.
+     The most present vivid hue wins (greys, near-black and near-white are ignored), then it is brought to a lightness that
+     reads against the cards in the current mode. Kept per picture and mode, so it is done once per wallpaper. ---- */
+  var ACC = { cache: LS.get('accent', null) || {}, busy: {} };
+  function hsl(c) {
+    var r = c[0] / 255, g = c[1] / 255, b = c[2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn, s = 0, h = 0;
+    if (d) { s = d / (1 - Math.abs(2 * l - 1)); h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h = (h * 60 + 360) % 360; }
+    return [h, s, l];
+  }
+  function rgbOf(h, s, l) {
+    var c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2, q = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return q.map(function (v) { return Math.round((v + m) * 255); });
+  }
+  function hex(c) { return '#' + c.map(function (v) { return ('0' + Math.max(0, Math.min(255, v)).toString(16)).slice(-2); }).join(''); }
+  function contrast(a, b) { var x = lum(a) + 0.05, y = lum(b) + 0.05; return x > y ? x / y : y / x; }
+  /* a usable accent from a picture's colour: saturation within a calm range, lightness moved until it stands out from the cards (3:1, the
+     WCAG minimum for controls) and the button text on it stays readable */
+  function tuneAccent(rgb, panel, light) {
+    var q = hsl(rgb), h = q[0], s = Math.max(0.5, Math.min(0.82, q[1])), l = Math.max(0.3, Math.min(0.7, q[2])), pc = hexRgb(panel), c = rgbOf(h, s, l), n = 0;
+    while (contrast(c, pc) < 3.2 && n++ < 24) { l += light ? -0.02 : 0.02; if (l < 0.12 || l > 0.9) break; c = rgbOf(h, s, l); }
+    return hex(c);
+  }
+  function extractAccent(im, panel, light) {
+    var W = 64, H = Math.max(2, Math.round(W * im.naturalHeight / Math.max(1, im.naturalWidth)));
+    var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    var cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(im, 0, 0, W, H);
+    var d = cx.getImageData(0, 0, W, H).data, bins = [], i, k;   // getImageData throws on a picture another site did not allow
+    for (i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 128) continue;
+      var q = hsl([d[i], d[i + 1], d[i + 2]]);
+      if (q[1] < 0.2 || q[2] < 0.12 || q[2] > 0.9) continue;                 // grey, black and white say nothing about the picture's colour
+      k = Math.floor(q[0] / 15) % 24;
+      var w = q[1] * (1 - Math.min(1, Math.abs(q[2] - 0.5) * 1.6)), bn = bins[k] || (bins[k] = { w: 0, r: 0, g: 0, b: 0 });
+      bn.w += w; bn.r += d[i] * w; bn.g += d[i + 1] * w; bn.b += d[i + 2] * w;
+    }
+    var best = -1, score = 0;
+    for (k = 0; k < 24; k++) { if (!bins[k]) continue; var sc = bins[k].w + (bins[(k + 23) % 24] || { w: 0 }).w * 0.5 + (bins[(k + 1) % 24] || { w: 0 }).w * 0.5; if (sc > score) { score = sc; best = k; } }
+    if (best < 0 || bins[best].w < W * H * 0.004) return null;               // a picture with (almost) no colour keeps the theme's accent
+    var bn = bins[best];
+    return tuneAccent([bn.r / bn.w, bn.g / bn.w, bn.b / bn.w], panel, light);
+  }
+  function accentFor(url, mode, panel, done) {
+    var key = url + '|' + mode;
+    if (ACC.cache[key]) { done(ACC.cache[key]); return; }
+    if (ACC.busy[key]) return;
+    ACC.busy[key] = 1;
+    var im = new Image(); im.crossOrigin = 'anonymous'; im.referrerPolicy = 'no-referrer';
+    im.onload = function () {
+      var hx = null; try { hx = extractAccent(im, panel, mode === 'light'); } catch (e) { hx = null; }
+      delete ACC.busy[key];
+      if (hx) { ACC.cache[key] = hx; var ks = Object.keys(ACC.cache); while (ks.length > 12) delete ACC.cache[ks.shift()]; LS.set('accent', ACC.cache); }
+      done(hx);
+    };
+    im.onerror = function () { delete ACC.busy[key]; done(null); };
+    im.src = url;
+  }
+  /* the accent the look uses now: the theme's, the one taken from the wallpaper, or the colour chosen in Settings */
+  function accentOf(a, mode, p) {
+    if (a.accent_mode === 'custom' && a.accent) return a.accent;
+    var wall = wallUrl(a);
+    if (a.accent_mode === 'auto' && wall) {
+      var got = ACC.cache[wall + '|' + mode];
+      if (got) return got;
+      accentFor(wall, mode, p.panel, function (hx) { if (hx && (S.drawer ? S.drawer.cfg && S.drawer.cfg.appearance === a : S.L && S.L.appearance === a)) applyLook(a); });
+      return S.lastAccent || p.accent;                                         // the previous accent stays until the picture is read
+    }
+    return p.accent;
+  }
   function applyLook(a) {
     a = a || S.L.appearance;
     syncThemes(a);
@@ -418,7 +495,8 @@
       if (k !== 'info' && k !== 'off') set('--' + k + '-soft', 'rgba(' + hexRgb(v).join(',') + ',' + (light ? 0.12 : 0.14) + ')');
     });
     set('--shadow', light ? '0 1px 2px rgba(16,24,40,.06)' : a.theme === 'amoled' ? 'none' : '0 1px 2px rgba(0,0,0,.25)');
-    var acc = a.accent || p.accent, c = hexRgb(acc), L1 = lum(c);
+    var acc = accentOf(a, mode, p), c = hexRgb(acc), L1 = lum(c);
+    S.lastAccent = acc;
     set('--accent', acc);
     set('--accent-btn', mix(c, [0, 0, 0], light ? 0.06 : 0.12));
     set('--accent-ink', L1 > 0.45 ? '#111' : '#fff');
@@ -426,7 +504,7 @@
     // link text must stay readable on the panel colour: darken on light, lighten on dark
     set('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : acc) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
     if (window.UND_STANDALONE) document.body.style.background = p.bg;
-    var wall = a.daily && a.daily.on && S.wall && S.wall.url ? S.wall.url : a.background;
+    var wall = wallUrl(a);
     root.classList.toggle('has-bg', !!wall);
     // wallpaper blur: the whole picture, or only what shows through the (then see-through) cards
     // the margin around the dashboard: automatic, or what Settings > Appearance says
@@ -485,7 +563,10 @@
   var R = {};      // references to live parts of the page
   function shell() {
     closeMenu(true);
-    alertClose(); clear(root); R = {}; toastBox = null;
+    alertClose();
+    var keepToasts = toastBox && toastBox.parentNode === root ? toastBox : null;   // "Settings saved" must outlive the page being drawn again
+    clear(root); R = {}; toastBox = null;
+    if (keepToasts) { root.appendChild(keepToasts); toastBox = keepToasts; }
     applyLook();
     applyCss(S.boot.css);
     var g = S.L.general;
@@ -2949,7 +3030,7 @@
     var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
       h('div', { class: 'dh' }, ic('gear'), h('h2', null, 'Settings'), settingsSearch(D, function (x) { goTo(x); }), btn('', function () { close(); }, 'ghost', 'x', 'Close settings')),
       h('div', { class: 'dmain' }, tabs, bodyEl),
-      h('div', { class: 'df' }, saveB, prevB, btn('Discard', function () { if (!D.dirty) close(true); else confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard', true).then(function (y) { if (y) close(true); }); }), status));
+      h('div', { class: 'df' }, saveB, prevB, btn('Cancel', function () { if (!D.dirty) close(true); else confirmBox('Discard your changes?', 'Everything you changed since opening Settings is undone.', 'Discard changes', true).then(function (y) { if (y) close(true); }); }), status));
     var bg = h('div', { class: 'drawer-bg', onclick: function () { close(); } });
     root.appendChild(bg); root.appendChild(drawer);
     function key(e) {
@@ -2965,7 +3046,14 @@
     }
     document.addEventListener('keydown', key);
     function paintTabs() { [].forEach.call(tabs.querySelectorAll('button'), function (b) { var on = b.getAttribute('data-t') === D.tab; b.className = on ? 'on' : ''; b.setAttribute('aria-selected', on ? 'true' : 'false'); }); }
-    function dirty() { D.dirty = true; saveB.disabled = false; status.textContent = 'Unsaved changes'; }
+    function dirty() { D.dirty = true; D.sync(); }
+    /* the footer follows the state: Save only with changes and no value out of range */
+    D.sync = function () {
+      var bad = Object.keys(D.invalid || {}).length;
+      saveB.disabled = !D.dirty || bad > 0; prevB.disabled = !D.cfg || bad > 0;
+      status.textContent = bad ? (bad === 1 ? 'One value is out of range. ' : bad + ' values are out of range. ') + 'Fix it to save.' : D.dirty ? 'Unsaved changes' : 'Changes apply after saving.';
+      status.classList.toggle('bad-t', bad > 0);
+    };
     /* Preview: the dashboard drawn from the unsaved settings, with a bar to go back, save or discard */
     var pbar = null;
     function preview() {
@@ -3006,16 +3094,33 @@
       var data = { config: D.cfg, creds: D.creds, shared: sharedOut(D) };
       if (D.cssChanged) data.css = D.css;
       api('save', data).then(function (j) {
-        if (j.error) { saveB.disabled = false; status.textContent = j.error; toast(j.error, true); return; }
-        D.dirty = false; D.saved = null; toast('Settings saved');
+        if (j.error) { saveB.disabled = false; status.textContent = j.error; status.classList.add('bad-t'); toast(j.error, true); return; }
+        D.dirty = false; D.saved = null;
+        // a number the server had to bring back inside its limits is named, never changed in silence
+        var adj = j.adjusted ? Object.keys(j.adjusted) : [];
+        toast(adj.length ? 'Saved. ' + (adj.length === 1 ? 'One value was' : adj.length + ' values were') + ' kept within the limits: ' + adj.map(function (k) { return k.split('.').pop().replace(/_/g, ' ') + ' is now ' + j.adjusted[k][1]; }).join(', ') + '.' : 'Settings saved');
         close(true); reload();
       });
     }
+    /* "Restore defaults" on a page: that part of the settings goes back to the defaults (saved only when you press Save) */
+    function restoreDefaults(key) {
+      confirmBox('Restore the defaults on this page?', 'Every setting on this page goes back to its default. Your apps, your own themes and your custom CSS are kept. Nothing is saved until you press Save.', 'Restore defaults').then(function (y) {
+        if (!y || !D.defaults || !D.defaults[key]) return;
+        var def = JSON.parse(JSON.stringify(D.defaults[key])), cur = D.cfg[key];
+        if (key === 'appearance') { def.custom_themes = cur.custom_themes || []; def.css_enabled = cur.css_enabled; }
+        Object.keys(def).forEach(function (k) { cur[k] = def[k]; });
+        D.invalid = {}; dirty();
+        if (key === 'appearance') { applyLook(cur); applyCss(cur.css_enabled ? D.css : ''); }
+        render(); toast('Defaults restored on this page. Save to keep them.');
+      });
+    }
     function render() {
-      clear(bodyEl);
+      clear(bodyEl); D.invalid = {}; D.sync();
       if (!D.cfg) { bodyEl.appendChild(h('div', { class: 'progress' }, h('i'))); return; }
-      bodyEl.appendChild(h('h2', { class: 'dtitle' }, SET_PAGES[D.tab][0]));
-      SET_PAGES[D.tab][2](bodyEl, D, dirty);
+      var pg = SET_PAGES[D.tab], key = pg[3];
+      bodyEl.appendChild(h('div', { class: 'dhead' }, h('h2', { class: 'dtitle' }, pg[0]),
+        key && D.defaults && D.defaults[key] ? btn('Restore defaults', function () { restoreDefaults(key); }, 'sm ghost', 'restart', 'Put every setting on this page back to its default') : null));
+      pg[2](bodyEl, D, dirty);
       bodyEl.scrollTop = 0;
     }
     D.render = render;
@@ -3032,6 +3137,7 @@
       box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
       var f = box.querySelector('input,select,textarea'); if (f && f.focus) f.focus({ preventScroll: true });
     }
+    D.go = goTo;
     D.pages = function () {
       // every page drawn off screen, so the search knows exactly what Settings holds
       var out = [], noop = function () {};
@@ -3042,9 +3148,9 @@
     paintTabs(); render();
     api('settings').then(function (j) {
       if (j.error) { status.textContent = j.error; return; }
-      D.cfg = j.config; D.creds = Array.isArray(j.creds) ? {} : j.creds; D.shared = j.shared || []; D.zones = j.zones || {}; D.types = j.types; prevB.disabled = false; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
+      D.cfg = j.config; D.creds = Array.isArray(j.creds) ? {} : j.creds; D.shared = j.shared || []; D.zones = j.zones || {}; D.types = j.types; D.keep = j.keep; D.css = j.css; D.loc = j.loc; D.store = j.store; D.flash = j.flash;
+      D.defaults = j.defaults || null; D.limits = j.limits || {}; if (j.wall) S.boot.wall = j.wall;
       ['docker', 'vms'].forEach(function (k) { if (Array.isArray(D.cfg[k].items)) D.cfg[k].items = {}; });
-      status.textContent = 'Changes apply after saving.';
       render();
       setTimeout(function () { var f = tabs.querySelector('.on'); if (f) f.focus(); }, 0);
     });
@@ -3128,9 +3234,71 @@
     inp.addEventListener('blur', function () { setTimeout(hide, 120); });
     return h('div', { class: 'ssb' }, ic('search'), inp, list);
   }
+  /* a picture chosen for the wallpaper: read in this browser, scaled down when it is large, then sent to the server as it is */
+  function uploadWall(file, status, done) {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { toast('Choose a JPEG, PNG or WebP picture.', true); return; }
+    if (file.size > 40 * 1048576) { toast('That picture is larger than 40 MB. Choose a smaller one.', true); return; }
+    txt(status, 'Reading the picture…');
+    var send = function (b64) {
+      txt(status, 'Uploading…');
+      api('wallpaper_upload', { data: b64 }, 120000).then(function (j) {
+        if (j.error) { txt(status, ''); toast(j.error, true); return; }
+        S.boot.wall = { set: true, v: j.v, size: j.size };
+        S.wallNote = 'Uploaded: ' + j.width + ' × ' + j.height + ' pixels, ' + bytes(j.size) + '.'; txt(status, S.wallNote);
+        done();
+      });
+    };
+    var rd = new FileReader();
+    rd.onload = function () {
+      var src = String(rd.result), im = new Image();          // a data: address, which the page's security policy allows for pictures
+      im.onload = function () {
+        var MAX = 2560, w = im.naturalWidth, hh = im.naturalHeight;
+        if (w && hh && (w > MAX || hh > MAX || file.size > 2.5 * 1048576)) {
+          var sc = Math.min(1, MAX / Math.max(w, hh)), cv = document.createElement('canvas'); cv.width = Math.round(w * sc); cv.height = Math.round(hh * sc);
+          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+          var out = cv.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.86);
+          if (out.length > 7 * 1048576) out = cv.toDataURL('image/jpeg', 0.8);        // a PNG photo stays huge: a JPEG of it does not
+          send(out.split(',')[1]); return;
+        }
+        send(src.split(',')[1]);
+      };
+      im.onerror = function () { txt(status, ''); toast('That file could not be read as a picture.', true); };
+      im.src = src;
+    };
+    rd.onerror = function () { txt(status, ''); toast('That file could not be read.', true); };
+    rd.readAsDataURL(file);
+  }
   /* small form helpers */
   function F(label, input, hint) { return h('div', { class: 'fld' }, h('label', null, label), input, hint ? h('div', { class: 'hint' }, hint) : null); }
-  function tIn(o, k, dirty, ph, type, attrs) { return h('input', Object.assign({ type: type || 'text', value: o[k] === undefined || o[k] === null ? '' : o[k], placeholder: ph || '', oninput: function (e) { o[k] = type === 'number' ? +e.target.value : e.target.value; dirty(); } }, attrs || {})); }
+  /* a text or number box. A number outside min..max is marked, explained under the box, and keeps Save off until it is fixed; the
+     value in the settings only changes when it is valid, so nothing is saved other than what was typed */
+  var VID = 0;
+  function tIn(o, k, dirty, ph, type, attrs) {
+    attrs = attrs || {};
+    var inp = h('input', Object.assign({ type: type || 'text', value: o[k] === undefined || o[k] === null ? '' : o[k], placeholder: ph || '', oninput: function (e) {
+      var v = e.target.value;
+      if (type === 'number') {
+        var n = +v, bad = v.trim() === '' || !isFinite(n) || (attrs.min !== undefined && n < +attrs.min) || (attrs.max !== undefined && n > +attrs.max);
+        fieldValid(inp, !bad, attrs.min !== undefined && attrs.max !== undefined ? 'Use a number from ' + attrs.min + ' to ' + attrs.max + '.' : 'Use a number.');
+        if (!bad) o[k] = n;
+      } else if (type === 'url') {
+        var ok = v.trim() === '' || /^(https?:\/\/[^\s"'<>]+|\/[^\s"'<>]*)$/i.test(v.trim());
+        fieldValid(inp, ok, 'Use an address that starts with http:// or https://.');
+        if (ok) o[k] = v.trim();
+      } else o[k] = v;
+      dirty();
+    } }, attrs));
+    return inp;
+  }
+  function fieldValid(inp, ok, msg) {
+    var D = S.drawer, id = inp._vid || (inp._vid = 'v' + (++VID));
+    inp.classList.toggle('invalid', !ok);
+    if (ok) inp.removeAttribute('aria-invalid'); else inp.setAttribute('aria-invalid', 'true');
+    var fld = inp.closest('.fld'), err = fld && fld.querySelector('.verr');
+    if (!ok && fld && !err) { err = h('div', { class: 'verr', role: 'alert' }); fld.appendChild(err); }
+    if (err) { if (ok) err.remove(); else txt(err, msg); }
+    if (D) { D.invalid = D.invalid || {}; if (ok) delete D.invalid[id]; else D.invalid[id] = msg; if (D.sync) D.sync(); }
+  }
   function cIn(o, k, dirty, lab) { return h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!o[k], onchange: function (e) { o[k] = e.target.checked; dirty(); } }), lab); }
   function sIn(o, k, dirty, opts, onch) { return h('select', { onchange: function (e) { o[k] = e.target.value; dirty(); if (onch) onch(); } }, opts.map(function (x) { return h('option', { value: x[0], selected: String(o[k]) === String(x[0]) }, x[1]); })); }
   function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return false; var x = arr[i]; arr[i] = arr[j]; arr[j] = x; return true; }
@@ -3143,16 +3311,39 @@
       titles.forEach(function (want) { kids.forEach(function (el) { var t = el.querySelector('h3'); if (t && t.textContent === want) b.appendChild(el); }); });
     };
   }
+  /* Settings pages: [title, icon, builder, the part of the configuration a "Restore defaults" button puts back (optional)] */
   var SET_PAGES = {
     dashboard: ['Apps & cards', 'grid', tabDashboard],
-    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Card style', 'Background', 'Daily wallpaper', 'Layout & size'])],
+    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Accent colour', 'Layout & size', 'Card style', 'Daily wallpaper', 'Background']), 'appearance'],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
-    system: ['General', 'clock', tabSystem],
+    system: ['General', 'clock', tabSystem, 'general'],
     ignored: ['Alerts', 'mute', tabIgnored],
     config: ['Server connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }],
-    backup: ['Backup & restore', 'download', configCommon]
+    backup: ['Backup & restore', 'download', configCommon],
+    about: ['About', 'info', tabAbout]
   };
-  var SET_NAV = [['Dashboard', ['dashboard', 'appearance', 'css']], ['Preferences', ['system', 'ignored']], ['Server', ['config', 'backup']]];
+  var SET_NAV = [['Dashboard', ['dashboard', 'appearance']], ['Preferences', ['system', 'ignored']], ['Server', ['config', 'backup']], ['Advanced', ['css', 'about']]];
+  /* About: what is running, where its files are, and the tools for a closer look */
+  function tabAbout(b, D) {
+    var bt = S.boot, me = S.self || {}, api = bt.caps.mode === 'api', sv = bt.server || {};
+    var row = function (k, v) { return v ? [h('span', null, k), h('span', null, v)] : null; };
+    b.appendChild(set('UnDash', null, h('div', { class: 'kv2' },
+      row('Version', 'UnDash ' + bt.version + (me.newer ? ' · ' + me.latest + ' is available' : me.latest ? ' · up to date' : '')),
+      row('Running as', api ? 'Docker container, reading the server through the Unraid API' : 'Unraid plugin'),
+      row('Server', (sv.name || '') + (sv.os ? ' · Unraid ' + sv.os : '')),
+      row('Settings folder', D.store || ''), api ? null : row('Flash copy', D.flash || ''),
+      row('Sign-in', bt.auth === 'unraid' ? 'Your Unraid login' : bt.auth === 'env' ? 'Password from the container settings (UNDASH_PASSWORD)' : bt.auth === 'file' ? 'Password set in Settings' : 'No password: anyone who reaches this address is signed in')),
+      h('div', { class: 'inl', style: { 'margin-top': '12px' } },
+        h('a', { class: 'btn sm', href: 'https://github.com/Stiphr/UnDash', target: '_blank', rel: 'noopener' }, ic('web'), 'GitHub'),
+        h('a', { class: 'btn sm', href: 'https://github.com/Stiphr/UnDash/issues', target: '_blank', rel: 'noopener' }, ic('info'), 'Report a problem'),
+        me.url ? h('a', { class: 'btn sm', href: me.url, target: '_blank', rel: 'noopener' }, ic('download'), 'Releases') : null)));
+    b.appendChild(set('Diagnostics', 'For a closer look when something is off. Nothing here changes a setting.',
+      h('div', { class: 'inl' }, btn('Action history', historyDialog, 'sm', 'history', 'Every start, stop, update and other action UnDash ran'),
+        btn('Alert history', alertHistory, 'sm', 'bell', 'When each problem started and ended'),
+        btn('Check configuration', function () { D.go({ tab: 'backup', label: 'Check configuration' }); }, 'sm', 'check', 'Looks for apps without an address, unknown values and removed sources'),
+        api ? btn('Test the Unraid connection', function () { D.go({ tab: 'config', label: 'Unraid connection' }); }, 'sm', 'server') : null,
+        btn('Keyboard shortcuts', keysHelp, 'sm', 'list'))));
+  }
   /* older page names (links in messages) open Apps & cards with that part unfolded */
   var SET_ALIAS = { layout: ['dashboard'], media: ['dashboard', 'media'], containers: ['dashboard', 'docker'], services: ['dashboard', 'apps'] };
   function set(title, hint) { var b = h('section', { class: 'set' }, h('h3', null, title), hint ? h('p', { class: 'hint' }, hint) : null); for (var i = 2; i < arguments.length; i++) add(b, arguments[i]); return b; }
@@ -3260,7 +3451,7 @@
     var page = list.filter(function (s) { return s.id === D.sub; })[0];
     if (page) {
       txt(b.querySelector('.dtitle'), TITLES[page.id]);
-      b.insertBefore(h('button', { type: 'button', class: 'sback', onclick: function () { D.sub = null; D.render(); } }, ic('chev'), 'Apps & cards'), b.querySelector('.dtitle'));
+      b.insertBefore(h('button', { type: 'button', class: 'sback', onclick: function () { D.sub = null; D.render(); } }, ic('chev'), 'Apps & cards'), b.firstChild);
       b.appendChild(set('On the dashboard', SEC_DESC[page.id],
         F('Show this card', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: shown(page), onchange: function (e) { page.visible = e.target.checked; dirty(); } }), TITLES[page.id])),
         F('Width in Smart arrange', sIn(page, 'width', dirty, [['full', 'Full width'], ['half', 'Half width']]))));
@@ -3438,7 +3629,7 @@
       var t = THEMES[id], p = t[lookMode({ theme: id, mode: a.mode })] || t.dark;
       tw.appendChild(h('button', { type: 'button', class: 'theme' + (a.theme === id ? ' on' : ''), role: 'radio', 'aria-checked': a.theme === id ? 'true' : 'false',
         title: t.light ? 'Light and dark' : 'Dark only',
-        onclick: function () { a.theme = id; a.accent = ''; if (t.custom) Object.assign(a, t.custom.look); hex.value = col.value = themeAccent(a); dirty(); preview(); applyCss(a.css_enabled ? D.css : ''); D.render(); } },
+        onclick: function () { a.theme = id; if (a.accent_mode === 'custom') { a.accent_mode = 'theme'; a.accent = ''; } if (t.custom) Object.assign(a, t.custom.look); dirty(); preview(); applyCss(a.css_enabled ? D.css : ''); D.render(); } },
         h('span', { class: 'pv', style: { background: a.gradient === false ? p.bg : meshCss(id, lookMode({ theme: id, mode: a.mode })) } },
           h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.panel, border: '1px solid ' + p.line } }), h('i', { style: { background: p.accent, flex: '0 0 18%' } })),
         h('span', { class: 'tn' }, h('b', null, themeName(t, lookMode({ theme: id, mode: a.mode }))), t.custom ? h('span', { class: 'muted xs' }, 'yours') : t.light ? null : h('span', { class: 'muted xs' }, 'dark only'))));
@@ -3484,17 +3675,39 @@
          btn('Cancel', function () { m.close(); back(); }), btn(nw ? 'Create' : 'Save', function () { m.close(); t.css = css.value; t.name = (t.name || '').trim() || 'My theme'; a.custom_themes = keep.list; addTheme(t); }, 'pri')].filter(Boolean));
       live();
     }
-    var col, hex, cur = a.accent || themeAccent(a);
-    hex = h('input', { type: 'text', value: cur, 'aria-label': 'Accent colour (hex)', maxlength: 7, style: { width: '110px' }, oninput: function (e) { var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; e.target.style.borderColor = ''; dirty(); preview(); } else e.target.style.borderColor = 'var(--bad)'; } });
-    col = h('input', { type: 'color', value: cur, 'aria-label': 'Accent colour', oninput: function (e) { a.accent = e.target.value; hex.value = a.accent; dirty(); preview(); } });
     b.appendChild(set('Theme', 'Pick a colour theme and whether it is light, dark or follows your system; every theme has both. Status colours (green, amber, red) stay readable in every theme.',
       h('div', { class: 'inl', style: { 'margin-bottom': '12px' } }, h('span', { class: 'muted sm' }, 'Mode'), modeSeg), tw,
       h('div', { class: 'inl', style: { 'margin-top': '12px' } }, btn('New theme', function () { editTheme(null); }, 'sm', 'plus', 'Start from the theme you are using'),
         chosen() ? btn('Edit theme', function () { editTheme(chosen().custom); }, 'sm', 'edit') : null, h('span', { class: 'grow' }),
-        btn('Import', importTheme, 'sm', 'up', 'Load a theme file'), btn('Export', exportTheme, 'sm', 'download', 'Save the current theme and look as a file')),
-      h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex,
-        btn(a.accent ? 'Use the theme accent' : 'Theme accent in use', function () { a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); }, 'sm ghost')),
-      null));
+        btn('Import', importTheme, 'sm', 'up', 'Load a theme file'), btn('Export', exportTheme, 'sm', 'download', 'Save the current theme and look as a file'))));
+    /* the accent: the theme's own, taken from the wallpaper, or a colour of your own. A manual colour always wins over the wallpaper. */
+    var ACCENTS = [['#f15a2c', 'Golden Gate'], ['#4f8dff', 'Sky'], ['#2fc4a0', 'Mint'], ['#cba6f7', 'Lavender'], ['#ec3f9d', 'Magenta'], ['#f2d23d', 'Sun'], ['#7e9cd8', 'Wave'], ['#ff6b5e', 'Coral']];
+    var accBox = h('div');
+    function accentDraw() {
+      clear(accBox);
+      var mode = a.accent_mode || (a.accent ? 'custom' : 'theme'), wall = wallUrl(a);
+      var seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Where the accent colour comes from' });
+      [['theme', 'Theme'], ['auto', 'From the wallpaper'], ['custom', 'Custom']].forEach(function (m) {
+        seg.appendChild(h('button', { type: 'button', role: 'radio', class: mode === m[0] ? 'on' : '', 'aria-checked': mode === m[0] ? 'true' : 'false', onclick: function () {
+          a.accent_mode = m[0]; if (m[0] === 'custom' && !a.accent) a.accent = S.lastAccent || themeAccent(a); dirty(); preview(); accentDraw(); } }, m[1]));
+      });
+      accBox.appendChild(F('Source', seg, mode === 'auto' ? (wall ? 'Worked out from the wallpaper in this browser; the picture is never sent anywhere. The colour is toned so buttons, links and selected items stay readable.' : 'There is no wallpaper yet: the theme\'s accent is used until you turn on the Daily wallpaper or set a background picture below.')
+        : mode === 'theme' ? 'The colour that comes with the theme.' : 'Your own colour for buttons, links and selected items. It stays even when the wallpaper changes.'));
+      if (mode === 'custom') {
+        var hexIn, col;
+        var sw = h('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent presets' }, ACCENTS.map(function (x) {
+          return h('button', { type: 'button', class: 'sw' + (a.accent === x[0] ? ' on' : ''), style: { '--sw': x[0] }, title: x[1], 'aria-label': x[1], 'aria-pressed': a.accent === x[0] ? 'true' : 'false', onclick: function () { a.accent = x[0]; dirty(); preview(); accentDraw(); } });
+        }));
+        hexIn = h('input', { type: 'text', value: a.accent, 'aria-label': 'Accent colour as a hex value', maxlength: 7, spellcheck: 'false', style: { width: '110px' }, oninput: function (e) {
+          var v = e.target.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) { a.accent = v.toLowerCase(); col.value = a.accent; fieldValid(e.target, true); dirty(); preview(); } else fieldValid(e.target, false, 'Use a colour like #f15a2c.'); } });
+        col = h('input', { type: 'color', value: a.accent, 'aria-label': 'Pick an accent colour', oninput: function (e) { a.accent = e.target.value; hexIn.value = a.accent; fieldValid(hexIn, true); dirty(); preview(); } });
+        accBox.appendChild(F('Pick a colour', h('div', { class: 'inl acc-pick' }, sw, col, hexIn)));
+      }
+      accBox.appendChild(h('div', { class: 'inl acc-row' }, h('span', { class: 'acc-now', 'aria-hidden': 'true' }), h('span', { class: 'muted sm' }, 'The accent in use'), h('span', { class: 'grow' }),
+        mode !== 'theme' ? btn('Use the theme accent', function () { a.accent_mode = 'theme'; a.accent = ''; dirty(); preview(); accentDraw(); }, 'sm ghost', 'restart') : null));
+    }
+    accentDraw();
+    b.appendChild(set('Accent colour', null, accBox));
     /* zoom: Auto follows the screen and the window; the stops are the ones browsers use */
     var ZOOMS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200], zv = +a.zoom || 100;
     var zoomField = function () {
@@ -3547,10 +3760,40 @@
         F('Subject', sIn(wd, 'topic', dirty, [['nature', 'Nature'], ['city', 'Cityscape'], ['cars', 'Cars'], ['mountains', 'Mountains'], ['ocean', 'Ocean'], ['space', 'Night sky'], ['custom', 'Custom…']], function () { wCustom.hidden = wd.topic !== 'custom'; })),
         wCustom),
       S.wallErr ? h('div', { class: 'banner bad' }, S.wallErr) : null));
-    b.appendChild(set('Background', 'Optional image behind the dashboard (https:// or a path served by Unraid).',
-      F('Gradient', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.gradient !== false, onchange: function (e) { a.gradient = e.target.checked; dirty(); preview(); D.render(); } }), 'A gradient in the theme\'s colours'), 'Off gives a plain colour. An image or daily wallpaper takes its place.'),
+    /* what is behind the dashboard: the theme's gradient, a plain colour, a picture of your own (uploaded, kept on the server) or one from an address */
+    var wallBox = h('div');
+    function wallDraw() {
+      clear(wallBox);
+      var w = S.boot.wall || {}, kind = a.background === 'custom' ? 'upload' : a.background ? 'url' : a.gradient === false ? 'plain' : 'gradient';
+      var sel = h('select', { 'aria-label': 'Background', onchange: function (e) {
+        var k = e.target.value;
+        if (k === 'gradient') { a.gradient = true; a.background = ''; } else if (k === 'plain') { a.gradient = false; a.background = ''; }
+        else if (k === 'url') a.background = a.background && a.background !== 'custom' ? a.background : ''; else a.background = 'custom';
+        dirty(); preview(); wallDraw(); } },
+        [['gradient', 'Gradient in the theme\'s colours'], ['plain', 'Plain colour'], ['upload', 'My own picture'], ['url', 'A picture from an address']].map(function (o) { return h('option', { value: o[0], selected: kind === o[0] }, o[1]); }));
+      wallBox.appendChild(F('Background', sel, 'The Daily wallpaper above takes the place of a picture while it is on.'));
+      if (kind === 'url') wallBox.appendChild(F('Picture address', tIn(a, 'background', pd, 'https://…', 'url'), 'https:// or a path Unraid serves. A picture from another site can only colour the accent when that site allows it (Wikimedia does).'));
+      if (kind === 'upload') {
+        var st = h('div', { class: 'wall-st', role: 'status' }, S.wallNote || '');
+        var fileIn = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: { display: 'none' }, 'aria-label': 'Choose a picture', onchange: function () {
+          var f = fileIn.files[0]; fileIn.value = ''; if (!f) return;
+          uploadWall(f, st, function () { a.background = 'custom'; dirty(); preview(); wallDraw(); });
+        } });
+        var pv = w.set ? h('img', { class: 'wall-pv', src: wallUrl({ background: 'custom' }), alt: 'Your wallpaper' }) : h('div', { class: 'wall-pv empty' }, 'No picture yet');
+        wallBox.appendChild(F('Your picture', h('div', { class: 'wallup' }, pv, h('div', { class: 'inl' },
+          btn(w.set ? 'Replace…' : 'Choose a picture…', function () { fileIn.click(); }, 'sm', 'up'),
+          w.set ? btn('Remove', function () {
+            confirmBox('Remove your wallpaper?', 'The picture is deleted from the server. The background goes back to the theme\'s gradient.', 'Remove', true).then(function (y) {
+              if (y) act('wallpaper_remove', {}, 'Wallpaper removed').then(function (j) { if (!j.error) { S.boot.wall = { set: false, v: 0, size: 0 }; a.background = ''; a.gradient = true; dirty(); preview(); wallDraw(); } });
+            });
+          }, 'sm ghost danger', 'trash') : null, fileIn), st),
+          'JPEG, PNG or WebP up to ' + ((D.limits || {}).wallpaper_mb || 6) + ' MB. A large photo is scaled down to 2560 px in your browser before it is sent. It is kept in the configuration folder and never sent to another site.'));
+      }
+    }
+    wallDraw();
+    b.appendChild(set('Background', 'What sits behind the dashboard.',
+      wallBox,
       h('div', { class: 'grid2' },
-      F('Image URL', tIn(a, 'background', pd, 'https://…')),
       F('Blur', sIn(a, 'blur_target', dirty, [['wallpaper', 'The whole wallpaper'], ['cards', 'Only behind the cards (frosted glass)']], preview), 'Frosted glass keeps the picture sharp and blurs it only where cards sit on it.'),
       F('Background blur', rng('blur', 0, 40, ' px', 'Background blur')),
       F('Saturation', rng('wall_saturation', 0, 200, ' %', 'Background saturation'), '0 is black and white.'),
@@ -4144,8 +4387,8 @@
         api('validate').then(function (j) { clear(vbox); if (j.error) { vbox.appendChild(h('div', { class: 'banner bad' }, j.error)); return; } if (!j.issues.length) vbox.appendChild(h('div', { class: 'banner ok', style: { 'margin-top': '10px' } }, 'No problems found.')); j.issues.forEach(function (x) { vbox.appendChild(h('div', { class: 'banner ' + (x.level === 'bad' ? 'bad' : ''), style: { 'margin-top': '8px' } }, x.msg)); }); });
       }, '', 'check'), vbox));
     b.appendChild(set('Backups', 'Every time you save settings, both files are backed up automatically (and before an import, restore or reset). The last 7 different versions are kept in data/backups of the configuration folder.', bbox,
-      h('div', { style: { 'margin-top': '10px' } }, btn('Reset to defaults…', function () {
-        confirmBox('Reset the dashboard?', 'Apps, sections and preferences go back to the defaults. Your keys and passwords stay in .env, and a backup is taken first.', 'Reset', true).then(function (y) { if (y) act('reset', {}, 'Reset').then(function (j) { if (!j.error) location.reload(); }); });
+      h('div', { style: { 'margin-top': '10px' } }, btn('Restore all defaults…', function () {
+        confirmBox('Restore the default settings?', 'Every app, section and preference goes back to the defaults; the dashboard starts over. Your keys and passwords stay in .env, nothing on the server is touched, and a backup is taken first so you can come back to this list and restore it.', 'Restore defaults', true).then(function (y) { if (y) act('reset', { confirm: 'yes' }, 'Defaults restored').then(function (j) { if (!j.error) location.reload(); }); });
       }, 'danger', 'trash'))));
     api('backups').then(function (j) {
       clear(bbox);

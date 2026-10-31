@@ -1,4 +1,13 @@
 ###beta
+- Accent colour from the wallpaper: Settings > Appearance > Accent colour can follow the theme, take its colour from the wallpaper, or use a colour of your own (presets or a picker). The wallpaper's colour is worked out in your browser from a small copy of the picture, never sent anywhere, and toned so buttons, links and selected items stay readable in light and dark mode. A colour you pick always wins.
+- Your own wallpaper: Settings > Appearance > Background offers the theme's gradient, a plain colour, a picture from an address, or a picture you upload (JPEG, PNG or WebP). Large photos are scaled down in your browser before they are sent; the picture is checked on the server, kept in the configuration folder and served only to signed-in browsers.
+- Settings: pages are grouped into Dashboard, Preferences, Server and Advanced, with a new About page (version, how UnDash runs, where its files are, action and alert history, diagnostics). Appearance and General have a Restore defaults button for that page alone; "Reset to defaults" is now "Restore all defaults" and asks first.
+- Settings check numbers as you type: a value outside its range is marked and explained, and Save waits until it is fixed. A number the server still has to bring inside its limits is named after saving instead of being changed in silence.
+- Fixed: an import or restore that could not be written reported success; it now reports the error. Custom CSS that could not be written is reported too.
+- Fixed: the "Settings saved" message vanished as soon as the dashboard was drawn again.
+- Security: container and VM preference names are checked like action targets; UNDASH_TLS_VERIFY=1 turns on certificate checks for the apps UnDash reads.
+- Prowlarr: "Fail grabs" and "Fail queries" are "Failed grabs" and "Failed queries".
+- Removed the styles of the Fluent theme, which had already become Golden Gate.
 - Card board: the dashboard is a grid of cards. Every System tile, Media list, app and section is its own card. Edit layout (the pencil) moves them by dragging, resizes them by their edges, and swaps a card with the one it lands on while others make way. Undo and redo, Snap up on or off, Fit to content per card or for all, remove and add cards, Reset, and nothing is saved until Save.
 - Keyboard: arrow keys move the focused card, Shift + arrows resize it, Delete removes it, Ctrl+Z undoes.
 - Desktop and tablet keep separate layouts; a phone shows the cards in order at their natural height. A new app appears by itself, and a card with nothing to show (no alerts) closes its gap.

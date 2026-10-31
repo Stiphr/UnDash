@@ -60,9 +60,10 @@ general:
 appearance:
   theme: default             # default amoled minimal zinc wave dragon catppuccin nord tokyo fluent
   mode: dark                 # dark | light | system
-  accent: ""                 # "#rrggbb", or empty for the theme's own accent
+  accent: ""                 # "#rrggbb" when accent_mode is custom
+  accent_mode: theme         # theme | auto (taken from the wallpaper in the browser) | custom
   density: comfortable       # compact | comfortable | expanded
-  background: ""             # https://... or /path, optional wallpaper
+  background: ""             # https://..., /path, or custom (the picture uploaded in Settings, kept in data/wallpaper)
   blur: 4                    # 0-40 px
   blur_target: wallpaper     # wallpaper | cards (frosted glass behind the cards only)
   brightness: 75             # 0-100 %
