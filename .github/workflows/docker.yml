@@ -1,5 +1,6 @@
 # Builds the UnDash image (tests run inside the build) and pushes it to ghcr.io/stiphr/undash.
 # Runs only when you ask for it (Actions > Docker image > Run workflow) or when you push a version tag (v2026.10.30).
+# A build from the beta branch is published as :beta only and never replaces :latest.
 name: Docker image
 on:
   workflow_dispatch:
@@ -27,5 +28,5 @@ jobs:
           push: true
           build-args: VERSION=${{ steps.v.outputs.version }}
           tags: |
-            ghcr.io/stiphr/undash:latest
+            ${{ !contains(github.ref_name, 'beta') && 'ghcr.io/stiphr/undash:latest' || '' }}
             ghcr.io/stiphr/undash:${{ steps.v.outputs.version }}
