@@ -1296,3 +1296,11 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .set.sub .ae-row:hover>.btn,.und.bui .set.sub .ae-row:focus-within>.btn{opacity:1}
 @media (hover:none){.und.bui .set.sub .ae-row>.btn{opacity:1}}
 
+/* an app's or container's own SVG icon takes the theme's text colour; selfh.st icons keep theirs */
+.und.bui :is(.aico,.cico,.appb img,.tpick img,.alink img):is(img,*)[src*=".svg"]:not([src*="selfhst"]){filter:brightness(0) invert(1)!important;opacity:.92}
+.und.bui[data-mode=light] :is(.aico,.cico,.appb img,.tpick img,.alink img):is(img,*)[src*=".svg"]:not([src*="selfhst"]){filter:brightness(0)!important;opacity:.82}
+/* close: a small quiet circle, like a Mac window */
+.und.bui .drawer .dh>.btn.ic,.und.bui.translucent .drawer .dh>.btn.ic:not(.pri):not(.solid){width:28px;height:28px;min-width:28px!important;min-height:28px!important;padding:0;border:0!important;border-radius:50%!important;background:color-mix(in srgb,var(--text) 10%,transparent)!important;color:var(--muted)!important;box-shadow:none!important}
+.und.bui .drawer .dh>.btn.ic:hover,.und.bui.translucent .drawer .dh>.btn.ic:not(.pri):not(.solid):hover{background:color-mix(in srgb,var(--text) 18%,transparent)!important;color:var(--title)!important}
+.und.bui .drawer .dh>.btn.ic svg{width:13px;height:13px}
+

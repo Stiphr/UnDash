@@ -22,6 +22,8 @@
 - Endpoint health no longer has a card or phone tab. An address that stops answering shows in Alerts, and Endpoints there lists them all.
 - Containers are a small, plain list: no box around each one, and the gear appears when you point at it. Show all is a simple link.
 - Found on your server has a Refresh button, and lists other running containers with a web page: one click adds a shortcut.
+- An app's or container's own SVG icon takes the theme's text colour. Selfh.st icons keep their colours.
+- First load shows a moving line and placeholders instead of Waiting for data.
 - Scrolling fades the page out under the header: a soft blur with the Translucent Effect, a colour fade without it.
 - Daily wallpaper: a new photo every day from Wikimedia Commons, with no key or account. Pick Nature, Cityscape, Cars, Mountains, Ocean or Night sky, or type your own words (Settings > Theme > Daily wallpaper). The author and licence are shown in the corner.
 - Translucent Effect (Settings > Theme): glass cards that blur and tint what is behind them, for dark and light themes. Its blur, opacity and saturation are adjustable, and the wallpaper gets saturation, contrast and opacity beside blur and brightness, all with safe limits. Without a wallpaper the page gets a soft colour wash for the glass to show.
