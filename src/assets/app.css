@@ -936,3 +936,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und.bui .drawer .df .grow{flex-basis:100%;order:-1}
   .und.bui .modal{border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
 }
+
+/* privacy: titles, posters, streams, requests, torrents and the server name */
+.und.privacy .mlist>*,.und.privacy .pl,.und.privacy .rq,.und.privacy .dln>.ell,.und.privacy .ais,.und.privacy .und-sub .vchip:first-child,.und.privacy .sbox .sb-i{filter:blur(7px);-webkit-user-select:none;user-select:none}
+.und .btn.priv.on{background:var(--accent-soft)!important;color:var(--accent-text)!important;border-color:var(--accent)!important}
