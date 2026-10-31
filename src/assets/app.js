@@ -105,6 +105,7 @@
     [/archisteamfarm/i, '<path d="M30 60V24h4v36zM32 4c5.500 5 5.500 12 0 18-5.500-6-5.500-13 0-18zM29 30c-8-1-13-6-14-13 8 1 13 6 14 13zM35 30c8-1 13-6 14-13-8 1-13 6-14 13zM29 42c-8-1-13-6-14-13 8 1 13 6 14 13zM35 42c8-1 13-6 14-13-8 1-13 6-14 13zM29 54c-8-1-13-6-14-13 8 1 13 6 14 13zM35 54c8-1 13-6 14-13-8 1-13 6-14 13z"/>'],
     [/twitch.?drops/i, '<g fill="none" stroke="#000" stroke-linecap="round" stroke-width="6"><path d="M12 24C24 7 44 7 58 26"/><path d="M36 14 10 58"/></g>'],
     [/postgres/i, '<g fill="none" stroke="#000" stroke-width="5"><ellipse cx="32" cy="15" rx="21" ry="9"/><path d="M11 15v34c0 5 9.400 9 21 9s21-4 21-9V15M11 32c0 5 9.400 9 21 9s21-4 21-9"/></g>'],
+    [/profilarr/i, '<g fill="none" stroke="#000" stroke-linecap="round" stroke-width="5"><path d="M8 16h48M8 32h48M8 48h48"/></g><circle cx="22" cy="16" r="7"/><circle cx="44" cy="32" r="7"/><circle cx="28" cy="48" r="7"/>'],
     [/autobrr/i, '<ellipse cx="29" cy="38" rx="19" ry="12" transform="rotate(-12 29 38)"/><circle cx="48" cy="29" r="9"/><circle cx="9" cy="39" r="4"/><path d="M45 23C42 13 35 7 27 5c1 9 7 16 14 21zM51 21c1-8-2-14-8-19-2 7-1 14 3 20zM36 46l11 11h-7L27 49zM20 46 7 56h8l14-7z"/>']
   ];
   function glyphUrl(text) {
@@ -170,6 +171,7 @@
     }, 300);
   }
   function objIcon(name, image, own, cls, fb) {
+    if (/^undash(-|$)/i.test(name)) { var me = logo(); me.setAttribute('class', 'logo ' + (cls || '')); return me; }    // our own mark, in the theme's accent
     var gl = glyphUrl(name + ' ' + image); if (gl) return img(gl, cls, fb);
     var mode = (S.L && S.L.appearance.icon_mode) || 'color';
     if (mode === 'off') return img(iconUrl(own), cls, fb);
@@ -428,7 +430,7 @@
     root.classList.toggle('has-bg', !!wall);
     // wallpaper blur: the whole picture, or only what shows through the (then see-through) cards
     // the margin around the dashboard: automatic, or what Settings > Theme says
-    ['x', 'y'].forEach(function (k) { var v = a['safe_' + k]; if (v === undefined || v < 0) root.style.removeProperty('--safe-' + k); else root.style.setProperty('--safe-' + k, v + 'px'); });
+    if (S.L && boardOn()) boardScale(a); else ['x', 'y'].forEach(function (k) { var v = a['safe_' + k]; if (v === undefined || v < 0) root.style.removeProperty('--safe-' + k); else root.style.setProperty('--safe-' + k, v + 'px'); });
     var glass = !!wall && a.blur_target === 'cards';
     root.classList.toggle('glass', glass);
     set('--glass-blur', (glass ? a.blur : 0) + 'px');
@@ -786,10 +788,22 @@
   /* text follows the screen: the whole board is scaled as one, so a 1440p monitor is not all tiny text and a laptop not all cramped.
      Sizes read from the page are screen pixels and go through boardTs() to become board pixels. */
   function boardTs() { return parseFloat(root.style.getPropertyValue('--ts')) || 1; }
-  function boardScale() {
+  function boardAutoZoom() {
     var w = window.innerWidth, m = boardMode(), cl = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
-    var auto = m === 'lg' ? cl(w / 1600, 0.86, 1.35) : m === 'md' ? cl(w / 1000, 0.9, 1.05) : 1;
-    root.style.setProperty('--ts', (auto * ({ s: 0.9, l: 1.12 }[S.L.appearance.text_size] || 1)).toFixed(3));
+    return m === 'lg' ? cl(w / 1600, 0.86, 1.35) : m === 'md' ? cl(w / 1000, 0.9, 1.05) : 1;
+  }
+  function boardScale(a) {
+    a = a || (S.drawer && S.drawer.cfg ? S.drawer.cfg : S.L).appearance;      // Settings shows its unsaved values while it is open
+    var z = +a.zoom ? a.zoom / 100 : boardAutoZoom();
+    if (+a.zoom && boardMode() === 'sm') z = Math.max(0.85, Math.min(1.25, z));       // a phone has no room for desktop sizes
+    root.style.setProperty('--ts', (z * ({ s: 0.9, l: 1.12 }[a.text_size] || 1)).toFixed(3));
+    boardMargins(a);
+  }
+  /* Smart margins: the same gap at the top and the sides, growing with the window. A number in Settings wins. */
+  function boardMargins(a) {
+    var ts = boardTs(), w = window.innerWidth / ts, sm = boardMode() === 'sm';
+    var smart = sm ? 8 : Math.round(Math.max(10, Math.min(36, w * 0.012)));
+    ['x', 'y'].forEach(function (k) { var v = a['safe_' + k]; root.style.setProperty('--safe-' + k, (v === undefined || v < 0 ? smart : v) + 'px'); });
   }
   /* cards marked automatic are as tall as their content: measured together in one go, after data arrives or the screen changes */
   function boardAuto() {
@@ -3040,7 +3054,7 @@
     var c = e.cloneNode(true); [].forEach.call(c.querySelectorAll('input,select,textarea,button,svg'), function (x) { x.remove(); });
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
-  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font zoom scale bigger', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
+  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
     wallpaper: 'background image picture blur', 'daily wallpaper': 'wikimedia commons nature city cars random photo background', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
     'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
   var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Daily wallpaper', 'Animations', 'Dashboard password'];
@@ -3481,25 +3495,38 @@
       h('div', { class: 'inl', style: { 'margin-top': '14px' } }, h('span', { class: 'muted sm' }, 'Accent'), col, hex,
         btn(a.accent ? 'Use the theme accent' : 'Theme accent in use', function () { a.accent = ''; hex.value = col.value = themeAccent(a); dirty(); preview(); D.render(); }, 'sm ghost')),
       null));
+    /* zoom: Auto follows the screen and the window; the stops are the ones browsers use */
+    var ZOOMS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200], zv = +a.zoom || 100;
+    var zoomField = function () {
+      var now = function () { return Math.round(parseFloat(root.style.getPropertyValue('--ts') || 1) * 100); }, sync = function () { if (R.cards) boardAutoSoon(); };
+      var out = h('span', { class: 'num muted sm', style: { 'min-width': '48px', 'text-align': 'right' } }, a.zoom ? a.zoom + '%' : now() + '%');
+      var r = h('input', { type: 'range', min: 0, max: ZOOMS.length - 1, step: 1, value: Math.max(0, ZOOMS.indexOf(zv)), disabled: !a.zoom, 'aria-label': 'Zoom level', style: { width: '100%' },
+        oninput: function (e) { a.zoom = zv = ZOOMS[+e.target.value]; txt(out, a.zoom + '%'); dirty(); boardScale(a); sync(); } });
+      return F('Zoom level', h('div', { class: 'zoomf' }, h('div', { class: 'inl' }, h('label', { class: 'switch', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: !a.zoom, onchange: function (e) {
+        a.zoom = e.target.checked ? 0 : zv; r.disabled = e.target.checked; dirty(); boardScale(a); sync(); txt(out, (a.zoom || now()) + '%'); } }), 'Auto'), h('span', { class: 'grow' }), out),
+        r, h('div', { class: 'zticks', 'aria-hidden': 'true' }, ZOOMS.map(function (z) { return h('span', { class: z === 100 ? 'on' : '' }, String(z)); }))),
+        'Auto fits the dashboard to your screen and window size. Turn it off to choose your own.');
+    };
     var margin = function (k, lab) {
-      var auto = a[k] < 0, out = h('span', { class: 'num muted sm', style: { 'min-width': '48px', 'text-align': 'right' } }, auto ? 'auto' : a[k] + ' px');
+      var auto = a[k] < 0, out = h('span', { class: 'num muted sm', style: { 'min-width': '48px', 'text-align': 'right' } }, auto ? 'smart' : a[k] + ' px');
       var r = h('input', { type: 'range', min: 0, max: 120, value: auto ? (k === 'safe_x' ? 32 : 16) : a[k], disabled: auto, 'aria-label': lab, style: { flex: '1' },
         oninput: function (e) { a[k] = +e.target.value; txt(out, a[k] + ' px'); dirty(); preview(); } });
       return F(lab, h('div', { class: 'inl' }, h('label', { class: 'switch', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: auto, onchange: function (e) {
-        a[k] = e.target.checked ? -1 : +r.value; r.disabled = e.target.checked; txt(out, e.target.checked ? 'auto' : a[k] + ' px'); dirty(); preview(); } }), 'Auto'), r, out));
+        a[k] = e.target.checked ? -1 : +r.value; r.disabled = e.target.checked; txt(out, e.target.checked ? 'smart' : a[k] + ' px'); dirty(); preview(); } }), 'Smart'), r, out));
     };
     b.appendChild(set('Spacing', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
       F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
       F('Animations', sIn(a, 'motion', dirty, [['full', 'Full'], ['fast', 'Fast'], ['nointro', 'Skip the opening'], ['off', 'Off']], preview), 'Skip the opening keeps the small transitions and shows the dashboard at once. Pressing anything also skips it.'),
       F('Corner radius', rng('radius', 0, 28, ' px', 'Corner radius'), 'How round the cards are on the card board, from square to 28 px.'),
-      F('Text size', sIn(a, 'text_size', dirty, [['s', 'Small'], ['m', 'Normal'], ['l', 'Large']]), 'On the card board. Text also follows the size of your screen.'),
+      zoomField(),
+      F('Text size', sIn(a, 'text_size', dirty, [['s', 'Small'], ['m', 'Normal'], ['l', 'Large']], function () { boardScale(a); }), 'Fine-tunes the text on top of the zoom level.'),
       F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'),
       F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
         'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
       F('Icon boxes', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.icon_box !== false, onchange: function (e) { a.icon_box = e.target.checked; dirty(); preview(); } }), 'Logos in rounded boxes'), 'Off shows the logos on their own.'),
       F('Container and VM icons', sIn(a, 'icon_mode', function () { dirty(); }, [['color', 'selfh.st, in colour'], ['auto', 'selfh.st, light or dark to suit the theme'], ['light', 'selfh.st, light'], ['dark', 'selfh.st, dark'], ['off', 'Unraid\'s own icons']], preview),
         'Found by the container\'s name or image (binhex-, linuxserver and similar prefixes are ignored). When selfh.st has none, Unraid\'s icon is used. An icon picked for a container in Sections & apps always wins.'),
-      margin('safe_x', 'Side margin'), margin('safe_y', 'Top and bottom margin'))));
+      margin('safe_x', 'Side margin'), margin('safe_y', 'Top margin'))));
     var pd = function () { dirty(); preview(); };
     function rng(k, lo, hi, unit, lab) {
       var out = h('span', { class: 'num muted sm', style: { 'min-width': '44px', 'text-align': 'right' } }, a[k] + unit);
