@@ -1361,3 +1361,4 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und.bui .board.flow .gc-c>.sec>.sec-h .tools>.muted{white-space:nowrap}
 }
 
+@media (max-width:700px){.und.bui .dlh{flex-wrap:wrap}.und.bui .dlh .an{flex:1 1 0;min-width:0}.und.bui .dlh>.grow{display:none}.und.bui .dlh>.badge{order:9;flex-basis:100%;margin:-6px 0 0 36px}}
