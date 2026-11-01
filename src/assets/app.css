@@ -1412,7 +1412,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .bside .olist{border:0;border-radius:0}
 .und .bside .olist .oi{background:none;padding:6px 0;min-height:44px;gap:8px}
 .und .bside .pick-list{max-height:none;overflow:visible}.und .bside .pick-list .oi input[type=text]{display:none}
-.und .bside .pick-list .oi{gap:6px}.und .bside .pick-list .oi .t{flex:1 1 0;min-width:0}.und .bside .pick-list .switch.ico-t{flex:none;width:24px;height:24px;padding:3px;gap:0;overflow:hidden}
+.und .bside .pick-list .oi{gap:6px}.und .bside .pick-list .oi .t{flex:1 1 0;min-width:0}.und.bui .switch.ico-t input[type=checkbox]{position:absolute;width:1px;height:1px;margin:0}.und .bside .pick-list .switch.ico-t{flex:none;width:24px;height:24px;padding:3px;gap:0}
 .und .bside .pick-bar{flex-wrap:wrap;gap:6px}.und .bside .pick-bar input[type=search]{flex:1 1 100%;width:100%}
 .und .gc-x{position:absolute;top:-7px;left:-7px;z-index:3;display:grid;place-items:center;width:22px;height:22px;padding:0;background:var(--panel);color:var(--text);border:1px solid var(--line-2);border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.35);cursor:pointer}
 .und .gc-x svg{width:12px;height:12px;stroke-width:3}.und .gc-x:hover,.und .gc-x:focus-visible{background:var(--bad);border-color:var(--bad);color:#fff}
