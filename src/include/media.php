@@ -33,7 +33,7 @@ function und_media(array $cfg, $kind) {
   $type = in_array($kind, ['upcoming_movies', 'recent_movies'], true) ? 'radarr' : 'sonarr';
   $id = und_media_source($cfg, $type);
   if (!$id) return ['items' => [], 'unconfigured' => true, 'error' => 'Add a ' . ($type === 'radarr' ? 'Radarr' : 'Sonarr') . ' app in Settings > Apps & cards to see this.'];
-  $count = max(1, min(50, (int)($cfg['media']['count'] ?? 15)));
+  $count = max(1, min(50, (int)($cfg['media']['count'] ?? 5)));
   foreach ((array)($cfg['media']['widgets'] ?? []) as $w) if (($w['id'] ?? '') === $kind && isset($w['count'])) $count = max(1, min(50, (int)$w['count']));
   $days = max(7, min(120, (int)($cfg['media']['days_ahead'] ?? 30)));
   return und_api_cached('media-' . $kind . '-' . $id . '-' . $count . '-' . $days, 60, function () use ($cfg, $id, $kind, $count, $days) {

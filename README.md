@@ -104,10 +104,11 @@ Everything is set up in **Settings** (the gear at the top right, or press `,`); 
    | Group | App types |
    |---|---|
    | Arr Stack | Radarr, Sonarr, Lidarr, Readarr, Prowlarr, Bazarr, autobrr, Overseerr / Jellyseerr, Wizarr |
-   | Downloads | qBittorrent, qui, SABnzbd |
-   | Media | Plex, Jellyfin, Emby, Tautulli, Tautulli recently added, Calendar, Tdarr, Unmanic |
-   | Network and tools | AdGuard Home, Pi-hole, Nginx Proxy Manager, Gluetun, Immich, Home Assistant, PeaNUT |
-   | Monitoring | Scrutiny, Uptime Kuma, Speedtest Tracker |
+   | Downloads | qBittorrent, qui, SABnzbd, Deluge, Transmission, NZBGet |
+   | Media | Plex, Jellyfin, Emby, Tautulli, Tautulli recently added, Calendar, Tdarr, Unmanic, Navidrome, Audiobookshelf, Kavita, Komga, RomM, Jellystat, Tube Archivist, Ombi, Frigate |
+   | Files and home | Nextcloud, Paperless-ngx, File Browser, Syncthing, Karakeep, Mealie, Miniflux, FreshRSS, Gitea / Forgejo, Gotify, changedetection.io |
+   | Network and tools | AdGuard Home, Pi-hole, Technitium DNS, Nginx Proxy Manager, Traefik, Caddy, Gluetun, Headscale, UniFi, Immich, Home Assistant, PeaNUT |
+   | Monitoring | Scrutiny, Uptime Kuma, Speedtest Tracker, Healthchecks, Gatus, Beszel, Netdata, Prometheus, Grafana, Glances, Portainer, What's Up Docker, Minecraft server |
    | Server | Storage, Docker summary, VM summary, UPS |
    | Widgets | Weather (Open-Meteo, no key), GitHub releases (with *Add from my containers*), Bookmarks |
    | Other | Custom API (JSON) for most other apps, Link for a plain shortcut |

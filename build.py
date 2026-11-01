@@ -11,7 +11,7 @@ version = args[0] if args else datetime.date.today().strftime('%Y.%m.%d')
 files = [
     ('UnDash.page', '0644'), ('UnDashMain.page', '0644'),
     ('include/lib.php', '0644'), ('include/config.php', '0644'), ('include/system.php', '0644'), ('include/docker.php', '0644'),
-    ('include/vm.php', '0644'), ('include/services.php', '0644'), ('include/import.php', '0644'), ('include/transfer.php', '0644'),
+    ('include/vm.php', '0644'), ('include/services.php', '0644'), ('include/widgets.php', '0644'), ('include/import.php', '0644'), ('include/transfer.php', '0644'),
     ('include/ops.php', '0644'), ('include/auth.php', '0644'), ('include/unraid_api.php', '0644'), ('include/media.php', '0644'), ('include/arr.php', '0644'),
     ('include/downloads.php', '0644'), ('include/ignores.php', '0644'), ('include/store.php', '0644'), ('include/alerts.php', '0644'), ('include/notify.php', '0644'), ('include/glances.php', '0644'), ('include/guest.php', '0644'), ('include/metrics.php', '0644'), ('include/health.php', '0644'), ('include/playing.php', '0644'), ('include/requests.php', '0644'), ('include/icons.php', '0644'), ('include/wallpaper.php', '0644'), ('include/api.php', '0644'), ('handoff.php', '0644'), ('wall.php', '0644'), ('standalone/router.php', '0644'),
     ('scripts/oscheck.php', '0755'), ('scripts/alertcheck.php', '0755'), ('scripts/rc.undash', '0755'), ('assets/app.css', '0644'), ('assets/app.js', '0644'),

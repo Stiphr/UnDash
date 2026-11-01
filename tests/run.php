@@ -721,7 +721,7 @@ t('requests style defaults to posters', und_normalize(['groups' => []])['request
 t('section names shown by default and can be hidden', und_normalize(['groups' => []])['appearance']['sec_names'] === true && und_normalize(['groups' => [], 'appearance' => ['sec_names' => false]])['appearance']['sec_names'] === false);
 t('icon mode defaults to color and is checked', und_normalize(['groups' => []])['appearance']['icon_mode'] === 'color' && und_normalize(['groups' => [], 'appearance' => ['icon_mode' => 'auto']])['appearance']['icon_mode'] === 'auto' && und_normalize(['groups' => [], 'appearance' => ['icon_mode' => 'x']])['appearance']['icon_mode'] === 'color');
 t('visibility kept', $m['widgets'][3]['visible'] === false && $m['widgets'][0]['visible'] === true);
-t('default count is 15', und_load_config()['media']['widgets'][2]['count'] === 15);
+t('default count is 5', und_load_config()['media']['widgets'][2]['count'] === 5);
 $ap = und_normalize(['groups' => [], 'appearance' => ['brightness' => 0, 'blur_target' => 'cards']])['appearance'];
 t('wallpaper brightness goes down to 0 and the blur can sit behind the cards only', $ap['brightness'] === 0 && $ap['blur_target'] === 'cards'
   && und_normalize(['groups' => [], 'appearance' => ['brightness' => 150, 'blur_target' => 'everything']])['appearance']['brightness'] === 100
@@ -1313,7 +1313,7 @@ $GLOBALS['UND_HTTP_MOCK'] = function ($m, $u) {
 $gr = und_glances_read('http://10.0.0.9:61208');
 t('an older Glances answers on version 3', $gr['version'] === '3' && $gr['pct'] === 12.3 && $gr['cores'] === [10.0, 20.0] && $gr['mem']['used'] === 40.0 && $gr['uptime'] === 7200, json_encode($gr));
 $GLOBALS['UND_HTTP_MOCK'] = function () { return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'refused', 'headers' => []]; };
-@unlink(und_tmp('glances-fs.json'));
+foreach (glob(und_tmp('glances-fs-*.json')) ?: [] as $f) @unlink($f);
 t('a dead address says so', isset(und_glances_read('http://10.0.0.9:61208')['error']));
 unset($GLOBALS['UND_HTTP_MOCK']);
 t('no address is no alert', und_alerts(und_load_config(), ['error' => 'x', 'none' => true], null) === []);
@@ -1321,6 +1321,92 @@ t('the Glances address must be an address', und_normalize(['general' => ['glance
 t('a new dashboard starts at 100%', und_default_config()['appearance']['zoom'] === 100);
 t('Auto stays what you chose', und_normalize(['appearance' => ['zoom' => 0]])['appearance']['zoom'] === 0);
 t('the side margin goes to 480, the top stays at 200', und_normalize(['appearance' => ['safe_x' => 999, 'safe_y' => 999]])['appearance']['safe_x'] === 480 && und_normalize(['appearance' => ['safe_x' => 999, 'safe_y' => 999]])['appearance']['safe_y'] === 200);
+
+/* ---------- more app presets ---------- */
+$ok = function ($j, $h = []) { return ['code' => 200, 'body' => is_string($j) ? $j : json_encode($j), 'json' => is_string($j) ? null : $j, 'err' => '', 'headers' => $h]; };
+$sv = function ($type, $x = []) { return $x + ['id' => 'abcd0001', 'type' => $type, 'name' => $type, 'url' => 'http://app', 'key' => 'k', 'username' => 'u', 'password' => 'p', 'fields' => [], 'options' => []]; };
+$vals = function ($r) { $o = []; foreach ($r['blocks'] as $b) $o[$b['key']] = $b['value']; return $o; };
+$calls = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use ($ok, &$calls) {
+  $calls[] = [$m, $url, $o];
+  $p = parse_url($url, PHP_URL_PATH);
+  $body = json_decode((string)($o['body'] ?? ''), true);
+  switch ($p) {
+    case '/json': return ($body['method'] ?? '') === 'auth.login' ? $ok(['result' => true], ['set-cookie' => ['_session_id=abc; Path=/']]) : (($o['cookie'] ?? '') === '_session_id=abc' ? $ok(['result' => ['torrents' => ['a' => ['progress' => 100], 'b' => ['progress' => 40.5]], 'stats' => ['download_rate' => 10, 'upload_rate' => 20]]]) : $ok(['result' => null]));
+    case '/transmission/rpc': return empty($o['headers']['X-Transmission-Session-Id']) ? ['code' => 409, 'body' => '', 'json' => null, 'err' => '', 'headers' => ['x-transmission-session-id' => ['sid']]] : $ok(['arguments' => ['torrents' => [['percentDone' => 1, 'rateDownload' => 0, 'rateUpload' => 7], ['percentDone' => .5, 'rateDownload' => 5, 'rateUpload' => 1]]]]);
+    case '/rest/getScanStatus.view': return $ok(['subsonic-response' => ['status' => 'ok', 'scanStatus' => ['count' => 900, 'folderCount' => 30]]]);
+    case '/rest/getNowPlaying.view': return $ok(['subsonic-response' => ['status' => 'ok', 'nowPlaying' => ['entry' => [['title' => 'Song', 'artist' => 'Band', 'username' => 'sam', 'duration' => 200]]]]]);
+    case '/api/libraries': return $ok(['libraries' => [['id' => 'l1', 'mediaType' => 'book'], ['id' => 'l2', 'mediaType' => 'podcast']]]);
+    case '/api/libraries/l1/stats': return $ok(['totalItems' => 4, 'totalDuration' => 100, 'totalSize' => 1000]);
+    case '/api/libraries/l2/stats': return $ok(['totalItems' => 2, 'totalDuration' => 50, 'totalSize' => 500]);
+    case '/api/Plugin/authenticate': return $ok(['token' => 'tok']);
+    case '/api/Stats/server/stats': return ($o['headers']['Authorization'] ?? '') === 'Bearer tok' ? $ok(['seriesCount' => 3, 'volumeCount' => 4, 'totalFiles' => 5, 'totalSize' => 6]) : ['code' => 401, 'body' => '', 'json' => null, 'err' => '', 'headers' => []];
+    case '/ocs/v2.php/apps/serverinfo/api/v1/info': return $ok(['ocs' => ['data' => ['nextcloud' => ['system' => ['freespace' => 99], 'storage' => ['num_users' => 2, 'num_files' => 7]], 'activeUsers' => ['last24hours' => 1]]]]);
+    case '/api/v1/repos/issues/search': return $ok([], ['x-total-count' => [strpos($url, 'type=pulls') ? '2' : '9']]);
+    case '/api/v1/repos/search': return $ok(['data' => []], ['x-total-count' => ['12']]);
+    case '/api/v1/notifications/new': return $ok(['new' => 4]);
+    case '/api/v1/watch': return $ok(['a' => ['title' => 'Old', 'last_changed' => 5, 'last_viewed' => 9], 'b' => ['title' => '', 'url' => 'http://x', 'last_changed' => 9, 'last_viewed' => 1, 'last_error' => 'boom']]);
+    case '/api/dashboard/stats/get': return $ok(['status' => 'ok', 'response' => ['stats' => ['totalQueries' => 200, 'totalBlocked' => 50, 'totalClients' => 3]]]);
+    case '/api/v3/checks/': return $ok(['checks' => [['status' => 'up', 'name' => 'a'], ['status' => 'down', 'name' => 'nas'], ['status' => 'grace', 'name' => 'c']]]);
+    case '/api/v1/endpoints/statuses': return $ok([['name' => 'web', 'results' => [['success' => false], ['success' => true]]], ['name' => 'db', 'group' => 'core', 'results' => [['success' => false]]], ['name' => 'new', 'results' => []]]);
+    case '/api/collections/_superusers/auth-with-password': return ['code' => 404, 'body' => '', 'json' => null, 'err' => '', 'headers' => []];
+    case '/api/collections/users/auth-with-password': return $ok(['token' => 'pb']);
+    case '/api/collections/systems/records': return $ok(['items' => [['status' => 'up', 'name' => 'a'], ['status' => 'down', 'name' => 'b']]]);
+    case '/api/v1/targets': return $ok(['data' => ['activeTargets' => [['health' => 'up'], ['health' => 'down', 'labels' => ['job' => 'node', 'instance' => 'x:9100']], ['health' => 'unknown']]]]);
+    case '/api/endpoints': return $ok([['Id' => 1, 'Type' => 1, 'Status' => 1], ['Id' => 2, 'Type' => 5, 'Status' => 1], ['Id' => 3, 'Type' => 2, 'Status' => 2]]);
+    case '/api/endpoints/1/docker/containers/json': return $ok([['State' => 'running'], ['State' => 'exited']]);
+    case '/api/containers': return $ok([['name' => 'a', 'updateAvailable' => true], ['name' => 'b', 'updateAvailable' => false]]);
+    case '/api/auth/login': return ['code' => 404, 'body' => '', 'json' => null, 'err' => '', 'headers' => []];
+    case '/api/login': return $ok(['meta' => ['rc' => 'ok']], ['set-cookie' => ['unifises=abc; Path=/', 'csrf_token=d; Path=/']]);
+    case '/api/s/default/stat/health': return ($o['cookie'] ?? '') === 'unifises=abc; csrf_token=d' ? $ok(['data' => [['subsystem' => 'wan', 'status' => 'ok'], ['subsystem' => 'wlan', 'num_user' => 4, 'num_guest' => 1, 'num_adopted' => 2], ['subsystem' => 'lan', 'num_user' => 3, 'num_adopted' => 1]]]) : $ok([]);
+    case '/api/greader.php/accounts/ClientLogin': return $ok("SID=x\nLSID=null\nAuth=tok\n");
+    case '/api/greader.php/reader/api/0/unread-count': return $ok(['unreadcounts' => [['id' => 'feed/1', 'count' => 1], ['id' => 'user/-/state/com.google/reading-list', 'count' => 8]]]);
+    case '/api/greader.php/reader/api/0/subscription/list': return $ok(['subscriptions' => [[], []]]);
+    case '/api/login/': return $ok('x');
+  }
+  return null;
+};
+$v = $vals(und_w_deluge($sv('deluge')));
+t('Deluge counts by progress, with its login cookie', $v === ['leech' => 1, 'download' => 10.0, 'seed' => 1, 'upload' => 20.0]);
+$v = $vals(und_w_transmission($sv('transmission')));
+t('Transmission retries with its session id', $v['leech'] === 1 && $v['seed'] === 1 && $v['upload'] === 8.0);
+$r = und_w_navidrome($sv('navidrome')); $sent = end($calls)[1];
+t('Navidrome sends a salted hash, never the password', !preg_match('/[?&]p=/', $sent) && preg_match('/[?&]s=([a-f0-9]+)/', $sent, $m) && strpos($sent, 't=' . md5('p' . $m[1])) !== false);
+t('Navidrome shows who is playing', $vals($r)['songs'] === 900 && $r['streams'][0]['sub'] === 'Band' && $r['streams'][0]['user'] === 'sam');
+$v = $vals(und_w_audiobookshelf($sv('audiobookshelf')));
+t('Audiobookshelf adds up its libraries by kind', $v['books'] === 4 && $v['podcasts'] === 2 && $v['duration'] == 150);
+t('Kavita trades the key for a token', $vals(und_w_kavita($sv('kavita')))['seriesCount'] === 3);
+t('Nextcloud reads its server info', $vals(und_w_nextcloud($sv('nextcloud')))['free'] === 99.0);
+$v = $vals(und_w_gitea($sv('gitea')));
+t('Gitea reads totals from the header', $v === ['notifications' => 4, 'issues' => 9, 'pulls' => 2, 'repos' => 12]);
+$r = und_w_changedetection($sv('changedetection'));
+t('changedetection counts only unseen changes', $vals($r) === ['total' => 2, 'changed' => 1, 'errors' => 1] && $r['list'][0]['title'] === 'http://x');
+t('Technitium works out the blocked share', $vals(und_w_technitium($sv('technitium')))['blocked_percent'] == 25);
+$r = und_w_healthchecks($sv('healthchecks'));
+t('Healthchecks names what is down', $vals($r)['late'] === 1 && $r['list'][0]['title'] === 'nas');
+$r = und_w_gatus($sv('gatus'));
+t('Gatus goes by the latest result', $vals($r) === ['up' => 1, 'down' => 1] && $r['list'][0]['title'] === 'core / db');
+t('Beszel falls back to the older login', $vals(und_w_beszel($sv('beszel'))) === ['up' => 1, 'down' => 1, 'paused' => 0]);
+$r = und_w_prometheus($sv('prometheus'));
+t('Prometheus counts targets', $vals($r) === ['up' => 1, 'down' => 1, 'total' => 3] && $r['list'][0]['title'] === 'node x:9100');
+t('Portainer reads only Docker environments that are up', $vals(und_w_portainer($sv('portainer'))) === ['running' => 1, 'stopped' => 1, 'total' => 2]);
+t('What\'s Up Docker counts updates', $vals(und_w_wud($sv('wud'))) === ['monitored' => 2, 'updates' => 1]);
+$v = $vals(und_w_unifi($sv('unifi', ['key' => ''])));
+t('UniFi falls back to a classic controller', $v === ['wan' => 'ok', 'users' => 7, 'guests' => 1, 'devices' => 3]);
+t('FreshRSS takes the unread total, not a feed', $vals(und_w_freshrss($sv('freshrss'))) === ['unread' => 8, 'subscriptions' => 2]);
+unset($GLOBALS['UND_HTTP_MOCK']);
+$vi = function ($n) { $o = ''; do { $b = $n & 0x7f; $n >>= 7; $o .= chr($n ? $b | 0x80 : $b); } while ($n); return $o; };
+$js = json_encode(['version' => ['name' => '1.21'], 'players' => ['online' => 2, 'max' => 20], 'description' => str_repeat('x', 300)]);
+$pl = "\0" . $vi(strlen($js)) . $js;
+$j = (function () use ($vi, $pl) { $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, 0); fwrite($pair[1], $vi(strlen($pl)) . $pl); $r = und_mc_status($pair[0], 'host', 25565); fread($pair[1], 300); return $r; })();
+t('Minecraft status reads players and version, past a two-byte length', $j['players']['online'] === 2 && $j['version']['name'] === '1.21');
+foreach (array_keys(und_types()) as $x) if (!in_array($x, ['system_info', 'cpu', 'memory', 'link'], true) && !function_exists('und_w_' . $x)) t("widget for $x exists", false);
+t('every app type has a reader', true);
+$m = und_normalize(['groups' => [], 'media' => ['widgets' => [['id' => 'recent_movies', 'title' => '  New films  ', 'count' => 3]]]])['media']['widgets'];
+t('a media list keeps its name', $m[2]['title'] === 'New films' && $m[2]['count'] === 3 && $m[0]['title'] === '');
+t('a new media list shows 5', $m[0]['count'] === 5);
+$c = und_hp_convert("- G:\n    - N:\n        widget:\n          type: paperlessngx\n          url: http://p\n          key: abc\n");
+t('Homepage import keeps the new app types', $c['config']['groups'][0]['services'][0]['type'] === 'paperless');
 
 rmrf($SANDBOX);
 

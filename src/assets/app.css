@@ -153,13 +153,16 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .gc-m .stat{margin:0}
 .und .bdetail{position:absolute;z-index:40;max-height:60vh;overflow:auto;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 .und .board.edit{min-height:60vh;background-image:linear-gradient(to right,color-mix(in srgb,var(--line) 45%,transparent) 1px,transparent 1px);background-size:calc((100% + var(--gg))/var(--cols)) 100%}
-.und .board.edit .gc{cursor:grab;touch-action:none;outline:1px dashed var(--line-2);outline-offset:1px;border-radius:var(--radius)}
-.und .board.edit .gc:focus-visible,.und .board.edit .gc:hover{outline:2px solid var(--accent)}
+.und .board.edit .gc{cursor:grab;touch-action:none;outline:1px solid color-mix(in srgb,var(--line-2) 70%,transparent);outline-offset:1px;border-radius:var(--radius);transition-property:left,top,width,height,outline-color,box-shadow}
+.und .board.edit .gc:focus-visible,.und .board.edit .gc:hover{outline-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 .und .board.edit .gc-c{pointer-events:none;user-select:none;opacity:.8}
 .und .board.edit .gc-c>[hidden]{display:flex!important}
-.und .gc-t{position:absolute;top:4px;left:6px;right:6px;display:flex;align-items:center;gap:4px;padding:2px 2px 2px 8px;font-size:12px;font-weight:600;background:var(--bar);border-radius:8px;opacity:0;transition:opacity .12s;min-height:26px}
-.und .gc-t>.ell{flex:1;min-width:0}
-.und .gc:hover>.gc-t,.und .gc:focus-within>.gc-t,.und .gc:focus>.gc-t{opacity:1}
+.und .gc-t{position:absolute;top:8px;right:8px;z-index:4;display:flex;align-items:center;gap:1px;padding:2px;background:color-mix(in srgb,var(--panel) 74%,transparent);-webkit-backdrop-filter:blur(14px) saturate(1.4);backdrop-filter:blur(14px) saturate(1.4);border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:calc(var(--r2) + 2px);box-shadow:0 4px 14px rgba(0,0,0,.22);opacity:0;transform:translateY(-2px);transition:opacity .14s,transform .14s}
+.und .gc-t .btn{min-width:26px;min-height:26px;padding:0;color:var(--muted)!important;border-radius:var(--r2)!important}
+.und .gc-t .btn:hover:not(:disabled),.und .gc-t .btn:focus-visible{background:var(--accent-soft)!important;border-color:transparent!important;color:var(--text)!important}
+.und .gc-t .btn.danger:hover:not(:disabled),.und .gc-t .btn.danger:focus-visible{background:color-mix(in srgb,var(--bad) 22%,transparent)!important;color:var(--bad)!important}
+.und .gc:hover>.gc-t,.und .gc:focus-within>.gc-t,.und .gc:focus>.gc-t,.und .gc.sel>.gc-t{opacity:1;transform:none}
+@media (hover:none){.und .gc-t{opacity:1;transform:none}}
 .und .gc.drag{z-index:30;cursor:grabbing;transition:none;box-shadow:0 14px 34px rgba(0,0,0,.5);opacity:.92}
 .und .gc.meas{height:auto!important;transition:none}
 .und .gc.meas .gc-c,.und .gc.meas .gc-c>*,.und .gc.meas .sec-b,.und .gc.meas .card.w{height:auto!important;overflow:visible!important}
@@ -168,7 +171,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .rh{position:absolute;z-index:5;touch-action:none}
 .und .rh.e{top:12px;bottom:12px;right:-4px;width:10px;cursor:ew-resize}
 .und .rh.s{left:12px;right:12px;bottom:-4px;height:10px;cursor:ns-resize}
-.und .rh.se{right:-2px;bottom:-2px;width:18px;height:18px;cursor:nwse-resize;border-right:3px solid var(--accent);border-bottom:3px solid var(--accent);border-radius:0 0 8px 0}
+.und .rh.se{right:-2px;bottom:-2px;width:18px;height:18px;cursor:nwse-resize;border-right:2px solid transparent;border-bottom:2px solid transparent;border-radius:0 0 var(--radius) 0;transition:border-color .14s}
+.und .gc:hover>.rh.se,.und .gc:focus-within>.rh.se{border-color:var(--accent)}
 .und.dragging,.und.dragging *{user-select:none!important}
 .und .badds{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
 .und .badd{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:13px}
@@ -992,7 +996,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .ipick{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
 .und.bui .ipick button{border-radius:var(--r2);background:var(--panel-2);border-color:transparent}
 .und.bui .ipick button:hover,.und.bui .ipick button:focus-visible{border-color:var(--accent)}
-.und.bui .gc-t .btn{min-width:26px}
 
 /* Settings: opens in the middle, with a search */
 @keyframes und-pop{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
@@ -1332,7 +1335,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .gc-m .stat .sp:has(.upt){opacity:1;height:auto;left:var(--cp);right:var(--cp);bottom:var(--cp)}
 .und .upt{display:flex;gap:2px;align-items:flex-end;height:12px}
 .und .upt i{flex:1 1 0;min-width:0;height:100%;border-radius:2px;background:color-mix(in srgb,var(--text) 12%,transparent)}
-.und .upt i.on{background:var(--ok)}
+.und .upt i.on{background:var(--accent)}
 .und.bui .gc-m .stat:has(.upt){justify-content:flex-start;padding-bottom:calc(var(--cp) + 18px)}
 
 /* hidden buttons take no room from the name; they make room only while shown */
@@ -1460,8 +1463,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .bside .pick-list{max-height:none;overflow:visible}.und .bside .pick-list .oi input[type=text]{display:none}
 .und .bside .pick-list .oi{gap:6px}.und .bside .pick-list .oi .t{flex:1 1 0;min-width:0}.und.bui .switch.ico-t input[type=checkbox]{position:absolute;width:1px;height:1px;margin:0}.und .bside .pick-list .switch.ico-t{flex:none;width:24px;height:24px;padding:3px;gap:0}
 .und .bside .pick-bar{flex-wrap:wrap;gap:6px}.und .bside .pick-bar input[type=search]{flex:1 1 100%;width:100%}
-.und .gc-x{position:absolute;top:-7px;left:-7px;z-index:3;display:grid;place-items:center;width:22px;height:22px;padding:0;background:var(--panel);color:var(--text);border:1px solid var(--line-2);border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.35);cursor:pointer}
-.und .gc-x svg{width:12px;height:12px;stroke-width:3}.und .gc-x:hover,.und .gc-x:focus-visible{background:var(--bad);border-color:var(--bad);color:#fff}
 /* your own section: its apps are rows in one card, not cards in a card */
 .und.bui .gcs-b,.und.bui .gc-c>.sec>.sec-b.gcs-b{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:0 20px;align-content:start}
 .und.bui .gcs-b>.card.w{height:auto;padding:10px 0;background:none;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none}

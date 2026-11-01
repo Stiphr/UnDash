@@ -1,4 +1,8 @@
 ###beta
+- 37 new app presets: Deluge, Transmission, NZBGet, Navidrome, Audiobookshelf, Kavita, Komga, RomM, Jellystat, Tube Archivist, Ombi, Frigate, Nextcloud, Paperless-ngx, File Browser, Syncthing, Karakeep, Mealie, Miniflux, FreshRSS, Gitea / Forgejo, Gotify, changedetection.io, Technitium DNS, Traefik, Caddy, Headscale, UniFi, Healthchecks, Gatus, Beszel, Netdata, Prometheus, Grafana, Glances on another machine, Portainer, What's Up Docker and Minecraft servers. Your containers of these types are offered in Add app, and a Homepage import keeps them
+- Edit mode: click a media list to rename it and set how many items it shows. Media lists show 5 items on a new dashboard
+- Edit mode: the card toolbar is a small glass bar in the corner that follows your theme and accent, with Remove in it, and it no longer covers the card's title
+- The uptime tile uses your accent color
 - Without an Unraid API key the Docker version hides what cannot work: containers, VMs, array details and the server menu. They come back with the key, and your layout is kept
 - Settings > Server connection lists what an API key adds while none is set
 - Glances: with no API key, its address (Settings > Server connection, or the setup wizard) brings back CPU, memory, storage, network and uptime, with history charts. It needs no key

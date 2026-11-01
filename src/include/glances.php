@@ -71,7 +71,7 @@ function und_glances_read($url) {
   foreach ([4, 3] as $v) { $q = und_glances_get("$url/api/$v/quicklook"); if (is_array($q)) { $base = "$url/api/$v"; break; } }
   if (!is_array($q)) return ['error' => 'Glances at ' . (parse_url($url, PHP_URL_HOST) ?: 'that address') . ' is not answering. Is it running, with its web server on (-w)?'];
   $get = function ($p) use ($base) { $j = und_glances_get("$base/$p"); return is_array($j) ? $j : []; };
-  $mem = $get('mem'); $swap = $get('memswap'); $sys = $get('system'); $pools = und_cached('glances-fs.json', 30, function () use ($get) { return und_glances_pools($get('fs')); });
+  $mem = $get('mem'); $swap = $get('memswap'); $sys = $get('system'); $pools = und_cached('glances-fs-' . md5($url) . '.json', 30, function () use ($get) { return und_glances_pools($get('fs')); });
   $up = und_glances_get("$base/uptime");
   $total = (float)($mem['total'] ?? 0); $free = (float)($mem['available'] ?? $mem['free'] ?? 0);
   return ['version' => $base[strlen($base) - 1], 'pct' => isset($q['cpu']) ? round((float)$q['cpu'], 1) : null, 'model' => (string)($q['cpu_name'] ?? ''),

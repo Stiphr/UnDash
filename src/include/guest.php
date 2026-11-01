@@ -11,7 +11,7 @@
 const UND_GUEST_ENV = 'UNDASH_GUEST_TOKEN';
 const UND_GUEST_SECTIONS = ['overview', 'media', 'playing', 'apps'];
 const UND_GUEST_TILES = ['cpu', 'memory', 'storage', 'network', 'health', 'disks', 'uptime', 'ups', 'cores', 'swap'];
-const UND_GUEST_PRIVATE = ['gluetun', 'homeassistant', 'customapi'];       // not offered to guests until the owner ticks them
+const UND_GUEST_PRIVATE = ['gluetun', 'homeassistant', 'customapi', 'frigate', 'nextcloud', 'paperless', 'filebrowser', 'syncthing', 'gitea', 'gotify', 'changedetection', 'traefik', 'caddy', 'headscale', 'unifi', 'healthchecks', 'gatus', 'beszel', 'netdata', 'prometheus', 'grafana', 'glances', 'portainer', 'wud'];       // not offered to guests until the owner ticks them
 const UND_GUEST_STREAM = ['title', 'sub', 'user', 'state', 'pos', 'dur', 'method', 'quality', 'hw'];
 
 function und_guest_token() { return (string)(und_env()[UND_GUEST_ENV] ?? ''); }
