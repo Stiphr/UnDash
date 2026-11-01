@@ -297,9 +297,12 @@
     });
     if (m.lastChild && m.lastChild.tagName === 'HR') m.removeChild(m.lastChild);
     m._from = from; S.menu = m; root.appendChild(m);
-    var r = from.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
-    var left = Math.min(window.innerWidth - mw - 8, Math.max(8, r.right - mw)), top = r.bottom + 4;
-    if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 4);
+    // sizes on the page are screen pixels and the menu's own are board pixels: on the board the whole page is zoomed
+    var ts = R.cards ? boardTs() : 1, r = from.getBoundingClientRect(), vw = window.innerWidth / ts, vh = window.innerHeight / ts;
+    m.style.maxWidth = (vw - 16) + 'px'; m.style.maxHeight = (vh - 16) + 'px';
+    var mw = m.offsetWidth, mh = m.offsetHeight;
+    var left = Math.min(vw - mw - 8, Math.max(8, r.right / ts - mw)), top = r.bottom / ts + 4;
+    if (top + mh > vh - 8) top = Math.max(8, r.top / ts - mh - 4);
     m.style.left = left + 'px'; m.style.top = top + 'px';
     document.addEventListener('mousedown', menuOut, true); document.addEventListener('keydown', menuKey, true);
     var f = m.querySelector('button:not([disabled])'); if (f) f.focus();
@@ -481,6 +484,7 @@
     root.classList.toggle('translucent', !!a.translucent);
     root.classList.toggle('mesh', a.gradient !== false);
     root.classList.toggle('ibox', a.icon_box !== false);
+    root.classList.toggle('no-chips', a.header_chips === false);
     root.style.setProperty('--mesh', meshCss(a.theme, mode));
     root.setAttribute('data-motion', a.motion || 'full');
     var set = function (k, v) { root.style.setProperty(k, v); };
@@ -3160,7 +3164,7 @@
     var c = e.cloneNode(true); [].forEach.call(c.querySelectorAll('input,select,textarea,button,svg'), function (x) { x.remove(); });
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
-  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
+  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'server details in the header': 'chips version name unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
     wallpaper: 'background image picture blur', 'daily wallpaper': 'wikimedia commons nature city cars random photo background', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
     'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
   var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Daily wallpaper', 'Animations', 'Dashboard password'];
@@ -3736,6 +3740,7 @@
       F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'),
       F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
         'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
+      F('Server details in the header', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.header_chips !== false, onchange: function (e) { a.header_chips = e.target.checked; dirty(); preview(); } }), 'Server name and versions'), 'Off hides them. An update notice still shows when there is one.'),
       F('Icon boxes', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.icon_box !== false, onchange: function (e) { a.icon_box = e.target.checked; dirty(); preview(); } }), 'Logos in rounded boxes'), 'Off shows the logos on their own.'),
       F('Container and VM icons', sIn(a, 'icon_mode', function () { dirty(); }, [['color', 'selfh.st, in colour'], ['auto', 'selfh.st, light or dark to suit the theme'], ['light', 'selfh.st, light'], ['dark', 'selfh.st, dark'], ['off', 'Unraid\'s own icons']], preview),
         'Found by the container\'s name or image (binhex-, linuxserver and similar prefixes are ignored). When selfh.st has none, Unraid\'s icon is used. An icon picked for a container in Sections & apps always wins.'),
