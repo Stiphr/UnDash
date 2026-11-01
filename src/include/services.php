@@ -26,7 +26,7 @@ function und_http($method, $url, array $o = []) {
   curl_setopt_array($ch, [
     CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
     CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => (int)($o['timeout'] ?? 10), CURLOPT_HTTPHEADER => $headers,
-    CURLOPT_SSL_VERIFYPEER => und_tls_verify(), CURLOPT_SSL_VERIFYHOST => und_tls_verify() ? 2 : 0,
+    CURLOPT_SSL_VERIFYPEER => und_tls_verify() || !empty($o['verify']), CURLOPT_SSL_VERIFYHOST => und_tls_verify() || !empty($o['verify']) ? 2 : 0,
     CURLOPT_USERAGENT => 'UnDash/' . UND_VERSION, CURLOPT_ENCODING => '',
     CURLOPT_HEADERFUNCTION => function ($c, $h) use (&$resp) { $p = explode(':', $h, 2); if (count($p) === 2) $resp[strtolower(trim($p[0]))][] = trim($p[1]); return strlen($h); },
   ]);

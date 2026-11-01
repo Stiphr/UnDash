@@ -13,7 +13,7 @@ files = [
     ('include/lib.php', '0644'), ('include/config.php', '0644'), ('include/system.php', '0644'), ('include/docker.php', '0644'),
     ('include/vm.php', '0644'), ('include/services.php', '0644'), ('include/import.php', '0644'), ('include/transfer.php', '0644'),
     ('include/ops.php', '0644'), ('include/auth.php', '0644'), ('include/unraid_api.php', '0644'), ('include/media.php', '0644'), ('include/arr.php', '0644'),
-    ('include/downloads.php', '0644'), ('include/ignores.php', '0644'), ('include/store.php', '0644'), ('include/alerts.php', '0644'), ('include/health.php', '0644'), ('include/playing.php', '0644'), ('include/requests.php', '0644'), ('include/icons.php', '0644'), ('include/wallpaper.php', '0644'), ('include/api.php', '0644'), ('handoff.php', '0644'), ('wall.php', '0644'), ('standalone/router.php', '0644'),
+    ('include/downloads.php', '0644'), ('include/ignores.php', '0644'), ('include/store.php', '0644'), ('include/alerts.php', '0644'), ('include/notify.php', '0644'), ('include/metrics.php', '0644'), ('include/health.php', '0644'), ('include/playing.php', '0644'), ('include/requests.php', '0644'), ('include/icons.php', '0644'), ('include/wallpaper.php', '0644'), ('include/api.php', '0644'), ('handoff.php', '0644'), ('wall.php', '0644'), ('standalone/router.php', '0644'),
     ('scripts/oscheck.php', '0755'), ('scripts/alertcheck.php', '0755'), ('scripts/rc.undash', '0755'), ('assets/app.css', '0644'), ('assets/app.js', '0644'),
 ]
 # the changelog goes into the XML as text, so &, < and > must be escaped (an unescaped & breaks plugin installs)
@@ -62,6 +62,8 @@ rm -f """ + tmp + """
 </FILE>
 """
 out.append(binary((root / 'assets' / 'icon.png').read_bytes(), '&emhttp;/images/undash.png', 'icon'))
+for size in (192, 512):
+    out.append(binary((src / 'images' / f'icon-{size}.png').read_bytes(), f'&emhttp;/images/icon-{size}.png', f'icon {size}'))
 out.append(binary((src / 'assets' / 'inter.woff2').read_bytes(), '&emhttp;/assets/inter.woff2', 'font'))
 
 out.append("""<FILE Run="/bin/bash">

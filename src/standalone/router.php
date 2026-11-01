@@ -65,6 +65,14 @@ if ($uri === '/assets/inter.woff2') {
   header('Content-Type: font/woff2'); header('Cache-Control: public, max-age=31536000, immutable');
   readfile(UND_ROOT . '/assets/inter.woff2'); exit;
 }
+// what a phone needs to put UnDash on its home screen; public, because the browser asks for it without the sign-in cookie
+if ($uri === '/manifest.webmanifest') {
+  header('Content-Type: application/manifest+json'); header('Cache-Control: no-cache');
+  echo json_encode(['name' => 'UnDash', 'short_name' => 'UnDash', 'start_url' => '/', 'scope' => '/', 'display' => 'standalone', 'background_color' => '#0b0c0f', 'theme_color' => '#0b0c0f',
+    'icons' => [['src' => '/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'], ['src' => '/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable']]], JSON_UNESCAPED_SLASHES);
+  exit;
+}
+if ($uri === '/icon-192.png' || $uri === '/icon-512.png') sa_asset(UND_ROOT . '/images' . $uri, 'image/png');
 if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
   // needed by the sign-in page too; nothing secret in either
   if ($uri === '/favicon.png') sa_asset(UND_ROOT . '/images/undash.png', 'image/png');
@@ -180,7 +188,8 @@ if ($uri === '/' || $uri === '/index.html') {
   header('Content-Type: text/html; charset=utf-8');
   header('Cache-Control: no-store');
   echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b0c0f">',
-       '<title>UnDash</title><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/assets/app.css?v=', $v, '">',
+       '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="UnDash"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
+       '<title>UnDash</title><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/assets/app.css?v=', $v, '">',
        '</head><body class="und-page"><div id="und" class="und"><div class="und-loading">Loading UnDash…</div></div>',
        '<script src="/assets/boot.js"></script><script src="/assets/app.js?v=', $v, '"></script></body></html>';
   exit;

@@ -18,7 +18,7 @@ function t($n, $c, $d = '') { global $pass, $fail; if ($c) $pass++; else { $fail
 function clear_cache() { foreach (glob(UND_TMP . '/api-*') ?: [] as $f) unlink($f); }
 function clear_cache_keep_none() { foreach (glob(UND_TMP . '/api-*.json') ?: [] as $f) unlink($f); }
 
-t('caps hide what the API cannot do', und_caps()['power'] === false && und_caps()['os_update'] === false && und_caps()['docker_stats'] === false && und_caps()['mode'] === 'api');
+t('caps hide what the API cannot do', und_caps()['power'] === false && und_caps()['os_update'] === false && und_caps()['docker_stats'] === true && und_caps()['mode'] === 'api');
 t('settings live in /config (UNDASH_CONFIG)', und_store_dir() === UND_DIR);
 t('the port is not changeable from the UI', isset(und_save_loc(['PORT' => '9100'])['error']));
 t('no API configured: clear error, no request', isset(und_gql('query { online }')['error']) && !$GLOBALS['SENT']);
@@ -214,5 +214,13 @@ t('a strange answer is refused', isset(und_os_check()['error']));
 @unlink(und_tmp('api-os.json')); $GLOBALS['UND_HTTP_MOCK'] = $saved; $GLOBALS['ANSWER'] = $keep;
 
 exec('rm -rf ' . escapeshellarg($SB));
+
+/* per-container numbers: the API's strings, and the control code `docker stats` can put in front of the first id */
+t('memory strings become bytes', und_api_mem_bytes('18.65MiB / 62.5GiB') === (int)round(18.65 * 1048576) && und_api_mem_bytes('2GiB / 8GiB') === 2147483648 && und_api_mem_bytes('500kB / 1GB') === 500000 && und_api_mem_bytes('12B / 1GB') === 12 && und_api_mem_bytes('nonsense') === null);
+t('a stats id matches the container whatever comes first', und_api_stats_key("aaaa:\x1b[Hbbbb") === 'bbbb' && und_api_stats_key('aaaa:bbbb') === 'bbbb' && und_api_stats_key('bbbb') === 'bbbb');
+und_write_json(und_tmp('docker-stats.json'), ['t' => 1000, 'v' => ['bbbb' => ['cpu' => 1.5, 'mem' => 10]]]);
+t('recent numbers are used, old ones are not', und_api_stats_seen(1010)['bbbb']['cpu'] === 1.5 && und_api_stats_seen(1000 + UND_STATS_OLD) === []);
+@unlink(und_tmp('docker-stats.json'));
+
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);
