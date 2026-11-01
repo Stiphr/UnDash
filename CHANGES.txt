@@ -22,6 +22,8 @@
 - Five new themes in the spirit of qui's: Autobrr, The Kyle, Napster, Nightwalker and Swizzin, with their own palettes for the glass cards. Mono is rebuilt in clean greys with a soft light from above.
 - Fixed: with two UnDash open on one server (live and beta), each signed the other out, which showed "UnDash restarted" and reloaded the page. Each port now has its own session, and a page whose token goes stale renews it and carries on without reloading.
 - The header shows your server's name by default. Settings > General > Display sets your own name and icon.
+- The server menu can check for an Unraid update in the Docker version too, and shows what Unraid last found for containers. The server name left the header's chips.
+- Changing the zoom no longer shakes the page: it applies when you let go of the slider.
 - Every card has the same inner margin on all four sides.
 - Settings > Appearance > Layout & size can hide the server name and versions in the header. Menus stay inside the window at any zoom.
 - Settings > Appearance > Zoom level: Auto fits the dashboard to the screen and window, or pick 50 to 200%. Smart margins keep the same gap at the top and sides as the window changes.
@@ -41,7 +43,7 @@
 - An app's or container's own SVG icon takes the theme's text colour. Selfh.st icons keep their colours.
 - First load shows a moving line and placeholders instead of Waiting for data.
 - Scrolling fades the page out under the header: a soft blur with the Translucent Effect, a colour fade without it.
-- Daily wallpaper: a new photo every day from Wikimedia Commons, with no key or account. Pick Nature, Cityscape, Cars, Mountains, Ocean or Night sky, or type your own words (Settings > Appearance > Daily wallpaper). The author and licence are shown in the corner.
+- Wallpaper: Settings > Appearance > Background takes a picture from a link, a local path on the server, or an upload.
 - Translucent Effect (Settings > Appearance): glass cards that blur and tint what is behind them, for dark and light themes. Its blur, opacity and saturation are adjustable, and the wallpaper gets saturation, contrast and opacity beside blur and brightness, all with safe limits. Without a wallpaper the page gets a soft colour wash for the glass to show.
 - Smooth animations: cards arrive in turn, and Settings, dialogs, menus, toasts and tabs move gently. Settings > Appearance > Animations sets Full, Fast, Skip the opening or Off, any click or key skips the opening, and the system's reduced motion setting is respected.
 - Header redesigned as one floating bar, also on wallpapers and with the Translucent Effect.

@@ -78,7 +78,7 @@ t('restart maps to vm.reboot', isset(und_vm_action('Win', 'restart')['ok']) && e
 t('starting a running VM refused', isset(und_vm_action('Win', 'start')['error']));
 // power and OS are not offered
 t('server power refused in Docker mode', isset(und_power_prepare('reboot')['error']) && isset(und_power('reboot', 'x', 'y')['error']));
-t('OS update refused in Docker mode', isset(und_os_update()['error']));
+t('OS update refused in Docker mode', strpos(und_os_update()['error'] ?? '', 'not available') !== false);
 // secrets
 $view = json_encode([und_creds_view(und_load_config()), und_shared_view(und_load_config())]);
 t('the API key is not in the settings view', strpos($view, 'SECRETKEY123') === false);
@@ -190,30 +190,28 @@ $GLOBALS['ANSWER'] = ['json' => ['data' => []]];
 und_alerts_check();
 t('the background alert check does not count as an open page', !is_file(UND_TMP . '/viewer'));
 
-// the daily wallpaper
-$wc = ['appearance' => ['daily' => ['on' => true, 'topic' => 'cars', 'custom' => '']]];
-$wn = 0; $wh = null; $wu = '';
-$photo = function ($n, $w = 6000, $h = 4000) { return ['title' => 'File:' . $n . '.jpg', 'imageinfo' => [['width' => $w, 'height' => $h, 'thumburl' => 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/' . $n . '.jpg/2560px-' . $n . '.jpg', 'descriptionurl' => 'https://commons.wikimedia.org/wiki/File:' . $n . '.jpg', 'extmetadata' => ['Artist' => ['value' => '<a href="x">Ann &amp; Bo</a>'], 'LicenseShortName' => ['value' => 'CC BY-SA 4.0']]]]]; };
-$saved = $GLOBALS['UND_HTTP_MOCK'];
-$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use (&$wn, &$wh, &$wu, $photo) { $wn++; $wh = $o['headers'] ?? []; $wu = $url; $j = ['query' => ['pages' => [1 => $photo('a'), 2 => $photo('b'), 3 => $photo('c', 2000, 3000)]]]; return ['code' => 200, 'body' => json_encode($j), 'json' => $j, 'err' => '', 'headers' => []]; };
-@unlink(und_wall_file());
-$w = und_wall($wc, '2026-11-01');
-t('a Commons photo comes back with its author and licence', strpos((string)($w['url'] ?? ''), 'https://upload.wikimedia.org/') === 0 && $w['by'] === 'Ann & Bo' && $w['license'] === 'CC BY-SA 4.0' && strpos($w['link'], 'https://commons.wikimedia.org/wiki/') === 0, json_encode($w));
-t('no key is sent, and the search is for the subject in reviewed photos', empty($wh['Authorization']) && strpos(urldecode($wu), 'sports car hastemplate:"Quality image"') !== false, urldecode($wu));
-t('a tall photo is never picked', strpos(json_encode($w), '/c.jpg') === false);
-t('a photo with an unexpected address is refused', und_wall_photo(['imageinfo' => [['width' => 3000, 'height' => 2000, 'thumburl' => 'https://evil.example/a.jpg', 'descriptionurl' => 'https://commons.wikimedia.org/wiki/File:a.jpg']]]) === null);
-und_wall($wc, '2026-11-01');
-t('Commons is asked once a day', $wn === 1, (string)$wn);
-und_wall($wc, '2026-11-02');
-t('a new day asks again', $wn === 2);
-t('custom words stay plain words', und_wall_query(['topic' => 'custom', 'custom' => 'red "barn" hastemplate:x']) === 'red barn hastemplate x' && und_wall_query(['topic' => 'custom', 'custom' => ' ']) === und_wall_query(['topic' => 'nature']));
-$GLOBALS['UND_HTTP_MOCK'] = function () { return ['code' => 500, 'body' => '', 'json' => null, 'err' => '', 'headers' => []]; };
-$w2 = und_wall($wc, '2026-11-03');
-t('when Commons fails, the last photo stays up with the reason', !empty($w2['url']) && !empty($w2['error']), json_encode($w2));
-t('switched off: nothing is asked', und_wall(['appearance' => ['daily' => ['on' => false]]]) === ['off' => true]);
-$mig = und_normalize(['appearance' => ['pexels' => ['on' => true, 'query' => 'autumn forest', 'color' => 'black']]])['appearance']['daily'];
-t('a saved Pexels wallpaper carries over as custom words', $mig === ['on' => true, 'topic' => 'custom', 'custom' => 'autumn forest'], json_encode($mig));
-$GLOBALS['UND_HTTP_MOCK'] = $saved;
+// a wallpaper named by its path
+$pic = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+file_put_contents(UND_DIR . '/wall.png', $pic); file_put_contents(UND_DIR . '/note.txt', 'secret');
+t('a picture in the config folder is found', (und_wall_local(UND_DIR . '/wall.png')['ext'] ?? '') === 'png');
+t('the appdata path on the server means the same file', (und_wall_local('/mnt/user/appdata/undash-beta/wall.png')['ext'] ?? '') === 'png');
+t('a file outside the allowed folders is refused', isset(und_wall_local('/etc/passwd')['error']));
+t('a file that is not a picture is refused, even in the config folder', isset(und_wall_local(UND_DIR . '/note.txt')['error']));
+t('climbing out of the folder is refused', isset(und_wall_local(UND_DIR . '/../../../../etc/passwd')['error']));
+@symlink('/etc/hosts', UND_DIR . '/link.png');
+t('a link pointing outside is refused', isset(und_wall_local(UND_DIR . '/link.png')['error']));
+t('no path gives a clear message', strpos(und_wall_local('')['error'] ?? '', 'path') !== false);
+t('a local wallpaper is a valid background; the old daily setting is dropped', und_normalize(['appearance' => ['background' => 'local', 'wall_path' => '/config/a.jpg']])['appearance']['background'] === 'local' && !isset(und_normalize(['appearance' => ['daily' => ['on' => true]]])['appearance']['daily']));
+// the OS check of the Docker version
+$saved = $GLOBALS['UND_HTTP_MOCK']; $osv = '99.1.0'; $osu = '';
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use (&$osv, &$osu, $saved) { if (strpos($url, 'releases.unraid.net') === false) return $saved($m, $url, $o); $osu = $url; $j = ['version' => $osv]; return ['code' => 200, 'body' => json_encode($j), 'json' => $j, 'err' => '', 'headers' => []]; };
+$keep = $GLOBALS['ANSWER']; $GLOBALS['ANSWER'] = ['json' => ['data' => ['info' => ['versions' => ['core' => ['unraid' => '7.3.4']]]]]]; clear_cache();
+$oc = und_os_check();
+t('the OS check asks Unraid\'s release service and sees a newer version', strpos($osu, 'https://releases.unraid.net/os?') === 0 && $oc['latest'] === '99.1.0' && $oc['installed'] !== '' && $oc['available'] === true, json_encode($oc));
+t('what it found is remembered for the header', und_api_os_seen('7.3.4')['available'] === true && und_api_os_seen('99.1.0')['available'] === false);
+$osv = 'bad"version';
+t('a strange answer is refused', isset(und_os_check()['error']));
+@unlink(und_tmp('api-os.json')); $GLOBALS['UND_HTTP_MOCK'] = $saved; $GLOBALS['ANSWER'] = $keep;
 
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";

@@ -65,6 +65,12 @@ function und_api_test() {
 
 /* ---------- reads (cached briefly so several open browsers share one request) ---------- */
 
+/** What the last update check found (Unraid's release service, from the server menu). */
+function und_api_os_seen($cur) {
+  $c = und_read_json(und_tmp('api-os.json'), []); $v = (string)($c['latest'] ?? '');
+  return ['installed' => $cur, 'latest' => $v, 'checked' => (int)($c['checked'] ?? 0), 'error' => '', 'available' => $v !== '' && $cur !== '' && version_compare($v, $cur, '>'), 'staged' => '', 'job' => 'idle'];
+}
+
 function und_api_cached($name, $ttl, $fn) {
   $f = und_tmp('api-' . $name . '.json');
   $c = und_read_json($f, null);
@@ -171,7 +177,7 @@ function und_api_system(array $cfg) {
               'model' => (string)($ident['cpu']['brand'] ?? ''), 'threads' => (int)($ident['cpu']['threads'] ?? 0), 'temp' => $temp, 'load' => null],
     'mem' => $memOut, 'net' => ['rx' => $net ? (float)$net['rxSec'] : null, 'tx' => $net ? (float)$net['txSec'] : null, 'iface' => $net ? $net['name'] : ''],
     'disk' => null, 'uptime' => $up, 'array' => $arr, 'hist' => $hist,
-    'os_update' => ['installed' => (string)($info['versions']['core']['unraid'] ?? ''), 'latest' => '', 'checked' => 0, 'error' => '', 'available' => false, 'staged' => '', 'job' => 'idle'],
+    'os_update' => und_api_os_seen((string)($info['versions']['core']['unraid'] ?? '')),
     'partial' => $r['partial'] ?? null,
   ];
 }

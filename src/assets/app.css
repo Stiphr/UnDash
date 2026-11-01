@@ -922,7 +922,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 }
 
 /* privacy: titles, posters, streams, requests, torrents and the server name */
-.und.privacy .mlist>*,.und.privacy .pl,.und.privacy .rq,.und.privacy .dln>.ell,.und.privacy .ais,.und.privacy .und-sub .vchip:first-child,.und.privacy .sbox .sb-i{filter:blur(7px);-webkit-user-select:none;user-select:none}
+.und.privacy .mlist>*,.und.privacy .pl,.und.privacy .rq,.und.privacy .dln>.ell,.und.privacy .ais,.und.privacy .und-name,.und.privacy .sbox .sb-i{filter:blur(7px);-webkit-user-select:none;user-select:none}
 .und .btn.priv.on{background:var(--accent-soft)!important;color:var(--accent-text)!important;border-color:var(--accent)!important}
 
 /* Now playing: a card per stream, side by side when several people watch */
@@ -965,10 +965,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .fld.flash,.und.bui .oi.flash,.und.bui .set.flash,.und.bui .switch.flash{border-radius:var(--r2)}
 @media (max-width:700px){.und .ssb{order:3;flex:1 0 100%;max-width:none}.und.bui .drawer .dh h2{flex:1}}
 
-/* credit for the daily wallpaper */
-.und .wcredit{position:fixed;left:12px;bottom:10px;z-index:30;font-size:11px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.45);padding:3px 8px;border-radius:var(--r2,6px);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-.und .wcredit a{color:#fff;text-decoration:underline}
-@media (max-width:700px){.und.bui .wcredit{bottom:calc(72px + env(safe-area-inset-bottom))}}
 
 /* Translucent Effect: glass that tints and blurs what is behind it */
 .und.bui.translucent{--g-fill:color-mix(in srgb,#101116 calc(var(--g-op,42%) + 14%),transparent);--g-fill-2:rgba(255,255,255,.07);--g-line:rgba(255,255,255,.13);--g-shine:rgba(255,255,255,.14);--g-blur:brightness(calc(.62*var(--g-exp,1))) contrast(var(--g-con,1)) saturate(var(--g-sat,170%)) blur(var(--g-bl,26px))}
@@ -1376,4 +1372,4 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.no-chips .und-sub .vchip:not(:has(.upd)){display:none}
 .und .brand img.logo,.und .brand .ph.logo,.und .sec-in-ic .logo{object-fit:contain}
 .und .sec-in-ic{display:inline-flex;flex:none}.und .sec-in-ic .logo{width:30px;height:30px;border-radius:7px}
-
+.und.rezoom .gc,.und.rezoom .gc *{transition:none!important}

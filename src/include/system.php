@@ -275,7 +275,18 @@ function und_os_staged() {
 }
 
 function und_os_check() {
-  if (und_api_mode()) return ['error' => 'Unraid OS updates are not available through the Unraid API; use Tools > Update OS in Unraid.'];
+  if (und_api_mode()) {
+    // the API cannot check or install, but Unraid's public release service says what the latest version is
+    $cur = (string)(und_system(und_load_config())['os_update']['installed'] ?? '');
+    try {
+      $j = und_get('https://releases.unraid.net/os?' . http_build_query(['branch' => 'stable', 'current' => $cur]), ['timeout' => 15]);
+      $v = (string)($j['version'] ?? '');
+      if (!preg_match('/^[0-9][A-Za-z0-9._+-]{0,30}$/', $v)) return ['error' => 'The update server did not answer.'];
+    } catch (Throwable $e) { return ['error' => 'The update server did not answer.']; }
+    $out = ['checked' => time(), 'latest' => $v, 'installed' => $cur, 'available' => $cur !== '' && version_compare($v, $cur, '>')];
+    und_write_json(und_tmp('api-os.json'), $out);
+    return $out;
+  }
   $tmp = '/tmp/plugins/unRAIDServer.plg';
   @unlink($tmp);
   $r = und_run([und_bin('plugin'), 'check', 'unRAIDServer.plg'], 120);

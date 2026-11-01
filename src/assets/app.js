@@ -412,8 +412,9 @@
   function themeAccent(a) { var t = THEMES[a.theme] || THEMES.default; return (t[lookMode(a)] || t.dark).accent; }
   /* the wallpaper in use: today's photo, the picture uploaded in Settings (served by UnDash itself), or an address */
   function wallUrl(a) {
-    if (a.daily && a.daily.on && S.wall && S.wall.url) return S.wall.url;
-    if (a.background === 'custom') { var w = (S.boot && S.boot.wall) || {}; return w.set ? (API.indexOf('/plugins/') === 0 ? '/plugins/undash/wall.php' : '/wallpaper') + '?v=' + w.v : ''; }
+    var w = (S.boot && S.boot.wall) || {}, at = API.indexOf('/plugins/') === 0 ? '/plugins/undash/wall.php' : '/wallpaper';
+    if (a.background === 'custom') return w.set ? at + '?v=' + w.v : '';
+    if (a.background === 'local') return w.local ? at + '?local=1&v=' + w.local : '';
     return a.background || '';
   }
   /* ---- accent from the wallpaper: worked out in this browser from a 64 px copy of the picture, never sent anywhere.
@@ -531,7 +532,6 @@
     root.classList.toggle('full', S.full && !window.UND_STANDALONE);
     var bg = null;
     for (var i = 0; i < root.children.length; i++) if (root.children[i].classList.contains('und-bg')) bg = root.children[i];
-    wallCredit(wall && wall === (S.wall || {}).url ? S.wall : null);
     if (wall) {
       if (!bg) { bg = h('div', { class: 'und-bg' }); root.insertBefore(bg, root.firstChild); }
       bg.style.backgroundImage = 'url("' + wall.replace(/["\\()]/g, '') + '")';
@@ -539,21 +539,6 @@
       bg.style.opacity = (a.wall_opacity === undefined ? 100 : a.wall_opacity) / 100;
       bg.style.inset = glass ? '0' : '-' + (a.blur * 2) + 'px';
     } else if (bg) bg.parentNode.removeChild(bg);
-  }
-  /* these photos are free to use when the author and licence are named, with a link back */
-  function wallCredit(w) {
-    var old = root.querySelector('.wcredit'); if (old) old.remove();
-    if (w) root.appendChild(h('div', { class: 'wcredit' }, h('a', { href: w.link, target: '_blank', rel: 'noopener' }, 'Photo' + (w.by ? ' by ' + w.by : '')), (w.license ? ' · ' + w.license : '') + ' · Wikimedia Commons'));
-  }
-  /* today's photo; the server asks Wikimedia Commons at most once a day, the page looks again every hour for the new day */
-  function loadWall() {
-    clearTimeout(S.wallT);
-    if (!S.L.appearance.daily || !S.L.appearance.daily.on) { if (S.wall) { S.wall = null; applyLook(); } return; }
-    api('wallpaper').then(function (j) {
-      S.wall = j.url ? j : null; S.wallErr = j.error || '';
-      if (!S.drawer) applyLook();
-      S.wallT = setTimeout(loadWall, 3600000);
-    });
   }
   // "system" follows the OS switching between light and dark while the page is open
   if (DARK_OS) { var osChange = function () { if (S.L && S.L.appearance && S.L.appearance.mode === 'system' && !S.drawer) applyLook(); }; if (DARK_OS.addEventListener) DARK_OS.addEventListener('change', osChange); else DARK_OS.addListener(osChange); }
@@ -622,7 +607,6 @@
     if (board) boardMount(); else packHalves();
     paintAll(); paintLive(); paintIdent();
     if (!S.selfT) { S.selfT = 1; checkSelf(); }
-    if (S.wallFor !== JSON.stringify(S.L.appearance.daily)) { S.wallFor = JSON.stringify(S.L.appearance.daily); loadWall(); }
   }
 
   /* privacy: blurs what you may not want on a screen share or a screenshot, on this browser only */
@@ -657,7 +641,7 @@
     var sig = JSON.stringify([name, ip, os, ou.available, ou.latest, ou.staged, me.newer, me.latest]);
     if (R.sub._sig === sig) return; R.sub._sig = sig;
     clear(R.sub);
-    if (name) R.sub.appendChild(h('span', { class: 'vchip', title: ip && ip !== name ? ip : null }, name));
+    R.brandName.title = ip && ip !== name ? name + ' · ' + ip : name;
     if (os) {
       var osUp = ou.staged ? ['restart for ' + ou.staged, 'Unraid ' + ou.staged + ' is installed; it becomes active after a restart'] : ou.available ? [ou.latest + ' available', 'Unraid ' + ou.latest + ' is available'] : null;
       R.sub.appendChild(h('span', { class: 'vchip' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { if (S.boot.caps.os_update) osDialog(); else window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
@@ -903,6 +887,13 @@
     root.style.setProperty('--ts', (z * ({ s: 0.9, l: 1.12 }[a.text_size] || 1)).toFixed(3));
     boardMargins(a);
   }
+  /* a new size lands at once: cards do not slide into it, and their heights are measured again in the same step */
+  function boardZoomNow(a) {
+    root.classList.add('rezoom');
+    boardScale(a);
+    if (R.cards) boardAuto();
+    clearTimeout(S.zoomT); S.zoomT = setTimeout(function () { root.classList.remove('rezoom'); }, 350);
+  }
   /* Smart margins: the same gap at the top and the sides, growing with the window. A number in Settings wins. */
   function boardMargins(a) {
     var ts = boardTs(), w = window.innerWidth / ts, sm = boardMode() === 'sm';
@@ -925,7 +916,7 @@
     if (sig !== S.boardNat) { S.boardNat = sig; boardPaint(); }
   }
   function boardAutoSoon() { clearTimeout(S.autoT); S.autoT = setTimeout(boardAuto, 250); }
-  if (window.ResizeObserver) new ResizeObserver(function () { if (!R.cards) return; boardScale(); boardAutoSoon(); if (R.overview && R.overview.open) boardDetail(); }).observe(document.documentElement);
+  if (window.ResizeObserver) new ResizeObserver(function () { if (!R.cards) return; if (S.winW !== window.innerWidth) { S.winW = window.innerWidth; boardZoomNow(); } else boardScale(); boardAutoSoon(); if (R.overview && R.overview.open) boardDetail(); }).observe(document.documentElement);
   function boardQuiet(p) { return p.hidden || p.style.display === 'none'; }
   /* a card with nothing to say (no alerts) leaves the board for now, and the ones under it close the gap */
   function boardSync() {
@@ -1683,13 +1674,33 @@
     if (!S.boot.port_enabled) return null;
     return h('a', { class: 'btn ' + cls, href: '/plugins/undash/handoff.php', target: '_blank', rel: 'noopener', title: 'UnDash on its own page (port ' + S.boot.port + '), without Unraid\'s menu' }, ic('web'), 'Open on port ' + S.boot.port);
   }
+  /* the Docker version: Unraid's release service says what the latest OS is; installing stays in Unraid */
+  function checkOs() {
+    toast('Checking for an Unraid update…');
+    api('os_check', {}, 25000).then(function (j) {
+      if (j.error) { toast(j.error, true); return; }
+      if (j.available) toast('Unraid ' + j.latest + ' is available.', false, UNRAID ? ['Open', function () { window.open(UNRAID + '/Tools/Update', '_blank', 'noopener'); }] : null);
+      else toast('Unraid is up to date (' + j.latest + ').');
+      refreshNow();
+    });
+  }
+  /* the API has no "check now": this reads what Unraid last found, and offers its Docker page for a fresh check */
+  function rereadUpdates() {
+    api('live', { parts: 'docker' }, 20000).then(function (j) {
+      var err = j.error || (j.docker && j.docker.error);
+      if (err) { toast(err, true); return; }
+      S.live = Object.assign({}, S.live, { docker: j.docker }); paintAll();
+      var n = (dockerStats(S.live) || {}).updates || 0;
+      toast((n ? n + (n === 1 ? ' container has an update' : ' containers have updates') : 'No container updates') + ', as of Unraid\'s last check.', false, UNRAID ? ['Check in Unraid', function () { window.open(UNRAID + '/Docker', '_blank', 'noopener'); }] : null);
+    });
+  }
   function serverMenu(from) {
     var dk = dockerStats(S.live || {}), caps = S.boot.caps;
     var pl = portLink('');
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
-      caps.docker_check ? ['Check container updates', 'box', checkUpdates, '', !!S.busy.dcheck] : null, dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
-      caps.os_update ? ['Unraid OS update', 'up', osDialog] : null, ['Recent operations', 'history', historyDialog], ['Keyboard shortcuts  ?', 'grid', keysHelp],
+      ['Check container updates', 'box', caps.docker_check ? checkUpdates : rereadUpdates, '', !!S.busy.dcheck], dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
+      caps.os_update ? ['Unraid OS update', 'up', osDialog] : ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], ['Keyboard shortcuts  ?', 'grid', keysHelp],
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
       window.UND_STANDALONE && S.boot.auth !== 'open' ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
       caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
@@ -3183,10 +3194,10 @@
     var c = e.cloneNode(true); [].forEach.call(c.querySelectorAll('input,select,textarea,button,svg'), function (x) { x.remove(); });
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
-  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'dashboard name': 'title header brand rename server', 'dashboard icon': 'logo brand header picture', 'server details in the header': 'chips version name unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
-    wallpaper: 'background image picture blur', 'daily wallpaper': 'wikimedia commons nature city cars random photo background', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
+  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'dashboard name': 'title header brand rename server', 'dashboard icon': 'logo brand header picture', 'versions in the header': 'chips version unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
+    wallpaper: 'background image picture blur link path upload', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
     'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
-  var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Daily wallpaper', 'Animations', 'Dashboard password'];
+  var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Background', 'Animations', 'Dashboard password'];
   function settingsIndex(D) {
     var out = [], seen = {};
     function add(tab, label, where, hint) {
@@ -3337,7 +3348,7 @@
   /* Settings pages: [title, icon, builder, the part of the configuration a "Restore defaults" button puts back (optional)] */
   var SET_PAGES = {
     dashboard: ['Apps & cards', 'grid', tabDashboard],
-    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Accent colour', 'Layout & size', 'Card style', 'Daily wallpaper', 'Background']), 'appearance'],
+    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Accent colour', 'Layout & size', 'Card style', 'Background']), 'appearance'],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['General', 'clock', tabSystem, 'general'],
     ignored: ['Alerts', 'mute', tabIgnored],
@@ -3744,12 +3755,14 @@
     /* zoom: Auto follows the screen and the window; the stops are the ones browsers use */
     var ZOOMS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200], zv = +a.zoom || 100;
     var zoomField = function () {
-      var now = function () { return Math.round(parseFloat(root.style.getPropertyValue('--ts') || 1) * 100); }, sync = function () { if (R.cards) boardAutoSoon(); };
+      var now = function () { return Math.round(parseFloat(root.style.getPropertyValue('--ts') || 1) * 100); };
       var out = h('span', { class: 'num muted sm', style: { 'min-width': '48px', 'text-align': 'right' } }, a.zoom ? a.zoom + '%' : now() + '%');
       var r = h('input', { type: 'range', min: 0, max: ZOOMS.length - 1, step: 1, value: Math.max(0, ZOOMS.indexOf(zv)), disabled: !a.zoom, 'aria-label': 'Zoom level', style: { width: '100%' },
-        oninput: function (e) { a.zoom = zv = ZOOMS[+e.target.value]; txt(out, a.zoom + '%'); dirty(); boardScale(a); sync(); } });
+        // Settings is on the page being zoomed, so it would move under the pointer: the number follows the drag, the zoom waits for the release
+        oninput: function (e) { txt(out, ZOOMS[+e.target.value] + '%'); },
+        onchange: function (e) { a.zoom = zv = ZOOMS[+e.target.value]; dirty(); boardZoomNow(a); } });
       return F('Zoom level', h('div', { class: 'zoomf' }, h('div', { class: 'inl' }, h('label', { class: 'switch', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: !a.zoom, onchange: function (e) {
-        a.zoom = e.target.checked ? 0 : zv; r.disabled = e.target.checked; dirty(); boardScale(a); sync(); txt(out, (a.zoom || now()) + '%'); } }), 'Auto'), h('span', { class: 'grow' }), out),
+        a.zoom = e.target.checked ? 0 : zv; r.disabled = e.target.checked; dirty(); boardZoomNow(a); txt(out, (a.zoom || now()) + '%'); } }), 'Auto'), h('span', { class: 'grow' }), out),
         r, h('div', { class: 'zticks', 'aria-hidden': 'true' }, ZOOMS.map(function (z) { return h('span', { class: z === 100 ? 'on' : '' }, String(z)); }))),
         'Auto fits the dashboard to your screen and window size. Turn it off to choose your own.');
     };
@@ -3769,7 +3782,7 @@
       F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'),
       F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
         'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
-      F('Server details in the header', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.header_chips !== false, onchange: function (e) { a.header_chips = e.target.checked; dirty(); preview(); } }), 'Server name and versions'), 'Off hides them. An update notice still shows when there is one.'),
+      F('Versions in the header', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.header_chips !== false, onchange: function (e) { a.header_chips = e.target.checked; dirty(); preview(); } }), 'Unraid and UnDash versions'), 'Off hides them. An update notice still shows when there is one.'),
       F('Icon boxes', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.icon_box !== false, onchange: function (e) { a.icon_box = e.target.checked; dirty(); preview(); } }), 'Logos in rounded boxes'), 'Off shows the logos on their own.'),
       F('Container and VM icons', sIn(a, 'icon_mode', function () { dirty(); }, [['color', 'selfh.st, in colour'], ['auto', 'selfh.st, light or dark to suit the theme'], ['light', 'selfh.st, light'], ['dark', 'selfh.st, dark'], ['off', 'Unraid\'s own icons']], preview),
         'Found by the container\'s name or image (binhex-, linuxserver and similar prefixes are ignored). When selfh.st has none, Unraid\'s icon is used. An icon picked for a container in Sections & apps always wins.'),
@@ -3786,27 +3799,28 @@
       h('div', { class: 'grid2' }, F('Card blur', rng('glass_blur', 0, 60, ' px', 'Card blur')), F('Card opacity', rng('glass_opacity', 10, 95, ' %', 'Card opacity'), 'Lower shows more of what is behind.'),
         F('Card exposure', rng('glass_exposure', 40, 160, ' %', 'Card exposure')), F('Card saturation', rng('glass_saturation', 100, 250, ' %', 'Card saturation')), F('Card contrast', rng('glass_contrast', 50, 150, ' %', 'Card contrast'))),
       resetTo({ glass_blur: 26, glass_opacity: 42, glass_saturation: 170, glass_exposure: 100, glass_contrast: 100 })));
-    var wd = a.daily, wCustom = F('Your words', tIn(wd, 'custom', dirty, 'autumn forest'), 'What the photo should show. A word or two works best.');
-    wCustom.hidden = wd.topic !== 'custom';
-    b.appendChild(set('Daily wallpaper', 'A new photo every day from Wikimedia Commons, no key or account needed. It replaces the image below while this is on. Blur and brightness apply to it too.',
-      h('div', { class: 'grid2' },
-        F('New photo every day', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: wd.on, onchange: function (e) { wd.on = e.target.checked; dirty(); } }), 'Daily wallpaper')),
-        F('Subject', sIn(wd, 'topic', dirty, [['nature', 'Nature'], ['city', 'Cityscape'], ['cars', 'Cars'], ['mountains', 'Mountains'], ['ocean', 'Ocean'], ['space', 'Night sky'], ['custom', 'Custom…']], function () { wCustom.hidden = wd.topic !== 'custom'; })),
-        wCustom),
-      S.wallErr ? h('div', { class: 'banner bad' }, S.wallErr) : null));
-    /* what is behind the dashboard: the theme's gradient, a plain colour, a picture of your own (uploaded, kept on the server) or one from an address */
+    /* what is behind the dashboard: the theme's gradient, a plain colour, or your own picture from a link, a path on the server or an upload */
     var wallBox = h('div');
     function wallDraw() {
       clear(wallBox);
-      var w = S.boot.wall || {}, kind = a.background === 'custom' ? 'upload' : a.background ? 'url' : a.gradient === false ? 'plain' : 'gradient';
+      var w = S.boot.wall || {}, kind = a.background === 'custom' ? 'upload' : a.background === 'local' ? 'local' : a.background ? 'url' : a.gradient === false ? 'plain' : 'gradient';
       var sel = h('select', { 'aria-label': 'Background', onchange: function (e) {
         var k = e.target.value;
         if (k === 'gradient') { a.gradient = true; a.background = ''; } else if (k === 'plain') { a.gradient = false; a.background = ''; }
-        else if (k === 'url') a.background = a.background && a.background !== 'custom' ? a.background : ''; else a.background = 'custom';
+        else if (k === 'url') a.background = /^(https?:|\/)/.test(a.background) ? a.background : ''; else a.background = k === 'local' ? 'local' : 'custom';
         dirty(); preview(); wallDraw(); } },
-        [['gradient', 'Gradient in the theme\'s colours'], ['plain', 'Plain colour'], ['upload', 'My own picture'], ['url', 'A picture from an address']].map(function (o) { return h('option', { value: o[0], selected: kind === o[0] }, o[1]); }));
-      wallBox.appendChild(F('Background', sel, 'The Daily wallpaper above takes the place of a picture while it is on.'));
-      if (kind === 'url') wallBox.appendChild(F('Picture address', tIn(a, 'background', pd, 'https://…', 'url'), 'https:// or a path Unraid serves. A picture from another site can only colour the accent when that site allows it (Wikimedia does).'));
+        [['gradient', 'Gradient in the theme\'s colours'], ['plain', 'Plain colour'], ['url', 'Wallpaper from a link'], ['local', 'Wallpaper from a local path'], ['upload', 'Upload a wallpaper']].map(function (o) { return h('option', { value: o[0], selected: kind === o[0] }, o[1]); }));
+      wallBox.appendChild(F('Background', sel));
+      if (kind === 'url') wallBox.appendChild(F('Picture link', tIn(a, 'background', pd, 'https://…', 'url'), 'The address of a picture, starting with https://.'));
+      if (kind === 'local') {
+        var note = h('div', { class: 'wall-st', role: 'status' }, S.wallNote || '');
+        var pathIn = tIn(a, 'wall_path', function () { dirty(); }, S.boot.caps.mode === 'api' ? '/mnt/user/appdata/undash/wallpaper.jpg' : '/mnt/user/pictures/wallpaper.jpg');
+        var chk = btn('Check', function () { api('wallpaper_check', { path: a.wall_path }).then(function (j) {
+          S.wallNote = j.error ? j.error : 'Found: ' + bytes(j.size) + '.' + (a.background === 'local' && (S.boot.wall || {}).local !== j.v ? ' Save to use it.' : ''); txt(note, S.wallNote); note.classList.toggle('t-bad', !!j.error);
+        }); }, 'sm', 'check', 'Look for this picture on the server');
+        wallBox.appendChild(F('Picture path', h('div', { class: 'zoomf' }, h('div', { class: 'sec-in' }, pathIn, chk), note),
+          S.boot.caps.mode === 'api' ? 'A JPEG, PNG or WebP on the server, up to 30 MB. The Docker version reads its own appdata folder, so put the picture there. Another folder works once it is mapped to /wallpapers in the container\'s settings.' : 'A JPEG, PNG or WebP under /mnt on the server, up to 30 MB.'));
+      }
       if (kind === 'upload') {
         var st = h('div', { class: 'wall-st', role: 'status' }, S.wallNote || '');
         var fileIn = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: { display: 'none' }, 'aria-label': 'Choose a picture', onchange: function () {

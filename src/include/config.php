@@ -78,7 +78,7 @@ function und_default_config() {
     'schema' => UND_SCHEMA,
     'general' => ['title' => '', 'logo' => '', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'accent_mode' => 'theme', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'icon_box' => true, 'header_chips' => true, 'zoom' => 0, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'daily' => ['on' => false, 'topic' => 'nature', 'custom' => ''], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'accent_mode' => 'theme', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'icon_box' => true, 'header_chips' => true, 'zoom' => 0, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'wall_path' => '', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -384,14 +384,10 @@ function und_normalize(array $c) {
   $a['zoom'] = in_array((int)($a['zoom'] ?? 0), [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200], true) ? (int)$a['zoom'] : 0;     // 0 = fit the screen
   foreach (und_look_limits() as $k => $r) $a[$k] = max($r[0], min($r[1], (int)($a[$k] ?? $r[2])));
   $a['motion'] = in_array($a['motion'] ?? '', ['full', 'fast', 'nointro', 'off'], true) ? $a['motion'] : 'full';
-  // the wallpaper used to come from Pexels: a saved search carries over as custom words
-  $old = (array)($c['appearance']['pexels'] ?? []);
-  $w = is_array($a['daily'] ?? null) && isset($c['appearance']['daily']) ? $a['daily'] : ['on' => !empty($old['on']), 'topic' => ($old['query'] ?? 'nature wallpaper') === 'nature wallpaper' ? 'nature' : 'custom', 'custom' => ($old['query'] ?? 'nature wallpaper') === 'nature wallpaper' ? '' : (string)$old['query']];
-  $topic = (string)($w['topic'] ?? 'nature');
-  $a['daily'] = ['on' => !empty($w['on']), 'topic' => $topic === 'custom' || isset(UND_WALL_TOPICS[$topic]) ? $topic : 'nature', 'custom' => und_clip(trim((string)($w['custom'] ?? '')), 80)];
+  $a['wall_path'] = und_clip(preg_replace('/[\x00-\x1f]/', '', trim((string)($a['wall_path'] ?? ''))), 500);
   $a['text_size'] = in_array($a['text_size'] ?? '', ['s', 'm', 'l'], true) ? $a['text_size'] : 'm';
   // an address, a path Unraid serves, or "custom" for the picture uploaded in Settings (kept in data/wallpaper)
-  $a['background'] = $a['background'] === 'custom' || preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
+  $a['background'] = in_array($a['background'], ['custom', 'local'], true) || preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(0, min(100, (int)$a['brightness']));
   // the margin around the dashboard in px; -1 = automatic
   foreach (['safe_x', 'safe_y'] as $k) $a[$k] = (int)$a[$k] < 0 ? -1 : min(200, (int)$a[$k]);
