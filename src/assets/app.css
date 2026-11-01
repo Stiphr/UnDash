@@ -573,28 +573,29 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und[data-density=compact] .mi.ml{padding:2px 6px}.und[data-density=expanded] .mi.ml{padding:6px}
 
 /* Arr Stack */
-.und .arr{display:flex;flex-direction:column}
-.und .aitem{border-bottom:1px solid var(--line)}.und .aitem:last-child{border-bottom:0}
-.und .arr{container-type:inline-size}
+.und .arr{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));grid-auto-rows:minmax(min-content,1fr);column-gap:14px;overflow:hidden}
+.und .aitem{min-width:0;container-type:inline-size}
+.und .aitem:has(.adet:not([hidden])){grid-column:1/-1}
 .und .aline{display:flex;align-items:center;gap:4px;padding:0 6px 0 0}
-.und button.arow{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:9px 10px;min-height:54px;cursor:default}
+.und button.arow{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:5px 8px;min-height:40px;cursor:default}
 .und .aline:has(.achev:not([hidden])) button.arow{cursor:pointer}
 .und .aline:has(.achev:not([hidden])) button.arow:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}.und button.arow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .und .aico{width:20px;height:20px;object-fit:contain;flex:none;border-radius:4px}
-.und .arr .aico{width:30px;height:30px;border-radius:8px}
+.und .arr .aico{width:24px;height:24px;border-radius:6px}
 .und span.aico{display:flex;align-items:center;justify-content:center;color:var(--faint)}.und span.aico svg{width:14px;height:14px}
 .und .an{font-weight:600;color:var(--title);white-space:nowrap}
-.und .ahd{flex:0 0 32%;min-width:0;display:flex;flex-direction:column;gap:1px}
+.und .ahd{flex:none;max-width:65%;display:flex;align-items:center;gap:7px}.und .ahd .an{min-width:0;flex:0 1 auto}
+@container (max-width:340px){.und .asub .ell{display:none}}
 .und .asub{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;color:var(--muted)}
 .und .sdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--off)}
 .und .sdot.ok{background:var(--ok)}.und .sdot.warn{background:var(--warn)}.und .sdot.bad{background:var(--bad)}
-.und .ai{flex:1;min-width:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.und .ai .st{display:flex;flex-direction:column;min-width:0;font-size:11.5px;color:var(--muted)}
-.und .ai .st b,.und .amore b{color:var(--title);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25}
+.und .ai{flex:1 1 0;min-width:0;display:flex;flex-wrap:wrap-reverse;justify-content:flex-end;gap:12px;height:20px;overflow:hidden}
+.und .ai .st{display:flex;align-items:baseline;gap:4px;min-width:0;height:20px;line-height:20px;font-size:11.5px;color:var(--muted);text-transform:lowercase;white-space:nowrap}
+.und .ai .st b,.und .amore b{color:var(--title);font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25}
 .und .amore{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.und .amore b{font-size:12.5px}
 .und .achev{flex:none;display:flex;color:var(--faint)}.und .achev[hidden]{visibility:hidden;display:flex}.und .achev svg{width:15px;height:15px;transform:rotate(-90deg);transition:transform .14s ease}
 .und button.arow[aria-expanded=true] .achev svg{transform:none}
-.und .adet{padding:0 12px 12px 52px;display:flex;flex-direction:column;gap:6px}
+.und .adet{padding:0 12px 10px 42px;display:flex;flex-direction:column;gap:6px}
 .und .aiss{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
 .und .aiss:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .und .ais{display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:12.5px;min-width:0}
@@ -603,10 +604,9 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .ais.open .ais-t{white-space:normal;overflow-wrap:anywhere}
 .und .ais-t b{color:var(--text);font-weight:600}
 .und .ais-k{flex:none;font-size:11.5px;color:var(--warn)}.und .ais.bad .ais-k{color:var(--bad)}
-@container (max-width:430px){.und button.arow{flex-wrap:wrap;gap:6px 12px}.und .ahd{flex:1 1 0}.und .ai{order:3;flex:1 0 100%;padding-left:42px}.und .adet{padding-left:52px}}
 /* stretched to match the section beside it: the rows share the extra height */
 .und .sec.fill .arr>.aitem{flex:1 0 auto;display:flex;flex-direction:column;justify-content:center}.und .sec.fill .arr>.aitem>.aline{flex:1 0 auto}
-.und[data-density=compact] button.arow{padding:5px 10px;min-height:44px}.und[data-density=expanded] button.arow{padding:12px 14px;min-height:62px}
+.und[data-density=compact] button.arow{padding:3px 8px;min-height:34px}.und[data-density=expanded] button.arow{padding:8px 10px;min-height:48px}
 
 /* download clients */
 .und .dls{display:flex;flex-direction:column;gap:var(--gap)}
@@ -862,7 +862,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .wz-ps{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
 .und .wz-p{appearance:none;font:inherit;color:var(--text);text-align:left;display:flex;flex-direction:column;gap:3px;padding:12px 14px;background:var(--p2);border:1px solid var(--line);border-radius:var(--radius);cursor:pointer;transition:border-color .15s,background .15s}
 .und .wz-p:hover{border-color:var(--l2)}.und .wz-p.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
-.und .wz-l{margin-top:12px}
+.und .wz-l{margin-top:12px}.und .wz-l:empty{display:none}
 .und .pr-a{flex:none;gap:4px;flex-wrap:nowrap}.und.bui .cardl .olist .oi.wz-r{flex-wrap:wrap}.und .drawer .wz-ts{margin:6px 0 10px}
 .und .wz-r{flex-wrap:wrap;row-gap:6px}.und .wz-r .crow{flex:1 1 200px;min-width:0}.und .wz-v{flex:0 1 auto;flex-wrap:wrap}.und .wz-v button{white-space:nowrap}
 .und .wz-apps{display:flex;flex-direction:column;gap:8px}
@@ -1175,7 +1175,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .gc-m .stat .bar{display:none}
 
 /* Arr Stack on a card */
-.und.bui .aitem{border-bottom:0;border-top:1px solid var(--line)}.und.bui .aitem:first-child{border-top:0}
+.und .aitem{border-bottom:1px solid var(--line)}
 .und.bui button.arow{border-radius:var(--r2)}
 
 /* alerts: a button in the header that says what is wrong, and a list under it */
@@ -1519,3 +1519,4 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .bdetail{background:color-mix(in srgb,var(--panel) 94%,var(--bg,transparent));-webkit-backdrop-filter:blur(28px) saturate(1.3);backdrop-filter:blur(28px) saturate(1.3)}
 .und .oi.nr{display:flex;align-items:center;gap:10px}.und .oi.nr .crow{flex:1;min-width:0}.und .oi.nr>.btn{flex:none}
 .und .dfacts{margin-bottom:12px}.und .dfacts:empty{display:none}
+@media (max-width:700px){.und.bui .gc-c>.sec>.sec-h{flex-wrap:wrap!important}.und.bui .gc-c>.sec>.sec-h .tools{flex:1 1 100%;min-width:0;margin-left:0}.und .sec-h .tools>.muted{white-space:normal!important}}
