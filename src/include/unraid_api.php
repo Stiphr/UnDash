@@ -279,7 +279,7 @@ function und_api_stats_read() {
   $ctx = stream_context_create(['ssl' => ['verify_peer' => und_tls_verify(), 'verify_peer_name' => und_tls_verify(), 'peer_name' => $u['host']]]);
   $s = @stream_socket_client(($tls ? 'ssl://' : 'tcp://') . $u['host'] . ':' . $port, $en, $es, 4, STREAM_CLIENT_CONNECT, $ctx);
   if (!$s) return null;
-  stream_set_timeout($s, 2);
+  stream_set_timeout($s, 5);      // the API can take seconds to answer the upgrade while it is busy
   fwrite($s, 'GET ' . ($u['path'] ?? '/graphql') . " HTTP/1.1\r\nHost: " . $u['host'] . ':' . $port . "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " . base64_encode(random_bytes(16))
     . "\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: graphql-transport-ws\r\nx-api-key: " . $c['key'] . "\r\n\r\n");
   $line = fgets($s);
