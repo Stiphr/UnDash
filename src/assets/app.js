@@ -5311,13 +5311,13 @@
     }
     /* what UnDash found in your containers, ready to be added; a key is asked for here, so nothing opens on top */
     function stepApps() {
-      head('Connect your apps', 'These are the apps found on your server. Turn off what you do not want, and paste a key where one is needed.');
+      head('Connect your apps', 'These are the apps found on your server. Turn on the ones you want, then paste a key where one is needed.');
       var list = h('div', { class: 'wz-apps' }, h('div', { class: 'progress' }, h('i')));
       box.appendChild(list);
       var draw = function () {
         if (W.apps === null) W.apps = [];
         var known = {}; W.apps.forEach(function (a) { known[a.f.url + a.f.t] = 1; });
-        foundApps(D).forEach(function (f) { if (!known[f.url + f.t]) W.apps.push({ f: f, on: true, id: rid(), cr: { key: '', username: '', password: '' } }); });
+        foundApps(D).forEach(function (f) { if (!known[f.url + f.t]) W.apps.push({ f: f, on: false, id: rid(), cr: { key: '', username: '', password: '' } }); });
         clear(list);
         var have = []; c.groups.forEach(function (g) { g.services.forEach(function (x) { if (x.type !== 'link') have.push(x); }); });
         if (!W.apps.length && !have.length) list.appendChild(h('div', { class: 'muted sm' }, 'Nothing found yet. You can add apps later from Edit dashboard > Add.'));
