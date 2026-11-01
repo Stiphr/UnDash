@@ -98,14 +98,26 @@ function und_api_cached($name, $ttl, $fn) {
  * cannot be null, as vars does, so a key without that permission would leave the whole dashboard empty.
  *
  * Some parts of the API are slow on a busy server, whatever other fields are asked for: the network interface list and
- * the primary interface (about 2 s each), the temperature sensors (seen up to 10 s) and the OS details (up to 4 s). In Docker, scripts/apipoll.php keeps them fresh in the background while someone has the
+ * the primary interface (about 2 s each), the temperature sensors (seen up to 10 s) and the OS details (up to 4 s). The API
+ * answers one request at a time, so while one of these runs even the smallest query waits, and CPU and memory take about
+ * 2 s themselves. A page must not join that queue: one reader asks, and every open page shares its copy. In Docker, scripts/apipoll.php keeps them fresh in the background while someone has the
  * dashboard open, so page loads and refreshes never wait for them. Without it (tests, dev server) they are read inline.
  * name => [refresh every N seconds, oldest copy still shown, query]
  */
 const UND_API_SLOW = [
+  'system' => [3, 30, 'query {
+    metrics {
+      cpu { percentTotal cpus { percentTotal } }
+      memory { total used available swapTotal swapUsed percentTotal }
+    }
+    array { state capacity { kilobytes { free used total } } parityCheckStatus { running progress status speed duration paused }
+      parities { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
+      disks { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
+      caches { name device status temp numErrors fsSize fsFree fsType color isSpinning type } }
+  }'],
   'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname uptime kernel } versions { core { unraid } } } }'],
-  'net'   => [2, 20, 'query { metrics { network { name rxSec txSec } } }'],
-  'temp'  => [10, PHP_INT_MAX, 'query { metrics { temperature { sensors { type current { value } } } } }'],
+  'net'   => [5, 30, 'query { metrics { network { name rxSec txSec } } }'],
+  'temp'  => [30, PHP_INT_MAX, 'query { metrics { temperature { sensors { type current { value } } } } }'],
 ];
 const UND_API_TEMP_IDLE = 60;       // with no page open the temperature is still read this often: the alert check needs it
 
@@ -145,17 +157,8 @@ function und_api_bigint($v) { return is_numeric($v) ? (float)$v : 0.0; }
 
 /** Overview data in the same shape as the plugin's und_system(). */
 function und_api_system(array $cfg) {
-  $q = 'query {
-    metrics {
-      cpu { percentTotal cpus { percentTotal } }
-      memory { total used available swapTotal swapUsed percentTotal }
-    }
-    array { state capacity { kilobytes { free used total } } parityCheckStatus { running progress status speed duration paused }
-      parities { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
-      disks { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
-      caches { name device status temp numErrors fsSize fsFree fsType color isSpinning type } }
-  }';
-  $r = und_api_cached('system', 1, function () use ($q) { return und_gql($q); });
+  // the background copy while it is recent; a read of its own when the poller is not keeping up, so old numbers never pass for live ones
+  $r = und_api_slow('system') ?: und_api_cached('system', 1, function () { return und_gql(UND_API_SLOW['system'][2]); });
   if (isset($r['error']) && empty($r['data'])) return ['error' => $r['error'], 'auth' => !empty($r['auth'])];
   $d = $r['data']; $now = time();
   $m = $d['metrics'] ?? [];

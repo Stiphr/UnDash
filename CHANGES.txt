@@ -1,5 +1,5 @@
 ###beta
-- The dashboard loads and refreshes much faster on a busy server: temperatures and OS details are read in the background, so the page no longer waits for the slowest parts of the Unraid API. Temperature alerts stay current with no page open
+- The dashboard loads and refreshes much faster on a busy server: the Unraid API answers one request at a time, so one background reader now asks it and every open page shares that copy, up to 30 seconds old. Container and VM states are still read directly. Temperature alerts stay current with no page open, and the API gets far fewer requests
 - Settings are safe from a damaged file: if config.yaml is cut short or emptied, UnDash keeps the damaged copy, restores the newest backup and tells you, instead of showing an empty dashboard
 - Security: keys, passwords and cookies no longer follow a redirect to another server. Links to javascript: and data: addresses are removed, wherever they come from
 - A failed restart or shutdown no longer blocks those buttons for good. Answers from apps are limited to 64 MB, and PHP may use 256 MB, so a very large library gives a clear error
