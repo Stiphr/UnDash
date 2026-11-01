@@ -387,7 +387,7 @@ function und_normalize(array $c) {
   $a['wall_path'] = und_clip(preg_replace('/[\x00-\x1f]/', '', trim((string)($a['wall_path'] ?? ''))), 500);
   $a['text_size'] = in_array($a['text_size'] ?? '', ['s', 'm', 'l'], true) ? $a['text_size'] : 'm';
   // an address, a path Unraid serves, or "custom" for the picture uploaded in Settings (kept in data/wallpaper)
-  $a['background'] = in_array($a['background'], ['custom', 'local'], true) || preg_match('#^(https?://|/)[^"\'<>\s()\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
+  $a['background'] = in_array($a['background'], ['custom', 'local'], true) || preg_match('#^(https?://|/)[^"\'<>\s\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(0, min(100, (int)$a['brightness']));
   // the margin around the dashboard in px; -1 = automatic
   foreach (['safe_x', 'safe_y'] as $k) $a[$k] = (int)$a[$k] < 0 ? -1 : min(200, (int)$a[$k]);

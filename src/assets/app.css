@@ -1373,3 +1373,11 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .brand img.logo,.und .brand .ph.logo,.und .sec-in-ic .logo{object-fit:contain}
 .und .sec-in-ic{display:inline-flex;flex:none}.und .sec-in-ic .logo{width:30px;height:30px;border-radius:7px}
 .und.rezoom .gc,.und.rezoom .gc *{transition:none!important}
+
+/* a card made smaller than its content scrolls; nothing inside it shrinks away or gets cut off */
+.und.bui .gc-c>.sec>.sec-b{overflow-x:hidden;overflow-y:auto}
+.und.bui .gc-c>.sec>.sec-b>*{flex-shrink:0}
+.und.bui .gc-c>.sec>.sec-b>.panel{overflow:visible}
+.und.bui .gc-c>.card.w{overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.und.bui .gc-c>.card.w>.cb{flex:1 0 auto;min-height:auto}
+

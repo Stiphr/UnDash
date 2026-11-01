@@ -24,6 +24,8 @@
 - The header shows your server's name by default. Settings > General > Display sets your own name and icon.
 - The server menu can check for an Unraid update in the Docker version too, and shows what Unraid last found for containers. The server name left the header's chips.
 - Changing the zoom no longer shakes the page: it applies when you let go of the slider.
+- Fixed: Wallpaper from a link showed no box to type in, and an address with brackets was dropped. The link is now checked as you type.
+- Fixed: a card made smaller than its content cut it off. It now scrolls, with no sideways bar.
 - Every card has the same inner margin on all four sides.
 - Settings > Appearance > Layout & size can hide the server name and versions in the header. Menus stay inside the window at any zoom.
 - Settings > Appearance > Zoom level: Auto fits the dashboard to the screen and window, or pick 50 to 200%. Smart margins keep the same gap at the top and sides as the window changes.

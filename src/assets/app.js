@@ -534,7 +534,7 @@
     for (var i = 0; i < root.children.length; i++) if (root.children[i].classList.contains('und-bg')) bg = root.children[i];
     if (wall) {
       if (!bg) { bg = h('div', { class: 'und-bg' }); root.insertBefore(bg, root.firstChild); }
-      bg.style.backgroundImage = 'url("' + wall.replace(/["\\()]/g, '') + '")';
+      bg.style.backgroundImage = 'url("' + wall.replace(/["\\\n]/g, '') + '")';
       bg.style.filter = (glass ? '' : 'blur(' + a.blur + 'px) ') + 'brightness(' + a.brightness + '%) saturate(' + (a.wall_saturation === undefined ? 100 : a.wall_saturation) + '%) contrast(' + (a.wall_contrast === undefined ? 100 : a.wall_contrast) + '%)';
       bg.style.opacity = (a.wall_opacity === undefined ? 100 : a.wall_opacity) / 100;
       bg.style.inset = glass ? '0' : '-' + (a.blur * 2) + 'px';
@@ -3348,7 +3348,7 @@
   /* Settings pages: [title, icon, builder, the part of the configuration a "Restore defaults" button puts back (optional)] */
   var SET_PAGES = {
     dashboard: ['Apps & cards', 'grid', tabDashboard],
-    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Accent colour', 'Layout & size', 'Card style', 'Background']), 'appearance'],
+    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Accent colour', 'Background', 'Layout & size', 'Card style']), 'appearance'],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['General', 'clock', tabSystem, 'general'],
     ignored: ['Alerts', 'mute', tabIgnored],
@@ -3794,7 +3794,7 @@
         oninput: function (e) { a[k] = +e.target.value; txt(out, a[k] + unit); dirty(); preview(); } }), out);
     }
     function resetTo(vals) { return btn('Reset', function () { Object.keys(vals).forEach(function (k) { a[k] = vals[k]; }); dirty(); preview(); D.render(); }, 'sm', 'restart', 'Back to the standard values'); }
-    b.appendChild(set('Card style', 'How the cards look over what is behind them. These are separate from the background below.',
+    b.appendChild(set('Card style', 'How the cards look over what is behind them. These are separate from the background.',
       F('Translucent Effect', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!a.translucent, onchange: function (e) { a.translucent = e.target.checked; dirty(); preview(); } }), 'See-through glass cards'), 'The other card controls need this on. It uses more graphics power on older devices.'),
       h('div', { class: 'grid2' }, F('Card blur', rng('glass_blur', 0, 60, ' px', 'Card blur')), F('Card opacity', rng('glass_opacity', 10, 95, ' %', 'Card opacity'), 'Lower shows more of what is behind.'),
         F('Card exposure', rng('glass_exposure', 40, 160, ' %', 'Card exposure')), F('Card saturation', rng('glass_saturation', 100, 250, ' %', 'Card saturation')), F('Card contrast', rng('glass_contrast', 50, 150, ' %', 'Card contrast'))),
@@ -3803,15 +3803,34 @@
     var wallBox = h('div');
     function wallDraw() {
       clear(wallBox);
-      var w = S.boot.wall || {}, kind = a.background === 'custom' ? 'upload' : a.background === 'local' ? 'local' : a.background ? 'url' : a.gradient === false ? 'plain' : 'gradient';
+      // a link still to be typed has no address yet, so the choice is remembered here
+      var w = S.boot.wall || {}, kind = a.background === 'custom' ? 'upload' : a.background === 'local' ? 'local' : a.background || D.wallKind === 'url' ? 'url' : a.gradient === false ? 'plain' : 'gradient';
       var sel = h('select', { 'aria-label': 'Background', onchange: function (e) {
         var k = e.target.value;
+        D.wallKind = k;
         if (k === 'gradient') { a.gradient = true; a.background = ''; } else if (k === 'plain') { a.gradient = false; a.background = ''; }
         else if (k === 'url') a.background = /^(https?:|\/)/.test(a.background) ? a.background : ''; else a.background = k === 'local' ? 'local' : 'custom';
         dirty(); preview(); wallDraw(); } },
         [['gradient', 'Gradient in the theme\'s colours'], ['plain', 'Plain colour'], ['url', 'Wallpaper from a link'], ['local', 'Wallpaper from a local path'], ['upload', 'Upload a wallpaper']].map(function (o) { return h('option', { value: o[0], selected: kind === o[0] }, o[1]); }));
       wallBox.appendChild(F('Background', sel));
-      if (kind === 'url') wallBox.appendChild(F('Picture link', tIn(a, 'background', pd, 'https://…', 'url'), 'The address of a picture, starting with https://.'));
+      if (kind === 'url') {
+        var seen = h('div', { class: 'wall-st', role: 'status' }), probe = null;
+        var look = function () {
+          clearTimeout(probe); pd();
+          var u = String(a.background || '').trim();
+          if (!u) { txt(seen, ''); return; }
+          txt(seen, 'Loading…'); seen.classList.remove('t-bad');
+          probe = setTimeout(function () {
+            var im = new Image();
+            im.onload = function () { if (a.background === u) { txt(seen, 'Loaded: ' + im.naturalWidth + ' × ' + im.naturalHeight + ' pixels.'); seen.classList.remove('t-bad'); } };
+            im.onerror = function () { if (a.background === u) { txt(seen, 'That address did not give a picture. Use a direct link to the image file, not a web page.'); seen.classList.add('t-bad'); } };
+            im.src = u;
+          }, 400);
+        };
+        var linkIn = tIn(a, 'background', look, 'https://…/picture.jpg', 'url');
+        wallBox.appendChild(F('Picture link', h('div', { class: 'zoomf' }, linkIn, seen), 'A direct link to a picture. It usually ends in .jpg, .png or .webp.'));
+        if (a.background) look();
+      }
       if (kind === 'local') {
         var note = h('div', { class: 'wall-st', role: 'status' }, S.wallNote || '');
         var pathIn = tIn(a, 'wall_path', function () { dirty(); }, S.boot.caps.mode === 'api' ? '/mnt/user/appdata/undash/wallpaper.jpg' : '/mnt/user/pictures/wallpaper.jpg');
