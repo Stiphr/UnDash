@@ -1118,6 +1118,37 @@ t('the level is stored', isset(und_notify_save_prefs('bad', false)['ok']) && und
 und_doc_write(['notify' => null]);
 t('the default is warnings and critical, with endings', und_notify_prefs() === ['min' => 'warn', 'resolved' => true]);
 
+
+/* ---------------- batch 2: forecast, parity alerts, transcodes ---------------- */
+group('storage facts');
+$t0 = 1800000000; $col = array_search('used', UND_METRIC_FIELDS) + 1;
+$mk = function ($days, $per) use ($t0, $col) { $o = []; for ($i = $days * 4; $i >= 0; $i--) { $r = array_fill(0, count(UND_METRIC_FIELDS) + 1, null); $r[0] = $t0 - $i * 21600; $r[$col] = 50 - $i / 4 * $per; $o[] = $r; } return $o; };
+$f = und_metrics_forecast($mk(1, 0.1), 1000, $t0);
+t('a forecast waits for three days of history', $f === ['ready' => false, 'wait' => 2], json_encode($f));
+$f = und_metrics_forecast($mk(10, 1.0), 1000000, $t0);
+t('a steady 1% a day from half full is 50 days', $f['rising'] === true && $f['days'] === 50 && $f['per_day'] === 10000, json_encode($f));
+t('storage that stays level is not filling up', und_metrics_forecast($mk(10, 0.0), 1000, $t0) === ['ready' => true, 'rising' => false]);
+t('storage that shrinks is not filling up', und_metrics_forecast($mk(10, -1.0), 1000, $t0)['rising'] === false);
+t('history older than 30 days is left out', und_metrics_forecast($mk(40, 1.0), 1000000, $t0 + 86400 * 40)['ready'] === false);
+$now = time(); $sy = function ($a) { return ['array' => $a + ['state' => 'STARTED', 'parity' => 1]]; };
+$cats = function ($sys) { return array_map(function ($x) { return $x['cat']; }, und_alerts(und_normalize([]), $sys, null)); };
+t('a server with no finished check is told so', in_array('array.parity_old', $cats($sy(['parity_checks' => ['last' => null, 'ok_at' => 0]])), true));
+t('a recent finished check is quiet', !array_intersect(['array.parity_old', 'array.parity_errors'], $cats($sy(['parity_checks' => ['last' => ['status' => 'COMPLETED', 'errors' => 0, 'at' => $now - 86400], 'ok_at' => $now - 86400]]))));
+t('an old one is overdue', in_array('array.parity_old', $cats($sy(['parity_checks' => ['last' => ['status' => 'COMPLETED', 'errors' => 0, 'at' => $now - 200 * 86400], 'ok_at' => $now - 200 * 86400]])), true));
+t('errors in the last check are named', in_array('array.parity_errors', $cats($sy(['parity_checks' => ['last' => ['status' => 'COMPLETED', 'errors' => 3, 'at' => $now], 'ok_at' => $now]])), true));
+t('nothing is said while a check runs', !in_array('array.parity_old', $cats($sy(['resync' => 1, 'resync_action' => '', 'parity_checks' => ['last' => null, 'ok_at' => 0]])), true));
+t('a server without parity disks needs no check', !in_array('array.parity_old', $cats(['array' => ['state' => 'STARTED', 'parity' => 0, 'parity_checks' => ['last' => null, 'ok_at' => 0]]]), true));
+t('a read that failed says nothing', !in_array('array.parity_old', $cats($sy([])), true));
+t('a disk that stopped reporting SMART is named', in_array('disk.smart_lost', $cats($sy(['smart_lost' => ['disk1']])), true));
+t('every new alert can be ignored', isset(und_alert_categories()['disk.smart_lost'], und_alert_categories()['array.parity_old'], und_alert_categories()['array.parity_errors']));
+$tc = ['SessionKey' => 'a', 'NowPlayingItem' => ['Name' => 'X'], 'PlayState' => ['PlayMethod' => 'Transcode']];
+t('Emby says when a transcode is on hardware', und_streams_emby([$tc + ['TranscodingInfo' => ['VideoEncoderIsHardware' => true]]])[0]['hw'] === true);
+t('or software', und_streams_emby([$tc + ['TranscodingInfo' => ['VideoEncoderIsHardware' => false, 'VideoDecoderIsHardware' => false]]])[0]['hw'] === false);
+t('Jellyfin names its method', und_streams_emby([$tc + ['TranscodingInfo' => ['HardwareAccelerationType' => 'qsv']]])[0]['hw'] === true && und_streams_emby([$tc + ['TranscodingInfo' => ['HardwareAccelerationType' => 'none']]])[0]['hw'] === false);
+t('a server that does not say is left unsaid', und_streams_emby([$tc + ['TranscodingInfo' => ['Bitrate' => 1]]])[0]['hw'] === null && und_streams_emby([$tc])[0]['hw'] === null);
+$pl = function ($ts) { return und_streams_plex(['MediaContainer' => ['Metadata' => [['title' => 'X', 'TranscodeSession' => $ts]]]])[0]['hw']; };
+t('Plex too', $pl(['videoDecision' => 'transcode', 'transcodeHwEncoding' => 'vaapi']) === true && $pl(['videoDecision' => 'transcode']) === false && und_streams_plex(['MediaContainer' => ['Metadata' => [['title' => 'X']]]])[0]['hw'] === null);
+
 rmrf($SANDBOX);
 
 echo "\n$pass passed, $fail failed\n";

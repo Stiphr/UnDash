@@ -8,6 +8,8 @@
  * and act (the button the page shows: logs | settings | restart | os, or '').
  */
 
+const UND_PARITY_OLD_DAYS = 100;
+
 /** The alerts for one snapshot. $sys = und_system(), $dk = und_docker_live() (either may be null when not loaded),
  *  $smart = und_smart_failures() (Scrutiny; null when not read). */
 function und_alerts(array $cfg, $sys, $dk, $smart = null) {
@@ -20,6 +22,14 @@ function und_alerts(array $cfg, $sys, $dk, $smart = null) {
     $st = (string)($a['state'] ?? '');
     if ($st !== '' && $st !== 'STARTED') $add('warn', 'The array is ' . strtolower($st) . '. Shares, containers and VMs on it are unavailable.', 'array.state', $st);
     if (!empty($a['resync'])) $add('info', ($a['resync_action'] ?: 'A parity operation') . ' is running' . (isset($a['resync_pct']) && $a['resync_pct'] !== null ? ' (' . $a['resync_pct'] . '%)' : '') . '.', 'array.resync', 'array');
+    foreach ((array)($a['smart_lost'] ?? []) as $n) $add('warn', $n . ' no longer reports a healthy SMART status. Open its SMART report in Unraid.', 'disk.smart_lost', $n);
+    $pc = $a['parity_checks'] ?? null;
+    if (is_array($pc) && !empty($a['parity']) && empty($a['resync'])) {
+      $last = $pc['last'] ?? null; $ok = (int)($pc['ok_at'] ?? 0);
+      if ($last && $last['status'] === 'COMPLETED' && $last['errors'] > 0) $add('warn', 'The last parity check found ' . number_format($last['errors']) . ' error' . ($last['errors'] > 1 ? 's' : '') . '.', 'array.parity_errors', 'array');
+      if (!$ok) $add('warn', 'No parity check on record has finished. Run one from Main in Unraid.', 'array.parity_old', 'array');
+      elseif (time() - $ok > UND_PARITY_OLD_DAYS * 86400) $add('warn', 'The last finished parity check was ' . floor((time() - $ok) / 86400) . ' days ago.', 'array.parity_old', 'array');
+    }
     foreach ((array)($a['bad_disks'] ?? []) as $n) $add('bad', $n . ' is disabled, missing or emulated. Check Main in Unraid.', 'disk.bad', $n);
     foreach ((array)($a['error_disks'] ?? []) as $d) $add('bad', $d['name'] . ' reported ' . $d['errors'] . ' read/write error' . ($d['errors'] > 1 ? 's' : '') . '.', 'disk.errors', $d['name']);
     foreach ((array)($a['hot_disks'] ?? []) as $d) $add('warn', $d['name'] . ' is at ' . $d['temp'] . '°C.', 'disk.hot', $d['name']);
@@ -103,7 +113,7 @@ function und_alert_history() {
 /** One background check (scripts/alertcheck.php): the full system and container state, then the history. */
 function und_alerts_check() {
   $cfg = und_load_config();
-  if (und_api_mode()) und_api_poll_due();     // the network rates, which the background reader otherwise only keeps fresh while a page is open
+  if (und_api_mode()) { und_api_poll_due(); und_api_facts_refresh(); }     // the network rates, which the background reader otherwise only keeps fresh while a page is open, and the slow facts
   $sys = und_system($cfg);
   und_metrics_record($sys);
   $dk = und_docker_live();

@@ -222,5 +222,16 @@ und_write_json(und_tmp('docker-stats.json'), ['t' => 1000, 'v' => ['bbbb' => ['c
 t('recent numbers are used, old ones are not', und_api_stats_seen(1010)['bbbb']['cpu'] === 1.5 && und_api_stats_seen(1000 + UND_STATS_OLD) === []);
 @unlink(und_tmp('docker-stats.json'));
 
+
+/* disks and parity: only OK or UNKNOWN comes from the API, and the parity list is not in a promised order */
+list($d, $lost, $seen) = und_api_smart_read([['device' => '/dev/sdb', 'name' => 'WD', 'smartStatus' => 'OK', 'temperature' => 37], ['device' => '/dev/sda', 'name' => 'Flash', 'smartStatus' => 'UNKNOWN', 'temperature' => null]], []);
+t('SMART rows use the short device name', $d['sdb'] === ['smart' => 'ok', 'model' => 'WD'] && $d['sda']['smart'] === 'unknown' && $lost === []);
+t('a disk that was never OK is not news', $seen === ['sdb' => true]);
+t('a disk that was OK and is awake but no longer OK is', und_api_smart_read([['device' => '/dev/sdb', 'smartStatus' => 'UNKNOWN', 'temperature' => 37]], $seen)[1] === ['sdb']);
+t('a sleeping disk is not', und_api_smart_read([['device' => '/dev/sdb', 'smartStatus' => 'UNKNOWN', 'temperature' => null]], $seen)[1] === []);
+$p = und_api_parity_sum([['date' => '2025-01-01T00:00:00.000Z', 'status' => 'COMPLETED', 'errors' => 0, 'duration' => 5], ['date' => '2025-02-01T00:00:00.000Z', 'status' => 'CANCELLED', 'errors' => 9], ['date' => '2024-01-01T00:00:00.000Z', 'status' => 'COMPLETED']]);
+t('the newest check is the last one, and the newest finished one is found', $p['last']['status'] === 'CANCELLED' && $p['last']['errors'] === 9 && $p['ok_at'] === strtotime('2025-01-01T00:00:00Z'));
+t('no history is none on record', und_api_parity_sum([]) === ['last' => null, 'ok_at' => 0]);
+
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

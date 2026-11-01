@@ -1,4 +1,9 @@
 ###beta
+- Array details show the last parity check and the last finished one, with an alert when none has finished for 100 days or the last one found errors
+- Storage details forecast when the array fills up, from 30 days of history
+- Disk list has a SMART column, with an alert when a healthy disk stops reporting OK
+- Mover status, when the API key has read access to Vars
+- Now playing says whether a transcode runs on hardware or software
 - Push alerts to Discord, Telegram, ntfy and Gotify (Settings > Alerts)
 - History charts for CPU, memory, network, storage and disk temperature, kept for 30 days
 - CPU and memory per container in the Docker version
