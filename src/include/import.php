@@ -147,8 +147,10 @@ function und_hp_convert($servicesYaml, $settingsYaml = '', $envText = '') {
   $settings = $settingsYaml !== '' ? und_yaml_parse($settingsYaml) : [];
   $layout = is_array($settings['layout'] ?? null) ? $settings['layout'] : [];
   $env = und_env_parse($envText);
-  $direct = ['radarr', 'sonarr', 'lidarr', 'readarr', 'bazarr', 'prowlarr', 'overseerr', 'autobrr', 'qbittorrent', 'sabnzbd', 'emby', 'jellyfin', 'plex', 'tautulli', 'adguard', 'pihole', 'npm', 'immich', 'peanut'];
-  $alias = ['jellyseerr' => 'overseerr', 'nginxproxymanager' => 'npm'];
+  $direct = ['radarr', 'sonarr', 'lidarr', 'readarr', 'bazarr', 'prowlarr', 'overseerr', 'autobrr', 'qbittorrent', 'sabnzbd', 'emby', 'jellyfin', 'plex', 'tautulli', 'adguard', 'pihole', 'npm', 'immich', 'peanut',
+    'deluge', 'transmission', 'nzbget', 'audiobookshelf', 'kavita', 'komga', 'romm', 'jellystat', 'tubearchivist', 'ombi', 'frigate', 'nextcloud', 'paperless', 'filebrowser', 'karakeep', 'mealie', 'miniflux', 'freshrss', 'gitea', 'gotify', 'changedetection',
+    'technitium', 'traefik', 'caddy', 'headscale', 'unifi', 'healthchecks', 'gatus', 'beszel', 'netdata', 'prometheus', 'grafana', 'portainer', 'wud', 'minecraft'];
+  $alias = ['jellyseerr' => 'overseerr', 'nginxproxymanager' => 'npm', 'paperlessngx' => 'paperless', 'changedetectionio' => 'changedetection', 'whatsupdocker' => 'wud', 'unifi_console' => 'unifi'];
   $groups = []; $secrets = []; $calendars = [];
   foreach ($svcs as $gEntry) {
     if (!is_array($gEntry)) continue;

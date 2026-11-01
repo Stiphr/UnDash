@@ -307,7 +307,7 @@ switch ($action) {
     if (isset($g['error'])) fail($g['error'], 422);
     $cfg = und_load_config(); $cfg['general']['glances'] = $url;
     if (!und_save_config($cfg, false)) fail('Could not save.', 500);
-    @unlink(und_tmp('glances.json')); @unlink(und_tmp('glances-fs.json'));
+    @unlink(und_tmp('glances.json')); foreach (glob(und_tmp('glances-fs-*.json')) ?: [] as $f) @unlink($f);
     out(['ok' => true, 'version' => (string)($g['version'] ?? ''), 'pools' => count($g['pools'] ?? [])]);
   }
 

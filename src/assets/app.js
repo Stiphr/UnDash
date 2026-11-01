@@ -745,7 +745,7 @@
     d.sections.forEach(function (sec) {
       if (!sec.visible || sec.id === 'alerts' || sec.id === 'health') return;     // alerts live in the header, and a dead endpoint is an alert
       if (sec.id === 'overview') d.metrics.forEach(function (m) { if (m.visible && MET[m.id] && !((m.id === 'load' || m.id === 'path') && api)) out.push({ i: 'm:' + m.id, t: MET[m.id][0], s: 'overview', w: 3, h: 5, minw: 2, minh: 3 }); });
-      else if (sec.id === 'media') { var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; }); MEDIA_ORDER.forEach(function (id) { if (vis[id] !== false) out.push({ i: 'media:' + id, t: MEDIA[id][0], s: 'media', w: 6, h: 18, minw: 3, minh: 6 }); }); }
+      else if (sec.id === 'media') { var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; }); MEDIA_ORDER.forEach(function (id) { if (vis[id] !== false) out.push({ i: 'media:' + id, t: mediaName(id), s: 'media', w: 6, h: 18, minw: 3, minh: 6 }); }); }
       else if (sec.id === 'apps') S.L.groups.forEach(function (g) { if (!g.section) g.services.forEach(function (x) {
         if (x.zone !== 'apps' || x.hidden || (x.type === 'link' && !S.L.apps.links)) return;
         var tall = x.type === 'rss' || x.type === 'releases' || x.type === 'bookmarks';
@@ -1272,10 +1272,10 @@
   }
   function boardChrome(el, it, c) {
     el.tabIndex = 0;
-    el.appendChild(h('button', { type: 'button', class: 'gc-x', title: 'Remove ' + c.t, 'aria-label': 'Remove ' + c.t, onclick: function () { boardRemove(it.i); } }, ic('minus')));
-    el.appendChild(h('div', { class: 'gc-t' }, h('span', { class: 'ell' }, c.t),
+    el.appendChild(h('div', { class: 'gc-t' },
       btn('', function () { boardFit([it.i]); }, 'sm ghost', 'fit', 'Fit the height to the content'),
-      btn('', function () { boardView(it.i); }, 'sm ghost', 'edit', 'Edit ' + c.t)));
+      btn('', function () { boardView(it.i); }, 'sm ghost', 'edit', 'Edit ' + c.t),
+      btn('', function () { boardRemove(it.i); }, 'sm ghost danger', 'minus', 'Remove ' + c.t)));
     ['e', 's', 'se'].forEach(function (d) { el.appendChild(h('span', { class: 'rh ' + d, 'data-rh': d, 'aria-hidden': 'true' })); });
     el.addEventListener('pointerdown', boardPointer);
     el.addEventListener('keydown', boardKey);
@@ -1402,7 +1402,7 @@
       if (!s.visible && s.id !== 'alerts' && s.id !== 'health' && secOk(s.id)) out.push({ t: s.title || TITLES[s.id], w: 'Section', icon: ic(SEC_ICON[s.id] || 'grid'), add: on(s) });
     });
     if (shows.overview) c.dashboard.metrics.forEach(function (m) { if (!m.visible && MET[m.id] && tileOk(m.id) && !((m.id === 'load' || m.id === 'path') && api2)) out.push({ t: MET[m.id][0], w: 'System tile', icon: ic('server'), add: on(m) }); });
-    if (shows.media) c.media.widgets.forEach(function (w) { if (!w.visible) out.push({ t: MEDIA[w.id][0], w: 'Media list', icon: ic('play'), add: on(w) }); });
+    if (shows.media) c.media.widgets.forEach(function (w) { if (!w.visible) out.push({ t: w.title || MEDIA[w.id][0], w: 'Media list', icon: ic('play'), add: on(w) }); });
     if (shows.apps) c.groups.forEach(function (g) { g.services.forEach(function (s) {
       if (s.hidden && appZone(E.D, s) === 'apps') out.push({ t: s.name, w: 'App', icon: img(iconUrl(s.icon), '', 'web'), add: function () { s.hidden = false; boardDirty(); boardSide(); } });
     }); });
@@ -1532,7 +1532,13 @@
     var sid = card ? card.s : i, sec = c.dashboard.sections.filter(function (x) { return x.id === sid; })[0];
     if (!sec) { boardView(null); return; }
     var mine = i === sid, body = h('div', { class: 'bs-b' });
-    box.appendChild(bsHead(sec.title || TITLES[sid], h('span', { class: 'bs-i' }, ic(SEC_ICON[sid] || 'grid'))));
+    var list = sid === 'media' && !mine ? c.media.widgets.filter(function (w) { return 'media:' + w.id === i; })[0] : null;
+    box.appendChild(bsHead(list ? list.title || MEDIA[list.id][0] : sec.title || TITLES[sid], h('span', { class: 'bs-i' }, ic(SEC_ICON[sid] || 'grid'))));
+    if (list) {
+      var listNamed = function (v) { var x = R.media && R.media.w[list.id], m = x && x.el.querySelector('h3'), t = v.trim() || MEDIA[list.id][0]; if (m) (m.querySelector('a') || m).firstChild.textContent = t; txt(box.querySelector('.bs-h b'), t); };
+      box.appendChild(h('div', { class: 'bs-n' }, h('label', { class: 'bs-nl' }, 'Name', h('input', { type: 'text', value: list.title || '', maxlength: 40, placeholder: MEDIA[list.id][0], oninput: function (e) { list.title = e.target.value; listNamed(list.title); boardDirty(); } }))));
+      box.appendChild(h('div', { class: 'bs-b' }, F('Items shown', tIn(list, 'count', boardDirty, '5', 'number', { min: 1, max: 50, 'aria-label': 'Items shown' }))));
+    }
     // the name on the card changes as you type, ahead of the preview
     var named = function (v) { var t = R[sid] && R[sid].el.querySelector('.sec-h h2 button'); if (t && t.lastChild) t.lastChild.textContent = v.trim() || TITLES[sid]; txt(box.querySelector('.bs-h b'), v.trim() || TITLES[sid]); };
     if (mine) box.appendChild(h('div', { class: 'bs-n' }, h('label', { class: 'bs-nl' }, 'Name', h('input', { type: 'text', value: sec.title || '', maxlength: 40, placeholder: TITLES[sid], oninput: function (e) { sec.title = e.target.value; named(sec.title); boardDirty(); } }))));
@@ -1548,7 +1554,7 @@
     } else if (sid === 'media') {
       body.appendChild(bsSub('Lists'));
       body.appendChild(h('div', { class: 'bs-l' }, c.media.widgets.map(function (w) {
-        return bsRow(ic('play'), MEDIA[w.id][0], null, bsSwitch(w.visible, 'Show ' + MEDIA[w.id][0], function (on) { w.visible = on; boardDirty(); }));
+        return bsRow(ic('play'), w.title || MEDIA[w.id][0], null, bsSwitch(w.visible, 'Show ' + (w.title || MEDIA[w.id][0]), function (on) { w.visible = on; boardDirty(); }));
       })));
       more.appendChild(F('Show as', sIn(c.media, 'style', boardDirty, [['art', 'Posters'], ['text', 'Text only']])));
       boardZone(body, 'media');
@@ -3088,14 +3094,16 @@
   /* ---- media: four equal columns (4 / 2 / 1 by the section's width), each a compact list refreshed on its own ---- */
   var MEDIA = { upcoming_movies: ['Upcoming movies', 'Nothing scheduled in the coming weeks.'], upcoming_episodes: ['Upcoming episodes', 'No episodes airing soon.'],
                 recent_movies: ['Recent movies', 'No movies imported recently.'], recent_episodes: ['Recent episodes', 'No episodes imported recently.'] };
+  function mediaWidget(id) { return ((S.L.media || {}).widgets || []).filter(function (w) { return w.id === id; })[0]; }
+  function mediaName(id) { return (mediaWidget(id) || {}).title || MEDIA[id][0]; }
   var MEDIA_ORDER = ['upcoming_movies', 'upcoming_episodes', 'recent_movies', 'recent_episodes'];
   BUILD.media = function (r) {
     r.grid = h('div', { class: 'media' + (S.L.media.style === 'text' ? ' text' : '') }); r.w = {};
     var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; });
     MEDIA_ORDER.forEach(function (id) {
       if (vis[id] === false) return;
-      var x = { link: h('span'), row: h('div', { class: 'mlist', role: 'list', 'aria-label': MEDIA[id][0], tabindex: '0' }, h('div', { class: 'empty' }, 'Loading…')), count: h('span', { class: 'count' }) };
-      x.el = h('div', { class: 'mw card' }, h('div', { class: 'mh' }, h('h3', null, MEDIA[id][0]), x.count, h('span', { class: 'grow' }), x.link), x.row);
+      var x = { link: h('span'), row: h('div', { class: 'mlist', role: 'list', 'aria-label': mediaName(id), tabindex: '0' }, h('div', { class: 'empty' }, 'Loading…')), count: h('span', { class: 'count' }) };
+      x.el = h('div', { class: 'mw card' }, h('div', { class: 'mh' }, h('h3', null, mediaName(id)), x.count, h('span', { class: 'grow' }), x.link), x.row);
       r.w[id] = x; r.grid.appendChild(x.el);
     });
     if (!r.grid.childNodes.length) r.grid.appendChild(h('div', { class: 'card empty' }, 'All media columns are hidden (Settings > Apps & cards > Media).'));
@@ -3118,8 +3126,10 @@
     x.last = j;
     var sig = JSON.stringify(j); if (x.sig === sig) return; x.sig = sig;
     clear(x.row); clear(x.link);
+    // a shorter list set in edit mode shows at once; the server sends the new length after saving
+    var keep = (mediaWidget(k) || {}).count; if (keep && j.items && j.items.length > keep) j = Object.assign({}, j, { items: j.items.slice(0, keep) });
     var mt = x.el.querySelector('h3');
-    if (R.cards) { clear(mt); mt.appendChild(j.app && j.app.href ? h('a', { class: 'mhl', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name }, MEDIA[k][0], ic('open')) : document.createTextNode(MEDIA[k][0])); }
+    if (R.cards) { clear(mt); mt.appendChild(j.app && j.app.href ? h('a', { class: 'mhl', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name }, mediaName(k), ic('open')) : document.createTextNode(mediaName(k))); }
     else if (j.app && j.app.href) x.link.appendChild(h('a', { class: 'btn sm ghost', href: j.app.href, target: '_blank', rel: 'noopener', title: 'Open ' + j.app.name, 'aria-label': 'Open ' + j.app.name }, h('span', { class: 'lbl' }, j.app.name), ic('web')));
     if (j.error && !(j.items || []).length) { x.row.appendChild(h('div', { class: 'empty ' + (j.unconfigured ? '' : 'err-t') }, j.error)); txt(x.count, ''); return; }
     var items = k.indexOf('episodes') > 0 ? groupEps(j.items || [], k.indexOf('upcoming') === 0) : j.items || [];
@@ -3694,7 +3704,14 @@
     pihole: 'queries, blocked, blocked_percent, gravity', npm: 'enabled, disabled, total', immich: 'users, photos, videos, storage', peanut: 'battery_charge, ups_load, ups_status',
     ups: 'battery_charge, ups_load, ups_status, runtime',
     scrutiny: 'passed, failed, unknown, hottest', tdarr: 'queue, processed, errored, saved', unmanic: 'active, workers, pending', uptimekuma: 'up, down, uptime',
-    speedtest: 'download, upload, ping', weather: 'now, today, humidity, wind', gluetun: 'public_ip, country, region, city, port', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total'
+    speedtest: 'download, upload, ping', weather: 'now, today, humidity, wind', gluetun: 'public_ip, country, region, city, port', docker_summary: 'running, stopped, paused, updates', vm_summary: 'running, stopped, paused, total',
+    deluge: 'leech, download, seed, upload', transmission: 'leech, download, seed, upload', nzbget: 'rate, remaining, downloaded', navidrome: 'streams, songs, folders', audiobookshelf: 'books, podcasts, duration, size',
+    kavita: 'seriesCount, volumes, totalFiles, size', komga: 'libraries, series, books', romm: 'platforms, totalRoms, saves, states, screenshots, totalfilesize', jellystat: 'movies, series, songs, other',
+    tubearchivist: 'downloads, videos, channels, playlists', ombi: 'pending, approved, available', frigate: 'cameras, detectors, inference, uptime', nextcloud: 'users, active, files, free', paperless: 'total, inbox',
+    filebrowser: 'available, used, total', syncthing: 'folders, devices, synced, needed', karakeep: 'bookmarks, favorites, archived, lists, tags', mealie: 'recipes, users, categories, tags', miniflux: 'unread, read', freshrss: 'unread, subscriptions',
+    gitea: 'notifications, issues, pulls, repos', gotify: 'apps, clients, messages', changedetection: 'total, changed, errors', technitium: 'queries, blocked, blocked_percent, clients', traefik: 'routers, services, middleware, errors',
+    caddy: 'upstreams, requests, fails', headscale: 'online, offline, total', unifi: 'wan, users, guests, devices, clients', healthchecks: 'up, down, late, paused', gatus: 'up, down', beszel: 'up, down, paused', netdata: 'critical, warning, normal',
+    prometheus: 'up, down, total', grafana: 'dashboards, datasources, users, firing', glances: 'cpu, memory, uptime', portainer: 'running, stopped, total', wud: 'monitored, updates', minecraft: 'players, version, ping'
   };
   var SEC_DESC = { overview: 'CPU, memory, storage, network, health, disks, UPS', playing: 'Active Plex, Emby, Jellyfin and Tautulli streams', requests: 'Overseerr / Jellyseerr requests, approve or decline', health: 'Every app and container web UI: status and latency', alerts: 'Problems that need attention', favorites: 'Starred containers, VMs and apps',
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
@@ -4192,8 +4209,8 @@
         return [sub('Columns', 'Always in this order, with dates from Radarr and Sonarr (and posters, unless Show as is Text only). Each column scrolls on its own.'),
           h('div', { class: 'olist' }, c.media.widgets.map(function (w) {
             return h('div', { class: 'oi' }, h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: w.visible, onchange: function (e) { w.visible = e.target.checked; dirty(); } }),
-              h('span', null, h('b', null, MEDIA[w.id][0]), h('span', { class: 'muted sm' }, ' · ' + MEDIA_DESC[w.id]))),
-              h('label', { class: 'muted sm nowrap' }, 'Items ', tIn(w, 'count', dirty, '15', 'number', { min: 1, max: 50, style: 'width:70px', 'aria-label': 'Items in ' + MEDIA[w.id][0] })));
+              h('span', null, h('b', null, w.title || MEDIA[w.id][0]), h('span', { class: 'muted sm' }, ' · ' + MEDIA_DESC[w.id]))),
+              h('label', { class: 'muted sm nowrap' }, 'Items ', tIn(w, 'count', dirty, '5', 'number', { min: 1, max: 50, style: 'width:70px', 'aria-label': 'Items in ' + MEDIA[w.id][0] })));
           })),
           h('div', { class: 'grid2', style: { 'margin-top': '12px' } }, F('Radarr', sIn(c.media, 'radarr', dirty, radarrs)), F('Sonarr', sIn(c.media, 'sonarr', dirty, sonarrs)),
             F('Days ahead', tIn(c.media, 'days_ahead', dirty, '30', 'number', { min: 7, max: 120 }), 'How far the two Upcoming columns look ahead.'),
@@ -4712,23 +4729,33 @@
 
   /* ---- Apps: every app is added, changed, hidden and removed here. Addresses go to config.yaml, keys and passwords to .env (server side) ---- */
   var APP_CATS = [['Arr Stack', ['radarr', 'sonarr', 'lidarr', 'readarr', 'prowlarr', 'bazarr', 'autobrr', 'overseerr', 'wizarr']],
-    ['Downloads', ['qbittorrent', 'qui', 'sabnzbd']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar', 'tdarr', 'unmanic']],
-    ['Network and tools', ['adguard', 'pihole', 'npm', 'gluetun', 'immich', 'homeassistant', 'peanut']], ['Monitoring', ['scrutiny', 'uptimekuma', 'speedtest']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Widgets', ['weather', 'rss', 'releases', 'bookmarks']], ['Other', ['customapi', 'link']]];
+    ['Downloads', ['qbittorrent', 'qui', 'sabnzbd', 'deluge', 'transmission', 'nzbget']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar', 'tdarr', 'unmanic', 'navidrome', 'audiobookshelf', 'kavita', 'komga', 'romm', 'jellystat', 'tubearchivist', 'ombi', 'frigate']],
+    ['Files and home', ['nextcloud', 'paperless', 'filebrowser', 'syncthing', 'karakeep', 'mealie', 'miniflux', 'freshrss', 'gitea', 'gotify', 'changedetection']],
+    ['Network and tools', ['adguard', 'pihole', 'technitium', 'npm', 'traefik', 'caddy', 'gluetun', 'headscale', 'unifi', 'immich', 'homeassistant', 'peanut']], ['Monitoring', ['scrutiny', 'uptimekuma', 'speedtest', 'healthchecks', 'gatus', 'beszel', 'netdata', 'prometheus', 'grafana', 'glances', 'portainer', 'wud', 'minecraft']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Widgets', ['weather', 'rss', 'releases', 'bookmarks']], ['Other', ['customapi', 'link']]];
   var APP_PORT = { radarr: 7878, sonarr: 8989, lidarr: 8686, readarr: 8787, prowlarr: 9696, bazarr: 6767, autobrr: 7474, overseerr: 5055, wizarr: 5690, qbittorrent: 8080, qui: 7476, sabnzbd: 8080,
     plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80,
-    scrutiny: 8080, tdarr: 8265, unmanic: 8888, uptimekuma: 3001, speedtest: 80, gluetun: 8000, homeassistant: 8123 };
-  var APP_ICON = { weather: '', rss: '', releases: 'github', bookmarks: '', tdarr: 'tdarr.png', unmanic: 'unmanic.png', uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
+    scrutiny: 8080, tdarr: 8265, unmanic: 8888, uptimekuma: 3001, speedtest: 80, gluetun: 8000, homeassistant: 8123,
+    deluge: 8112, transmission: 9091, nzbget: 6789, navidrome: 4533, audiobookshelf: 13378, kavita: 5000, komga: 25600, romm: 8080, jellystat: 3000, tubearchivist: 8000, ombi: 3579, frigate: 5000, nextcloud: 80, paperless: 8000, filebrowser: 80,
+    syncthing: 8384, karakeep: 3000, mealie: 9000, miniflux: 8080, freshrss: 80, gitea: 3000, gotify: 80, changedetection: 5000, technitium: 5380, traefik: 8080, caddy: 2019, headscale: 8080, unifi: 8443, healthchecks: 8000, gatus: 8080,
+    beszel: 8090, netdata: 19999, prometheus: 9090, grafana: 3000, glances: 61208, portainer: 9000, wud: 3000, minecraft: 25565 };
+  var APP_ICON = { paperless: 'paperless-ngx', filebrowser: 'file-browser', tubearchivist: 'tube-archivist.png', jellystat: 'jellystat.png', unifi: 'ubiquiti-unifi', weather: '', rss: '', releases: 'github', bookmarks: '', tdarr: 'tdarr.png', unmanic: 'unmanic.png', uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
   var KEY_WHERE = { radarr: 'Radarr: Settings > General', sonarr: 'Sonarr: Settings > General', lidarr: 'Lidarr: Settings > General', readarr: 'Readarr: Settings > General', prowlarr: 'Prowlarr: Settings > General',
     bazarr: 'Bazarr: Settings > General', overseerr: 'Overseerr / Jellyseerr: Settings > General', sabnzbd: 'SABnzbd: Config > General', qui: 'qui: Settings > API Keys', autobrr: 'autobrr: Settings > API Keys',
     tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys',
     tdarr: 'Tdarr: Tools > API keys (only when its login is on; else leave it empty)', speedtest: 'Speedtest Tracker: API Tokens (v1 and later; older versions need none)',
     gluetun: 'Gluetun\'s control server settings (only if you set one; else leave it empty)', homeassistant: 'Home Assistant: your profile > Security > Long-lived access tokens',
-    releases: 'GitHub: Settings > Developer settings > Personal access tokens, with no scopes (optional: without one GitHub allows 60 checks an hour)' };
-  var KEY_OPT = { peanut: 1, customapi: 1, tdarr: 1, speedtest: 1, gluetun: 1, releases: 1 };     // apps that work without a key
+    releases: 'GitHub: Settings > Developer settings > Personal access tokens, with no scopes (optional: without one GitHub allows 60 checks an hour)',
+    audiobookshelf: 'Audiobookshelf: Settings > API Keys', kavita: 'Kavita: your user settings > API Key (an admin user)', komga: 'Komga: your account > API Keys, or use a username and password instead', jellystat: 'Jellystat: Settings > API Keys',
+    tubearchivist: 'Tube Archivist: Settings > Application > API token', ombi: 'Ombi: Settings > Ombi > API Key', nextcloud: 'Nextcloud: the token you set with occ config:app:set serverinfo token, or an admin username and password instead',
+    paperless: 'Paperless-ngx: My Profile > API Auth Token', syncthing: 'Syncthing: Actions > Settings > General', karakeep: 'Karakeep: Settings > API Keys', mealie: 'Mealie: your profile > API Tokens', miniflux: 'Miniflux: Settings > API Keys',
+    gitea: 'Gitea / Forgejo: Settings > Applications, with read access to issues, notifications and repositories', gotify: 'Gotify: Clients (a client token, not an app token)', changedetection: 'changedetection.io: Settings > API',
+    technitium: 'Technitium: your user menu > Create API Token', headscale: 'Headscale: run headscale apikeys create', unifi: 'UniFi OS: Settings > Control Plane > Integrations, or a local account instead', healthchecks: 'Healthchecks: project Settings > API Access (read-only is enough)',
+    grafana: 'Grafana: a service account token with the admin role, or an admin username and password instead', portainer: 'Portainer: My account > Access tokens' };
+  var KEY_OPT = { peanut: 1, customapi: 1, tdarr: 1, speedtest: 1, gluetun: 1, releases: 1, komga: 1, nextcloud: 1, unifi: 1, grafana: 1 };     // apps that work without a key
   var ZONE_NAME = { arr: 'Arr Stack', downloads: 'Downloads', media: 'Media', overview: 'System overview', apps: 'Apps' };
   function appIcon(t) { var n = APP_ICON[t] !== undefined ? APP_ICON[t] : t; return n ? 'sh-' + n : ''; }
   function appZone(D, s) { return s.type === 'customapi' && /get_recently_added/.test(s.url || '') ? 'media' : (D.zones || {})[s.type] || 'apps'; }
-  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : t === 'homeassistant' ? 'Access token' : t === 'speedtest' ? 'API token' : t === 'releases' ? 'GitHub token' : 'API key', username: 'Username', password: 'Password' }[k]; }
+  function credLabel(t, k) { return { key: t === 'plex' ? 'Plex token' : t === 'peanut' ? 'Device key' : t === 'pihole' ? 'Password / app password' : t === 'homeassistant' ? 'Access token' : t === 'speedtest' ? 'API token' : t === 'releases' ? 'GitHub token' : t === 'nextcloud' ? 'Monitoring token' : t === 'gotify' ? 'Client token' : /^(gitea|grafana|portainer|technitium)$/.test(t) ? 'Access token' : 'API key', username: t === 'beszel' ? 'Email' : 'Username', password: t === 'freshrss' ? 'API password' : 'Password' }[k]; }
 
   /* the app lists in Settings > Apps & cards: one per section (zone), plus the groups of the Apps section.
      Every list redraws together, so moving or finding an app updates all of them. */
@@ -4899,7 +4926,12 @@
     ['immich', /^immich(-server)?$/], ['adguard', /^adguard-?home$/], ['pihole', /^pi-?hole$/], ['npm', /^nginx-proxy-manager$/], ['peanut', /^peanut$/],
     ['qbittorrent', /^qbittorrent$/], ['qui', /^qui$/], ['sabnzbd', /^sabnzbd$/], ['jellyfin', /^jellyfin$/], ['tautulli', /^tautulli$/], ['radarr', /^radarr$/],
     ['sonarr', /^sonarr$/], ['scrutiny', /^scrutiny(-web)?$/], ['tdarr', /^tdarr$/], ['unmanic', /^unmanic$/], ['uptimekuma', /^uptime-?kuma$/],
-    ['speedtest', /^speedtest-tracker$/], ['gluetun', /^gluetun$/], ['homeassistant', /^home-?assistant$/], ['lidarr', /^lidarr$/], ['readarr', /^readarr$/], ['bazarr', /^bazarr$/], ['prowlarr', /^prowlarr$/], ['autobrr', /^autobrr$/], ['wizarr', /^wizarr$/]];
+    ['speedtest', /^speedtest-tracker$/], ['gluetun', /^gluetun$/], ['homeassistant', /^home-?assistant$/], ['lidarr', /^lidarr$/], ['readarr', /^readarr$/], ['bazarr', /^bazarr$/], ['prowlarr', /^prowlarr$/], ['autobrr', /^autobrr$/], ['wizarr', /^wizarr$/],
+    ['deluge', /^deluge$/], ['transmission', /^transmission$/], ['nzbget', /^nzbget$/], ['navidrome', /^navidrome$/], ['audiobookshelf', /^audiobookshelf$/], ['kavita', /^kavita$/], ['komga', /^komga$/], ['romm', /^romm$/], ['jellystat', /^jellystat$/],
+    ['tubearchivist', /^tube-?archivist$/], ['ombi', /^ombi$/], ['frigate', /^frigate$/], ['nextcloud', /^nextcloud$/], ['paperless', /^paperless(-ngx)?$/], ['filebrowser', /^file-?browser$/], ['syncthing', /^syncthing$/], ['karakeep', /^karakeep$/], ['mealie', /^mealie$/],
+    ['miniflux', /^miniflux$/], ['freshrss', /^freshrss$/], ['gitea', /^(gitea|forgejo)$/], ['gotify', /^(gotify|server)$/], ['changedetection', /^changedetection(\.io)?$/], ['technitium', /^technitium/], ['traefik', /^traefik$/], ['caddy', /^caddy$/], ['headscale', /^headscale$/],
+    ['unifi', /^unifi(-network-application|-controller)?$/], ['healthchecks', /^healthchecks$/], ['gatus', /^gatus$/], ['beszel', /^beszel$/], ['netdata', /^netdata$/], ['prometheus', /^prometheus$/], ['grafana', /^grafana(-oss)?$/], ['portainer', /^portainer(-ce|-ee)?$/],
+    ['wud', /^(wud|whats-?up-?docker)$/], ['minecraft', /^minecraft(-server)?$/]];
   function foundType(c) {
     var norm = function (v) { return String(v || '').toLowerCase().replace(/^(arch-|docker-)/, '').replace(/-?vpn$/, ''); };
     var img0 = norm(String(c.image || '').split('@')[0].split('/').pop().split(':')[0]), nm = norm(c.name);
@@ -5079,6 +5111,7 @@
       if (s.type === 'rss') form.appendChild(h('div', null, lines('feeds', 'https://selfh.st/rss/\nReleases | https://github.com/immich-app/immich/releases.atom', 'Feeds', 'One per line, up to ' + 10 + ': the address, or Name | address. RSS and Atom both work. Each is read at most every 15 minutes.'),
         F('Stories to show', tIn(s.options, 'limit', noop, '8', 'number', { min: 1, max: 50 }))));
       if (s.type === 'bookmarks') form.appendChild(lines('links', 'Router | http://192.168.1.1\nhttps://selfh.st', 'Links', 'One per line: Title | https://… or just the address. Only http and https links are kept.'));
+      if (s.type === 'unifi') form.appendChild(F('Site', tIn(s.options, 'site', noop, 'default'), 'With a username and password: the site to read, the part after /site/ in its address.'));
       if (s.type === 'uptimekuma') form.appendChild(F('Status page slug', tIn(s.options, 'slug', noop, 'home'), 'Uptime Kuma reads a status page: the end of its address, /status/NAME. Make one under Status Pages first.'));
       if (s.type === 'homeassistant') form.appendChild(F('Entities', h('textarea', { rows: 3, spellcheck: 'false', placeholder: 'sensor.living_room_temperature\nlight.kitchen', oninput: function (e) { s.options.entities = e.target.value; } }, s.options.entities || ''),
         'Entity ids, one per line, up to 8 (Developer tools > States lists them). Empty shows people home, lights on and switches on.'));

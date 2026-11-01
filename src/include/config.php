@@ -33,6 +33,17 @@ function und_types() {
     'scrutiny' => ['Scrutiny', [], true], 'tdarr' => ['Tdarr', ['key'], true], 'unmanic' => ['Unmanic', [], true], 'uptimekuma' => ['Uptime Kuma', [], true],
     'speedtest' => ['Speedtest Tracker', ['key'], true], 'gluetun' => ['Gluetun', ['key'], true], 'homeassistant' => ['Home Assistant', ['key'], true],
     'weather' => ['Weather', [], false], 'rss' => ['RSS feed', [], false], 'releases' => ['GitHub releases', ['key'], false], 'bookmarks' => ['Bookmarks', [], false],
+    'deluge' => ['Deluge', ['password'], true], 'transmission' => ['Transmission', ['username', 'password'], true], 'nzbget' => ['NZBGet', ['username', 'password'], true],
+    'navidrome' => ['Navidrome / Subsonic', ['username', 'password'], true], 'audiobookshelf' => ['Audiobookshelf', ['key'], true], 'kavita' => ['Kavita', ['key'], true],
+    'komga' => ['Komga', ['key', 'username', 'password'], true], 'romm' => ['RomM', ['username', 'password'], true], 'jellystat' => ['Jellystat', ['key'], true],
+    'tubearchivist' => ['Tube Archivist', ['key'], true], 'ombi' => ['Ombi', ['key'], true], 'frigate' => ['Frigate', [], true],
+    'nextcloud' => ['Nextcloud', ['key', 'username', 'password'], true], 'paperless' => ['Paperless-ngx', ['key'], true], 'filebrowser' => ['File Browser', ['username', 'password'], true],
+    'syncthing' => ['Syncthing', ['key'], true], 'karakeep' => ['Karakeep', ['key'], true], 'mealie' => ['Mealie', ['key'], true], 'miniflux' => ['Miniflux', ['key'], true],
+    'freshrss' => ['FreshRSS', ['username', 'password'], true], 'gitea' => ['Gitea / Forgejo', ['key'], true], 'gotify' => ['Gotify', ['key'], true], 'changedetection' => ['changedetection.io', ['key'], true],
+    'technitium' => ['Technitium DNS', ['key'], true], 'traefik' => ['Traefik', ['username', 'password'], true], 'caddy' => ['Caddy', [], true], 'headscale' => ['Headscale', ['key'], true],
+    'unifi' => ['UniFi', ['key', 'username', 'password'], true], 'healthchecks' => ['Healthchecks', ['key'], true], 'gatus' => ['Gatus', [], true], 'beszel' => ['Beszel', ['username', 'password'], true],
+    'netdata' => ['Netdata', [], true], 'prometheus' => ['Prometheus', ['username', 'password'], true], 'grafana' => ['Grafana', ['key', 'username', 'password'], true],
+    'glances' => ['Glances (another machine)', [], true], 'portainer' => ['Portainer', ['key'], true], 'wud' => ["What's Up Docker", ['username', 'password'], true], 'minecraft' => ['Minecraft server', [], true],
     'customapi' => ['Custom API (JSON)', ['key'], true], 'link' => ['Link only', [], false],
   ];
 }
@@ -96,7 +107,7 @@ function und_default_config() {
     'general' => ['title' => '', 'logo' => '', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0, 'glances' => ''],
     'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'accent_mode' => 'theme', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'icon_box' => true, 'header_chips' => true, 'zoom' => 100, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'wall_path' => '', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
-    'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
+    'media' => ['radarr' => '', 'sonarr' => '', 'count' => 5, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 5, 'title' => '']; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
     'apps' => ['columns' => 0, 'links' => false, 'headers' => false],
@@ -491,7 +502,7 @@ function und_normalize(array $c) {
   $raw = []; foreach ((array)($md['widgets'] ?? []) as $x) if (is_array($x) && is_string($x['id'] ?? null)) $raw[$x['id']] = $x;
   $byId = []; foreach ($media['widgets'] as $w) $byId[$w['id']] = $w;
   $media['widgets'] = array_map(function ($id) use ($byId, $raw, $media) {
-    return ['id' => $id, 'visible' => $byId[$id]['visible'], 'count' => max(1, min(50, (int)($raw[$id]['count'] ?? $media['count'])))];
+    return ['id' => $id, 'visible' => $byId[$id]['visible'], 'count' => max(1, min(50, (int)($raw[$id]['count'] ?? $media['count']))), 'title' => und_clip(trim((string)($raw[$id]['title'] ?? '')), 40)];
   }, und_media_ids());
   $dl = (isset($c['downloads']) && is_array($c['downloads']) ? $c['downloads'] : []) + $d['downloads'];
   $downloads = ['items' => max(0, min(20, (int)$dl['items']))];
