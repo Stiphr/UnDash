@@ -21,6 +21,7 @@
 - Alerts left the board: a button in the header names the problem in its colour, and opens the list with Ignore and History. With nothing wrong it is a quiet bell.
 - Five new themes in the spirit of qui's: Autobrr, The Kyle, Napster, Nightwalker and Swizzin, with their own palettes for the glass cards. Mono is rebuilt in clean greys with a soft light from above.
 - Fixed: with two UnDash open on one server (live and beta), each signed the other out, which showed "UnDash restarted" and reloaded the page. Each port now has its own session, and a page whose token goes stale renews it and carries on without reloading.
+- The header shows your server's name by default. Settings > General > Display sets your own name and icon.
 - Every card has the same inner margin on all four sides.
 - Settings > Appearance > Layout & size can hide the server name and versions in the header. Menus stay inside the window at any zoom.
 - Settings > Appearance > Zoom level: Auto fits the dashboard to the screen and window, or pick 50 to 200%. Smart margins keep the same gap at the top and sides as the window changes.
