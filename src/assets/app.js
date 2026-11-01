@@ -227,7 +227,19 @@
     } else if (!S.drawer && !S.reloadT) S.reloadT = setTimeout(function () { location.reload(); }, 30000 - (Date.now() - at));      // restarted twice in a row
     return { error: 'UnDash restarted. Reload the page.', auth: true };
   }
-  function send(action, data, timeoutMs) {
+  /* a token that stopped matching: fetch the current one, so the page carries on as it is. Only a new UnDash version needs a reload */
+  function renewToken() {
+    if (!window.UND_STANDALONE) return Promise.resolve(false);
+    if (S.tokP) return S.tokP;
+    S.tokP = fetch('/csrf', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
+      S.tokP = null;
+      if (!j || !j.csrf) return false;
+      window.UND_CSRF = j.csrf;
+      return !S.boot || j.version === S.boot.version;
+    });
+    return S.tokP;
+  }
+  function send(action, data, timeoutMs, again) {
     var fd = new URLSearchParams(); fd.append('action', action);   // urlencoded: multipart POSTs hang on Unraid's web server
     fd.append('csrf_token', window.UND_CSRF || '');
     for (var k in (data || {})) fd.append(k, typeof data[k] === 'object' ? JSON.stringify(data[k]) : data[k]);
@@ -236,7 +248,7 @@
     return fetch(API, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-Token': window.UND_CSRF || '' }, signal: ctl ? ctl.signal : undefined }).then(function (r) {
       clearTimeout(to);
       if (r.status === 401) return { error: 'Signed out. Reload the page to sign in again.', auth: true };
-      if (r.status === 403) return r.clone().text().then(function (t) { return /CSRF/.test(t) ? staleSession() : r.json().catch(function () { return { error: t || 'Refused (HTTP 403).' }; }); });
+      if (r.status === 403) return r.clone().text().then(function (t) { return /CSRF/.test(t) ? (again ? Promise.resolve(false) : renewToken()).then(function (ok) { return ok ? send(action, data, timeoutMs, true) : staleSession(); }) : r.json().catch(function () { return { error: t || 'Refused (HTTP 403).' }; }); });
       return r.json().catch(function () { return { error: 'Unexpected answer from the server (HTTP ' + r.status + ').' }; }).then(function (j) { if (!r.ok && !j.error) j.error = 'Request failed (HTTP ' + r.status + ').'; return j; });
     }).catch(function (e) { clearTimeout(to); return { error: e && e.name === 'AbortError' ? 'The server took too long to answer.' : 'Could not reach the server.', offline: true }; });
   }

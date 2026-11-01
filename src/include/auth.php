@@ -12,13 +12,16 @@
 
 if (!defined('UND_SESS_TTL')) define('UND_SESS_TTL', 12 * 3600);
 
+/** A cookie's name, per port: cookies ignore the port, so two UnDash on one server would otherwise sign each other out. */
+function und_cookie($base) { return preg_match('/:(\d{1,5})$/', (string)($_SERVER['HTTP_HOST'] ?? ''), $m) ? $base . '_' . $m[1] : $base; }
+
 function und_sess_dir() { $d = und_tmp('sess'); @mkdir($d, 0700, true); return $d; }
 
 function und_sess_file($sid) { return und_sess_dir() . '/' . hash('sha256', (string)$sid) . '.json'; }
 
 /** The UnDash session of this request, or null. */
 function und_sess_get() {
-  $sid = (string)($_COOKIE['undash_sid'] ?? '');
+  $sid = (string)($_COOKIE[und_cookie('undash_sid')] ?? '');
   if (!preg_match('/^[a-f0-9]{64}$/', $sid)) return null;
   $s = und_read_json(und_sess_file($sid), null);
   if (!is_array($s) || (int)($s['exp'] ?? 0) < time()) { @unlink(und_sess_file($sid)); return null; }
@@ -28,7 +31,7 @@ function und_sess_get() {
 
 /** After a password change: every other browser has to sign in again (sessions opened without a password included). */
 function und_sess_drop_others() {
-  $keep = und_sess_file((string)($_COOKIE['undash_sid'] ?? ''));
+  $keep = und_sess_file((string)($_COOKIE[und_cookie('undash_sid')] ?? ''));
   foreach (glob(und_sess_dir() . '/*.json') ?: [] as $f) if ($f !== $keep) @unlink($f);
 }
 
@@ -36,16 +39,16 @@ function und_sess_new($how) {
   $sid = bin2hex(random_bytes(32));
   $s = ['exp' => time() + UND_SESS_TTL, 'csrf' => bin2hex(random_bytes(24)), 'how' => $how, 'at' => time()];
   und_write_json(und_sess_file($sid), $s, true);
-  setcookie('undash_sid', $sid, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
+  setcookie(und_cookie('undash_sid'), $sid, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
   // old sessions are removed now and then
   if (random_int(1, 20) === 1) foreach (glob(und_sess_dir() . '/*.json') ?: [] as $f) if (filemtime($f) < time() - UND_SESS_TTL - 3600) @unlink($f);
   return $s;
 }
 
 function und_sess_end() {
-  $sid = (string)($_COOKIE['undash_sid'] ?? '');
+  $sid = (string)($_COOKIE[und_cookie('undash_sid')] ?? '');
   if (preg_match('/^[a-f0-9]{64}$/', $sid)) @unlink(und_sess_file($sid));
-  setcookie('undash_sid', '', ['expires' => 1, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict']);
+  setcookie(und_cookie('undash_sid'), '', ['expires' => 1, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict']);
 }
 
 /** The host name of this request without the port, or '' when it does not look like one. */
