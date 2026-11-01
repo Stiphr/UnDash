@@ -71,7 +71,7 @@ function und_media_ids() { return ['upcoming_movies', 'upcoming_episodes', 'rece
 function und_default_config() {
   $svc = function ($name, $type, $icon = '') { return ['id' => und_id(), 'name' => $name, 'type' => $type, 'icon' => $icon, 'href' => '', 'url' => '', 'fields' => [], 'options' => new stdClass()]; };
   $sections = [];
-  foreach (und_section_ids() as $id) $sections[] = ['id' => $id, 'visible' => $id !== 'favorites', 'width' => in_array($id, ['arr', 'downloads', 'playing', 'requests'], true) ? 'half' : 'full', 'collapsed' => false];
+  foreach (und_section_ids() as $id) $sections[] = ['id' => $id, 'visible' => $id !== 'favorites', 'width' => in_array($id, ['arr', 'downloads', 'playing', 'requests'], true) ? 'half' : 'full', 'collapsed' => false, 'title' => ''];
   $metrics = [];
   foreach (und_metric_ids() as $id) $metrics[] = ['id' => $id, 'visible' => !in_array($id, ['cores', 'swap', 'load', 'path', 'docker', 'vms'], true)];
   return [
@@ -407,14 +407,14 @@ function und_normalize(array $c) {
       $row = ['id' => $x['id']];
       foreach ($fields as $f => $type) {
         $v = array_key_exists($f, $x) ? $x[$f] : $def[$f];
-        $row[$f] = $type === 'bool' ? !empty($v) : (in_array($v, $type, true) ? $v : $def[$f]);
+        $row[$f] = $type === 'bool' ? !empty($v) : ($type === 'text' ? und_clip(trim(preg_replace('/[\x00-\x1f\x7f]+/', ' ', is_scalar($v) ? (string)$v : '')), 40) : (in_array($v, $type, true) ? $v : $def[$f]));
       }
       $out[] = $row;
     }
     foreach ($defaults as $dd) if (!isset($seen[$dd['id']])) $out[] = $dd;
     return $out;
   };
-  $sections = $order($db['sections'] ?? [], und_section_ids(), $d['dashboard']['sections'], ['visible' => 'bool', 'width' => ['full', 'half'], 'collapsed' => 'bool']);
+  $sections = $order($db['sections'] ?? [], und_section_ids(), $d['dashboard']['sections'], ['visible' => 'bool', 'width' => ['full', 'half'], 'collapsed' => 'bool', 'title' => 'text']);
   // a section added in a later version goes where it belongs, not at the bottom of an older layout
   $had = array_column(array_filter((array)($db['sections'] ?? []), 'is_array'), 'id');
   if ($had) foreach (und_section_since() as $new => $after) {
