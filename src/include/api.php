@@ -162,7 +162,15 @@ switch ($action) {
   case 'os_status':     out(und_os_cached() + ['log' => und_job(und_tmp('os-update.log'))]);
   case 'os_check':      out(und_os_check());
   case 'os_update':     { $r = und_os_update(); if (isset($r['error'])) fail($r['error']); und_history_add('server', 'Unraid OS', 'update', true, 'install started'); out($r); }
-  case 'storage':       out(und_storage());
+  case 'storage': {
+    $st = und_storage();
+    if (!isset($st['error'])) {
+      $size = 0; foreach ((array)($st['array'] ?: $st['pools']) as $d) $size += (float)($d['size'] ?? 0);
+      $st['forecast'] = und_metrics_forecast(und_metrics_load()['coarse'], $size);
+      if (und_api_mode()) { $st['mover'] = und_api_mover(); $st['checks'] = und_read_json(und_tmp('api-facts.json'), [])['parity'] ?? null; }
+    }
+    out($st);
+  }
   case 'container_sources': out(und_container_sources());
   case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'), (int)$P('offset', '0'), $P('src'), $P('style'), $P('browse') === '1')); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
   case 'wallpaper_check': { $r = und_wall_local($P('path')); if (isset($r['error'])) fail($r['error'], 422); out(['ok' => true, 'v' => $r['v'], 'size' => $r['size']]); }

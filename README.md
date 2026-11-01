@@ -9,6 +9,7 @@ A compact dashboard for Unraid. System health, alerts, media, Arr apps, download
 
 - **System**: CPU, memory, storage, network, array health, disk temperatures, uptime and UPS, with short history charts.
 - **Alerts**: problems only (unhealthy or restarting containers, disk errors and heat, array state, updates). Each alert can be ignored for a while or for good. A history keeps when each problem started and ended.
+- **Array details**: click Storage or Array health for the last parity check, Mover status, each disk's SMART status and when the array will be full at the current pace.
 - **Push alerts**: Discord, Telegram, ntfy or Gotify, set up in **Settings > Alerts**. Sent when a problem lasts over a minute and when it ends, also with no dashboard open.
 - **History charts**: click CPU, Memory, Network, Storage or Disk temps for the last hour, day, week or month. A reading is kept every minute.
 - **Media**: upcoming and recently added movies and episodes from Radarr and Sonarr.

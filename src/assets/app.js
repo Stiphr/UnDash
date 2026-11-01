@@ -1962,8 +1962,10 @@
     var hist = s.hist || [];
     if (id === 'storage' || id === 'health' || id === 'disks') {
       if (Date.now() - S.storageAt > 30000) loadStorage();
-      var sig = JSON.stringify(S.storage); if (r.detailSig === sig) return; r.detailSig = sig;
-      clear(r.detail).appendChild(diskTable());
+      var a = s.array || {}, sig = JSON.stringify([S.storage, a.resync_pct, a.resync_paused]); if (r.detailSig === sig) return; r.detailSig = sig;
+      clear(r.detail);
+      if (id !== 'disks') r.detail.appendChild(arrayFacts(a, id));
+      r.detail.appendChild(diskTable());
       return;
     }
     clear(r.detail); r.detailSig = null;
@@ -2087,17 +2089,38 @@
     }
     return s;
   }
+  /* parity, Mover and the forecast: only what this server can tell (a line it cannot fill is left out) */
+  var PARITY_END = { COMPLETED: 'Finished', CANCELLED: 'Cancelled', FAILED: 'Failed', PAUSED: 'Paused', RUNNING: 'Running' };
+  function arrayFacts(a, id) {
+    var st = S.storage || {}, kv = h('div', { class: 'kv2 sm dfacts' }), row = function (k, v, cls) { kv.appendChild(h('span', null, k)); kv.appendChild(h('span', { class: cls || null }, v)); };
+    var day = function (t) { return new Date(t * 1000).toLocaleDateString([], { dateStyle: 'medium' }); };
+    if (a.resync) {
+      var left = a.resync_pct > 0 && a.resync_time ? a.resync_time * (100 - a.resync_pct) / a.resync_pct : 0;
+      row(a.resync_action || 'Parity check', [(a.resync_pct === null ? '' : a.resync_pct + '%'), a.resync_paused ? 'paused' : '', a.resync_speed && a.resync_speed !== '0' ? a.resync_speed + ' MB/s' : '', left ? 'about ' + upt(left) + ' left' : ''].filter(Boolean).join(' · '));
+    }
+    var pc = st.checks, last = pc && pc.last;
+    if (pc) {
+      row('Last parity check', last ? [day(last.at), (PARITY_END[last.status] || last.status) + (last.duration ? ' after ' + upt(last.duration) : ''), last.errors ? last.errors.toLocaleString() + ' errors' : ''].filter(Boolean).join(' · ') : 'None on record');
+      if (!last || last.status !== 'COMPLETED') row('Last finished check', pc.ok_at ? day(pc.ok_at) : 'None on record', pc.ok_at ? '' : 't-warn');
+    }
+    if (st.mover) row('Mover', (st.mover.active ? 'Running' : 'Idle') + (st.mover.schedule ? ' · schedule ' + st.mover.schedule : ''));
+    var f = st.forecast;
+    if (f && id === 'storage') row('Forecast', !f.ready ? 'Ready in ' + f.wait + ' day' + (f.wait > 1 ? 's' : '') + ': it needs some history first' : !f.rising ? 'Not filling up' : 'Full in about ' + (f.days > 730 ? Math.round(f.days / 365) + ' years' : f.days > 60 ? Math.round(f.days / 30) + ' months' : f.days + ' days') + ' · ' + bytes(f.per_day) + ' a day');
+    return kv;
+  }
   function diskTable() {
     var st = S.storage;
     if (!st) return h('div', { class: 'empty' }, 'Loading disks…');
     if (st.error) return h('div', { class: 'empty' }, st.error);
     var rows = [].concat((st.parity || []).map(function (d) { d.k = 'Parity'; return d; }), (st.array || []).map(function (d) { d.k = 'Array'; return d; }), (st.pools || []).map(function (d) { d.k = 'Pool'; return d; }));
     if (!rows.length) return h('div', { class: 'empty' }, 'No disk information. Is the array started?');
-    return h('div', { class: 'tw' }, h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Disk'), h('th', null, 'Health'), h('th', null, 'Temp'), h('th', null, 'Usage'))),
+    var smart = rows.some(function (d) { return d.smart; });
+    return h('div', { class: 'tw' }, h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Disk'), h('th', null, 'Health'), smart ? h('th', null, 'SMART') : null, h('th', null, 'Temp'), h('th', null, 'Usage'))),
       h('tbody', null, rows.map(function (d) {
         var p = d.size ? 100 * (d.size - d.free) / d.size : 0;
         return h('tr', null, h('td', null, h('b', null, d.name), h('span', { class: 'muted xs' }, ' ' + d.k + (d.device ? ' · ' + d.device : '') + (d.fs ? ' · ' + d.fs : ''))),
           h('td', null, h('span', { class: 'badge ' + (d.health === 'ok' ? 'ok' : d.health === 'warn' ? 'warn' : 'bad'), title: d.status }, d.health === 'ok' ? 'ok' : String(d.status).replace('DISK_', '').toLowerCase()), d.errors ? h('span', { class: 'badge bad' }, d.errors + ' errors') : null),
+          smart ? h('td', { title: d.model || null }, d.smart === 'ok' ? 'OK' : h('span', { class: 'muted' }, d.smart ? 'not reported' : '-')) : null,
           h('td', { class: 'num' }, d.temp === null ? h('span', { class: 'muted' }, d.spun ? '-' : 'spun down') : h('span', { class: d.temp >= 55 ? 't-bad' : d.temp >= 50 ? 't-warn' : '' }, d.temp + '°C')),
           h('td', { style: { 'min-width': '160px' } }, d.size ? [h('div', { class: 'xs num' }, bytes(d.size - d.free) + ' / ' + bytes(d.size)), h('div', { class: 'meter' }, h('i', { class: meterCls(p), style: { width: p.toFixed(1) + '%' } }))] : h('span', { class: 'muted' }, '-')));
       }))));
@@ -2180,7 +2203,7 @@
   /* Alert ids are "<category>:<resource>" (see include/ignores.php); an alert without a category cannot be ignored. */
   var ALERT_CAT = {
     'docker.unhealthy': 'Container unhealthy', 'docker.restarting': 'Container restarting', 'docker.exited': 'Container stopped with an error', 'docker.update_failed': 'Container update failed',
-    'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature', 'disk.smart': 'Disk failed SMART (Scrutiny)',
+    'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature', 'disk.smart': 'Disk failed SMART (Scrutiny)', 'disk.smart_lost': 'Disk SMART status', 'array.parity_errors': 'Parity check errors', 'array.parity_old': 'Parity check overdue',
     'auth.open': 'No dashboard password', 'health.down': 'Endpoint not answering', 'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
   };
   /* the rules in force, by the server's clock (live.at), plus this tab's own changes until the next refresh confirms them */
@@ -3015,7 +3038,7 @@
         h('div', { class: 'pl2 muted xs' }, ic(x.state === 'paused' ? 'pause' : 'play'), h('span', { class: 'ell' }, [icon ? '' : x.user, x.device, x.app].filter(Boolean).join(' · '))),
         x.dur ? h('div', { class: 'meter', 'aria-hidden': 'true' }, h('i', { class: 'acc', style: { width: p + '%' } })) : null,
         h('div', { class: 'pl3 xs' }, x.dur ? h('span', { class: 'num muted' }, dur(x.pos) + ' / ' + dur(x.dur)) : null,
-          m ? h('span', { class: 'badge ' + m[1] }, m[0]) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
+          m ? h('span', { class: 'badge ' + m[1], title: x.hw === false ? 'Done by the CPU, not a graphics chip' : null }, m[0] + (x.hw === true ? ' · hardware' : x.hw === false ? ' · software' : '')) : null, x.quality ? h('span', { class: 'badge plain' }, x.quality) : null,
           x.bandwidth ? h('span', { class: 'num muted' }, rate(x.bandwidth / 8)) : null, x.location === 'wan' ? h('span', { class: 'badge plain', title: 'Streaming outside your network' }, 'remote') : null)));
   }
 

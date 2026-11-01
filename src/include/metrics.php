@@ -76,3 +76,19 @@ function und_metrics_range($range, $now = null) {
   $rows = array_values(array_filter($h[$r[1]], function ($x) use ($now, $r) { return $x[0] >= $now - $r[0]; }));
   return ['now' => $now, 'from' => $now - $r[0], 'step' => $r[1] === 'fine' ? 60 : UND_METRIC_STEP, 'fields' => UND_METRIC_FIELDS, 'rows' => $rows];
 }
+
+/** When the storage fills up at the pace of the last 30 days: a straight line through the 15-minute averages. Size in bytes. */
+function und_metrics_forecast(array $rows, $size, $now = null) {
+  $now = $now ?? time(); $col = array_search('used', UND_METRIC_FIELDS) + 1; $pts = [];
+  foreach ($rows as $r) if (isset($r[$col]) && $r[0] >= $now - UND_METRIC_RANGES['30d'][0]) $pts[] = [($r[0] - $now) / 86400, (float)$r[$col]];
+  $need = 3;
+  $span = $pts ? end($pts)[0] - $pts[0][0] : 0;
+  if ($span < $need) return ['ready' => false, 'wait' => (int)ceil($need - $span)];
+  $n = count($pts); $sx = 0; $sy = 0; $xx = 0; $xy = 0;
+  foreach ($pts as $p) { $sx += $p[0]; $sy += $p[1]; $xx += $p[0] * $p[0]; $xy += $p[0] * $p[1]; }
+  $div = $n * $xx - $sx * $sx;
+  $slope = $div > 0 ? ($n * $xy - $sx * $sy) / $div : 0;           // % a day
+  if ($slope < 0.005) return ['ready' => true, 'rising' => false];
+  return ['ready' => true, 'rising' => true, 'per_day' => (int)round($slope / 100 * $size), 'days' => (int)round((100 - end($pts)[1]) / $slope)];
+}
+

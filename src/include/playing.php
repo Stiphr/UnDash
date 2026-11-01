@@ -41,7 +41,8 @@ function und_streams_tautulli($d) {
     $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['friendly_name'] ?? $x['user'] ?? ''), 'device' => trim(($x['player'] ?? '') . (isset($x['product']) && $x['product'] !== ($x['player'] ?? '') ? ' · ' . $x['product'] : '')),
       'state' => (string)($x['state'] ?? 'playing'), 'pos' => (int)((int)($x['view_offset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
       'method' => und_playing_method($x['transcode_decision'] ?? ''), 'quality' => (string)($x['quality_profile'] ?? $x['stream_video_full_resolution'] ?? ''),
-      'bandwidth' => isset($x['bandwidth']) && $x['bandwidth'] !== '' ? (int)$x['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['location'] ?? ''))];
+      'bandwidth' => isset($x['bandwidth']) && $x['bandwidth'] !== '' ? (int)$x['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['location'] ?? '')),
+      'hw' => und_playing_method($x['transcode_decision'] ?? '') === 'transcode' ? !empty($x['transcode_hw_encoding']) || !empty($x['transcode_hw_decoding']) : null];
   }
   return $out;
 }
@@ -56,9 +57,18 @@ function und_streams_plex($j) {
     $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['User']['title'] ?? ''), 'device' => trim(($x['Player']['title'] ?? '') . (!empty($x['Player']['product']) ? ' · ' . $x['Player']['product'] : '')),
       'state' => (string)($x['Player']['state'] ?? 'playing'), 'pos' => (int)((int)($x['viewOffset'] ?? 0) / 1000), 'dur' => (int)((int)($x['duration'] ?? 0) / 1000),
       'method' => $ts ? und_playing_method($ts['videoDecision'] ?? 'transcode') : 'direct play', 'quality' => (string)($x['Media'][0]['videoResolution'] ?? ''),
-      'bandwidth' => isset($x['Session']['bandwidth']) ? (int)$x['Session']['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['Session']['location'] ?? ''))];
+      'bandwidth' => isset($x['Session']['bandwidth']) ? (int)$x['Session']['bandwidth'] * 1000 : null, 'location' => strtolower((string)($x['Session']['location'] ?? '')),
+      'hw' => $ts ? !empty($ts['transcodeHwEncoding']) || !empty($ts['transcodeHwDecoding']) : null];
   }
   return $out;
+}
+
+/** Emby says VideoEncoderIsHardware, Jellyfin names the HardwareAccelerationType; null = this server does not say. */
+function und_playing_hw($t) {
+  if (!is_array($t)) return null;
+  if (isset($t['VideoEncoderIsHardware'])) return !empty($t['VideoEncoderIsHardware']) || !empty($t['VideoDecoderIsHardware']);
+  if (isset($t['HardwareAccelerationType'])) return strtolower((string)$t['HardwareAccelerationType']) !== 'none';
+  return null;
 }
 
 function und_streams_emby($j) {
@@ -72,7 +82,7 @@ function und_streams_emby($j) {
     $out[] = ['title' => $t, 'sub' => $sub, 'user' => (string)($x['UserName'] ?? ''), 'device' => trim(($x['DeviceName'] ?? '') . (!empty($x['Client']) ? ' · ' . $x['Client'] : '')),
       'state' => !empty($x['PlayState']['IsPaused']) ? 'paused' : 'playing', 'pos' => (int)(($x['PlayState']['PositionTicks'] ?? 0) / 10000000), 'dur' => (int)(($n['RunTimeTicks'] ?? 0) / 10000000),
       'method' => und_playing_method($x['PlayState']['PlayMethod'] ?? ''), 'quality' => $w >= 3800 ? '4K' : ($w >= 1900 ? '1080p' : ($w >= 1260 ? '720p' : ($w ? 'SD' : ''))),
-      'bandwidth' => isset($x['TranscodingInfo']['Bitrate']) ? (int)$x['TranscodingInfo']['Bitrate'] : null, 'location' => ''];
+      'bandwidth' => isset($x['TranscodingInfo']['Bitrate']) ? (int)$x['TranscodingInfo']['Bitrate'] : null, 'location' => '', 'hw' => und_playing_hw($x['TranscodingInfo'] ?? null)];
   }
   return $out;
 }

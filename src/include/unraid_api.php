@@ -59,7 +59,9 @@ function und_api_test() {
     $t = und_gql($q, [], 8);
     $out['access'][$k] = isset($t['error']) ? $t['error'] : 'ok';
   }
-  $out['optional'] = ['ups' => 'Not available through the API. Only needed for a UPS that Unraid\'s own UPS service runs; a NUT UPS is read directly.'];
+  $t = und_gql('query { vars { shareMoverActive } }', [], 8);
+  $out['access']['vars'] = isset($t['error']) ? $t['error'] : 'ok';
+  $out['optional'] = ['ups' => 'Not available through the API. Only needed for a UPS that Unraid\'s own UPS service runs; a NUT UPS is read directly.', 'vars' => 'Optional: read access to Vars shows whether Mover is running.'];
   return $out;
 }
 
@@ -143,7 +145,7 @@ function und_api_system(array $cfg) {
       memory { total used available swapTotal swapUsed percentTotal }
       temperature { sensors { type current { value } } summary { hottest { current { value } } } }
     }
-    array { state capacity { kilobytes { free used total } } parityCheckStatus { running progress status }
+    array { state capacity { kilobytes { free used total } } parityCheckStatus { running progress status speed duration paused }
       parities { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
       disks { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
       caches { name device status temp numErrors fsSize fsFree fsType color isSpinning type } }
@@ -202,9 +204,70 @@ function und_api_array(array $a) {
   foreach ($data as $x) { $size += $x['size']; $free += $x['free']; }
   $fl = und_disk_flags(array_merge($parity, $data, $pools));
   $pc = $a['parityCheckStatus'] ?? [];
+  $facts = und_read_json(und_tmp('api-facts.json'), []); $sm = (array)($facts['disks'] ?? []); $lost = [];
+  foreach ([&$parity, &$data, &$pools] as &$list) foreach ($list as &$row) {
+    $x = $sm[$row['device']] ?? null;
+    $row['smart'] = $x['smart'] ?? null; $row['model'] = (string)($x['model'] ?? '');
+    if (in_array($row['device'], (array)($facts['lost'] ?? []), true)) $lost[] = $row['name'];
+  }
+  unset($list, $row);
   return ['state' => (string)($a['state'] ?? ''), 'resync' => !empty($pc['running']) ? 1 : 0, 'resync_pct' => !empty($pc['running']) && isset($pc['progress']) ? (float)$pc['progress'] : null,
           'resync_action' => !empty($pc['running']) ? 'Parity check' : '', 'size' => $size, 'free' => $free, 'disks' => count($data), 'parity' => count($parity),
-          'pools' => $pools, 'mover' => false, '_rows' => ['parity' => $parity, 'array' => $data, 'pools' => $pools]] + $fl;
+          'pools' => $pools, 'mover' => false, '_rows' => ['parity' => $parity, 'array' => $data, 'pools' => $pools], 'smart_lost' => $lost, 'parity_checks' => $facts['parity'] ?? null,
+          'resync_speed' => !empty($pc['running']) ? (string)($pc['speed'] ?? '') : '', 'resync_time' => !empty($pc['running']) ? (int)($pc['duration'] ?? 0) : 0, 'resync_paused' => !empty($pc['paused'])] + $fl;
+}
+
+/* ---------- facts that change slowly and take seconds to read (the disk list alone takes about 5 s): the background check keeps a copy ---------- */
+
+const UND_API_FACTS = 600;
+
+/** Newest first: the last check of any kind, and when one last finished. [] history = none on record. */
+function und_api_parity_sum(array $list) {
+  $rows = [];
+  foreach ($list as $p) $rows[] = ['at' => (int)strtotime((string)($p['date'] ?? '')), 'duration' => (int)($p['duration'] ?? 0), 'status' => (string)($p['status'] ?? ''), 'errors' => (int)($p['errors'] ?? 0), 'speed' => (string)($p['speed'] ?? '')];
+  usort($rows, function ($a, $b) { return $b['at'] - $a['at']; });
+  $ok = 0;
+  foreach ($rows as $r) if ($r['status'] === 'COMPLETED') { $ok = $r['at']; break; }
+  return ['last' => $rows[0] ?? null, 'ok_at' => $ok];
+}
+
+/** The API only says OK or UNKNOWN. A disk once OK that is awake (it reports a temperature) and no longer OK is news; one that was never OK, like a USB flash drive, is not. */
+function und_api_smart_read(array $disks, array $seen) {
+  $out = []; $lost = [];
+  foreach ($disks as $d) {
+    $dev = preg_replace('#^/dev/#', '', (string)($d['device'] ?? ''));
+    $ok = ($d['smartStatus'] ?? '') === 'OK';
+    $out[$dev] = ['smart' => $ok ? 'ok' : 'unknown', 'model' => (string)($d['name'] ?? '')];
+    if ($ok) $seen[$dev] = true;
+    elseif (!empty($seen[$dev]) && isset($d['temperature'])) $lost[] = $dev;
+  }
+  return [$out, $lost, $seen];
+}
+
+/** One background round. A part that fails keeps its last good copy. */
+function und_api_facts_refresh($now = null) {
+  $now = $now ?? time();
+  $f = und_tmp('api-facts.json'); $c = und_read_json($f, []);
+  if ($now - (int)($c['t'] ?? 0) < UND_API_FACTS) return;
+  $d = und_gql('query { disks { device name smartStatus temperature } }', [], 15);
+  if (!isset($d['error'])) {
+    $sf = und_data_dir() . '/smart-seen.json';
+    list($c['disks'], $c['lost'], $seen) = und_api_smart_read((array)($d['data']['disks'] ?? []), und_read_json($sf, []));
+    und_write_json($sf, $seen);
+  }
+  $p = und_gql('query { parityHistory { date duration speed status errors } }', [], 10);
+  if (!isset($p['error'])) $c['parity'] = und_api_parity_sum((array)($p['data']['parityHistory'] ?? []));
+  $c['t'] = $now;
+  und_write_json($f, $c);
+}
+
+/** Whether Mover is running. Needs read access to Vars on the key; a refused read is an error in Unraid's API log, so it is not asked again for 10 minutes. */
+function und_api_mover() {
+  $none = und_tmp('api-mover.none');
+  if (time() - (int)@filemtime($none) < 600) return null;
+  $r = und_api_cached('mover', 30, function () { return und_gql('query { vars { shareMoverActive shareMoverSchedule } }'); });
+  if (isset($r['error']) || !isset($r['data']['vars'])) { @touch($none); return null; }
+  return ['active' => !empty($r['data']['vars']['shareMoverActive']), 'schedule' => (string)($r['data']['vars']['shareMoverSchedule'] ?? '')];
 }
 
 function und_api_storage() {
