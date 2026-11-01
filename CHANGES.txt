@@ -11,6 +11,7 @@
 - Settings > Presets also holds the ready-made dashboards, the choices for each set, and the Setup wizard
 - Settings pages reordered, most used first. General: name and icon, search, refresh, then disk and UPS. Appearance: Layout & size split into Size and density, Details and Margins. Backup & restore: backups first with Back up now, Start over last
 - The footer says when a page applies its changes at once
+- Fixed: on a slow server a card that loaded late could stay short, cutting off its list
 - Cards no longer leave holes: a medium window folds the layout into whole rows, and with snapping on any layout that would leave a hole or overlap does the same
 - Fixed: "Automatic" in the wizard's look step saved dark mode; it is now System and sets the right mode
 - Fixed: changing a found app's address in the wizard could list that app twice

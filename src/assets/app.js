@@ -985,6 +985,9 @@
       !list.length && !E ? h('div', { class: 'card empty bempty' }, GUEST ? 'Nothing is shared on this page.' : 'This page is empty. Use the edit button at the top to add cards.') : null);
     root.insertBefore(R.boardWrap, R.sections);
     S.boardHide = ''; S.boardNat = '';
+    // data that arrives late fills a card long after it was measured: anything added inside a card measures again, at most once a second
+    if (S.boardWatch) S.boardWatch.disconnect();
+    if (window.MutationObserver) { S.boardWatch = new MutationObserver(function () { if (S.autoLate) return; S.autoLate = setTimeout(function () { S.autoLate = 0; boardAutoSoon(); }, 1000); }); S.boardWatch.observe(R.board, { childList: true, subtree: true }); }
     if (E) boardDock();
     if (mode === 'sm') boardNav();
     boardPaint();
