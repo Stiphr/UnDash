@@ -1231,6 +1231,15 @@ t('an app not ticked cannot be read by its id', isset(und_guest_service($gc, $g2
 $GLOBALS['UND_HTTP_MOCK'] = function () { return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'connect to 10.0.0.5 failed', 'headers' => []]; };
 t('an app error does not name its address', und_guest_service($gc, $gp, 'aaaa0002') === ['error' => 'Not available right now.'], json_encode(und_guest_service($gc, $gp, 'aaaa0002')));
 unset($GLOBALS['UND_HTTP_MOCK']);
+foreach (['http://192.168.50.50:8096/', 'http://10.0.0.1', 'https://[fd00::1]/', 'http://tower/', 'http://tower.local/', 'https://plex.lan', 'http://localhost:1', 'https://a:b@public.example.com/', 'javascript:alert(1)', ''] as $u)
+  t("a guest does not get the link $u", und_guest_href($u) === '');
+t('a public address stays', und_guest_href('https://plex.example.com/web') === 'https://plex.example.com/web' && und_guest_href('https://1.1.1.1/') === 'https://1.1.1.1/');
+$gc2 = und_normalize(['groups' => [['id' => 'bbbb0001', 'name' => 'G', 'services' => [
+  ['id' => 'bbbb0002', 'type' => 'immich', 'name' => 'Photos', 'url' => 'http://192.168.1.5:2283'], ['id' => 'bbbb0003', 'type' => 'link', 'name' => 'Router', 'href' => 'http://192.168.1.1'], ['id' => 'bbbb0004', 'type' => 'link', 'name' => 'Site', 'href' => 'https://example.com']]]]]);
+$gl2 = und_guest_layout($gc2, ['sections' => $gp['sections'], 'apps' => ['bbbb0002', 'bbbb0003', 'bbbb0004']]);
+t('an app card keeps its numbers but loses a LAN link', $gl2['groups'][0]['services'][0]['href_resolved'] === '' && strpos(json_encode($gl2), '192.168') === false, json_encode($gl2['groups']));
+t('a LAN shortcut is not shown, a public one is', array_column($gl2['groups'][0]['services'], 'name') === ['Photos', 'Site']);
+t('and is not offered in Settings', array_column(und_guest_apps($gc2), 'name') === ['Photos', 'Site']);
 foreach (['settings', 'save', 'docker_action', 'vm_action', 'power', 'prefs', 'export', 'storage', 'metrics', 'probe', 'test', 'guest_get', 'notify_get', 'alert_history', 'docker_logs', 'unraid_conf', ''] as $a)
   t("a guest cannot call $a", und_guest_api($a, []) === ['error' => 'Not available in the guest view.'], json_encode(und_guest_api($a, [])));
 
