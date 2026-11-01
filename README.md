@@ -4,6 +4,8 @@
 
 A compact dashboard for Unraid. System health, alerts, media, Arr apps, downloads, requests, containers and VMs on one page, with the controls to manage them.
 
+<p align="center"><img src="docs/screenshots/dashboard.jpg" alt="UnDash dashboard in dark mode"></p>
+
 > [!WARNING]
 > **UnDash is entirely vibe coded (written with AI) and is still a work in progress.** Expect bugs and changes between versions. It can start, stop, restart and update containers and VMs on your server. Use it at your own risk: I am not responsible for anything that happens to your system or your data. Keep backups of your appdata and flash drive.
 
@@ -18,6 +20,21 @@ A compact dashboard for Unraid. System health, alerts, media, Arr apps, download
 - **Endpoint health**: HTTP status and latency of every app and container web UI.
 - **Search**: a list under the search box with your apps, containers and VMs, a web search and movies and series to request in Seerr. You choose which in Settings; the dashboard itself is never filtered.
 - Ten themes with light and dark versions, frosted-glass wallpapers, custom CSS. Works on phones too, and goes on the home screen with its own icon (full screen on iPhone; on Android that needs HTTPS).
+
+## Screenshots
+
+| | |
+|---|---|
+| ![The dashboard in light mode](docs/screenshots/dashboard-light.jpg) | ![Arr Stack, Downloads, Now playing and Requests](docs/screenshots/arr-stack.jpg) |
+| **Light mode.** Every theme has both | **Arr Stack, Downloads, Now playing and Requests.** Problems open under the app |
+| ![Moving and resizing cards on the dashboard](docs/screenshots/edit-dashboard.jpg) | ![The setup wizard](docs/screenshots/setup-wizard.jpg) |
+| **Edit dashboard.** Move, resize, add and remove cards in place | **Setup wizard.** Picks your layout and connects your apps |
+| ![Quick settings](docs/screenshots/settings.jpg) | ![Settings > Presets](docs/screenshots/presets.jpg) |
+| **Quick settings.** The first page of Settings | **Presets.** Save, share and import your own layouts |
+
+<p align="center"><img src="docs/screenshots/phone.jpg" width="520" alt="UnDash on a phone"></p>
+
+The screenshots use made-up sample data.
 
 ## Install
 

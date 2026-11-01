@@ -39,6 +39,7 @@
     e.appendChild(c.nodeType ? c : document.createTextNode(String(c)));
   }
   function clear(e) { while (e && e.firstChild) e.removeChild(e.firstChild); return e; }
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
   function txt(e, t) { if (e && e.textContent !== t) e.textContent = t; }
   var SVGNS = 'http://www.w3.org/2000/svg';
   var IC = {
@@ -743,7 +744,7 @@
         out.push({ i: 'app:' + x.id, t: x.name, s: 'apps', link: x.type === 'link', w: tall ? 6 : 4, h: x.type === 'link' ? 3 : tall ? 12 : 7, minw: 2, minh: 3 });
       }); });
       else {
-        var size = { favorites: [24, 8], arr: [12, 20], downloads: [12, 16], playing: [12, 10], requests: [12, 16], docker: [24, 24], vms: [12, 10] }[sec.id] || [12, 10];
+        var size = { favorites: [24, 8], arr: [12, 12], downloads: [12, 16], playing: [12, 10], requests: [12, 16], docker: [24, 24], vms: [12, 10] }[sec.id] || [12, 10];
         out.push({ i: sec.id, t: sec.title || TITLES[sec.id], s: sec.id, w: size[0], h: size[1], minw: 4, minh: 3, maxh: sec.id === 'docker' ? 100 : 60 });
       }
     });
@@ -2097,12 +2098,12 @@
     tile('cpu', pct(c), [s.cpu.temp !== null && s.cpu.temp !== undefined ? Math.round(s.cpu.temp) + '°C' : '', s.cpu.threads ? s.cpu.threads + ' threads' : ''].filter(Boolean).join(' · '), c, s.cpu.temp >= 85 ? 'bad' : s.cpu.temp >= 75 ? 'warn' : lvl(c, 85, 97));
     tile('memory', pct(s.mem.pct), bytes(s.mem.free) + ' free of ' + bytes(s.mem.total), s.mem.pct, lvl(s.mem.pct, 85, 95));
     var st = a.size ? [a.size, a.free] : pools.length ? pools.reduce(function (acc, p) { return [acc[0] + p.size, acc[1] + p.free]; }, [0, 0]) : null;
-    if (st) { var sp = 100 * (st[0] - st[1]) / st[0]; tile('storage', bytes(st[1]) + ' free', pct(sp) + ' of ' + bytes(st[0]) + (a.size ? ' · array' : ' · ' + pools.length + ' pools'), sp, lvl(sp, 85, 95)); }
+    if (st) { var sp = 100 * (st[0] - st[1]) / st[0]; tile('storage', bytes(st[1]) + ' free', pct(sp) + ' of ' + bytes(st[0]) + (a.size ? ' · array' : ' · ' + plural(pools.length, 'pool')), sp, lvl(sp, 85, 95)); }
     else tile('storage', 'n/a', a.state === 'STARTED' ? 'No sizes reported' : 'Array ' + (a.state || 'unknown').toLowerCase(), null, 'na');
     tile('network', s.net.rx === null ? 'n/a' : rate(s.net.rx) + ' ↓', s.net.tx === null ? (s.net.iface || '') : rate(s.net.tx) + ' ↑' + (s.net.iface ? ' · ' + s.net.iface : ''), null, s.net.rx === null ? 'na' : '');
     var hl = a.state !== 'STARTED' ? 'warn' : a.bad || a.errors ? 'bad' : 'ok';
     tile('health', a.state !== 'STARTED' ? (a.state || 'unknown').toLowerCase() : a.bad ? a.bad + ' disk problem' + (a.bad > 1 ? 's' : '') : a.errors ? a.errors + ' errors' : 'Healthy',
-      a.resync ? (a.resync_action || 'Parity check') + (a.resync_pct !== null ? ' ' + a.resync_pct + '%' : '') : (a.disks || 0) + ' disks · ' + (a.parity || 0) + ' parity · ' + pools.length + ' pools', a.resync_pct, hl);
+      a.resync ? (a.resync_action || 'Parity check') + (a.resync_pct !== null ? ' ' + a.resync_pct + '%' : '') : plural(a.disks || 0, 'disk') + ' · ' + (a.parity || 0) + ' parity · ' + plural(pools.length, 'pool'), a.resync_pct, hl);
     var temps = [], rows = a._rows ? [].concat(a._rows.parity, a._rows.array, a._rows.pools) : null;
     (rows || pools).forEach(function (d) { if (d.temp !== null && d.temp !== undefined) temps.push(d.temp); });
     if (S.storage) [].concat(S.storage.parity || [], S.storage.array || [], S.storage.pools || []).forEach(function (d) { if (d.temp !== null && d.temp !== undefined) temps.push(d.temp); });
@@ -3349,13 +3350,16 @@
     x.dot.className = 'sdot ' + state; x.dot.setAttribute('aria-label', !j.online ? (j.unconfigured ? 'not configured' : 'offline') : issues ? issues + ' issues' : 'online');
     clear(x.info);
     x.state.className = 'ell ' + (!j.online ? (j.unconfigured ? 'muted' : 't-bad') : issues ? (bad ? 't-bad' : 't-warn') : '');
-    txt(x.state, !j.online ? (j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline') : issues ? issues + (issues === 1 ? ' issue' : ' issues') : j.version ? 'v' + j.version : 'Healthy');
+    txt(x.state, !j.online ? (j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline') : issues ? issues + (issues === 1 ? ' issue' : ' issues') : '');
+    x.state.hidden = j.online && !issues;              // a healthy app only needs its green dot
     var list = j.online ? j.blocks || [] : [];
-    list.slice(0, 3).forEach(function (b) { x.info.appendChild(h('span', { class: 'st', title: b.label + ': ' + fmt(b.value, b.fmt) }, h('b', null, blkVal(b)), h('span', { class: 'ell' }, b.label))); });
+    // the row shows what fits: everything is here on hover, and under it when opened
+    x.tog.title = [x.s.name + (j.version ? ' v' + j.version : '')].concat(list.map(function (b) { return b.label + ': ' + fmt(b.value, b.fmt); })).join('\n');
+    list.slice(0, 2).forEach(function (b) { x.info.appendChild(h('span', { class: 'st', title: b.label + ': ' + fmt(b.value, b.fmt) }, h('b', null, blkVal(b)), h('span', { class: 'ell' }, b.label))); });
     clear(x.det);
     if (j.error && !j.preview) x.det.appendChild(h('div', { class: 'sm t-bad' }, j.error));
-    // the row shows three numbers: the rest of them and the problems open under it
-    if (list.length > 3) x.det.appendChild(h('div', { class: 'amore' }, list.slice(3).map(function (b) { return h('span', { class: 'st' }, h('b', null, blkVal(b)), ' ' + b.label.toLowerCase()); })));
+    // the row shows two numbers: the rest of them and the problems open under it
+    if (list.length > 2) x.det.appendChild(h('div', { class: 'amore' }, list.slice(2).map(function (b) { return h('span', { class: 'st' }, h('b', null, blkVal(b)), ' ' + b.label.toLowerCase()); })));
     if (issues) {
       var box = h('div', { class: 'aiss', role: 'list', tabindex: '0', 'aria-label': 'Problems' });
       var rows = (j.health || []).map(function (z) { return [z.level, z.tag || z.source, '', z.msg, 0, z.source ? z.source + ': ' + z.msg : z.msg]; })

@@ -1,4 +1,6 @@
 ###beta
+- Arr Stack takes far less room: one slim line per app, as many columns as the card has room for, numbers that fit on the line and the rest on hover or when opened. A problem opens across the whole card
+- Fixed: "1 disks" and "1 pools" on the tiles, and the Now playing summary running past its card on a phone
 - Settings opens on Quick settings: mode, theme, density, Edit dashboard, Presets, Setup wizard, and how the server is doing (connection, password, phone alerts, guest link, last backup)
 - Settings > Presets: save your dashboard as a preset, with or without its look, then use, update, rename or delete it. Export one or all as a file and import them; files hold no apps, addresses or keys, and an app is matched by type on the other server
 - Settings > Presets also holds the ready-made dashboards, the choices for each set, and the Setup wizard
