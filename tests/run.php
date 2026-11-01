@@ -329,7 +329,7 @@ t('deeply nested JSON refused', isset(und_import_parse(str_repeat('[', 200) . st
 $p = und_import_parse(json_encode(['undash_export' => 1, 'schema' => 2, 'kind' => 'redacted', 'config' => ['groups' => [['name' => 'G', 'services' => [['type' => 'radarr', 'name' => 'R'], ['type' => 'rm -rf', 'name' => 'X']]]]]]));
 t('unknown app types skipped and counted', $p['summary']['widgets'] === 1 && $p['summary']['skipped'] === 1);
 // config.yaml: replaces the layout, keeps .env
-$y = str_replace('title: UnDash', 'title: Imported', und_export('config')['text']);
+$y = preg_replace('/^(\s*)title:.*$/m', '$1title: Imported', und_export('config')['text'], 1);
 $r = und_import_apply($y);
 t('a config.yaml import is applied', isset($r['ok']) && und_load_config()['general']['title'] === 'Imported');
 t('... and keeps every stored secret', und_service_full(und_load_config(), 'abcdef02')['key'] === 'SVCSECRET' && und_env()['TOKEN_VAR'] === 'VARSECRET1');
@@ -982,6 +982,8 @@ $c = und_default_config(); $c['appearance']['radius'] = 500;
 t('the corner radius stays inside its limits', und_normalize($c)['appearance']['radius'] === 28 && und_default_config()['appearance']['radius'] === 8);
 t('zoom is automatic by default, and only the offered steps are kept', und_default_config()['appearance']['zoom'] === 0 && und_normalize(['appearance' => ['zoom' => 125]])['appearance']['zoom'] === 125 && und_normalize(['appearance' => ['zoom' => 999]])['appearance']['zoom'] === 0);
 t('server details in the header show by default and can be hidden', und_default_config()['appearance']['header_chips'] === true && und_normalize(['appearance' => ['header_chips' => false]])['appearance']['header_chips'] === false);
+t('the dashboard name defaults to empty (the server name), the old default counts as empty, and your own is kept', und_default_config()['general']['title'] === '' && und_normalize(['general' => ['title' => 'UnDash']])['general']['title'] === '' && und_normalize(['general' => ['title' => 'R1ZE']])['general']['title'] === 'R1ZE');
+t('the dashboard icon keeps icon names and addresses, and refuses anything else', und_normalize(['general' => ['logo' => 'sh-plex']])['general']['logo'] === 'sh-plex' && und_normalize(['general' => ['logo' => 'https://x.lan/a.png']])['general']['logo'] === 'https://x.lan/a.png' && und_normalize(['general' => ['logo' => 'javascript:alert(1)']])['general']['logo'] === '' && und_normalize(['general' => ['logo' => 'https://x/"><b']])['general']['logo'] === '');
 t('icon boxes are on by default and can be turned off', und_default_config()['appearance']['icon_box'] === true && und_normalize(['appearance' => ['icon_box' => false]])['appearance']['icon_box'] === false && und_normalize([])['appearance']['icon_box'] === true);
 t('the gradient background is on by default and can be turned off', und_default_config()['appearance']['gradient'] === true && und_normalize(['appearance' => ['gradient' => false]])['appearance']['gradient'] === false && und_normalize([])['appearance']['gradient'] === true);
 t('the Translucent Effect is on by default and can be turned off', und_default_config()['appearance']['translucent'] === true && und_normalize(['appearance' => ['translucent' => false]] + und_default_config())['appearance']['translucent'] === false);

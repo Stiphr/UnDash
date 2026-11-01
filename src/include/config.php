@@ -76,7 +76,7 @@ function und_default_config() {
   foreach (und_metric_ids() as $id) $metrics[] = ['id' => $id, 'visible' => !in_array($id, ['cores', 'swap', 'load', 'path', 'docker', 'vms'], true)];
   return [
     'schema' => UND_SCHEMA,
-    'general' => ['title' => 'UnDash', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
+    'general' => ['title' => '', 'logo' => '', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
                   'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
     'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'accent_mode' => 'theme', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'icon_box' => true, 'header_chips' => true, 'zoom' => 0, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'daily' => ['on' => false, 'topic' => 'nature', 'custom' => ''], 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
@@ -347,7 +347,10 @@ function und_normalize(array $c) {
   $d = und_default_config();
   $g = (isset($c['general']) && is_array($c['general']) ? $c['general'] : []) + $d['general'];
   $g = array_intersect_key($g, $d['general']);
-  $g['title'] = und_clip(trim((string)$g['title']), 60) ?: 'UnDash';
+  $g['title'] = und_clip(trim((string)$g['title']), 60);
+  if ($g['title'] === 'UnDash') $g['title'] = '';        // the old default: now empty means the server's name
+  $g['logo'] = und_clip(trim((string)($g['logo'] ?? '')), 300);
+  if (!preg_match('~^(https?://|/|sh-|[A-Za-z0-9._-]+$)~', $g['logo']) || preg_match('/["\'<>\s()\\\\]/', $g['logo'])) $g['logo'] = '';
   foreach (['refresh' => [1, 300], 'refresh_services' => [5, 3600], 'os_check_hours' => [1, 168]] as $k => $r) $g[$k] = max($r[0], min($r[1], (int)$g[$k]));
   foreach (['show_search', 'show_date'] as $k) $g[$k] = !empty($g[$k]);
   $g['background_poll'] = in_array($g['background_poll'], ['slow', 'pause', 'normal'], true) ? $g['background_poll'] : 'slow';

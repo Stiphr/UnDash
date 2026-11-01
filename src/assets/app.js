@@ -603,7 +603,7 @@
     R.srvBtn.setAttribute('aria-haspopup', 'menu');
     paintPrivacy();
     root.appendChild(h('header', { class: 'top' },
-      h('div', { class: 'brand' }, logo(), h('div', { class: 'ell' }, h('h1', { class: 'und-name' }, g.title || 'UnDash'),
+      h('div', { class: 'brand' }, g.logo ? img(iconUrl(g.logo), 'logo', 'server') : logo(), h('div', { class: 'ell' }, R.brandName = h('h1', { class: 'und-name' }, brandName()),
         R.sub = h('div', { class: 'und-sub' }))),
       R.search ? h('div', { class: 'search' }, ic('search'), R.search, R.sbox = h('div', { class: 'sbox', id: 'und-sbox', hidden: true, role: 'listbox', 'aria-label': 'Search results' })) : h('span', { class: 'grow' }), acts));
     var board = boardOn(), want = board ? boardWants() : null;
@@ -640,10 +640,17 @@
   window.addEventListener('scroll', edgeScroll, { passive: true });
   function togglePrivacy() { LS.set('privacy', !LS.get('privacy', false)); paintPrivacy(); }
 
+  /* the name in the header and the browser tab: yours from Settings, else the server's */
+  function brandName() {
+    var s = (S.live || {}).system, name = (s && !s.error && s.name) || (S.boot.server || {}).name || '';
+    return S.L.general.title || String(name).toUpperCase() || 'UnDash';
+  }
   /* ---- title bar: server, Unraid version and UnDash version, each with a badge when a newer one exists ---- */
   function checkSelf() { api('self_update').then(function (j) { if (!j.error || j.latest) { S.self = j; paintIdent(); } setTimeout(checkSelf, 6 * 3600 * 1000); }); }
   function paintIdent() {
     if (!R.sub) return;
+    txt(R.brandName, brandName());
+    if (window.UND_STANDALONE) document.title = brandName();
     var y = S.live || {}, s = y.system && !y.system.error ? y.system : null, b = S.boot.server || {};
     var name = (s && s.name) || b.name || '', ip = (s && s.ip) || b.ip || '', os = (s && s.os) || b.os || '', ou = (s && s.os_update) || {};
     var me = S.self || {};
@@ -3176,7 +3183,7 @@
     var c = e.cloneNode(true); [].forEach.call(c.querySelectorAll('input,select,textarea,button,svg'), function (x) { x.remove(); });
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
-  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'server details in the header': 'chips version name unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
+  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'dashboard name': 'title header brand rename server', 'dashboard icon': 'logo brand header picture', 'server details in the header': 'chips version name unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
     wallpaper: 'background image picture blur', 'daily wallpaper': 'wikimedia commons nature city cars random photo background', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
     'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
   var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Daily wallpaper', 'Animations', 'Dashboard password'];
@@ -3557,6 +3564,15 @@
       list);
   }
 
+  function brandIconField(g, dirty) {
+    var prev = h('span', { class: 'sec-in-ic' });
+    var paint = function () { clear(prev).appendChild(g.logo ? img(iconUrl(g.logo), 'logo', 'server') : logo()); reset.disabled = !g.logo; };
+    var input = tIn(g, 'logo', function () { dirty(); paint(); }, 'UnDash logo');
+    var browse = btn('Browse', function () { iconPicker('', function (v) { g.logo = v; input.value = v; dirty(); paint(); }, g.logo || '-'); }, 'sm', 'search', 'Choose an icon');
+    var reset = btn('', function () { g.logo = ''; input.value = ''; dirty(); paint(); }, 'sm ghost', 'restart', 'Back to the UnDash logo');
+    paint();
+    return F('Dashboard icon', h('div', { class: 'sec-in' }, prev, input, browse, reset), 'Browse to pick one, or type sh-NAME, NAME.png or an image address. Empty uses the UnDash logo.');
+  }
   function tabSystem(b, D, dirty) {
     var g = D.cfg.general;
     b.appendChild(set('Live refresh', 'How often system metrics, containers and VMs update without reloading. Each refresh is one light request; heavier details are cached on the server.', h('div', { class: 'grid2' },
@@ -3565,7 +3581,8 @@
       F('App widgets refresh every (seconds)', tIn(g, 'refresh_services', dirty, '15', 'number', { min: 5, max: 3600 }), 'Radarr, Plex and the other app widgets.'),
       F('Check for Unraid updates every (hours)', tIn(g, 'os_check_hours', dirty, '6', 'number', { min: 1, max: 168 })))));
     b.appendChild(set('Display', null, h('div', { class: 'grid2' },
-      F('Dashboard title', tIn(g, 'title', dirty, 'UnDash')),
+      F('Dashboard name', tIn(g, 'title', dirty, String((S.boot.server || {}).name || 'Your server').toUpperCase()), 'Shown in the header and the browser tab. Leave it empty to use your server\'s name.'),
+      brandIconField(g, dirty),
       F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
       F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'),
       F('UPS rated power (W)', tIn(g, 'ups_watts', dirty, 'from the UPS', 'number', { min: 0, max: 20000 }), 'For the power draw on the UPS tile (load × rated power). Leave it at 0 to use what the UPS reports (apcupsd NOMPOWER, NUT, the Unraid API); fill it in when your UPS only reports its load. The UPS label or manual gives it in watts, not VA.'))));

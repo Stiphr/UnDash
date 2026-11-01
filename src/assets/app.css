@@ -1374,3 +1374,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 /* phones: the Settings pages are one scrolling row of pills, not a 230 px tall block */
 @media (max-width:700px){.und.bui .drawer .dt{flex-basis:auto;flex:none;flex-direction:row;overflow-x:auto}.und.bui .drawer .dt .dg{display:none}.und.bui .drawer .dt button{flex:none;white-space:nowrap}}
 .und.no-chips .und-sub .vchip:not(:has(.upd)){display:none}
+.und .brand img.logo,.und .brand .ph.logo,.und .sec-in-ic .logo{object-fit:contain}
+.und .sec-in-ic{display:inline-flex;flex:none}.und .sec-in-ic .logo{width:30px;height:30px;border-radius:7px}
+
