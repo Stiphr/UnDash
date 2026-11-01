@@ -1,4 +1,11 @@
 ###beta
+- The dashboard loads and refreshes much faster on a busy server: temperatures and OS details are read in the background, so the page no longer waits for the slowest parts of the Unraid API. Temperature alerts stay current with no page open
+- Settings are safe from a damaged file: if config.yaml is cut short or emptied, UnDash keeps the damaged copy, restores the newest backup and tells you, instead of showing an empty dashboard
+- Security: keys, passwords and cookies no longer follow a redirect to another server. Links to javascript: and data: addresses are removed, wherever they come from
+- A failed restart or shutdown no longer blocks those buttons for good. Answers from apps are limited to 64 MB, and PHP may use 256 MB, so a very large library gives a clear error
+- Radarr, Sonarr, Lidarr and Readarr cards no longer download the whole library on every refresh
+- Array health only lists what you have: no more "0 disks · 0 parity" on a server with pools alone. Cards with four numbers show them in one row or two by two, never three and one
+- Larger touch targets on phones
 - 38 new app presets: Deluge, Transmission, NZBGet, Navidrome, Audiobookshelf, Kavita, Komga, RomM, Jellystat, Tube Archivist, Ombi, Frigate, Nextcloud, Paperless-ngx, File Browser, Syncthing, Karakeep, Mealie, Miniflux, FreshRSS, Gitea / Forgejo, Gotify, changedetection.io, Technitium DNS, Traefik, Caddy, Headscale, UniFi, Healthchecks, Gatus, Beszel, Netdata, Prometheus, Grafana, Glances on another machine, Portainer, What's Up Docker and Minecraft servers. Your containers of these types are offered in Add app, and a Homepage import keeps them
 - Edit mode: click a media list to rename it and set how many items it shows. Media lists show 5 items on a new dashboard
 - Edit mode: the card toolbar is a small glass bar in the corner that follows your theme and accent, with Remove in it, and it no longer covers the card's title

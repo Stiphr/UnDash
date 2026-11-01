@@ -25,6 +25,7 @@
       if (v === null || v === undefined || v === false) continue;
       if (k === 'class') e.className = v;
       else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v);
+      else if (k === 'href' && /^(javascript|data|vbscript):/i.test(String(v).replace(/[\x00-\x20]+/g, ''))) continue;      // links can come from a container's label or an imported file
       else if (k === 'value') e.value = v;
       else if (k === 'checked' || k === 'disabled' || k === 'selected') e[k] = !!v;
       else if (k === 'style' && typeof v === 'object') { for (var s in v) e.style.setProperty(s, v[s]); }
@@ -2120,7 +2121,7 @@
     tile('network', s.net.rx === null ? 'n/a' : rate(s.net.rx) + ' ↓', s.net.tx === null ? (s.net.iface || '') : rate(s.net.tx) + ' ↑' + (s.net.iface ? ' · ' + s.net.iface : ''), null, s.net.rx === null ? 'na' : '');
     var hl = a.state !== 'STARTED' ? 'warn' : a.bad || a.errors ? 'bad' : 'ok';
     tile('health', a.state !== 'STARTED' ? (a.state || 'unknown').toLowerCase() : a.bad ? a.bad + ' disk problem' + (a.bad > 1 ? 's' : '') : a.errors ? a.errors + ' errors' : 'Healthy',
-      a.resync ? (a.resync_action || 'Parity check') + (a.resync_pct !== null ? ' ' + a.resync_pct + '%' : '') : plural(a.disks || 0, 'disk') + ' · ' + (a.parity || 0) + ' parity · ' + plural(pools.length, 'pool'), a.resync_pct, hl);
+      a.resync ? (a.resync_action || 'Parity check') + (a.resync_pct !== null ? ' ' + a.resync_pct + '%' : '') : [a.disks ? plural(a.disks, 'disk') : '', a.parity ? a.parity + ' parity' : '', pools.length ? plural(pools.length, 'pool') : ''].filter(Boolean).join(' · '), a.resync_pct, hl);
     var temps = [], rows = a._rows ? [].concat(a._rows.parity, a._rows.array, a._rows.pools) : null;
     (rows || pools).forEach(function (d) { if (d.temp !== null && d.temp !== undefined) temps.push(d.temp); });
     if (S.storage) [].concat(S.storage.parity || [], S.storage.array || [], S.storage.pools || []).forEach(function (d) { if (d.temp !== null && d.temp !== undefined) temps.push(d.temp); });
@@ -5984,6 +5985,7 @@
   S.full = LS.get('full', false);
   S.paused = LS.get('paused', false);
   api('boot').then(function (j) {
+    if (j.recovered) toast('Your settings file was damaged, so UnDash restored the newest backup. The damaged file is kept as ' + j.recovered.kept + '.', true);
     if (j.error) { clear(root).appendChild(h('div', { class: 'und-loading' }, 'UnDash could not start: ' + j.error)); return; }
     S.boot = j; S.L = j.layout;
     shell();

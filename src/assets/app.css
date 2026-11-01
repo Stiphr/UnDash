@@ -1347,6 +1347,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 /* app stats share the line by what they need, so a long value such as 1.7 MiB/s is not cut */
 .und.bui .blocks,.und.bui .ac .blocks,.und.bui .ac .blocks.even{display:flex;flex-wrap:wrap;gap:6px 14px;align-content:flex-end;align-items:flex-end}
 .und.bui .blk,.und.bui .ac .blk,.und.bui .ac .blk:first-child,.und.bui .ac .blocks.even .blk:nth-child(3){flex:1 1 auto;width:auto}
+.und.bui .blocks.even,.und.bui .ac .blocks.even{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 10px}
+@container (max-width:300px){.und.bui .blocks.even,.und.bui .ac .blocks.even{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .und.bui .blk .l,.und.bui .ac .blk .l{white-space:nowrap}
 
 /* our own drawings take the theme's text colour everywhere */
@@ -1486,7 +1488,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und.bui a.wl,.und.bui span.wl{min-height:36px}
   .und.bui .allb{min-height:36px}
 }
-@media (pointer:coarse){.und input[type=range]{height:32px}}
+@media (pointer:coarse){.und input[type=range]{height:32px}.und .sec-h h2 button{min-height:36px}.und .rq .rqt a,.und .rq.line a{display:inline-block;padding-block:7px}.und .drawer .dh .btn,.und .drawer .btn.ghost.sm{min-width:36px;min-height:36px}}
 /* System tiles: one size, text on the same lines, and the graph in a band of its own under it */
 .und.bui .gc-m .stat,.und.bui .gc-m .stat:has(.upt){justify-content:flex-start;padding-bottom:calc(var(--cp) + 8px)}
 .und.bui .gc-m .stat .sp:not(:has(.upt)){height:24px;opacity:.75}

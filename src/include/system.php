@@ -278,6 +278,7 @@ function und_os_check() {
   if (und_api_mode()) {
     // the API cannot check or install, but Unraid's public release service says what the latest version is
     $cur = (string)(und_system(und_load_config())['os_update']['installed'] ?? '');
+    if ($cur === '') $cur = (string)(und_gql('query { info { versions { core { unraid } } } }', [], 8)['data']['info']['versions']['core']['unraid'] ?? '');
     try {
       $j = und_get('https://releases.unraid.net/os?' . http_build_query(['branch' => 'stable', 'current' => $cur]), ['timeout' => 15]);
       $v = (string)($j['version'] ?? '');
