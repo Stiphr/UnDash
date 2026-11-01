@@ -1255,6 +1255,45 @@ t('and is not offered in Settings', array_column(und_guest_apps($gc2), 'name') =
 foreach (['settings', 'save', 'docker_action', 'vm_action', 'power', 'prefs', 'export', 'storage', 'metrics', 'probe', 'test', 'guest_get', 'notify_get', 'alert_history', 'docker_logs', 'unraid_conf', ''] as $a)
   t("a guest cannot call $a", und_guest_api($a, []) === ['error' => 'Not available in the guest view.'], json_encode(und_guest_api($a, [])));
 
+/* ---- saved presets ---- */
+$pc = und_presets_clean([
+  ['id' => 'aaaa1111', 'name' => " Mine\x01 ", 'desc' => 'x', 'at' => 5, 'board' => ['lg' => [['i' => 'arr', 'x' => 0, 'y' => 0, 'w' => 24, 'h' => 9], ['i' => 'bad id!', 'x' => 0]], 'pages' => [['id' => 'bbbb2222', 'name' => 'P', 'cards' => ['docker'], 'lg' => [], 'md' => []]]],
+   'sections' => [['id' => 'arr', 'visible' => true, 'width' => 'full', 'title' => 'T', 'url' => 'http://10.0.0.9']], 'metrics' => [['id' => 'cpu', 'visible' => false]], 'media' => ['style' => 'text', 'radarr' => 'aaaaaaaa'], 'docker' => ['layout' => 'cards', 'items' => ['x' => ['label' => 'y']], 'selected' => ['a']],
+   'look' => ['theme' => 'c-ab12cd34', 'radius' => 999, 'custom_themes' => [['id' => 'c-11111111']], 'wall_path' => '/mnt/x', 'background' => 'http://10.0.0.9/w.jpg'], 'groups' => [['id' => 'cccc3333']], 'key' => 'SECRET'],
+  ['id' => 'aaaa1111', 'name' => 'twin'], ['id' => 'not-an-id', 'name' => 'x'], 'junk']);
+t('a preset with a bad or repeated id is dropped', count($pc) === 1, json_encode(array_column($pc, 'name')));
+t('its name is cleaned', $pc[0]['name'] === 'Mine', $pc[0]['name']);
+t('it holds no address, key, app or picture', !preg_match('/10\.0\.0\.9|SECRET|cccc3333|\/mnt\/x|custom_themes|"label"|"selected"|radarr/', json_encode($pc)), json_encode($pc));
+t('its layout is checked like the real one', array_column($pc[0]['board']['lg'], 'i') === ['arr'] && $pc[0]['board']['pages'][0]['cards'] === ['docker']);
+t('its numbers stay in range and your own theme is kept', $pc[0]['look']['radius'] === 28 && $pc[0]['look']['theme'] === 'c-ab12cd34');
+t('a preset without a look has none', !isset(und_presets_clean([['id' => 'aaaa1111', 'name' => 'n']])[0]['look']));
+$many = []; for ($i = 0; $i < 30; $i++) $many[] = ['id' => sprintf('%08x', $i), 'name' => "p$i"];
+t('at most 20 are kept', count(und_presets_clean($many)) === UND_PRESETS_MAX);
+$pcfg = und_load_config(); $pcfg['presets'] = $pc; und_save_config($pcfg, false);
+t('presets survive config.yaml', und_load_config()['presets'] === und_presets_clean($pc), json_encode(und_load_config()['presets']));
+t('the page and guests do not get them', !isset(und_layout_view(und_load_config())['presets']) && !isset(und_guest_layout(und_load_config(), und_guest_prefs())['presets']));
+$noP = und_export('config')['text'];
+t('a settings file keeps presets', strpos($noP, 'presets:') !== false);
+t('a file without presets leaves yours', isset(und_import_apply(preg_replace('/^presets:.*?(?=^[a-z_]+:)/ms', '', $noP))['ok']) && count(und_load_config()['presets']) === 1);
+$pcfg = und_load_config(); $pcfg['presets'] = []; und_save_config($pcfg, false);
+t('no presets, no key in the file', !isset(und_doc()['presets']));
+
+/* ---- other fixes ---- */
+$ei = und_import_parse("RADARR_API_KEY=abc\nUNDASH_PASSWORD_HASH=x\nUNDASH_AUTH=open\nUNDASH_GUEST_TOKEN=y\n");
+t('a .env file cannot set the password or the guest link', array_keys($ei['env']) === ['RADARR_API_KEY'] && $ei['summary']['values'] === 1, json_encode($ei['env']));
+$fc = und_load_config(); $fc['groups'][] = ['id' => 'dddd0001', 'name' => 'F', 'services' => [['id' => 'dddd0002', 'type' => 'rss', 'name' => 'R', 'options' => ['feeds' => "Mine | https://t.example/rss?passkey=abc123\nhttps://ok.example/a.xml"]]]];
+und_save_config($fc, false);
+$fx = und_export('config')['text'];
+t('a private feed loses its passkey in an export', strpos($fx, 'abc123') === false && strpos($fx, 'ok.example') !== false);
+und_notify_set('ntfy', ['url' => 'https://ntfy.sh/topic', 'token' => 'tk_keep']);
+t('saving with the optional token left empty keeps it', isset(und_notify_set('ntfy', ['url' => 'https://ntfy.sh/topic', 'token' => ''])['ok']) && und_env()['NOTIFY_NTFY_TOKEN'] === 'tk_keep');
+und_notify_off('ntfy');
+foreach (['http://192.168.1.2/a.png', '/boot/x.png'] as $u) t("a guest does not get the picture $u", und_guest_pic($u) === '');
+t('a public picture and an icon name stay', und_guest_pic('https://a.example/x.png') === 'https://a.example/x.png' && und_guest_pic('sh-plex') === 'sh-plex');
+$gv = und_load_config(); $gv['appearance']['background'] = 'http://192.168.1.2/w.jpg'; $gv['general']['logo'] = 'http://10.0.0.8/l.png';
+$gvj = json_encode(und_guest_layout($gv, und_guest_prefs())['appearance']) . json_encode(und_guest_layout($gv, und_guest_prefs())['general']);
+t('a LAN wallpaper or logo stays away from guests', !preg_match('/192\.168|10\.0\.0\.8/', $gvj), $gvj);
+
 rmrf($SANDBOX);
 
 echo "\n$pass passed, $fail failed\n";

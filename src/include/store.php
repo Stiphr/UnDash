@@ -144,7 +144,7 @@ function und_doc_write(array $parts) {
   $doc = und_doc();
   foreach ($parts as $k => $v) { if ($v === null) unset($doc[$k]); else $doc[$k] = $v; }
   unset($doc['schema']);       // version is the one that is written
-  $order = ['version', 'general', 'appearance', 'dashboard', 'media', 'downloads', 'apps', 'docker', 'vms', 'groups', 'unraid', 'ignored_alerts', 'notify', 'guest', 'setup', 'custom_css'];
+  $order = ['version', 'general', 'appearance', 'dashboard', 'media', 'downloads', 'requests', 'apps', 'docker', 'vms', 'groups', 'presets', 'unraid', 'ignored_alerts', 'notify', 'guest', 'setup', 'custom_css'];
   $sorted = [];
   foreach ($order as $k) if (array_key_exists($k, $doc)) $sorted[$k] = $doc[$k];
   foreach ($doc as $k => $v) if (!array_key_exists($k, $sorted)) $sorted[$k] = $v;

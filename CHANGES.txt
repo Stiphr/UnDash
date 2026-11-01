@@ -1,4 +1,22 @@
 ###beta
+- Settings opens on Quick settings: mode, theme, density, Edit dashboard, Presets, Setup wizard, and how the server is doing (connection, password, phone alerts, guest link, last backup)
+- Settings > Presets: save your dashboard as a preset, with or without its look, then use, update, rename or delete it. Export one or all as a file and import them; files hold no apps, addresses or keys, and an app is matched by type on the other server
+- Settings > Presets also holds the ready-made dashboards, the choices for each set, and the Setup wizard
+- Settings pages reordered, most used first. General: name and icon, search, refresh, then disk and UPS. Appearance: Layout & size split into Size and density, Details and Margins. Backup & restore: backups first with Back up now, Start over last
+- The footer says when a page applies its changes at once
+- Cards no longer leave holes: a medium window folds the layout into whole rows, and with snapping on any layout that would leave a hole or overlap does the same
+- Fixed: "Automatic" in the wizard's look step saved dark mode; it is now System and sets the right mode
+- Fixed: changing a found app's address in the wizard could list that app twice
+- Fixed: nine or more tiles in a preset ran off the right edge
+- Fixed: leaving the theme editor with Esc or a click outside left the unfinished theme in place
+- Fixed: a stray click outside the setup wizard threw your answers away
+- Fixed: Edit dashboard and Setup wizard did nothing with unsaved Settings; they now ask first
+- Fixed: focusing the Settings search jumped the page to the top, and an open card page stayed open after visiting another page
+- Fixed: saving ntfy with the token box empty deleted the saved token
+- Security: guests no longer receive a LAN or server-path address for the wallpaper, logo or app icons
+- Security: importing a .env file can no longer set the dashboard password or the guest link
+- Security: a config.yaml export removes passkeys and tokens from RSS feed addresses
+- Restore all defaults keeps your saved presets; importing a file without presets keeps them too
 - Setup wizard: a new dashboard walks you through its name, the Unraid connection, a password, what to show, your apps and a look. Run it again from Settings > Apps & cards; your apps and keys stay
 - Presets: whole dashboards (Everything, Media server, Server monitor, Essentials) and choices for each set, such as System tiles (All, Essentials, Performance, Storage) or Containers (Grid, List, Cards), in the wizard and in Edit dashboard > Arrange > Presets
 - Pages: split the dashboard into pages, each with its own cards and layout. Edit dashboard > Pages adds and names them, Split my cards makes a first set, tabs appear only with more than one page, and keys 1 to 9 switch pages

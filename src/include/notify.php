@@ -54,7 +54,6 @@ function und_notify_set($id, array $vals) {
   $env = und_env(); $new = $env;
   foreach (UND_NOTIFY_CHANNELS[$id][1] as $f => $x) {
     $v = trim((string)($vals[$f] ?? ''));
-    if ($v === '' && $x[2] && !$x[3]) { unset($new[$x[0]]); continue; }
     if ($v === '' && $x[2]) $v = (string)($env[$x[0]] ?? '');
     if ($v === '' && $x[3]) return ['error' => $x[1] . ' is needed.'];
     if ($v !== '') $new[$x[0]] = $v;
