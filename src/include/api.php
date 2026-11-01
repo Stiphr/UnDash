@@ -153,7 +153,7 @@ switch ($action) {
   case 'storage':       out(und_storage());
   case 'container_sources': out(und_container_sources());
   case 'icons':         { try { out(und_icon_search($P('q'), (int)$P('max', '60'), (int)$P('offset', '0'), $P('src'), $P('style'), $P('browse') === '1')); } catch (Exception $e) { fail(und_redact($e->getMessage())); } }
-  case 'wallpaper':     out(und_wall(und_load_config()));
+  case 'wallpaper_check': { $r = und_wall_local($P('path')); if (isset($r['error'])) fail($r['error'], 422); out(['ok' => true, 'v' => $r['v'], 'size' => $r['size']]); }
   /* your own wallpaper: the picture is checked (type, size, dimensions) before it replaces the old one */
   case 'wallpaper_upload': { $r = und_wall_upload($P('data')); if (isset($r['error'])) fail($r['error'], 422); und_history_add('server', 'Wallpaper', 'upload', true, $r['width'] . 'x' . $r['height']); out($r); }
   case 'wallpaper_remove': { und_wall_remove(); out(['ok' => true]); }
