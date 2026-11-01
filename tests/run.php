@@ -987,7 +987,7 @@ t('a saved board survives loading the settings', und_normalize($c)['dashboard'][
 
 $c = und_default_config(); $c['appearance']['radius'] = 500;
 t('the corner radius stays inside its limits', und_normalize($c)['appearance']['radius'] === 28 && und_default_config()['appearance']['radius'] === 8);
-t('zoom is automatic by default, and only the offered steps are kept', und_default_config()['appearance']['zoom'] === 0 && und_normalize(['appearance' => ['zoom' => 125]])['appearance']['zoom'] === 125 && und_normalize(['appearance' => ['zoom' => 999]])['appearance']['zoom'] === 0);
+t('zoom starts at 100%, and only the offered steps are kept', und_default_config()['appearance']['zoom'] === 100 && und_normalize(['appearance' => ['zoom' => 125]])['appearance']['zoom'] === 125 && und_normalize(['appearance' => ['zoom' => 999]])['appearance']['zoom'] === 0);
 t('server details in the header show by default and can be hidden', und_default_config()['appearance']['header_chips'] === true && und_normalize(['appearance' => ['header_chips' => false]])['appearance']['header_chips'] === false);
 t('the dashboard name defaults to empty (the server name), the old default counts as empty, and your own is kept', und_default_config()['general']['title'] === '' && und_normalize(['general' => ['title' => 'UnDash']])['general']['title'] === '' && und_normalize(['general' => ['title' => 'R1ZE']])['general']['title'] === 'R1ZE');
 t('the dashboard icon keeps icon names and addresses, and refuses anything else', und_normalize(['general' => ['logo' => 'sh-plex']])['general']['logo'] === 'sh-plex' && und_normalize(['general' => ['logo' => 'https://x.lan/a.png']])['general']['logo'] === 'https://x.lan/a.png' && und_normalize(['general' => ['logo' => 'javascript:alert(1)']])['general']['logo'] === '' && und_normalize(['general' => ['logo' => 'https://x/"><b']])['general']['logo'] === '');
@@ -1293,6 +1293,32 @@ t('a public picture and an icon name stay', und_guest_pic('https://a.example/x.p
 $gv = und_load_config(); $gv['appearance']['background'] = 'http://192.168.1.2/w.jpg'; $gv['general']['logo'] = 'http://10.0.0.8/l.png';
 $gvj = json_encode(und_guest_layout($gv, und_guest_prefs())['appearance']) . json_encode(und_guest_layout($gv, und_guest_prefs())['general']);
 t('a LAN wallpaper or logo stays away from guests', !preg_match('/192\.168|10\.0\.0\.8/', $gvj), $gvj);
+
+/* ---- Glances, no API key ---- */
+t('Glances uptime reads days and hours', und_glances_uptime('5 days, 10:56:00') === 471360 && und_glances_uptime('1 day, 0:00:10') === 86410 && und_glances_uptime('3:00:00') === 10800 && und_glances_uptime('x') === 0);
+t('the CPU temperature is the package, not a disk', und_glances_temp([['label' => 'Composite', 'value' => 80], ['label' => 'Core 0', 'value' => 50], ['label' => 'Package id 0', 'value' => 55]]) === 55.0);
+t('without a package the hottest core', und_glances_temp([['label' => 'Core 0', 'value' => 50], ['label' => 'Core 1', 'value' => 60], ['label' => 'acpitz 0', 'value' => 99]]) === 60.0);
+$gfs = [['device_name' => '/dev/loop2', 'fs_type' => 'btrfs', 'mnt_point' => '/', 'size' => 1e11, 'free' => 1], ['device_name' => '/dev/loop0', 'fs_type' => 'squashfs', 'mnt_point' => '/rootfs/usr', 'size' => 3e10, 'free' => 0],
+  ['device_name' => 'cache', 'fs_type' => 'zfs', 'mnt_point' => '/rootfs/mnt/cache', 'size' => 1e12, 'free' => 5e11], ['device_name' => 'cache/appdata', 'fs_type' => 'zfs', 'mnt_point' => '/rootfs/mnt/cache/appdata', 'size' => 1e12, 'free' => 5e11],
+  ['device_name' => 'shfs', 'fs_type' => 'fuse.shfs', 'mnt_point' => '/rootfs/mnt/user', 'size' => 9e12, 'free' => 1], ['device_name' => 'data', 'fs_type' => 'zfs', 'mnt_point' => '/rootfs/mnt/data', 'size' => 2e12, 'free' => 1e12]];
+t('storage counts each pool once and skips the user share', array_column(und_glances_pools($gfs), 'name') === ['cache', 'data'], json_encode(und_glances_pools($gfs)));
+t('with nothing under /mnt, the largest real disk', array_column(und_glances_pools(array_slice($gfs, 0, 2)), 'name') === [basename('/') ?: '/'], json_encode(und_glances_pools(array_slice($gfs, 0, 2))));
+t('the main interface wins, loopback does not count', und_glances_net([['interface_name' => 'lo', 'bytes_recv_rate_per_sec' => 9], ['interface_name' => 'eth0', 'bytes_recv_rate_per_sec' => 1, 'bytes_sent_rate_per_sec' => 2], ['interface_name' => 'br0', 'bytes_recv_rate_per_sec' => 3, 'bytes_sent_rate_per_sec' => 4]]) === ['rx' => 3.0, 'tx' => 4.0, 'iface' => 'br0']);
+t('Glances 3 rates come from the counters', und_glances_net([['interface_name' => 'eth0', 'rx' => 100, 'tx' => 50, 'time_since_update' => 2]])['rx'] === 50.0);
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $u) {
+  $j = strpos($u, '/api/4/') !== false ? null : (strpos($u, 'quicklook') ? ['cpu' => 12.34, 'cpu_name' => 'X', 'percpu' => [['total' => 10], ['total' => 20]]] : (strpos($u, '/mem') && !strpos($u, 'swap') ? ['total' => 100, 'used' => 40, 'available' => 60, 'percent' => 40] : (strpos($u, 'uptime') ? '2:00:00' : [])));
+  return ['code' => $j === null ? 404 : 200, 'body' => '', 'json' => $j, 'err' => '', 'headers' => []]; };
+$gr = und_glances_read('http://10.0.0.9:61208');
+t('an older Glances answers on version 3', $gr['version'] === '3' && $gr['pct'] === 12.3 && $gr['cores'] === [10.0, 20.0] && $gr['mem']['used'] === 40.0 && $gr['uptime'] === 7200, json_encode($gr));
+$GLOBALS['UND_HTTP_MOCK'] = function () { return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'refused', 'headers' => []]; };
+@unlink(und_tmp('glances-fs.json'));
+t('a dead address says so', isset(und_glances_read('http://10.0.0.9:61208')['error']));
+unset($GLOBALS['UND_HTTP_MOCK']);
+t('no address is no alert', und_alerts(und_load_config(), ['error' => 'x', 'none' => true], null) === []);
+t('the Glances address must be an address', und_normalize(['general' => ['glances' => 'javascript:alert(1)']])['general']['glances'] === '' && und_normalize(['general' => ['glances' => 'http://1.2.3.4:61208/']])['general']['glances'] === 'http://1.2.3.4:61208');
+t('a new dashboard starts at 100%', und_default_config()['appearance']['zoom'] === 100);
+t('Auto stays what you chose', und_normalize(['appearance' => ['zoom' => 0]])['appearance']['zoom'] === 0);
+t('the side margin goes to 480, the top stays at 200', und_normalize(['appearance' => ['safe_x' => 999, 'safe_y' => 999]])['appearance']['safe_x'] === 480 && und_normalize(['appearance' => ['safe_x' => 999, 'safe_y' => 999]])['appearance']['safe_y'] === 200);
 
 rmrf($SANDBOX);
 

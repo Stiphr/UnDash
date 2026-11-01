@@ -15,7 +15,9 @@ const UND_PARITY_OLD_DAYS = 100;
 function und_alerts(array $cfg, $sys, $dk, $smart = null) {
   $out = [];
   $add = function ($lv, $msg, $cat, $res, $act = '') use (&$out) { $out[] = ['lv' => $lv, 'msg' => $msg, 'cat' => $cat, 'res' => (string)$res, 'act' => $act]; };
-  if (is_array($sys) && isset($sys['error'])) {
+  if (is_array($sys) && !empty($sys['none'])) {
+    // no key and no Glances: nothing to check, and nothing wrong
+  } elseif (is_array($sys) && isset($sys['error'])) {
     $add('bad', $sys['error'] . (!empty($sys['auth']) ? ' Check Settings > Server connection.' : ''), 'api.error', 'unraid', 'settings');
   } elseif (is_array($sys)) {
     $a = $sys['array'] ?? [];

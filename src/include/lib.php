@@ -169,7 +169,7 @@ function und_api_mode() { return UND_MODE === 'api'; }
 /** What this deployment can do; the UI hides what is not available instead of failing. */
 function und_caps() {
   $p = !und_api_mode();
-  return ['power' => $p, 'os_update' => $p, 'docker_check' => $p, 'docker_stats' => true, 'docker_inspect' => true, 'vm_hibernate' => $p, 'vm_details' => $p,
+  return ['unraid' => $p || und_api_ready(), 'glances' => und_glances_url(und_load_config()) !== '', 'power' => $p, 'os_update' => $p, 'docker_check' => $p, 'docker_stats' => true, 'docker_inspect' => true, 'vm_hibernate' => $p, 'vm_details' => $p,
           'vnc' => $p, 'storage_detail' => true, 'mode' => UND_MODE];
 }
 
@@ -198,7 +198,7 @@ unset($__ident);
 
 } // UND_LIB_LOADED
 
-foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'notify', 'guest', 'metrics', 'health', 'playing', 'requests', 'icons', 'wallpaper'] as $__m) {
+foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'notify', 'glances', 'guest', 'metrics', 'health', 'playing', 'requests', 'icons', 'wallpaper'] as $__m) {
   $__f = __DIR__ . '/' . $__m . '.php';
   if (is_file($__f)) require_once $__f;
 }

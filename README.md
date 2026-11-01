@@ -178,6 +178,12 @@ Presets come in two sizes. Whole dashboards: **Everything**, **Media server**, *
 
 Edit dashboard > **Pages** adds and names pages, and **Split my cards** makes a first set from what you have. Click a card to send it to another page. Each page keeps its own layout. With one page there are no tabs; with more, press 1 to 9 to switch. On a phone your pages replace the bottom tabs.
 
+### Without an Unraid API key
+
+The Docker version reads and controls Unraid through its API, so without a key there are no containers, VMs or array details, and UnDash hides them rather than showing buttons that cannot work. Your apps, media, downloads, requests, feeds and push alerts for them work as usual, and everything comes back when you add a key.
+
+If you run [Glances](https://github.com/nicolargo/glances), put its address in **Settings > Server connection** to get CPU, memory, storage, network and uptime back. It needs no key. Network speed only covers the whole server when Glances runs with host networking.
+
 ### Pick a look
 
 **Settings > Appearance**: theme, light / dark / system mode, accent colour, spacing and wallpaper. The accent can follow the theme, be a colour of your own, or be taken from the wallpaper: UnDash reads a small copy of the picture in your browser and picks its main colour, toned so buttons and links stay readable. For the background choose the theme's gradient, a plain colour, a picture from an address, or **your own picture** (JPEG, PNG or WebP; it is scaled down in your browser and kept in the configuration folder, never sent anywhere). **Settings > Advanced > Custom CSS** for anything else.

@@ -47,6 +47,10 @@ switch ($action) {
     $cfg = und_load_config();
     if (und_api_mode()) @touch(und_tmp('viewer'));     // keeps the background reads of unraid_api.php going while a page is open
     $want = array_flip(explode(',', $P('parts', 'system,docker,vms')));
+    if (und_api_mode() && !und_api_ready()) {                 // nothing to ask without a key, and no reason to warn about it
+      unset($want['docker'], $want['vms'], $want['ups']);
+      if (und_glances_url($cfg) === '') unset($want['system']);
+    }
     $r = ['at' => time()];
     if (isset($want['system'])) { $r['system'] = und_system($cfg); if (!und_api_mode() && isset($r['system']['os_update'])) api_os_autocheck($cfg, $r['system']['os_update']); }
     if (isset($want['docker'])) $r['docker'] = und_docker_live();
@@ -294,6 +298,18 @@ switch ($action) {
     out(['ok' => true]);
   }
   case 'unraid_test': out(und_api_test());
+  /* the System tiles without an API key: saved only when the address answers */
+  case 'glances_save': {
+    $lk = und_config_lock();
+    $url = rtrim(trim($P('url')), '/');
+    if ($url !== '' && !preg_match('#^https?://[^\s"\'<>]+$#i', $url)) fail('The address must start with http:// or https://, e.g. http://192.168.1.10:61208');
+    $g = $url !== '' ? und_glances_read($url) : [];
+    if (isset($g['error'])) fail($g['error'], 422);
+    $cfg = und_load_config(); $cfg['general']['glances'] = $url;
+    if (!und_save_config($cfg, false)) fail('Could not save.', 500);
+    @unlink(und_tmp('glances.json')); @unlink(und_tmp('glances-fs.json'));
+    out(['ok' => true, 'version' => (string)($g['version'] ?? ''), 'pools' => count($g['pools'] ?? [])]);
+  }
 
   /* ---- the dashboard password (Docker version) ---- */
   case 'auth_status': out(['kind' => und_api_mode() ? und_auth_kind() : 'unraid']);

@@ -1,4 +1,9 @@
 ###beta
+- Without an Unraid API key the Docker version hides what cannot work: containers, VMs, array details and the server menu. They come back with the key, and your layout is kept
+- Settings > Server connection lists what an API key adds while none is set
+- Glances: with no API key, its address (Settings > Server connection, or the setup wizard) brings back CPU, memory, storage, network and uptime, with history charts. It needs no key
+- Scaling now starts at 100% on a new dashboard instead of Auto
+- Side margin goes up to 480 px, four times as far, and never takes more than a quarter of the window
 - Arr Stack takes far less room: one slim line per app, as many columns as the card has room for, numbers that fit on the line and the rest on hover or when opened. A problem opens across the whole card
 - Fixed: "1 disks" and "1 pools" on the tiles, and the Now playing summary running past its card on a phone
 - Settings opens on Quick settings: mode, theme, density, Edit dashboard, Presets, Setup wizard, and how the server is doing (connection, password, phone alerts, guest link, last backup)
