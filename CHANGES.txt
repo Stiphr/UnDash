@@ -1,4 +1,9 @@
 ###beta
+- Pages: split the dashboard into pages, each with its own cards and layout. Edit dashboard > Pages adds and names them, Split my cards makes a first set, tabs appear only with more than one page, and keys 1 to 9 switch pages
+- RSS card: the newest stories from up to 10 RSS or Atom feeds, read at most every 15 minutes
+- Guest link: a private read-only address for family (Settings > Guest link) with its own session. You choose what it shows: System, Media, Now playing and each app. It never shows containers, VMs, downloads, requests, alerts, addresses or Settings
+- Custom API builder: read a JSON address, click the values or list you want, and see the card before you add it
+- Beta builds carry a version such as 0.9.8be
 - On servers with parity disks, array details show the last parity check and the last finished one, with an alert when none has finished for 100 days or the last one found errors
 - Storage details forecast when the array fills up, from 30 days of history
 - Disk list has a SMART column, with an alert when a healthy disk stops reporting OK

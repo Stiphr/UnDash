@@ -149,6 +149,10 @@ The dashboard is made of sections: **System**, **Alerts**, **Favorites**, **Medi
 
 App widgets refresh every 15 seconds and the system every 2 seconds; change both in **Settings > General**.
 
+### Pages
+
+Edit dashboard > **Pages** adds and names pages, and **Split my cards** makes a first set from what you have. Click a card to send it to another page. Each page keeps its own layout. With one page there are no tabs; with more, press 1 to 9 to switch. On a phone your pages replace the bottom tabs.
+
 ### Pick a look
 
 **Settings > Appearance**: theme, light / dark / system mode, accent colour, spacing and wallpaper. The accent can follow the theme, be a colour of your own, or be taken from the wallpaper: UnDash reads a small copy of the picture in your browser and picks its main colour, toned so buttons and links stay readable. For the background choose the theme's gradient, a plain colour, a picture from an address, or **your own picture** (JPEG, PNG or WebP; it is scaled down in your browser and kept in the configuration folder, never sent anywhere). **Settings > Advanced > Custom CSS** for anything else.
@@ -180,6 +184,12 @@ UnDash keeps two files in its config folder (`/config` in Docker, `/mnt/user/app
 Both are backed up automatically after every settings save and before an import or restore; the last 7 different versions are kept (`data/backups`). Settings from older versions are converted on first start; the old files are kept in `data/legacy`. The format is described in [docs/CONFIG.md](docs/CONFIG.md).
 
 Keyboard: `/` search · `r` refresh · `p` pause · `,` settings · `?` all shortcuts · `g` + a letter jumps to a section.
+
+## Guest link
+
+Settings > **Guest link** makes a private address for family or friends. It is read-only and has its own session, so opening it does not sign you out. Choose what it shows: System, Media, Now playing and each app. New apps stay private until you tick them. It never shows containers, VMs, downloads, requests, alerts, addresses or Settings. **New link** ends the old address at once.
+
+Anyone with the link can open it, so share it like a password. Set a dashboard password as well: without one, the plain address still opens everything.
 
 ## Security
 

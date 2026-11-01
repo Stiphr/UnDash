@@ -55,6 +55,18 @@ function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
   echo '</form></div></body></html>';
   exit;
 }
+/** The dashboard's one page. boot.js says which area it runs in. */
+function sa_page($boot, $app) {
+  $v = (int)@filemtime(UND_ROOT . '/assets/app.js');
+  header('Content-Type: text/html; charset=utf-8');
+  header('Cache-Control: no-store');
+  echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b0c0f">',
+       '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="UnDash"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
+       '<title>UnDash</title><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/assets/app.css?v=', $v, '">',
+       '</head><body class="und-page"><div id="und" class="und"><div class="und-loading">Loading UnDash…</div></div>',
+       '<script src="', $boot, '"></script><script src="', $app, '?v=', $v, '"></script></body></html>';
+  exit;
+}
 function sa_pre_ok() { $c = (string)($_COOKIE[und_cookie('undash_pre')] ?? ''); return $c !== '' && hash_equals($c, (string)($_POST['pre'] ?? '')); }
 function sa_ip() { return (string)($_SERVER['REMOTE_ADDR'] ?? ''); }
 
@@ -83,6 +95,38 @@ if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
 if (und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true) && !und_host_allowed())
   sa_deny(421, "UnDash has no password yet, so it only answers at the server's IP address or name (http://<server IP>:<port>).\n"
     . "To use the name " . (und_req_host() ?: 'in the address bar') . ": set a password in Settings > Server connection, or add the name to UNDASH_ALLOWED_HOSTS in the container settings.");
+
+/* ---- the guest view: its own small area with its own session. Nothing here reaches api.php (see include/guest.php) ---- */
+if (strpos($uri, '/guest/') === 0) {
+  if (!und_guest_on()) sa_deny(404, 'Not found');
+  if (preg_match('#^/guest/([a-f0-9]{48})$#', $uri, $m)) {
+    if ($method !== 'GET' || !und_guest_token_ok($m[1])) sa_deny(404, 'Not found');
+    if (!und_guest_sess()) und_guest_sess_new();
+    sa_page('/guest/boot.js', '/guest/app.js');
+  }
+  $g = und_guest_sess();
+  if (!$g) sa_deny(401, 'Open the guest link again.');
+  if ($uri === '/guest/app.js') sa_asset(UND_ROOT . '/assets/app.js', 'application/javascript; charset=utf-8');
+  if ($uri === '/guest/wallpaper') { und_wall_serve(); exit; }
+  if ($uri === '/guest/csrf') { header('Content-Type: application/json'); header('Cache-Control: no-store'); echo json_encode(['csrf' => $g['csrf'], 'version' => UND_VERSION]); exit; }
+  if ($uri === '/guest/boot.js') {
+    header('Content-Type: application/javascript; charset=utf-8'); header('Cache-Control: no-store');
+    echo 'window.UND_API="/guest/api";window.UND_BASE="/guest";window.UND_GUEST=true;window.UND_CSRF=' . json_encode($g['csrf']) . ';window.UND_UNRAID="";window.UND_STANDALONE=true;';
+    exit;
+  }
+  if ($uri === '/guest/api') {
+    if ($method !== 'POST') sa_deny(405, 'POST only.');
+    $origin = (string)($_SERVER['HTTP_ORIGIN'] ?? '');
+    if (!hash_equals($g['csrf'], (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? '')))) sa_deny(403, 'Bad CSRF token. Reload the page.');
+    if ($origin !== '' && strcasecmp(preg_replace('#^https?://#', '', $origin), (string)($_SERVER['HTTP_HOST'] ?? '')) !== 0) sa_deny(403, 'Cross-origin request refused.');
+    header('Content-Type: application/json'); header('Cache-Control: no-store');
+    try { $r = und_guest_api((string)($_POST['action'] ?? ''), $_POST); }
+    catch (Throwable $e) { error_log('undash: guest: ' . $e->getMessage()); $r = ['error' => 'Not available right now.']; }
+    echo json_encode($r, JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+  }
+  sa_deny(404, 'Not found');
+}
 
 /* ---- sign-in ---- */
 $sess = und_sess_get();
@@ -183,15 +227,5 @@ foreach ($icons as $prefix => $dir) {
   readfile($dir . $name); exit;
 }
 
-if ($uri === '/' || $uri === '/index.html') {
-  $v = (int)@filemtime(UND_ROOT . '/assets/app.js');
-  header('Content-Type: text/html; charset=utf-8');
-  header('Cache-Control: no-store');
-  echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b0c0f">',
-       '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="UnDash"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
-       '<title>UnDash</title><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/assets/app.css?v=', $v, '">',
-       '</head><body class="und-page"><div id="und" class="und"><div class="und-loading">Loading UnDash…</div></div>',
-       '<script src="/assets/boot.js"></script><script src="/assets/app.js?v=', $v, '"></script></body></html>';
-  exit;
-}
+if ($uri === '/' || $uri === '/index.html') sa_page('/assets/boot.js', '/assets/app.js');
 sa_deny(404, 'Not found');

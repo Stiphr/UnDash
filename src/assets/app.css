@@ -841,6 +841,32 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und.bui .gc-m .stat .v{font-size:clamp(17px,11cqw,24px)}
 }
 
+/* pages: quiet tabs in the header, only when there is more than one */
+.und .pages{display:flex;gap:2px;min-width:0;flex:0 1 auto;overflow-x:auto;scrollbar-width:none;padding:3px;background:var(--panel);border-radius:var(--radius)}
+.und .pages[hidden]{display:none}.und .pages::-webkit-scrollbar{display:none}
+.und .pages button{appearance:none;border:0;background:none;color:var(--muted);font:inherit;font-size:13px;font-weight:550;white-space:nowrap;height:32px;padding:0 12px;border-radius:calc(var(--radius) - 2px);cursor:pointer;transition:background .15s,color .15s}
+.und .pages button:hover{color:var(--text)}.und .pages button.on{background:var(--bar);color:var(--text)}
+.und.bui .bempty{margin-top:40px;text-align:center}
+@media (max-width:1100px){.und.bui .top:has(.pages:not([hidden])){flex-wrap:wrap}.und.bui .top .pages{order:9;flex:1 0 100%}.und.bui .top .pages button{flex:1 0 auto}}
+.und .bs-pgs{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.und .bs-pg{display:flex;align-items:center;gap:6px}.und .bs-pg input{flex:1 1 auto;min-width:0}
+.und .bs-pg .bs-go{appearance:none;border:0;background:none;color:var(--faint);width:30px;height:30px;display:grid;place-items:center;border-radius:8px;cursor:pointer;flex:none}
+.und .bs-pg .bs-go svg{width:15px;height:15px}.und .bs-pg .bs-go:hover{background:var(--bar);color:var(--text)}
+.und .bs-pg.on .bs-go{color:var(--accent)}
+/* the card builder */
+.und .jt{display:flex;flex-direction:column;gap:1px;max-height:240px;overflow:auto;margin-top:10px;padding:4px;background:var(--p2);border:1px solid var(--line);border-radius:var(--radius)}
+.und .jr{appearance:none;border:0;background:none;color:var(--text);font:inherit;font-size:12.5px;display:flex;align-items:center;gap:8px;min-height:30px;padding:0 8px;border-radius:6px;cursor:pointer;text-align:left}
+.und .jr:hover:not(:disabled){background:var(--bar)}.und .jr:disabled{opacity:.5;cursor:default}
+.und .jr svg{width:13px;height:13px;flex:none;color:var(--faint)}.und .jr.on svg{color:var(--accent)}
+.und .jk{flex:1 1 55%;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}.und .jv{flex:0 1 45%;min-width:0;color:var(--muted);text-align:right}
+.und .jm{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.und .jmr{display:grid;grid-template-columns:minmax(0,1.3fr) 104px minmax(0,1fr) auto;gap:6px;align-items:center}
+.und .jcs{display:flex;flex-wrap:wrap;gap:4px}
+.und .jc{appearance:none;border:1px solid var(--line);background:var(--p2);color:var(--text);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;padding:3px 8px;border-radius:6px;cursor:pointer}
+.und .jc:hover{border-color:var(--l2)}
+.und .jp .card{max-width:340px}.und .jp .cb{min-height:0}
+@media (max-width:560px){.und .jmr{grid-template-columns:minmax(0,1fr) auto}.und .jmr .jmp{display:none}}
+
 /* phones: one column, tabs at the bottom, nothing to pinch or aim at */
 .und.bui .mnav{display:none}
 @media (max-width:700px){
@@ -865,6 +891,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und.bui .board.flow .gc-c>.sec>.sec-b{overflow:visible}
   .und.bui .board.flow .gc-c>.mw>.mlist{max-height:60vh!important}
   .und.bui .board.flow .gc-l .alink{min-height:44px}
+  .und.bui .top .pages{display:none}
+  .und.bui .mnav.pgs{overflow-x:auto;scrollbar-width:none}.und.bui .mnav.pgs button{flex:1 0 72px;min-width:0}
   .und.bui .bdetail{position:fixed;left:8px;right:8px;bottom:calc(72px + env(safe-area-inset-bottom));top:auto;max-height:65vh}
   .und.bui .toasts{bottom:calc(76px + env(safe-area-inset-bottom))}
   .und.bui .mnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:70;padding:6px 6px calc(6px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--panel) 90%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-top:1px solid var(--line)}

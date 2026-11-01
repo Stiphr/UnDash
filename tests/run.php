@@ -1149,6 +1149,91 @@ t('a server that does not say is left unsaid', und_streams_emby([$tc + ['Transco
 $pl = function ($ts) { return und_streams_plex(['MediaContainer' => ['Metadata' => [['title' => 'X', 'TranscodeSession' => $ts]]]])[0]['hw']; };
 t('Plex too', $pl(['videoDecision' => 'transcode', 'transcodeHwEncoding' => 'vaapi']) === true && $pl(['videoDecision' => 'transcode']) === false && und_streams_plex(['MediaContainer' => ['Metadata' => [['title' => 'X']]]])[0]['hw'] === null);
 
+/* ---- pages ---- */
+$bc = und_board_clean(['home' => ' Main ', 'pages' => [['id' => 'aaaaaaaa', 'name' => ' Media ', 'cards' => ['media:recent_movies', 'docker', 'bad id!'], 'lg' => [['i' => 'docker', 'x' => 0, 'y' => 0, 'w' => 99, 'h' => 5]]], ['id' => 'aaaaaaaa', 'name' => 'Twin'], ['id' => 'bbbbbbbb', 'name' => '', 'cards' => ['docker', 'vms']], 'junk']]);
+t('a page keeps its name, cards and layout', $bc['home'] === 'Main' && $bc['pages'][0]['name'] === 'Media' && $bc['pages'][0]['cards'] === ['media:recent_movies', 'docker'] && $bc['pages'][0]['lg'][0]['w'] === 24, json_encode($bc));
+t('a second page with the same id is dropped', count($bc['pages']) === 2 && $bc['pages'][1]['id'] === 'bbbbbbbb');
+t('a card stays on the first page that lists it', $bc['pages'][1]['cards'] === ['vms'] && $bc['pages'][1]['name'] === 'Page');
+t('a page id that is not ours is replaced', preg_match('/^[a-f0-9]{8}$/', und_board_clean(['pages' => [['id' => '../x', 'name' => 'A']]])['pages'][0]['id']) === 1);
+t('at most 12 pages', count(und_board_clean(['pages' => array_map(function ($i) { return ['name' => "p$i"]; }, range(1, 20))])['pages']) === 12);
+t('an old board has no extra pages', und_board_clean(['lg' => []])['pages'] === [] && und_board_clean([])['home'] === '');
+
+/* ---- RSS ---- */
+$rss2 = '<?xml version="1.0"?><rss version="2.0"><channel><title>Blog &amp; News</title><item><title><![CDATA[One <b>bold</b> &amp; true]]></title><link>https://a.example/1</link><pubDate>Mon, 02 Nov 2026 10:00:00 GMT</pubDate></item><item><title>Two</title><link>javascript:alert(1)</link></item><item><title></title><link>https://a.example/3</link></item></channel></rss>';
+$f = und_rss_parse($rss2);
+t('RSS 2.0 is read, and markup in a title is removed', $f['name'] === 'Blog & News' && $f['items'][0]['title'] === 'One bold & true' && $f['items'][0]['href'] === 'https://a.example/1' && $f['items'][0]['ts'] === 1793613600, json_encode($f));
+t('a link that is not a web address is dropped', $f['items'][1]['href'] === '');
+t('a story without a title is skipped', count($f['items']) === 2);
+$f = und_rss_parse('<feed xmlns="http://www.w3.org/2005/Atom"><title>Rel</title><entry><title>v1.2</title><link rel="enclosure" href="https://a.example/f.zip"/><link rel="alternate" href="https://a.example/v1.2"/><updated>2026-11-01T00:00:00Z</updated></entry></feed>');
+t('Atom is read, and its page link wins', $f['name'] === 'Rel' && $f['items'][0]['title'] === 'v1.2' && $f['items'][0]['href'] === 'https://a.example/v1.2' && $f['items'][0]['ts'] === strtotime('2026-11-01T00:00:00Z'), json_encode($f));
+$f = und_rss_parse('<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><title>Old</title></channel><item><title>A</title><link>https://a.example/a</link><dc:date>2026-10-01T00:00:00Z</dc:date></item></rdf:RDF>');
+t('RSS 1.0 is read, with its dc:date', $f['name'] === 'Old' && $f['items'][0]['ts'] === strtotime('2026-10-01T00:00:00Z'), json_encode($f));
+$thrown = function (callable $fn) { try { $fn(); return ''; } catch (Exception $e) { return $e->getMessage(); } };
+t('an HTML page is not a feed', strpos($thrown(function () { und_rss_parse('<html><body>hi</body></html>'); }), 'not a feed') !== false);
+t('neither is plain text', strpos($thrown(function () { und_rss_parse('{"a":1}'); }), 'not a feed') !== false);
+$xxe = '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]><rss version="2.0"><channel><title>x</title><item><title>a&x;b</title></item></channel></rss>';
+$r = ''; try { $r = json_encode(und_rss_parse($xxe)); } catch (Exception $e) { $r = ''; }
+t('a feed cannot read files of the server', strpos($r, 'root:') === false, $r);
+$calls = []; $GLOBALS['UND_HTTP_MOCK'] = function ($m, $u, $o) use (&$calls, $rss2) { $calls[] = $u; if (strpos($u, 'bad') !== false) return ['code' => 500, 'body' => '', 'json' => null, 'err' => '', 'headers' => []]; return ['code' => 200, 'body' => $rss2, 'json' => null, 'err' => '', 'headers' => []]; };
+$r = und_w_rss(['options' => ['feeds' => "Mine | https://a.example/feed\nhttps://bad.example/feed", 'limit' => 1]]);
+t('one feed failing leaves the others', count($r['list']) === 1 && $r['list'][0]['title'] === 'One bold & true' && $r['list'][0]['sub'] === 'Mine', json_encode($r));
+$n = count($calls); und_w_rss(['options' => ['feeds' => 'Mine | https://a.example/feed']]);
+t('a feed is not read again within 15 minutes', count($calls) === $n, json_encode($calls));
+t('no feed listed is a clear message', strpos($thrown(function () { und_w_rss(['options' => []]); }), 'Add the address') !== false);
+t('an address that is not one is refused', strpos($thrown(function () { und_w_rss(['options' => ['feeds' => 'file:///etc/passwd']]); }), 'Not a web address') !== false);
+unset($GLOBALS['UND_HTTP_MOCK']);
+
+/* ---- custom API card builder ---- */
+$tr = und_json_tree(['data' => ['users' => 4, 'ok' => true, 'name' => str_repeat('x', 90), 'none' => null], 'items' => [['id' => 1, 'user' => ['name' => 'a']], ['id' => 2]], 'empty' => []]);
+$by = []; foreach ($tr as $x) $by[$x['p']] = $x;
+t('every value is listed by its path', $by['data.users']['t'] === 'num' && $by['data.users']['v'] === '4' && $by['data.ok']['v'] === 'yes' && $by['data.none']['t'] === 'null');
+t('long values are cut short', strlen($by['data.name']['v']) <= 70);
+t('a list is one row, with the fields of its first item', $by['items']['t'] === 'list' && $by['items']['n'] === 2 && array_column($by['items']['f'], 'p') === ['id', 'user.name'], json_encode($by['items']));
+t('an empty list is listed too', $by['empty']['n'] === 0);
+t('an answer that is itself a list works', und_json_tree([['a' => 1]])[0]['p'] === '' && und_json_tree([['a' => 1]])[0]['n'] === 1);
+t('a huge answer is cut off', count(und_json_tree(array_fill_keys(array_map(function ($i) { return "k$i"; }, range(1, 1000)), 1))) === 300);
+$pc = und_normalize(['groups' => [['id' => 'abcdef01', 'name' => 'G', 'services' => [['id' => 'abcdef02', 'type' => 'customapi', 'name' => 'C', 'url' => 'http://x.example/a', 'options' => ['headers' => ['X-Api-Key' => '{{KEY}}']]], ['id' => 'abcdef03', 'type' => 'radarr', 'url' => 'http://r']]]]]);
+$GLOBALS['UND_TEST_SECRETS'] = ['vars' => ['C_API_KEY' => 'sekret123456'], 'svc' => ['abcdef02' => ['key' => 'sekret123456']], 'unraid' => []];
+$seen = []; $GLOBALS['UND_HTTP_MOCK'] = function ($m, $u, $o) use (&$seen) { $seen = $o['headers'] ?? []; return ['code' => 200, 'body' => '{"token":"sekret123456-x","n":1}', 'json' => ['token' => 'sekret123456-x', 'n' => 1], 'err' => '', 'headers' => []]; };
+$r = und_customapi_probe($pc, 'abcdef02');
+t('the card builder sends the key to the app', ($seen['X-Api-Key'] ?? '') === 'sekret123456');
+t('and never shows it, even if the app echoes it', strpos(json_encode($r), 'sekret123456') === false, json_encode($r));
+t('it only reads custom API apps', isset(und_customapi_probe($pc, 'abcdef03')['error']));
+unset($GLOBALS['UND_HTTP_MOCK'], $GLOBALS['UND_TEST_SECRETS']);
+
+/* ---- guest view ---- */
+t('the guest token is not a value apps can use', in_array('UNDASH_GUEST_TOKEN', UND_ENV_RESERVED, true));
+$gc = und_normalize(['general' => ['disk_path' => '/mnt/secret', 'ups_name' => 'myups'], 'appearance' => ['wall_path' => '/mnt/user/private/w.jpg'],
+  'groups' => [['id' => 'aaaa0001', 'name' => 'G', 'services' => [
+    ['id' => 'aaaa0002', 'type' => 'immich', 'name' => 'Photos', 'url' => 'http://10.0.0.5:2283', 'key' => '{{IMMICH_API_KEY}}'],
+    ['id' => 'aaaa0003', 'type' => 'gluetun', 'name' => 'VPN', 'url' => 'http://10.0.0.6:8000'],
+    ['id' => 'aaaa0004', 'type' => 'radarr', 'name' => 'Radarr', 'url' => 'http://10.0.0.7:7878'],
+    ['id' => 'aaaa0005', 'type' => 'customapi', 'name' => 'C', 'url' => 'http://x/a?token=abc', 'options' => ['headers' => ['A' => 'b']]]]]]]);
+$gp = ['sections' => ['overview' => true, 'media' => true, 'playing' => false, 'apps' => true], 'apps' => ['aaaa0002', 'aaaa0004']];
+$gl = und_guest_layout($gc, $gp); $gj = json_encode($gl);
+t('guests get only the apps ticked for them', array_column($gl['groups'][0]['services'], 'id') === ['aaaa0002']);
+t('an app of another section stays out, ticked or not', strpos($gj, 'Radarr') === false);
+t('no address, key, option or path reaches a guest', !preg_match('/10\.0\.0\.[67]|\{\{|IMMICH_API_KEY|token=abc|\/mnt\/secret|private\/w\.jpg|myups/', $gj), $gj);
+t('a section turned off is off', array_values(array_filter($gl['dashboard']['sections'], function ($s) { return $s['id'] === 'playing'; }))[0]['visible'] === false);
+$vis = array_column(array_filter($gl['dashboard']['sections'], function ($s) { return $s['visible']; }), 'id');
+t('containers, VMs, downloads, requests and alerts are never shown', !array_intersect($vis, ['docker', 'vms', 'downloads', 'requests', 'arr', 'alerts', 'health', 'favorites']), json_encode($vis));
+$mv = array_column(array_filter($gl['dashboard']['metrics'], function ($m) { return $m['visible']; }), 'id');
+t('the Containers and VMs tiles are off', !array_intersect($mv, ['docker', 'vms', 'path', 'load']), json_encode($mv));
+t('search is off', $gl['general']['show_search'] === false && $gl['general']['search_in'] === []);
+$gs = und_guest_system(['name' => 'Tower', 'ip' => '10.0.0.2', 'os' => '7.3', 'os_update' => ['available' => true], 'now' => 5, 'uptime' => 9, 'hist' => [], 'cpu' => ['pct' => 3, 'temp' => 40, 'threads' => 8, 'cores' => [1], 'model' => 'x'], 'mem' => ['pct' => 1, 'total' => 2],
+  'net' => ['rx' => 1, 'tx' => 2, 'iface' => 'eth0'], 'disk' => ['path' => '/mnt/x'], 'array' => ['state' => 'STARTED', 'size' => 1, 'free' => 1, 'pools' => [['name' => 'cache', 'size' => 1, 'free' => 1, 'temp' => 30, 'device' => 'sdb']], '_rows' => ['x'], 'parity_checks' => ['y']]]);
+t('a guest gets the numbers, not the address, version, disks or updates', !preg_match('/10\.0\.0\.2|os_update|eth0|mnt|cache|sdb|_rows|parity_checks/', json_encode($gs)) && $gs['cpu']['pct'] === 3 && $gs['array']['pools'][0]['temp'] === 30, json_encode($gs));
+t('a server error says nothing more', und_guest_system(['error' => 'cannot reach http://10.0.0.2/graphql']) === ['error' => 'The server is not answering.']);
+$st = und_guest_streams([['title' => 'A', 'user' => 'U', 'device' => 'Living room', 'location' => 'wan', 'bandwidth' => 9, 'app' => 'Plex', 'icon' => 'x']]);
+t('a stream keeps what is playing, not where from', $st === [['title' => 'A', 'user' => 'U']], json_encode($st));
+$g2 = $gp; 
+t('an app not ticked cannot be read by its id', isset(und_guest_service($gc, $g2, 'aaaa0003')['error']));
+$GLOBALS['UND_HTTP_MOCK'] = function () { return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'connect to 10.0.0.5 failed', 'headers' => []]; };
+t('an app error does not name its address', und_guest_service($gc, $gp, 'aaaa0002') === ['error' => 'Not available right now.'], json_encode(und_guest_service($gc, $gp, 'aaaa0002')));
+unset($GLOBALS['UND_HTTP_MOCK']);
+foreach (['settings', 'save', 'docker_action', 'vm_action', 'power', 'prefs', 'export', 'storage', 'metrics', 'probe', 'test', 'guest_get', 'notify_get', 'alert_history', 'docker_logs', 'unraid_conf', ''] as $a)
+  t("a guest cannot call $a", und_guest_api($a, []) === ['error' => 'Not available in the guest view.'], json_encode(und_guest_api($a, [])));
+
 rmrf($SANDBOX);
 
 echo "\n$pass passed, $fail failed\n";

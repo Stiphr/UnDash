@@ -11,7 +11,7 @@
  */
 
 function und_export($kind) {
-  if ($kind === 'env') return ['name' => 'undash.env', 'type' => 'text/plain', 'text' => und_env_text(und_secrets()['vars'] + array_intersect_key(und_env(), array_flip(array_diff(UND_ENV_RESERVED, ['UNDASH_PASSWORD_HASH', 'UNDASH_AUTH', 'PEXELS_API_KEY']))))];
+  if ($kind === 'env') return ['name' => 'undash.env', 'type' => 'text/plain', 'text' => und_env_text(und_secrets()['vars'] + array_intersect_key(und_env(), array_flip(array_diff(UND_ENV_RESERVED, ['UNDASH_PASSWORD_HASH', 'UNDASH_AUTH', 'PEXELS_API_KEY', 'UNDASH_GUEST_TOKEN']))))];
   $doc = und_doc();
   if (isset($doc['groups'])) foreach ($doc['groups'] as &$g) foreach ((array)($g['services'] ?? []) as $i => $sv) {
     $g['services'][$i]['url'] = und_redact_url((string)($sv['url'] ?? '')); $g['services'][$i]['href'] = und_redact_url((string)($sv['href'] ?? ''));
