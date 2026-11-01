@@ -45,19 +45,23 @@ function und_glances_net(array $list) {
   return ['rx' => (float)($net['bytes_recv_rate_per_sec'] ?? (($net['rx'] ?? 0) / $since)), 'tx' => (float)($net['bytes_sent_rate_per_sec'] ?? (($net['tx'] ?? 0) / $since)), 'iface' => (string)$net['interface_name']];
 }
 
-/** Your pools and disks: what is mounted directly under /mnt (Glances in Docker sees it under /rootfs or /hostfs). Without any, the largest real disk. */
+/** Your pools and disks: what is mounted directly under /mnt (Glances in Docker sees it under /rootfs or /hostfs). Without any, the largest real disk.
+ *  Each ZFS dataset counts only its own data, so a pool's used space is the sum of its datasets. */
 function und_glances_pools(array $fs) {
-  $out = []; $seen = []; $other = null;
+  $out = []; $seen = []; $other = null; $zfs = [];
   foreach ($fs as $f) {
     if (!is_array($f) || (float)($f['size'] ?? 0) <= 0) continue;
+    if (strtolower((string)($f['fs_type'] ?? '')) === 'zfs') { $pool = explode('/', (string)($f['device_name'] ?? ''))[0]; $zfs[$pool] = ($zfs[$pool] ?? 0) + max(0, (float)$f['size'] - (float)($f['free'] ?? 0)); }
     $type = strtolower((string)($f['fs_type'] ?? '')); $mnt = (string)($f['mnt_point'] ?? '');
     if (preg_match('/^(fuse|shfs|squashfs|tmpfs|overlay|nfs|cifs|smb)/', $type)) continue;
     $row = ['name' => basename($mnt) ?: $mnt, 'size' => (float)$f['size'], 'free' => (float)($f['free'] ?? 0), 'temp' => null];
     if (preg_match('#^(/rootfs|/hostfs)?/mnt/([^/]+)$#', $mnt, $m) && !in_array($m[2], ['user', 'user0', 'disks', 'remotes', 'addons', 'rootshare'], true)) {
       $id = (string)($f['device_name'] ?? $mnt);
-      if (!isset($seen[$id])) { $seen[$id] = 1; $out[] = $row; }
+      if (!isset($seen[$id])) { $seen[$id] = 1; $out[] = $row + ['_dev' => $id]; }
     } elseif ($type !== 'vfat' && (!$other || $row['size'] > $other['size'])) $other = $row;
   }
+  foreach ($out as &$r) { if (isset($zfs[$r['_dev']])) $r['size'] = $zfs[$r['_dev']] + $r['free']; unset($r['_dev']); }
+  unset($r);
   return $out ?: ($other ? [$other] : []);
 }
 
