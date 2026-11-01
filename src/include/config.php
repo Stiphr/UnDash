@@ -14,6 +14,7 @@
  */
 
 define('UND_SCHEMA', 5);
+const UND_PRESETS_MAX = 20;
 
 /** Every widget type: [label, credential fields it uses, needs url]. */
 function und_types() {
@@ -356,6 +357,33 @@ function und_look_limits() {
           'wall_saturation' => [0, 200, 100], 'wall_contrast' => [50, 150, 100], 'wall_opacity' => [10, 100, 100]];
 }
 
+/**
+ * Presets you saved: how a dashboard is laid out and viewed, and its look when you chose to keep that. Never an app, an address
+ * or a key. Each one goes through und_normalize, so a preset holds only what a real configuration may hold.
+ */
+function und_presets_clean($list) {
+  $out = []; $seen = [];
+  $look = ['theme', 'mode', 'accent', 'accent_mode', 'density', 'text_size', 'radius', 'translucent', 'gradient', 'icon_box', 'header_chips', 'zoom', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity', 'motion', 'blur', 'blur_target', 'brightness', 'safe_x', 'safe_y', 'sec_names', 'icon_mode'];
+  $text = function ($v, $max) { return und_clip(trim(preg_replace('/[\x00-\x1f\x7f]+/', ' ', is_scalar($v) ? (string)$v : '')), $max); };
+  foreach (array_slice(is_array($list) ? $list : [], 0, UND_PRESETS_MAX) as $p) {
+    if (!is_array($p) || !preg_match('/^[a-f0-9]{8}$/', (string)($p['id'] ?? '')) || isset($seen[$p['id']])) continue;
+    $seen[$p['id']] = 1;
+    $arr = function ($k) use ($p) { return is_array($p[$k] ?? null) ? $p[$k] : []; };
+    $n = und_normalize(['appearance' => $arr('look'), 'dashboard' => ['sections' => $arr('sections'), 'metrics' => $arr('metrics'), 'board' => $arr('board')], 'media' => $arr('media'), 'requests' => $arr('requests'),
+                        'downloads' => $arr('downloads'), 'apps' => $arr('apps'), 'docker' => $arr('docker'), 'vms' => $arr('vms')]);
+    $one = ['id' => $p['id'], 'name' => $text($p['name'] ?? '', 40) ?: 'My preset', 'desc' => $text($p['desc'] ?? '', 120), 'at' => max(0, (int)($p['at'] ?? 0)), 'board' => $n['dashboard']['board'],
+            'sections' => array_map(function ($s) { unset($s['collapsed']); return $s; }, $n['dashboard']['sections']), 'metrics' => $n['dashboard']['metrics'],
+            'media' => array_intersect_key($n['media'], array_flip(['style', 'days_ahead', 'widgets'])), 'requests' => $n['requests'], 'downloads' => $n['downloads'], 'apps' => $n['apps'],
+            'docker' => array_intersect_key($n['docker'], array_flip(['layout', 'view', 'filter', 'columns', 'sort', 'show', 'hide_stopped'])), 'vms' => array_intersect_key($n['vms'], array_flip(['layout', 'show']))];
+    if ($arr('look')) {
+      $one['look'] = array_intersect_key($n['appearance'], array_flip($look));
+      if (preg_match('/^c-[a-z0-9]{8}$/', (string)($p['look']['theme'] ?? ''))) $one['look']['theme'] = $p['look']['theme'];      // your own theme: used when it is still there
+    }
+    $out[] = $one;
+  }
+  return $out;
+}
+
 function und_hex($c, $d) { return preg_match('/^#[0-9a-fA-F]{6}$/', (string)$c) ? strtolower($c) : $d; }
 
 /** Clamp and fill a config that came from disk, the browser or an import. Unknown keys are dropped. */
@@ -499,7 +527,7 @@ function und_normalize(array $c) {
     $groups[] = $out;
   }
   return ['schema' => UND_SCHEMA, 'general' => $g, 'appearance' => $a, 'dashboard' => ['sections' => $sections, 'metrics' => $metrics, 'board' => und_board_clean($db['board'] ?? [])], 'media' => $media, 'downloads' => $downloads, 'requests' => $requests, 'apps' => $apps,
-          'docker' => $docker, 'vms' => $vms, 'groups' => $groups];
+          'docker' => $docker, 'vms' => $vms, 'groups' => $groups, 'presets' => und_presets_clean($c['presets'] ?? [])];
 }
 
 /**
@@ -540,6 +568,7 @@ function und_config_lock() {
 function und_save_config(array $c, $backup = true) {
   if ($backup) und_backup('before saving');
   $n = json_decode(json_encode(und_normalize($c)), true); unset($n['schema']);
+  if (!$n['presets']) $n['presets'] = null;
   foreach ($n['groups'] as &$g) $g['services'] = array_map('und_compact_service', $g['services']);
   unset($g);
   // container / VM entries: only what differs from the default (a hidden one is just "hidden: true")
@@ -669,6 +698,7 @@ function und_zone(array $s) {
 
 /** The layout sent to the browser: hrefs resolved (they are links the user clicks anyway), nothing secret. */
 function und_layout_view(array $cfg) {
+  unset($cfg['presets']);          // Settings has its own copy; the page and guests have no use for them
   $vars = und_secrets()['vars'];
   foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) {
     $s['zone'] = und_zone($s);

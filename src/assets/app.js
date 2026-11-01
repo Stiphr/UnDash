@@ -260,7 +260,7 @@
   /* ---------- dialogs and menus ---------- */
   function modal(title, body, foot, wide) {
     var last = document.activeElement;
-    var bg = h('div', { class: 'modal-bg', onmousedown: function (e) { if (e.target === bg) close(); } });
+    var bg = h('div', { class: 'modal-bg', onmousedown: function (e) { if (e.target === bg && !m.stay) close(); } });
     var hid = 'und-m' + Math.random().toString(36).slice(2, 8);
     var m = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': hid, tabindex: '-1' }, h('h3', { id: hid }, title), body, foot ? h('div', { class: 'foot' }, foot) : null);
     // what is behind a dialog is out of reach for a screen reader too
@@ -889,17 +889,44 @@
     return gEven(out);
   }
   function boardSeed(cards, cols) { return boardSmart(cards, cols); }
+  /* does this layout leave an empty cell, or put two cards on one? */
+  function gHoles(list, cols) {
+    var used = {}, n = 0, bottom = 0, twice = false;
+    list.forEach(function (c) {
+      bottom = Math.max(bottom, c.y + c.h);
+      for (var y = c.y; y < c.y + c.h; y++) for (var x = c.x; x < c.x + c.w; x++) { var k = y * cols + x; if (used[k]) twice = true; used[k] = 1; n++; }
+    });
+    return twice || n < bottom * cols;
+  }
+  /* the saved layout laid out again in the same reading order, as whole rows that end at both edges, so cards can never leave holes
+     between them. A narrower window with no layout of its own takes half each width. Cards of very different heights do not share a row */
+  function boardFold(list, cols) {
+    var bd = pageData(), own = (cols === 12 && (bd.md || []).length ? bd.md : bd.lg) || [], div = cols === 12 && own === bd.lg ? 2 : 1, saved = {}, out = [], y = 0, row = [], sum = 0, tile = function (c) { return c.i.indexOf('m:') === 0; };
+    own.forEach(function (r) { saved[r.i] = r; });
+    var at = function (c) { return saved[c.i] || { x: 0, y: 1e6, w: c.w * div }; }, H = function (c) { return (c.a && S.nat[c.i]) || c.h; };
+    var wide = function (c) { return tile(c) ? 1 : Math.max(cols / 4, Math.min(cols, Math.ceil(at(c).w / div))); };
+    var flush = function () {
+      if (!row.length) return;
+      var tall = Math.max.apply(null, row.map(H)), x = 0, left = cols;
+      row.forEach(function (c, n) { var w = n === row.length - 1 ? left : Math.max(1, Math.round(wide(c) * cols / sum)); out.push({ i: c.i, x: x, y: y, w: w, h: tall, a: !!c.a }); x += w; left -= w; });
+      y += tall; row = []; sum = 0;
+    };
+    var cs = list.slice().sort(function (a, b) { return at(a).y - at(b).y || at(a).x - at(b).x; }), tiles = cs.filter(tile), lines = Math.ceil(tiles.length / (cols === 24 ? 8 : 6));
+    for (var r = 0, n = 0; r < lines; r++) { var size = Math.ceil((tiles.length - n) / (lines - r)); row = tiles.slice(n, n + size); sum = size; n += size; flush(); }
+    cs.filter(function (c) { return !tile(c); }).forEach(function (c) {
+      var w = wide(c), h = H(c);
+      if (row.length && (sum + w > cols || row.some(function (o) { return h > 2 * H(o) || 2 * h < H(o); }))) flush();
+      row.push(c); sum += w;
+    });
+    flush();
+    return out;
+  }
   /* the saved layout for this screen size, without cards that no longer exist and with new ones added */
   function boardLayout(mode, hidden) {
     var bd = pageData(), cols = BOARD_COLS[mode === 'sm' ? 'lg' : mode], cards = boardCards(), have = {}, gone = {};
     cards.forEach(function (c) { have[c.i] = c; }); hidden.forEach(function (i) { gone[i] = 1; });
     var src = bd[mode === 'sm' ? 'lg' : mode] || [];
-    if (!src.length && mode === 'md' && (bd.lg || []).length) {
-      var half = []; gCopy(bd.lg).sort(function (a, b) { return a.y - b.y || a.x - b.x; }).forEach(function (c) {
-        c.w = Math.max(2, Math.ceil(c.w / 2)); gPlace(half, c, cols);
-      });
-      src = half;
-    }
+    if (!src.length && mode === 'md' && (bd.lg || []).length) src = boardFold(gCopy(bd.lg).filter(function (c) { return have[c.i] && !gone[c.i]; }), cols);
     var list = gCopy(src).filter(function (c) { return have[c.i] && !gone[c.i]; }), on = {};
     if (!list.length) return boardSeed(cards.filter(function (c) { return !gone[c.i]; }), cols);
     list.forEach(function (c) { on[c.i] = 1; c.w = Math.min(c.w, cols); c.x = Math.min(c.x, cols - c.w); });
@@ -1065,10 +1092,15 @@
         list.forEach(function (c) { if (c.a && S.nat[c.i]) c.h = S.nat[c.i]; });
         // a board left to Smart arrange is worked out again with the real heights, so it has no holes
         var bd = pageData(), mode = boardMode();
-        if (mode !== 'sm' && !(bd[mode] || []).length && !(bd.lg || []).length) {
-          var on = {}; list.forEach(function (c) { on[c.i] = 1; });
-          list = boardSmart(boardCards().filter(function (c) { return on[c.i]; }), BOARD_COLS[mode]);
-        } else if (mode !== 'sm') gStretch(gCompact(list), BOARD_COLS[mode]);
+        if (mode !== 'sm') {
+          var cols = BOARD_COLS[mode];
+          if (!(bd[mode] || []).length && !(bd.lg || []).length) {
+            var on = {}; list.forEach(function (c) { on[c.i] = 1; });
+            list = boardSmart(boardCards().filter(function (c) { return on[c.i]; }), cols);
+          } else if (mode === 'md' && !(bd.md || []).length) list = boardFold(list, cols);
+          else gStretch(gCompact(list), cols);
+          if (gHoles(list, cols)) list = boardFold(list, cols);      // cards that interlock leave holes no stretching can close
+        }
       }
     }
     var seen = {}, bottom = 0;
@@ -3661,7 +3693,7 @@
     if (S.edit) { toast('Save or cancel your dashboard changes first.', true); return; }
     if (S.drawer) { if (S.drawer.previewing) S.drawer.back(); return; }
     closeMenu(true);
-    var al = SET_ALIAS[tab], D = { tab: al ? al[0] : SET_PAGES[tab] ? tab : 'dashboard', dirty: false, open: {} };
+    var al = SET_ALIAS[tab], D = { tab: al ? al[0] : SET_PAGES[tab] ? tab : 'home', dirty: false, open: {} };
     if (al && al[1]) D.open[al[1]] = true;
     S.drawer = D;
     var last = document.activeElement;
@@ -3671,10 +3703,10 @@
     var status = h('span', { class: 'muted sm grow', role: 'status' }, 'Loading…');
     var tabs = h('nav', { class: 'dt', role: 'tablist', 'aria-label': 'Settings', 'aria-orientation': 'vertical' });
     SET_NAV.forEach(function (g) {
-      tabs.appendChild(h('div', { class: 'dg' }, g[0]));
+      if (g[0]) tabs.appendChild(h('div', { class: 'dg' }, g[0]));
       g[1].forEach(function (id) {
         var pg = SET_PAGES[id];
-        tabs.appendChild(h('button', { type: 'button', role: 'tab', 'data-t': id, onclick: function () { D.tab = id; paintTabs(); render(); } }, ic(pg[1]), pg[0]));
+        tabs.appendChild(h('button', { type: 'button', role: 'tab', 'data-t': id, onclick: function () { D.tab = id; D.sub = null; paintTabs(); render(); } }, ic(pg[1]), pg[0]));
       });
     });
     var drawer = h('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' },
@@ -3701,7 +3733,7 @@
     D.sync = function () {
       var bad = Object.keys(D.invalid || {}).length;
       saveB.disabled = !D.dirty || bad > 0; prevB.disabled = !D.cfg || bad > 0;
-      status.textContent = bad ? (bad === 1 ? 'One value is out of range. ' : bad + ' values are out of range. ') + 'Fix it to save.' : D.dirty ? 'Unsaved changes' : 'Changes apply after saving.';
+      status.textContent = bad ? (bad === 1 ? 'One value is out of range. ' : bad + ' values are out of range. ') + 'Fix it to save.' : D.dirty ? 'Unsaved changes' : SET_PAGES[D.tab][4] ? 'Changes on this page apply at once.' : 'Changes apply after saving.';
       status.classList.toggle('bad-t', bad > 0);
     };
     /* Preview: the dashboard drawn from the unsaved settings, with a bar to go back, save or discard */
@@ -3739,6 +3771,11 @@
       if (last && last.focus && document.body.contains(last)) try { last.focus(); } catch (e) { /* gone */ }
     }
     D.close = close;
+    /* leaves Settings for something on the dashboard; unsaved changes are asked about first */
+    D.leave = function (then) {
+      var go = function () { close(true); setTimeout(then, 60); };
+      if (!D.dirty) go(); else confirmBox('Close without saving?', 'Your changes in Settings are not saved yet.', 'Close without saving', true).then(function (y) { if (y) go(); });
+    };
     function save() {
       saveB.disabled = true; status.textContent = 'Saving…';
       var data = { config: D.cfg, creds: D.creds, shared: sharedOut(D) };
@@ -3776,8 +3813,8 @@
     D.render = render;
     /* a search result: its page, its folded panel opened, then scrolled to and marked */
     function goTo(x) {
-      D.tab = x.tab; paintTabs(); render();
-      var els = bodyEl.querySelectorAll('.set>h3,.fld>label,.switch,.oi b,.oi .t,.oi span');
+      D.tab = x.tab; D.sub = null; paintTabs(); render();
+      var els = bodyEl.querySelectorAll('.set h3,.fld>label,.switch,.oi b,.oi .t,.oi span');
       var el = [].filter.call(els, function (e) { return setText(e) === x.label; })[0]; if (!el) return;
       for (var p = el.parentNode; p && p !== bodyEl; p = p.parentNode) if (p.hidden && p.previousElementSibling) {
         var b = p.previousElementSibling.querySelector('.sec-opt'); if (b) b.click();
@@ -3790,11 +3827,13 @@
     D.go = goTo;
     D.pages = function () {
       // every page drawn off screen, so the search knows exactly what Settings holds
-      var out = [], noop = function () {};
-      SET_NAV.forEach(function (g) { g[1].forEach(function (id) { var t = h('div'); SET_PAGES[id][2](t, D, noop); out.push({ tab: id, el: t }); }); });
-      render();
+      var out = [], noop = function () {}, sub = D.sub;
+      D.sub = null;
+      SET_NAV.forEach(function (g) { g[1].forEach(function (id) { if (id === 'home') return; var t = h('div'); SET_PAGES[id][2](t, D, noop); out.push({ tab: id, el: t }); }); });
+      D.sub = sub;
       return out;
     };
+    D.paintTabs = paintTabs;
     paintTabs(); render();
     api('settings').then(function (j) {
       if (j.error) { status.textContent = j.error; return; }
@@ -3810,8 +3849,8 @@
     var c = e.cloneNode(true); [].forEach.call(c.querySelectorAll('input,select,textarea,button,svg'), function (x) { x.remove(); });
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
-  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets setup wizard preset first time', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'dashboard name': 'title header brand rename server', 'dashboard icon': 'logo brand header picture', 'versions in the header': 'chips version unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
-    wallpaper: 'background image picture blur link path upload', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
+  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', presets: 'layout template import export share save wizard setup first time', 'quick settings': 'home start status', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'dashboard name': 'title header brand rename server', 'dashboard icon': 'logo brand header picture', 'versions in the header': 'chips version unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
+    wallpaper: 'background image picture blur link path upload', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backups': 'export import restore download', 'disk and ups': 'battery power watts path', 'name and icon': 'title brand logo',
     'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
   var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Background', 'Animations', 'Dashboard password'];
   function settingsIndex(D) {
@@ -3884,6 +3923,14 @@
     inp.addEventListener('blur', function () { setTimeout(hide, 120); });
     return h('div', { class: 'ssb' }, ic('search'), inp, list);
   }
+  /* a file on this computer: read here, written here. Themes and presets travel this way; nothing goes to the server until Save */
+  function fileName(n) { return (n || 'theme').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'theme'; }
+  function getFile(accept, done, max) {
+    var f = h('input', { type: 'file', accept: accept, style: { display: 'none' } });
+    f.onchange = function () { var x = f.files[0]; if (!x) return; if (x.size > (max || 400000)) { toast('That file is too big.', true); return; } var r = new FileReader(); r.onload = function () { done(String(r.result), x.name); }; r.readAsText(x); };
+    root.appendChild(f); f.click(); setTimeout(function () { f.remove(); }, 60000);
+  }
+  function saveFile(name, text, type) { var l = h('a', { href: URL.createObjectURL(new Blob([text], { type: type })), download: name }); root.appendChild(l); l.click(); l.remove(); }
   /* a picture chosen for the wallpaper: read in this browser, scaled down when it is large, then sent to the server as it is */
   function uploadWall(file, status, done) {
     if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { toast('Choose a JPEG, PNG or WebP picture.', true); return; }
@@ -3963,17 +4010,65 @@
   }
   /* Settings pages: [title, icon, builder, the part of the configuration a "Restore defaults" button puts back (optional)] */
   var SET_PAGES = {
+    home: ['Quick settings', 'gear', tabHome],
     dashboard: ['Apps & cards', 'grid', tabDashboard],
-    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Accent colour', 'Background', 'Layout & size', 'Card style']), 'appearance'],
+    presets: ['Presets', 'list', tabPresets],
+    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Accent colour', 'Background', 'Card style', 'Size and density', 'Details', 'Margins']), 'appearance'],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['General', 'clock', tabSystem, 'general'],
-    ignored: ['Alerts', 'mute', tabIgnored],
-    guest: ['Guest link', 'eye', tabGuest],
-    config: ['Server connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }],
-    backup: ['Backup & restore', 'download', configCommon],
-    about: ['About', 'info', tabAbout]
+    ignored: ['Alerts', 'mute', tabIgnored, null, true],
+    guest: ['Guest link', 'eye', tabGuest, null, true],
+    config: ['Server connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }, null, true],
+    backup: ['Backup & restore', 'download', configCommon, null, true],
+    about: ['About', 'info', tabAbout, null, true]
   };
-  var SET_NAV = [['Dashboard', ['dashboard', 'appearance']], ['Preferences', ['system', 'ignored']], ['Server', ['config', 'guest', 'backup']], ['Advanced', ['css', 'about']]];
+  var SET_NAV = [['', ['home']], ['Dashboard', ['dashboard', 'presets', 'appearance']], ['Preferences', ['system', 'ignored']], ['Server', ['config', 'guest', 'backup']], ['Advanced', ['css', 'about']]];
+  /* the mode and the colour theme, side by side: the same control in Quick settings and the setup wizard. mine = your own themes too */
+  function lookPick(a, changed, mine) {
+    var seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Light or dark' }), grid = h('div', { class: 'wz-ts', role: 'radiogroup', 'aria-label': 'Theme' });
+    var paint = function () {
+      syncThemes(a); clear(seg); clear(grid);
+      [['light', 'Light', 'sun'], ['dark', 'Dark', 'moon'], ['system', 'System', 'screen']].forEach(function (x) { seg.appendChild(h('button', { type: 'button', role: 'radio', class: a.mode === x[0] ? 'on' : '', 'aria-checked': a.mode === x[0] ? 'true' : 'false', onclick: function () { a.mode = x[0]; changed(); paint(); } }, ic(x[2]), x[1])); });
+      Object.keys(THEMES).filter(function (id) { return mine || !THEMES[id].custom; }).forEach(function (id) {
+        var t = THEMES[id], p = t[lookMode({ theme: id, mode: a.mode })] || t.dark, on = a.theme === id;
+        grid.appendChild(h('button', { type: 'button', role: 'radio', class: 'wz-th' + (on ? ' on' : ''), 'aria-checked': on ? 'true' : 'false', onclick: function () {
+          a.theme = id; if (a.accent_mode === 'custom') { a.accent_mode = 'theme'; a.accent = ''; } if (t.custom) Object.assign(a, t.custom.look); changed(); paint(); } }, h('i', { style: { background: p.accent } }), themeName(t, lookMode({ theme: id, mode: a.mode }))));
+      });
+    };
+    paint();
+    return { seg: seg, grid: grid };
+  }
+  /* The first page of Settings: what most people came for, then how the server is doing. Everything here also has its own page */
+  function tabHome(b, D, dirty) {
+    var c = D.cfg, a = c.appearance, bt = S.boot, api2 = bt.caps.mode === 'api', sv = bt.server || {}, me = S.self || {};
+    var look = function () { dirty(); applyLook(a); applyCss(a.css_enabled ? D.css : ''); };
+    var to = function (tab) { return function () { D.tab = tab; D.sub = null; D.paintTabs(); D.render(); }; };
+    var row = function (icon, title, sub, go, warn) {
+      var el = h('span', { class: 'xs ell ' + (warn ? 't-bad' : 'muted') }, sub);
+      return { el: h('div', { class: 'oi nr' }, h('button', { type: 'button', class: 'crow', onclick: go }, h('span', { class: 'cri' }, ic(icon)), h('span', { class: 'crt' }, h('b', null, title), el), ic('chev'))), sub: el };
+    };
+    var L = lookPick(a, look, true);
+    var dens = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Density' });
+    var paintDens = function () { clear(dens); [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']].forEach(function (x) { dens.appendChild(h('button', { type: 'button', role: 'radio', class: a.density === x[0] ? 'on' : '', 'aria-checked': a.density === x[0] ? 'true' : 'false', onclick: function () { a.density = x[0]; dirty(); applyLook(a); paintDens(); } }, x[1])); }); };
+    paintDens();
+    if (api2 && bt.auth === 'open') b.appendChild(h('div', { class: 'banner warn' }, 'No password is set: anyone who can open this address can control your server. ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); to('config')(); } }, 'Set one')));
+    b.appendChild(set('Look', null, F('Mode', L.seg), L.grid, F('Density', dens),
+      h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!a.translucent, onchange: function (e) { a.translucent = e.target.checked; dirty(); applyLook(a); } }), 'See-through glass cards')));
+    b.appendChild(h('section', { class: 'set' }, h('h3', null, 'Dashboard'), h('div', { class: 'cardl' }, h('div', { class: 'olist' },
+      row('edit', 'Edit dashboard', 'Move, resize, add and rename cards', function () { D.leave(boardEdit); }).el,
+      row('list', 'Presets', (c.presets || []).length ? 'Ready-made layouts and ' + c.presets.length + ' of your own' : 'Ready-made layouts, or save your own', to('presets')).el,
+      row('grid', 'Apps & cards', 'Add apps and choose what each card shows', to('dashboard')).el,
+      row('check', 'Setup wizard', 'Answer a few questions to set it all up again', function () { D.leave(function () { if (!S.drawer) wizardStart(true); }); }).el)),
+      h('div', { class: 'grid2' }, F('Refresh every (seconds)', tIn(c.general, 'refresh', dirty, '2', 'number', { min: 1, max: 300 })), F('Dashboard name', tIn(c.general, 'title', dirty, String(sv.name || 'Your server').toUpperCase())))));
+    var conn = row('server', 'Connection', api2 ? (bt.api && bt.api.configured ? 'Connected to ' + (sv.name || 'your server') + (sv.os ? ' · Unraid ' + sv.os : '') : 'Not connected yet') : 'Running as a plugin on ' + (sv.name || 'your server'), to('config'), api2 && !(bt.api && bt.api.configured));
+    var pass = api2 ? row('eye', 'Dashboard password', bt.auth === 'env' ? 'Set in the container settings' : bt.auth === 'file' ? 'On' : 'Off', to('config'), bt.auth === 'open') : null;
+    var alerts = row('bell', 'Phone alerts', 'Checking…', to('ignored')), guest = row('web', 'Guest link', 'Checking…', to('guest')), back = row('download', 'Backups', 'Checking…', to('backup'));
+    var ver = row('info', 'UnDash ' + bt.version, me.newer ? me.latest + ' is available' : 'About, diagnostics and shortcuts', to('about'));
+    b.appendChild(h('section', { class: 'set' }, h('h3', null, 'Your server'), h('div', { class: 'cardl' }, h('div', { class: 'olist' }, conn.el, pass ? pass.el : null, alerts.el, guest.el, back.el, ver.el))));
+    api('notify_get').then(function (j) { var on = (j.channels || []).filter(function (x) { return x.on; }); txt(alerts.sub, j.error ? 'Could not be read' : on.length ? 'On: ' + on.map(function (x) { return x.name; }).join(', ') : 'Not set up'); });
+    api('guest_get').then(function (j) { txt(guest.sub, j.error ? 'Could not be read' : j.on ? 'On' : 'Off'); });
+    api('backups').then(function (j) { var l = j.backups || []; txt(back.sub, j.error ? 'Could not be read' : l.length ? 'Last one ' + new Date(l[0].created * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'None yet'); });
+  }
   /* the guest link is saved as you go, like the alert channels: it has nothing to do with the settings you can preview */
   function tabGuest(b) {
     var box = h('div', null, h('div', { class: 'progress' }, h('i')));
@@ -4162,8 +4257,7 @@
     b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Apps'), h('span', { class: 'grow' }), btn('Add app', function () { addApp(D, null, null, function () { ed.draw(); }, dirty); }, 'pri sm', 'plus')),
       h('div', { class: 'ae-bar' }, find, chips), ed.grid(), foundSet));
     b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Cards'), h('span', { class: 'grow' }),
-      btn('Setup wizard', function () { D.close(); setTimeout(function () { if (!S.drawer) wizardStart(true); }, 60); }, 'sm', 'list', 'Answer a few questions to set up apps, layout and look again'),
-      btn('Edit dashboard', function () { D.close(); setTimeout(function () { if (!S.drawer) boardEdit(); }, 60); }, 'sm', 'edit', 'Move, resize, add and rename cards on the dashboard itself')),
+      btn('Edit dashboard', function () { D.leave(boardEdit); }, 'sm', 'edit', 'Move, resize, add and rename cards on the dashboard itself')),
       h('p', { class: 'hint' }, 'Turn on what you want on your dashboard. Open a card to choose what it shows.'),
       h('div', { class: 'cardl' }, orderList(list, function (s) {
         var n = apps(s.id);
@@ -4226,7 +4320,7 @@
         list.appendChild(row);
       });
       if (!list.childNodes.length) list.appendChild(h('div', { class: 'empty' }, items.length ? 'Nothing matches.'
-        : ((dk ? y.docker : y.vms) || {}).error || ('No ' + what + ' found yet.' + (S.boot.caps.mode === 'api' ? ' They are listed here once the Unraid API is connected (Server > Connection).' : ''))));
+        : ((dk ? y.docker : y.vms) || {}).error || ('No ' + what + ' found yet.' + (S.boot.caps.mode === 'api' ? ' They are listed here once the Unraid API is connected (Settings > Server connection).' : ''))));
     }
     draw();
     return h('div', null,
@@ -4248,17 +4342,9 @@
   }
   function tabSystem(b, D, dirty) {
     var g = D.cfg.general;
-    b.appendChild(set('Live refresh', 'How often system metrics, containers and VMs update without reloading. Each refresh is one light request; heavier details are cached on the server.', h('div', { class: 'grid2' },
-      F('Refresh every (seconds)', tIn(g, 'refresh', dirty, '2', 'number', { min: 1, max: 300 }), 'Default 2. You can pause it from the dashboard.'),
-      F('When the browser tab is in the background', sIn(g, 'background_poll', dirty, [['slow', 'Slow down (every 30 s)'], ['pause', 'Pause'], ['normal', 'Keep the same speed']])),
-      F('App widgets refresh every (seconds)', tIn(g, 'refresh_services', dirty, '15', 'number', { min: 5, max: 3600 }), 'Radarr, Plex and the other app widgets.'),
-      F('Check for Unraid updates every (hours)', tIn(g, 'os_check_hours', dirty, '6', 'number', { min: 1, max: 168 })))));
-    b.appendChild(set('Display', null, h('div', { class: 'grid2' },
+    b.appendChild(set('Name and icon', null, h('div', { class: 'grid2' },
       F('Dashboard name', tIn(g, 'title', dirty, String((S.boot.server || {}).name || 'Your server').toUpperCase()), 'Shown in the header and the browser tab. Leave it empty to use your server\'s name.'),
-      brandIconField(g, dirty),
-      F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
-      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'),
-      F('UPS rated power (W)', tIn(g, 'ups_watts', dirty, 'from the UPS', 'number', { min: 0, max: 20000 }), 'For the power draw on the UPS tile (load × rated power). Leave it at 0 to use what the UPS reports (apcupsd NOMPOWER, NUT, the Unraid API); fill it in when your UPS only reports its load. The UPS label or manual gives it in watts, not VA.'))));
+      brandIconField(g, dirty))));
     if (!Array.isArray(g.search_in)) g.search_in = [];
     var src = function (k, lab, hint) {
       return h('label', { class: 'switch t' }, h('input', { type: 'checkbox', checked: g.search_in.indexOf(k) >= 0, onchange: function (e) {
@@ -4272,6 +4358,15 @@
         h('div', { class: 'oi' }, src('web', 'Web search', 'one line to search the web with the engine below'),
           sIn(g, 'search', dirty, [['duckduckgo', 'DuckDuckGo'], ['google', 'Google'], ['bing', 'Bing'], ['startpage', 'Startpage'], ['brave', 'Brave Search']])),
         h('div', { class: 'oi' }, src('seerr', 'Movies and series', seerr ? 'found in ' + seerr.name + ', with a Request button' : 'needs Overseerr or Jellyseerr in your apps')))));
+    b.appendChild(set('Live refresh', 'How often system metrics, containers and VMs update without reloading. Each refresh is one light request; heavier details are cached on the server.', h('div', { class: 'grid2' },
+      F('Refresh every (seconds)', tIn(g, 'refresh', dirty, '2', 'number', { min: 1, max: 300 }), 'Default 2. You can pause it from the dashboard.'),
+      F('When the browser tab is in the background', sIn(g, 'background_poll', dirty, [['slow', 'Slow down (every 30 s)'], ['pause', 'Pause'], ['normal', 'Keep the same speed']])),
+      F('App widgets refresh every (seconds)', tIn(g, 'refresh_services', dirty, '15', 'number', { min: 5, max: 3600 }), 'Radarr, Plex and the other app widgets.'),
+      F('Check for Unraid updates every (hours)', tIn(g, 'os_check_hours', dirty, '6', 'number', { min: 1, max: 168 })))));
+    b.appendChild(set('Disk and UPS', 'For the tiles that read these from your server.', h('div', { class: 'grid2' },
+      F('Path for the Disk metric', tIn(g, 'disk_path', dirty, '/mnt/user'), 'Any path under /mnt, e.g. /mnt/user, /mnt/cache or /mnt/disk3.'),
+      F('UPS name (NUT)', tIn(g, 'ups_name', dirty, 'ups'), 'NUT is tried first, then apcupsd. In the Docker version a NUT UPS is read from the server (port 3493); use NAME@HOST for another NUT server.'),
+      F('UPS rated power (W)', tIn(g, 'ups_watts', dirty, 'from the UPS', 'number', { min: 0, max: 20000 }), 'For the power draw on the UPS tile (load × rated power). Leave it at 0 to use what the UPS reports (apcupsd NOMPOWER, NUT, the Unraid API); fill it in when your UPS only reports its load. The UPS label or manual gives it in watts, not VA.'))));
   }
 
   /* Push alerts: changes apply at once, like the ignored alerts below. Secrets stay on the server: the page only learns what is set */
@@ -4382,13 +4477,6 @@
         h('span', { class: 'tn' }, h('b', null, themeName(t, lookMode({ theme: id, mode: a.mode }))), t.custom ? h('span', { class: 'muted xs' }, 'yours') : t.light ? null : h('span', { class: 'muted xs' }, 'dark only'))));
     });
     function chosen() { var t = THEMES[a.theme] || THEMES.default; return t.custom ? t : null; }
-    function fileName(n) { return (n || 'theme').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'theme'; }
-    function getFile(accept, done) {
-      var f = h('input', { type: 'file', accept: accept, style: { display: 'none' } });
-      f.onchange = function () { var x = f.files[0]; if (!x) return; if (x.size > 400000) { toast('That file is too big.', true); return; } var r = new FileReader(); r.onload = function () { done(String(r.result), x.name); }; r.readAsText(x); };
-      root.appendChild(f); f.click(); setTimeout(function () { f.remove(); }, 60000);
-    }
-    function saveFile(name, text, type) { var l = h('a', { href: URL.createObjectURL(new Blob([text], { type: type })), download: name }); root.appendChild(l); l.click(); l.remove(); }
     function lookNow() { var o = { translucent: !!a.translucent, gradient: a.gradient !== false }; ['radius', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity'].forEach(function (k) { o[k] = a[k]; }); return o; }
     function exportTheme() {
       var c = chosen(), m = lookMode(a), p = (THEMES[a.theme] || THEMES.default)[m], base = applyBase(p, m, a);
@@ -4415,11 +4503,12 @@
         return F(x[1], h('input', { type: 'color', value: t.colors[x[0]], 'aria-label': x[1], oninput: function (e) { t.colors[x[0]] = e.target.value; live(); } }));
       });
       var css = h('textarea', { rows: 7, spellcheck: 'false', 'aria-label': 'Theme CSS', placeholder: '/* Optional: CSS that comes with this theme */' }); css.value = t.css || '';
-      var back = function () { a.custom_themes = keep.list; a.theme = keep.theme; syncThemes(a); applyLook(a); };
+      var kept = false, back = function () { a.custom_themes = keep.list; a.theme = keep.theme; syncThemes(a); applyLook(a); };
       m = modal(nw ? 'New theme' : 'Edit theme', h('div', null, F('Name', tIn(t, 'name', function () {}, 'My theme')),
         F('Type', sIn(t, 'mode', live, [['dark', 'Dark'], ['light', 'Light']])), h('div', { class: 'tcols' }, rows), F('CSS', css, 'Saved with the theme and exported with it. Your own Custom CSS still applies on top.')),
-        [t0 ? btn('Delete', function () { m.close(); a.custom_themes = keep.list.filter(function (x) { return x.id !== t.id; }); a.theme = keep.theme === t.id ? 'default' : keep.theme; syncThemes(a); dirty(); preview(); D.render(); }, 'danger') : null,
-         btn('Cancel', function () { m.close(); back(); }), btn(nw ? 'Create' : 'Save', function () { m.close(); t.css = css.value; t.name = (t.name || '').trim() || 'My theme'; a.custom_themes = keep.list; addTheme(t); }, 'pri')].filter(Boolean));
+        [t0 ? btn('Delete', function () { kept = true; m.close(); a.custom_themes = keep.list.filter(function (x) { return x.id !== t.id; }); a.theme = keep.theme === t.id ? 'default' : keep.theme; syncThemes(a); dirty(); preview(); D.render(); }, 'danger') : null,
+         btn('Cancel', function () { m.close(); }), btn(nw ? 'Create' : 'Save', function () { kept = true; m.close(); t.css = css.value; t.name = (t.name || '').trim() || 'My theme'; a.custom_themes = keep.list; addTheme(t); }, 'pri')].filter(Boolean));
+      m.onclose = function () { if (!kept) back(); };
       live();
     }
     b.appendChild(set('Theme', 'Pick a colour theme and whether it is light, dark or follows your system; every theme has both. Status colours (green, amber, red) stay readable in every theme.',
@@ -4476,20 +4565,22 @@
       return F(lab, h('div', { class: 'inl' }, h('label', { class: 'switch', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: auto, onchange: function (e) {
         a[k] = e.target.checked ? -1 : +r.value; r.disabled = e.target.checked; txt(out, e.target.checked ? 'smart' : a[k] + ' px'); dirty(); preview(); } }), 'Smart'), r, out));
     };
-    b.appendChild(set('Layout & size', 'How dense the dashboard is, and the safe margin around it (the same in every theme). Auto adapts to the screen.', h('div', { class: 'grid2' },
-      F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
-      F('Animations', sIn(a, 'motion', dirty, [['full', 'Full'], ['fast', 'Fast'], ['nointro', 'Skip the opening'], ['off', 'Off']], preview), 'Skip the opening keeps the small transitions and shows the dashboard at once. Pressing anything also skips it.'),
-      F('Corner radius', rng('radius', 0, 28, ' px', 'Corner radius'), 'How round the cards are on the card board, from square to 28 px.'),
+    b.appendChild(set('Size and density', 'How big everything is and how tightly it sits. Auto adapts to the screen.', h('div', { class: 'grid2' },
       zoomField(),
       F('Text size', sIn(a, 'text_size', dirty, [['s', 'Small'], ['m', 'Normal'], ['l', 'Large']], function () { boardScale(a); }), 'Fine-tunes the text on top of the zoom level.'),
-      F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'),
+      F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
+      F('Corner radius', rng('radius', 0, 28, ' px', 'Corner radius'), 'How round the cards are on the card board, from square to 28 px.'))));
+    b.appendChild(set('Details', 'The small things around the cards.', h('div', { class: 'grid2' },
+      F('Animations', sIn(a, 'motion', dirty, [['full', 'Full'], ['fast', 'Fast'], ['nointro', 'Skip the opening'], ['off', 'Off']], preview), 'Skip the opening keeps the small transitions and shows the dashboard at once. Pressing anything also skips it.'),
       F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
         'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
       F('Versions in the header', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.header_chips !== false, onchange: function (e) { a.header_chips = e.target.checked; dirty(); preview(); } }), 'Unraid and UnDash versions'), 'Off hides them. An update notice still shows when there is one.'),
       F('Icon boxes', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.icon_box !== false, onchange: function (e) { a.icon_box = e.target.checked; dirty(); preview(); } }), 'Logos in rounded boxes'), 'Off shows the logos on their own.'),
       F('Container and VM icons', sIn(a, 'icon_mode', function () { dirty(); }, [['color', 'selfh.st, in colour'], ['auto', 'selfh.st, light or dark to suit the theme'], ['light', 'selfh.st, light'], ['dark', 'selfh.st, dark'], ['off', 'Unraid\'s own icons']], preview),
-        'Found by the container\'s name or image (binhex-, linuxserver and similar prefixes are ignored). When selfh.st has none, Unraid\'s icon is used. An icon picked for a container in Sections & apps always wins.'),
-      margin('safe_x', 'Side margin'), margin('safe_y', 'Top margin'))));
+        'Found by the container\'s name or image (binhex-, linuxserver and similar prefixes are ignored). When selfh.st has none, Unraid\'s icon is used. An icon picked for a container in Apps & cards always wins.'))));
+    b.appendChild(set('Margins', 'The safe margin around the dashboard, the same in every theme. Smart adapts to the screen.', h('div', { class: 'grid2' },
+      margin('safe_x', 'Side margin'), margin('safe_y', 'Top margin'),
+      F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'))));
     var pd = function () { dirty(); preview(); };
     function rng(k, lo, hi, unit, lab) {
       var out = h('span', { class: 'num muted sm', style: { 'min-width': '44px', 'text-align': 'right' } }, a[k] + unit);
@@ -5182,14 +5273,15 @@
     return h('div', { class: 'seg wz-v', role: 'group', 'aria-label': 'Style' }, SET_PRESETS[part].map(function (p, n) { return h('button', { type: 'button', class: on(p, n) ? 'on' : '', 'aria-pressed': on(p, n) ? 'true' : 'false', onclick: function () { pick(p, n); } }, p.t); }));
   }
   function presetTiles(c) {
-    var on = PRESET_TILES.concat(['cores', 'swap']).filter(function (t) { return !c || c.dashboard.metrics.some(function (m) { return m.id === t && m.visible; }); }), w = Math.max(3, Math.floor(24 / (on.length || 1)));
-    return on.map(function (t, n) { return ['m:' + t, n * w, 0, w, 7]; });
+    var on = PRESET_TILES.concat(['cores', 'swap']).filter(function (t) { return !c || c.dashboard.metrics.some(function (m) { return m.id === t && m.visible; }); }), w = Math.max(3, Math.floor(24 / (on.length || 1))), per = Math.floor(24 / w);
+    return on.map(function (t, n) { return ['m:' + t, n % per * w, Math.floor(n / per) * 7, w, 7]; });
   }
   /* the rows of a preset as a saved layout, with apps as their real ids; what the list leaves out finds its own spot */
   function presetRows(id, groups, off, c) {
     var byType = {}, out = [];
     groups.forEach(function (g) { g.services.forEach(function (x) { if (!byType[x.type] && !g.section) byType[x.type] = x.id; }); });
-    presetTiles(c).concat(PRESETS[id][3]).forEach(function (r) {
+    var tiles = presetTiles(c), under = tiles.length ? tiles[tiles.length - 1][2] : 0;       // a second row of tiles moves the rest down
+    tiles.concat(PRESETS[id][3].map(function (r) { return [r[0], r[1], r[2] + under, r[3], r[4]]; })).forEach(function (r) {
       var card = r[0], t = card.indexOf('app:') === 0 ? card.slice(4) : '';
       if (t) { if (!byType[t]) return; card = 'app:' + byType[t]; }
       if (off && off[card]) return;
@@ -5220,6 +5312,7 @@
             boardDirty(); draw();
           }));
       })));
+      body.appendChild(h('p', { class: 'hint', style: { 'margin-top': '10px' } }, 'To save this dashboard as a preset of your own, or import one, go to Settings > Presets.'));
     };
     draw();
     m = modal('Presets', body, [btn('Done', function () { m.close(); }, 'pri')], true);
@@ -5253,7 +5346,161 @@
     return rows;
   }
 
-  /* ---- Setup wizard: first start, or Settings > Apps & cards. One question at a time, and nothing is saved before Finish, except
+  /* ---- Presets of your own: Settings > Presets. A preset is how the dashboard is laid out and viewed, and its look when you keep that.
+     It never holds an app, an address or a key, so a file of one is safe to share. ---- */
+  var PRESET_LOOK = ['theme', 'mode', 'accent', 'accent_mode', 'density', 'text_size', 'radius', 'translucent', 'gradient', 'icon_box', 'header_chips', 'zoom', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity', 'motion', 'blur', 'blur_target', 'brightness', 'safe_x', 'safe_y', 'sec_names', 'icon_mode'];
+  var PRESET_MAX = 20;
+  function keysOf(o, ks) { var r = {}; ks.forEach(function (k) { r[k] = o[k]; }); return r; }
+  function presetTake(c, name, desc, look) {
+    return JSON.parse(JSON.stringify(Object.assign({ id: rid(), name: name, desc: desc, at: Math.floor(Date.now() / 1000), board: keysOf(c.dashboard.board, ['on', 'compact', 'home', 'pages', 'lg', 'md', 'hidden']),
+      sections: c.dashboard.sections.map(function (s) { return keysOf(s, ['id', 'visible', 'width', 'title']); }), metrics: c.dashboard.metrics, media: keysOf(c.media, ['style', 'days_ahead', 'widgets']), requests: c.requests, downloads: c.downloads, apps: c.apps,
+      docker: keysOf(c.docker, ['layout', 'view', 'filter', 'columns', 'sort', 'show', 'hide_stopped']), vms: keysOf(c.vms, ['layout', 'show']) }, look ? { look: keysOf(c.appearance, PRESET_LOOK) } : {})));
+  }
+  /* every card id in a preset through fn; null drops the card */
+  function presetMap(p, fn) {
+    var P = JSON.parse(JSON.stringify(p)), rows = function (l) { return (l || []).map(function (r) { var i = fn(r.i); return i ? Object.assign(r, { i: i }) : null; }).filter(Boolean); };
+    var ids = function (l) { return (l || []).map(fn).filter(Boolean); }, b = P.board;
+    b.lg = rows(b.lg); b.md = rows(b.md); b.hidden = ids(b.hidden);
+    b.pages = (b.pages || []).map(function (g) { g.cards = ids(g.cards); g.lg = rows(g.lg); g.md = rows(g.md); return g; });
+    return P;
+  }
+  /* Apps have ids of their own on each server, so a file names them by type and place ("the first Emby") and groups by name */
+  function presetNames(c) {
+    var fwd = {}, back = {}, seen = {};
+    c.groups.forEach(function (g) {
+      if (g.section) { fwd['grp:' + g.id] = 'grp:@' + g.name; back['grp:@' + g.name] = 'grp:' + g.id; }
+      g.services.forEach(function (x) { var n = seen[x.type] = (seen[x.type] || 0) + 1, name = 'app:@' + x.type + '.' + n; fwd['app:' + x.id] = name; back[name] = 'app:' + x.id; });
+    });
+    return { fwd: fwd, back: back };
+  }
+  function presetFile(c, p) {
+    var N = presetNames(c).fwd, P = presetMap(p, function (i) { return /^(app|grp):/.test(i) ? N[i] || null : i; });
+    delete P.id; delete P.at;
+    return P;
+  }
+  /* a preset from a file, with its cards turned back into this server's; drop counts what has no match here */
+  function presetRead(c, p) {
+    var B = presetNames(c).back, drop = { n: 0 };
+    var P = presetMap(p, function (i) { if (!/^(app|grp):/.test(i)) return i; if (B[i]) return B[i]; drop.n++; return null; });
+    P.id = rid(); P.at = Math.floor(Date.now() / 1000); P.name = String(P.name || 'Imported preset').slice(0, 40); P.desc = String(P.desc || '').slice(0, 120);
+    return { p: P, drop: drop.n };
+  }
+  function presetValid(p) { return !!p && typeof p === 'object' && !!p.board && typeof p.board === 'object' && Array.isArray(p.sections) && Array.isArray(p.metrics); }
+  /* a saved preset onto the settings being edited. An app removed since simply has no card; one added since finds its own spot */
+  function presetUse(c, p) {
+    var apps = {}, grps = {};
+    c.groups.forEach(function (g) { grps['grp:' + g.id] = 1; g.services.forEach(function (x) { apps['app:' + x.id] = 1; }); });
+    var P = presetMap(p, function (i) { return /^app:/.test(i) ? (apps[i] ? i : null) : /^grp:/.test(i) ? (grps[i] ? i : null) : i; }), b = c.dashboard.board;
+    Object.assign(b, keysOf(P.board, ['on', 'compact', 'home', 'pages', 'lg', 'md', 'hidden']));
+    var merge = function (cur, list) {
+      var was = {}, seen = {}; cur.forEach(function (x) { was[x.id] = x; });
+      return list.filter(function (x) { return was[x.id]; }).map(function (x) { seen[x.id] = 1; return Object.assign({}, was[x.id], x); }).concat(cur.filter(function (x) { return !seen[x.id]; }));
+    };
+    c.dashboard.sections = merge(c.dashboard.sections, P.sections); c.dashboard.metrics = merge(c.dashboard.metrics, P.metrics);
+    ['media', 'requests', 'downloads', 'apps', 'docker', 'vms'].forEach(function (k) { if (P[k]) Object.assign(c[k], P[k]); });
+    if (P.look) { var th = c.appearance.theme; Object.assign(c.appearance, P.look); syncThemes(c.appearance); if (!THEMES[c.appearance.theme]) c.appearance.theme = th; }
+  }
+  function presetName(list, name) { var n = name, k = 2; while (list.some(function (x) { return x.name === n; })) n = name.slice(0, 36) + ' ' + k++; return n; }
+  function presetCount(p) { var b = p.board, n = (b.lg || []).length; (b.pages || []).forEach(function (g) { n += g.cards.length; }); return n; }
+  function presetSub(p) {
+    var bits = [], n = presetCount(p), pg = (p.board.pages || []).length;
+    if (p.desc) bits.push(p.desc);
+    if (n) bits.push(n + (n === 1 ? ' card' : ' cards'));
+    if (pg) bits.push((pg + 1) + ' pages');
+    if (p.look) bits.push('with its look');
+    if (p.at) bits.push(new Date(p.at * 1000).toLocaleDateString([], { dateStyle: 'medium' }));
+    return bits.join(' · ');
+  }
+  /* the card of a set, on Home or the page that holds it */
+  function presetHome(c, part) {
+    var b = c.dashboard.board, all = [b].concat(b.pages || []);
+    for (var i = 0; i < all.length; i++) if ((all[i].lg || []).some(function (r) { return presetPart(r.i) === part; })) return all[i];
+    return null;
+  }
+  function tabPresets(b, D, dirty) {
+    var c = D.cfg, mine = c.presets || (c.presets = []), bd = c.dashboard.board, list = h('div'), sets = h('div');
+    var kept = function (msg) { dirty(); drawMine(); toast(msg + ' Press Save to keep it.'); };
+    var look = function () { syncThemes(c.appearance); applyLook(c.appearance); applyCss(c.appearance.css_enabled ? D.css : ''); };
+    function ask(p, nw) {
+      var v = { name: p ? p.name : '', desc: p ? p.desc : '', look: nw }, m;
+      var body = h('div', null, F('Name', tIn(v, 'name', function () {}, 'My dashboard', 'text', { maxlength: 40 })), F('Description', tIn(v, 'desc', function () {}, 'Optional', 'text', { maxlength: 120 })),
+        nw ? cIn(v, 'look', function () {}, 'Keep the look too: theme, colours, card style and sizes') : null, nw ? h('p', { class: 'hint' }, 'A preset saves the cards, pages and views you have now. It never holds an app, an address or a key.') : null);
+      var ok = function () {
+        var name = v.name.trim() || 'My preset';
+        if (nw) { mine.push(presetTake(c, presetName(mine, name), v.desc.trim(), v.look)); m.close(); kept('Preset added.'); return; }
+        p.name = presetName(mine.filter(function (x) { return x !== p; }), name); p.desc = v.desc.trim(); m.close(); kept('Preset changed.');
+      };
+      m = modal(nw ? 'Save this dashboard as a preset' : 'Edit preset', body, [nw ? null : btn('Delete', function () { mine.splice(mine.indexOf(p), 1); m.close(); kept('Preset deleted.'); }, 'danger'),
+        nw ? null : btn('Use the dashboard as it is now', function () {
+          var n = presetTake(c, p.name, p.desc, !!p.look); n.id = p.id; mine[mine.indexOf(p)] = n; m.close(); kept('Preset updated.');
+        }, '', 'restart', 'Replace what this preset holds with your cards as they are now'),
+        btn('Cancel', function () { m.close(); }), btn(nw ? 'Add preset' : 'Done', ok, 'pri')].filter(Boolean));
+    }
+    function use(p) {
+      confirmBox('Use "' + p.name + '"?', 'Your cards, pages and views' + (p.look ? ' and your look' : '') + ' change to this preset. Your apps and keys stay. Nothing is saved until you press Save, and Preview shows it first.', 'Use preset').then(function (y) {
+        if (!y) return;
+        presetUse(c, p); look(); dirty(); D.render(); toast(p.name + ' is ready. Press Preview to see it, or Save to keep it.');
+      });
+    }
+    function send(p) { saveFile(fileName(p.name) + '.undash-preset.json', JSON.stringify(Object.assign({ undash_preset: 1 }, presetFile(c, p)), null, 2), 'application/json'); }
+    function sendAll() { saveFile('undash-presets.json', JSON.stringify({ undash_presets: 1, presets: mine.map(function (p) { return presetFile(c, p); }) }, null, 2), 'application/json'); }
+    function take() {
+      getFile('.json,application/json', function (text) {
+        var j = null; try { j = JSON.parse(text); } catch (e) { /* reported below */ }
+        var got = !j ? null : j.undash_preset === 1 ? [j] : j.undash_presets === 1 && Array.isArray(j.presets) ? j.presets : null;
+        got = (got || []).filter(presetValid);
+        if (!got.length) { toast('That is not an UnDash preset file.', true); return; }
+        var added = 0, dropped = 0;
+        got.forEach(function (x) {
+          if (mine.length >= PRESET_MAX) return;
+          var r = presetRead(c, x); r.p.name = presetName(mine, r.p.name); mine.push(r.p); added++; dropped += r.drop;
+        });
+        if (!added) { toast('You have ' + PRESET_MAX + ' presets, the most UnDash keeps. Delete one first.', true); return; }
+        kept((added === 1 ? 'Preset imported' : added + ' presets imported') + (dropped ? ', without ' + dropped + (dropped === 1 ? ' card' : ' cards') + ' for apps you do not have' : '') + '.');
+      }, 3000000);
+    }
+    function drawMine() {
+      clear(list);
+      if (!mine.length) { list.appendChild(h('div', { class: 'empty' }, 'Nothing saved yet. Set up your dashboard the way you like it, then save it here to come back to it or share it.')); return; }
+      list.appendChild(h('div', { class: 'cardl' }, h('div', { class: 'olist' }, mine.map(function (p) {
+        return h('div', { class: 'oi nr wz-r' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic('grid')), h('span', { class: 'crt' }, h('b', null, p.name), h('span', { class: 'muted xs ell' }, presetSub(p)))),
+          h('span', { class: 'inl pr-a' }, btn('Use', function () { use(p); }, 'sm'), btn('', function () { send(p); }, 'sm ghost', 'download', 'Export ' + p.name), btn('', function () { ask(p, false); }, 'sm ghost', 'edit', 'Edit ' + p.name)));
+      }))));
+    }
+    b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'My presets'), h('span', { class: 'grow' }),
+      btn('Import', take, 'sm', 'up', 'Load a preset file'), mine.length ? btn('Export all', sendAll, 'sm', 'download', 'Save every preset in one file') : null,
+      btn('Save current', function () { if (mine.length >= PRESET_MAX) toast('You have ' + PRESET_MAX + ' presets, the most UnDash keeps. Delete one first.', true); else ask(null, true); }, 'pri sm', 'plus', 'Save this dashboard as a preset')),
+      h('p', { class: 'hint' }, 'Your own layouts, to come back to or share. Files hold no apps, addresses or keys: a card for an app you do not have is left out when you import.'), list));
+    drawMine();
+    b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Ready-made'), h('span', { class: 'grow' }),
+      btn('Setup wizard', function () { D.leave(function () { if (!S.drawer) wizardStart(true); }); }, 'sm', 'check', 'Answer a few questions to set up apps, layout and look again')),
+      h('p', { class: 'hint' }, 'A starting point for the whole dashboard. Pages go back to one, and your apps and keys stay.'),
+      h('div', { class: 'wz-ps' }, Object.keys(PRESETS).map(function (id) {
+        return h('button', { type: 'button', class: 'wz-p', onclick: function () {
+          confirmBox('Use "' + PRESETS[id][0] + '"?', 'Your cards and pages change to this layout. Your apps and keys stay. Nothing is saved until you press Save, and Preview shows it first.', 'Use preset').then(function (y) {
+            if (!y) return;
+            var parts = {}; PRESETS[id][2].forEach(function (p) { parts[p] = true; });
+            presetApply(c, D, { preset: id, parts: parts, vary: {}, pages: false }); dirty(); D.render(); toast(PRESETS[id][0] + ' is ready. Press Preview to see it, or Save to keep it.');
+          });
+        } }, h('b', null, PRESETS[id][0]), h('span', { class: 'muted xs' }, PRESETS[id][1]));
+      }))));
+    function drawSets() {
+      clear(sets);
+      sets.appendChild(h('div', { class: 'cardl' }, h('div', { class: 'olist' }, PRESET_PARTS.map(function (p) {
+        var own = presetHome(c, p[0]), off = SET_PRESETS[p[0]][0].size && !own;
+        return h('div', { class: 'oi nr wz-r' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(p[3])), h('span', { class: 'crt' }, h('b', null, p[1]), h('span', { class: 'muted xs ell' }, p[2]))),
+          off ? h('span', { class: 'muted xs' }, 'Not on the dashboard') : presetBar(p[0], function (x) { return x.is(c, bd.hidden, own && own.lg, 24); }, function (x) {
+            x.set(c, bd.hidden, own ? own.lg : null, 24);
+            if (own) { own.lg = own.lg.filter(function (r) { return bd.hidden.indexOf(r.i) < 0; }); if (bd.compact) gCompact(own.lg); own.md = []; }
+            dirty(); drawSets();
+          }));
+      }))));
+    }
+    drawSets();
+    b.appendChild(set('One set at a time', 'A different style for one part of the dashboard. The rest stays as it is.', sets));
+  }
+
+  /* ---- Setup wizard: first start, or Settings > Presets. One question at a time, and nothing is saved before Finish, except
      the Unraid connection and the password, which need to work before the next step can. ---- */
   function wizardStart(again) {
     if (GUEST || S.wiz) return;
@@ -5316,8 +5563,8 @@
       box.appendChild(list);
       var draw = function () {
         if (W.apps === null) W.apps = [];
-        var known = {}; W.apps.forEach(function (a) { known[a.f.url + a.f.t] = 1; });
-        foundApps(D).forEach(function (f) { if (!known[f.url + f.t]) W.apps.push({ f: f, on: false, id: rid(), cr: { key: '', username: '', password: '' } }); });
+        var known = {}; W.apps.forEach(function (a) { known[a.k] = 1; });
+        foundApps(D).forEach(function (f) { if (!known[f.url + f.t]) W.apps.push({ f: f, k: f.url + f.t, on: false, id: rid(), cr: { key: '', username: '', password: '' } }); });
         clear(list);
         var have = []; c.groups.forEach(function (g) { g.services.forEach(function (x) { if (x.type !== 'link') have.push(x); }); });
         if (!W.apps.length && !have.length) list.appendChild(h('div', { class: 'muted sm' }, 'Nothing found yet. You can add apps later from Edit dashboard > Add.'));
@@ -5340,19 +5587,11 @@
     }
     function stepLook() {
       head('Pick a look', 'It changes as you click. More colours and your own wallpaper are in Settings > Appearance.');
-      var a = c.appearance, seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Light or dark' }), grid = h('div', { class: 'wz-ts' });
-      var look = function () { applyLook(a); paint(); };
-      var paint = function () {
-        clear(seg); [['dark', 'Dark'], ['light', 'Light'], ['auto', 'Automatic']].forEach(function (x) { seg.appendChild(h('button', { type: 'button', class: a.mode === x[0] ? 'on' : '', 'aria-pressed': a.mode === x[0] ? 'true' : 'false', onclick: function () { a.mode = x[0]; look(); } }, x[1])); });
-        clear(grid); Object.keys(THEMES).filter(function (id) { return !THEMES[id].custom; }).forEach(function (id) {
-          var t = THEMES[id], p = t[lookMode(a)] || t.dark;
-          grid.appendChild(h('button', { type: 'button', class: 'wz-th' + (a.theme === id ? ' on' : ''), 'aria-pressed': a.theme === id ? 'true' : 'false', onclick: function () { a.theme = id; look(); } }, h('i', { style: { background: p.accent } }), themeName(t, lookMode(a))));
-        });
-      };
-      paint(); box.appendChild(F('Mode', seg)); box.appendChild(F('Theme', grid));
+      var a = c.appearance, L = lookPick(a, function () { applyLook(a); });
+      box.appendChild(F('Mode', L.seg)); box.appendChild(F('Theme', L.grid));
     }
     function stepDone() {
-      head('You are ready', 'Press Finish to save. Your settings are backed up first, and you can run this again from Settings > Apps & cards.');
+      head('You are ready', 'Press Finish to save. Your settings are backed up first, and you can run this again from Settings > Presets.');
       var n = W.apps ? W.apps.filter(function (a) { return a.on; }).length : 0;
       var row = function (i, t, sub) { return h('div', { class: 'oi nr' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(i)), h('span', { class: 'crt' }, h('b', null, t), h('span', { class: 'muted xs' }, sub)))); };
       box.appendChild(h('div', { class: 'olist wz-l' }, row('grid', W.preset ? PRESETS[W.preset][0] + ' layout' : 'Your layout stays', W.pages ? 'Split into pages' : 'One page'), row('plus', n ? n + (n === 1 ? ' new app' : ' new apps') : 'No new apps', 'Add more any time from Edit dashboard'),
@@ -5381,6 +5620,7 @@
       });
     }
     m = modal('Setup', h('div', { class: 'wz-w' }, box), [foot], true);
+    m.stay = true;        // a stray click must not throw the answers away
     m.onclose = function () { S.wiz = null; if (!W.saved) applyLook(); };
     draw();
   }
@@ -5529,6 +5769,10 @@
             confirmBox('Download your keys and passwords?', 'The file has every API key and password in plain text. Keep it somewhere private.', 'Download').then(function (y) { if (y) dl('env'); });
           }, '', 'download', 'Download .env')))));
     var info = h('div', { style: { 'margin-top': '10px' } });
+    var bbox = h('div', { class: 'olist' }, h('div', { class: 'empty' }, 'Loading…'));
+    b.insertBefore(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Backups'), h('span', { class: 'grow' }),
+      btn('Back up now', function () { api('backup_now').then(function (j) { if (j.error) { toast(j.error, true); return; } toast('Backed up'); paintBackups(j.backups || []); }); }, 'sm', 'download', 'Keep a copy of both settings files now')),
+      h('p', { class: 'hint' }, 'Taken by themselves every time you save settings, and before an import, restore or reset. The last 7 different versions are kept in data/backups of the configuration folder.'), bbox), b.lastChild);
     var file = h('input', { type: 'file', 'aria-label': 'Settings file to import', onchange: function () {
       var f = file.files[0]; clear(info); if (!f) return;
       if (f.size > 2097152) { info.appendChild(h('div', { class: 'banner bad' }, 'That file is larger than 2 MB, so it is not an UnDash settings file.')); return; }
@@ -5556,28 +5800,27 @@
       };
       rd.readAsText(f);
     } });
-    b.appendChild(set('Import', 'Choose a config.yaml or .env exported from UnDash (exports of older versions work too). You see what is in it before anything changes.', file, info));
-    hpImport(b, D);
+    b.appendChild(set('Import', 'Choose a config.yaml or .env exported from UnDash (exports of older versions work too). You see what is in it before anything changes. A password or guest link in a file is left out.', file, info));
     var vbox = h('div', { role: 'status' });
-    var bbox = h('div', { class: 'olist' }, h('div', { class: 'empty' }, 'Loading…'));
     b.appendChild(set('Check configuration', 'Looks for apps without an address, unknown {{NAMES}} and calendar sources that were removed.',
       btn('Check', function () {
         clear(vbox).appendChild(h('div', { class: 'progress' }, h('i')));
         api('validate').then(function (j) { clear(vbox); if (j.error) { vbox.appendChild(h('div', { class: 'banner bad' }, j.error)); return; } if (!j.issues.length) vbox.appendChild(h('div', { class: 'banner ok', style: { 'margin-top': '10px' } }, 'No problems found.')); j.issues.forEach(function (x) { vbox.appendChild(h('div', { class: 'banner ' + (x.level === 'bad' ? 'bad' : ''), style: { 'margin-top': '8px' } }, x.msg)); }); });
       }, '', 'check'), vbox));
-    b.appendChild(set('Backups', 'Every time you save settings, both files are backed up automatically (and before an import, restore or reset). The last 7 different versions are kept in data/backups of the configuration folder.', bbox,
-      h('div', { style: { 'margin-top': '10px' } }, btn('Restore all defaults…', function () {
-        confirmBox('Restore the default settings?', 'Every app, section and preference goes back to the defaults; the dashboard starts over. Your keys and passwords stay in .env, nothing on the server is touched, and a backup is taken first so you can come back to this list and restore it.', 'Restore defaults', true).then(function (y) { if (y) act('reset', { confirm: 'yes' }, 'Defaults restored').then(function (j) { if (!j.error) location.reload(); }); });
-      }, 'danger', 'trash'))));
-    api('backups').then(function (j) {
+    hpImport(b, D);
+    b.appendChild(set('Start over', 'Every app, section and preference goes back to the defaults.', btn('Restore all defaults…', function () {
+      confirmBox('Restore the default settings?', 'Every app, section and preference goes back to the defaults; the dashboard starts over. Your keys, passwords and saved presets stay, nothing on the server is touched, and a backup is taken first so you can come back to this list and restore it.', 'Restore defaults', true).then(function (y) { if (y) act('reset', { confirm: 'yes' }, 'Defaults restored').then(function (j) { if (!j.error) location.reload(); }); });
+    }, 'danger', 'trash')));
+    api('backups').then(function (j) { paintBackups(j.backups || []); });
+    function paintBackups(list) {
       clear(bbox);
-      if (!j.backups || !j.backups.length) { bbox.appendChild(h('div', { class: 'empty' }, 'No backups yet.')); return; }
-      j.backups.forEach(function (x) {
+      if (!list.length) { bbox.appendChild(h('div', { class: 'empty' }, 'No backups yet.')); return; }
+      list.forEach(function (x) {
         var when = new Date(x.created * 1000).toLocaleString();
         bbox.appendChild(h('div', { class: 'oi' }, h('span', { class: 't' }, h('b', null, when), h('span', { class: 'muted sm' }, ' · ' + (x.reason || ''))),
           btn('Restore', function () { confirmBox('Restore this backup?', 'config.yaml and .env go back to how they were on ' + when + '. The current state is backed up first.', 'Restore', true).then(function (y) { if (y) act('restore', { id: x.id }, 'Restored').then(function (k) { if (!k.error) location.reload(); }); }); }, 'sm', null, 'Restore the backup from ' + when)));
       });
-    });
+    }
   }
   /* the one place that talks about Homepage: its config files are converted into UnDash's own */
   function hpImport(b, D) {

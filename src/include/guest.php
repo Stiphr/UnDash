@@ -34,6 +34,9 @@ function und_guest_href($u) {
   return strpos($host, '.') === false || preg_match('/\.(local|lan|home|internal|intranet|localdomain|arpa|test)$/', $host) ? '' : $u;
 }
 
+/** A picture for a guest: an address must be public too, and a path on the server is of no use to them. */
+function und_guest_pic($u) { return preg_match('#^https?://#i', (string)$u) ? und_guest_href($u) : (strpos((string)$u, '/') === 0 ? '' : (string)$u); }
+
 /** The apps that can be offered: those with a card of their own in the Apps section. A shortcut needs somewhere a guest can go. */
 function und_guest_apps(array $cfg) {
   $out = [];
@@ -109,7 +112,9 @@ function und_guest_layout(array $cfg, array $p) {
   $on = array_keys(array_filter($p['sections']));
   $v = und_layout_view($cfg);
   $v['general'] = array_intersect_key($v['general'], array_flip(['title', 'logo', 'refresh', 'refresh_services', 'background_poll', 'show_date'])) + ['search' => '', 'search_in' => [], 'show_search' => false, 'os_check_hours' => 0, 'ups_name' => '', 'ups_watts' => 0, 'disk_path' => ''];
+  $v['general']['logo'] = und_guest_pic($v['general']['logo']);
   $v['appearance']['wall_path'] = $v['appearance']['wall_path'] !== '' ? 'set' : '';
+  $v['appearance']['background'] = und_guest_pic($v['appearance']['background']);
   foreach ($v['dashboard']['sections'] as &$s) $s['visible'] = !empty($s['visible']) && in_array($s['id'], $on, true);
   unset($s);
   foreach ($v['dashboard']['metrics'] as &$m) $m['visible'] = !empty($m['visible']) && in_array($m['id'], UND_GUEST_TILES, true);
@@ -123,6 +128,7 @@ function und_guest_layout(array $cfg, array $p) {
     foreach ($g['services'] as $s) {
       $href = und_guest_href($s['href_resolved']);
       if (!in_array('apps', $on, true) || $s['zone'] !== 'apps' || !empty($s['hidden']) || !in_array($s['id'], $p['apps'], true) || ($s['type'] === 'link' && $href === '')) continue;
+      $s['icon'] = und_guest_pic($s['icon']);
       $list[] = ['href_resolved' => $href] + array_intersect_key($s, array_flip(['id', 'name', 'type', 'icon', 'description', 'span', 'zone'])) + ['hidden' => false, 'favorite' => false, 'href' => '', 'url' => '', 'fields' => [], 'options' => new stdClass()];
     }
     if ($list) $groups[] = ['id' => $g['id'], 'name' => $g['name'], 'columns' => $g['columns'], 'header' => $g['header'], 'section' => $g['section'], 'services' => $list];

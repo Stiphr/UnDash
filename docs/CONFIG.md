@@ -36,11 +36,11 @@ groups:
 RADARR_API_KEY=0123456789abcdef
 ```
 
-Settings > Sections & apps writes both for you: type the key into the app's form and it is stored in `.env` under a name made
+Settings > Apps & cards writes both for you: type the key into the app's form and it is stored in `.env` under a name made
 from the app's name (`QBITTORRENT_PRIVATE_PASSWORD`). Removing an app removes its keys. A key typed straight into
 `config.yaml` is ignored, so the file can always be shared.
 
-**Shared values** (Settings > Sections & apps, advanced) are other `.env` entries you use as `{{NAME}}` in an address, link,
+**Shared values** (Settings > Apps & cards, advanced) are other `.env` entries you use as `{{NAME}}` in an address, link,
 header or key field, for example one server address used by many apps. `{{UNRAID_IP}}` is built in.
 
 ## config.yaml
@@ -155,3 +155,12 @@ Connection and sign-in alerts cannot be ignored. Rules only hide alerts; UnDash 
 out more than 30 days ago are removed on the next change.
 
 `undash.cfg` on the flash drive (plugin only) holds `CONFIG_DIR`, `PORT`, `BIND` and `STANDALONE` (see the README).
+
+## Presets
+
+`presets` in `config.yaml` is the list from Settings > Presets, at most 20. Each entry holds a name, a description, the
+board (`lg`, `md`, `pages`, `hidden`), sections, metrics and the media, request, download, app, container and VM views,
+plus `look` when you chose to keep it. It never holds an app, an address, a key, a wallpaper or custom CSS.
+
+A preset file (`.undash-preset.json`) has the same fields under `undash_preset: 1`, or a list under `undash_presets: 1`.
+Apps are written by type and place (`app:@emby.1` is the first Emby) and groups by name, because ids differ per server.

@@ -18,6 +18,8 @@ function und_export($kind) {
     // custom API headers may hold a key written in clear text
     if (isset($sv['options']['headers']) && is_array($sv['options']['headers'])) foreach ($sv['options']['headers'] as $hk => $hv)
       if (!und_ref_name($hv)) $g['services'][$i]['options']['headers'][$hk] = '{{REDACTED}}';
+    // a private feed carries its passkey in the address
+    if (is_string($sv['options']['feeds'] ?? null)) $g['services'][$i]['options']['feeds'] = implode("\n", array_map('und_redact_url', explode("\n", $sv['options']['feeds'])));
   }
   unset($g);
   if (!isset($doc['groups'])) { $full = json_decode(json_encode(und_load_config()), true); unset($full['schema']); $doc = ['version' => UND_SCHEMA] + $full + array_intersect_key($doc, ['unraid' => 1, 'ignored_alerts' => 1, 'custom_css' => 1]); }
@@ -45,7 +47,8 @@ function und_import_parse($raw) {
   // .env: only NAME=value lines (and comments)
   $lines = array_filter(preg_split('/\r\n|\r|\n/', $raw), function ($l) { return trim($l) !== '' && trim($l)[0] !== '#'; });
   if ($lines && count(array_filter($lines, function ($l) { return preg_match('/^\s*(export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/', $l); })) === count($lines)) {
-    $env = und_env_read($raw);
+    // what decides who gets in is never taken from a file: the password and the guest link are set in Settings
+    $env = array_diff_key(und_env_read($raw), array_flip(['UNDASH_PASSWORD_HASH', 'UNDASH_AUTH', 'UNDASH_GUEST_TOKEN']));
     return ['kind' => 'env', 'env' => $env, 'summary' => ['kind' => 'env', 'values' => count($env), 'names' => array_slice(array_keys($env), 0, 60)]];
   }
   $doc = und_yaml_read($raw);
@@ -54,7 +57,7 @@ function und_import_parse($raw) {
   $cfg = $doc; $cfg['schema'] = (int)($doc['version'] ?? UND_SCHEMA);
   $cfg = und_normalize(und_migrate($cfg));
   return und_import_summary(['kind' => 'config', 'config' => $cfg, 'css' => is_string($doc['custom_css'] ?? null) ? $doc['custom_css'] : null,
-    'ignored' => is_array($doc['ignored_alerts'] ?? null) ? $doc['ignored_alerts'] : null, 'unraid_url' => (string)($doc['unraid']['url'] ?? ''), 'env' => []], $doc['groups']);
+    'ignored' => is_array($doc['ignored_alerts'] ?? null) ? $doc['ignored_alerts'] : null, 'unraid_url' => (string)($doc['unraid']['url'] ?? ''), 'env' => [], 'presets_in' => isset($doc['presets'])], $doc['groups']);
 }
 
 /** An export of an older UnDash (JSON with config, vars and per-widget credentials): converted like the old files. */
@@ -99,6 +102,7 @@ function und_import_apply($raw) {
     if (!und_env_write($env)) return ['error' => 'The .env file could not be written. Check that ' . und_store_dir() . ' is writable.'];
     return ['ok' => true, 'backup' => $bk];
   }
+  if (empty($f['presets_in'])) $f['config']['presets'] = und_load_config()['presets'];        // a file without presets leaves yours alone
   if (!und_save_config($f['config'], false)) return ['error' => 'Could not write the configuration directory.'];
   $parts = [];
   if ($f['css'] !== null) $parts['custom_css'] = trim(und_sanitize_css($f['css'])) === '' ? null : und_sanitize_css($f['css']);

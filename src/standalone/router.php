@@ -50,7 +50,7 @@ function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
     // a second form, so skipping never needs the code or the password fields
     echo '</form><form class="login card skip" method="post"><input type="hidden" name="pre" value="', $pre, '"><input type="hidden" name="skip" value="1">',
          '<p class="muted"><b>Recommended:</b> set a password. Without one, anyone who can open this address can see and control your containers and VMs. ',
-         'You can add a password later in Settings &gt; Configuration.</p><button class="btn" type="submit">Continue without a password</button>';
+         'You can add a password later in Settings &gt; Server connection.</p><button class="btn" type="submit">Continue without a password</button>';
   }
   echo '</form></div></body></html>';
   exit;

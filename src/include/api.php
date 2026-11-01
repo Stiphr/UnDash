@@ -329,6 +329,7 @@ switch ($action) {
   case 'import_check':  { $r = und_import_parse($P('file')); if (isset($r['error'])) fail($r['error']); out(['summary' => $r['summary']]); }
   case 'import_file':   { $r = und_import_apply($P('file')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'backups':       out(['backups' => und_backups()]);
+  case 'backup_now':    { und_backup('made by hand'); out(['backups' => und_backups()]); }
   case 'restore':       { $r = und_restore($P('id')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'import_preview': {
     $c = und_hp_convert($P('services'), $P('settings'), $P('env'));
@@ -347,7 +348,7 @@ switch ($action) {
   case 'reset': {
     if ($P('confirm') !== 'yes') fail('Confirm restoring the default settings.');
     und_backup('before reset');
-    if (!und_save_config(und_default_config(), false)) fail('Could not write the configuration directory. Check that ' . und_store_dir() . ' is writable.', 500);
+    if (!und_save_config(['presets' => und_load_config()['presets']] + und_default_config(), false)) fail('Could not write the configuration directory. Check that ' . und_store_dir() . ' is writable.', 500);
     und_history_add('server', 'Settings', 'reset', true, 'defaults restored');
     out(['ok' => true]);
   }

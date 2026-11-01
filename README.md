@@ -151,9 +151,11 @@ App widgets refresh every 15 seconds and the system every 2 seconds; change both
 
 ### Setup wizard and presets
 
-A new dashboard opens the setup wizard. It asks for a name, your Unraid connection, a password, what to show, which apps to connect and a look. Run it again from Settings > Apps & cards. Your apps and keys stay, and you can keep your layout.
+A new dashboard opens the setup wizard. It asks for a name, your Unraid connection, a password, what to show, which apps to connect and a look. Run it again from Settings > Presets. Your apps and keys stay, and you can keep your layout.
 
 Presets come in two sizes. Whole dashboards: **Everything**, **Media server**, **Server monitor** and **Essentials**. Each set also has its own choices, such as System tiles (All, Essentials, Performance, Storage), Downloads (Active items, Speeds only, Long list) or Containers (Grid, List, Cards). Use them in the wizard, or in Edit dashboard > Arrange > **Presets**.
+
+**Your own presets:** **Settings > Presets > Save current** keeps your cards, pages and views, and the look if you tick it. **Use** brings them back, and Preview shows the result before you save. **Export** writes a file and **Import** reads one. A file holds no apps, addresses or keys: on another server each card goes to the first app of that type, and a card with no match is left out.
 
 ### Pages
 
@@ -174,12 +176,15 @@ Edit dashboard > **Pages** adds and names pages, and **Split my cards** makes a 
 
 | Where | What |
 |---|---|
+| Settings > Quick settings | the first page: mode, theme, density, shortcuts, and how the server is doing |
 | Settings > Apps & cards | what the dashboard shows: sections, their options and your apps |
+| Settings > Presets | your own presets (save, use, export, import), ready-made dashboards, a style per set, the setup wizard |
 | Settings > Appearance | how it looks: theme, accent colour, background and wallpaper, size and spacing; Restore defaults puts the page back |
-| Settings > General | refresh interval (default 2 s), what the search box searches, search engine, title |
-| Settings > Alerts | alerts you have ignored |
+| Settings > General | dashboard name and icon, what the search box searches, refresh interval (default 2 s), disk path and UPS |
+| Settings > Alerts | phone alerts, and alerts you have ignored |
 | Settings > Server connection | Docker: Unraid API and dashboard password. Plugin: settings folder and the 9099 port |
-| Settings > Backup & restore | export and import `config.yaml` and `.env`, automatic backups, import from another dashboard, restore all defaults |
+| Settings > Guest link | a private read-only address for family and friends |
+| Settings > Backup & restore | automatic backups and Back up now, export and import `config.yaml` and `.env`, import from another dashboard, restore all defaults |
 | Settings > Advanced | Custom CSS, and About: version, where the files are, action and alert history |
 
 UnDash keeps two files in its config folder (`/config` in Docker, `/mnt/user/appdata/undash` for the plugin):
