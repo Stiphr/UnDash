@@ -31,6 +31,7 @@ function und_http($method, $url, array $o = []) {
     CURLOPT_HEADERFUNCTION => function ($c, $h) use (&$resp) { $p = explode(':', $h, 2); if (count($p) === 2) $resp[strtolower(trim($p[0]))][] = trim($p[1]); return strlen($h); },
   ]);
   if (isset($o['body'])) curl_setopt($ch, CURLOPT_POSTFIELDS, $o['body']);
+  if (isset($o['max'])) { $max = (int)$o['max']; curl_setopt($ch, CURLOPT_NOPROGRESS, false); curl_setopt($ch, CURLOPT_XFERINFOFUNCTION, function ($c, $total, $now) use ($max) { return $now > $max ? 1 : 0; }); }
   if (isset($o['basic'])) curl_setopt($ch, CURLOPT_USERPWD, $o['basic'][0] . ':' . $o['basic'][1]);
   if (isset($o['cookie'])) curl_setopt($ch, CURLOPT_COOKIE, $o['cookie']);
   $body = curl_exec($ch);
@@ -599,6 +600,69 @@ function und_container_sources() {
   return ['containers' => $out];
 }
 
+/* ---------- RSS and Atom ---------- */
+
+const UND_RSS_TTL = 900;
+const UND_RSS_MAX = 3145728;
+const UND_RSS_FEEDS = 10;
+
+function und_rss_text($v) { return trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags((string)$v), ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? ''); }
+
+/** A feed as ['name' => title, 'items' => [[title, href, ts]]]. Reads RSS 2.0, RSS 1.0 and Atom. The network stays off while parsing. */
+function und_rss_parse($body) {
+  if (!function_exists('simplexml_load_string')) throw new Exception('This PHP has no XML reader.');
+  $was = libxml_use_internal_errors(true);
+  $x = simplexml_load_string((string)$body, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOCDATA);
+  libxml_clear_errors(); libxml_use_internal_errors($was);
+  if ($x === false) throw new Exception('The answer was not a feed (is the address right?).');
+  $root = strtolower($x->getName());
+  if ($root === 'feed') { $name = (string)$x->title; $rows = $x->entry; }
+  elseif ($root === 'rss') { $name = (string)$x->channel->title; $rows = $x->channel->item; }
+  elseif ($root === 'rdf') { $name = (string)$x->channel->title; $rows = $x->item; }
+  else throw new Exception('The answer was not a feed (is the address right?).');
+  $items = [];
+  foreach ($rows as $it) {
+    $href = '';
+    if ($root === 'feed') foreach ($it->link as $l) { $a = $l->attributes(); if ($href === '' || (string)($a['rel'] ?? '') === 'alternate') $href = (string)($a['href'] ?? ''); }
+    else $href = (string)$it->link ?: (string)$it->guid;
+    $dc = $it->children('http://purl.org/dc/elements/1.1/');
+    $when = (string)($it->pubDate ?: ($it->published ?: ($it->updated ?: $dc->date)));
+    $t = und_rss_text($it->title);
+    if ($t === '') continue;
+    $items[] = ['title' => und_clip($t, 200), 'href' => preg_match('#^https?://[^\s<>"]+$#i', trim($href)) ? trim($href) : '', 'ts' => $when !== '' ? (strtotime($when) ?: null) : null];
+    if (count($items) >= 50) break;
+  }
+  return ['name' => und_clip(und_rss_text($name), 60), 'items' => $items];
+}
+
+/** The newest stories of one or more feeds: "Name | address" per line, or just the address. Each is read at most every 15 minutes. */
+function und_w_rss($s) {
+  $feeds = [];
+  foreach (preg_split('/\r?\n/', (string)($s['options']['feeds'] ?? '')) as $line) {
+    $p = array_map('trim', explode('|', trim($line), 2));
+    $url = count($p) === 2 ? $p[1] : $p[0];
+    if ($url === '') continue;
+    if (!preg_match('#^https?://[^\s<>"]+$#i', $url)) throw new Exception('Not a web address: ' . und_clip($url, 80));
+    $feeds[$url] = count($p) === 2 ? und_clip($p[0], 60) : '';
+  }
+  if (!$feeds) throw new Exception('Add the address of a feed.');
+  $rows = []; $errs = []; $many = count($feeds) > 1;
+  foreach (array_slice($feeds, 0, UND_RSS_FEEDS, true) as $url => $name) {
+    try {
+      $f = und_cached('rss-' . md5($url) . '.json', UND_RSS_TTL, function () use ($url) {
+        $r = und_http('GET', $url, ['timeout' => 6, 'max' => UND_RSS_MAX, 'headers' => ['Accept' => 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5']]);
+        if ($r['err'] !== '') throw new Exception(und_redact($r['err']));
+        if ($r['code'] >= 400 || $r['code'] === 0) throw new Exception('HTTP ' . $r['code'] . ' from ' . und_clip((string)parse_url($url, PHP_URL_HOST), 80));
+        return und_rss_parse($r['body']);
+      });
+    } catch (Exception $e) { $errs[] = (parse_url($url, PHP_URL_HOST) ?: $url) . ': ' . $e->getMessage(); continue; }
+    foreach ($f['items'] as $it) $rows[] = $it + ($many ? ['sub' => $name !== '' ? $name : $f['name']] : []);
+  }
+  if (!$rows && $errs) throw new Exception($errs[0]);
+  usort($rows, function ($a, $b) { return ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0); });
+  return ['list' => array_slice($rows, 0, max(1, min(50, (int)($s['options']['limit'] ?? 8) ?: 8))), 'empty' => 'No stories yet'];
+}
+
 /** Links you keep on the dashboard: "Title | https://…" per line, or just the address. Nothing is fetched. */
 function und_w_bookmarks($s) {
   $list = [];
@@ -688,13 +752,51 @@ function und_ts($v) {
   return strtotime((string)$v) ?: null;
 }
 
-function und_w_customapi($s) {
+/** The answer of a custom API, with its key filled in. */
+function und_customapi_get($s) {
   $o = $s['options'];
   $h = isset($o['headers']) && is_array($o['headers']) ? array_map('strval', $o['headers']) : [];
   foreach ($h as $k => $v) $h[$k] = str_replace('{{KEY}}', $s['key'], $v);
   $opts = ['headers' => $h, 'method' => strtoupper((string)($o['method'] ?? 'GET'))];
   if ($s['username'] !== '') $opts['basic'] = [$s['username'], $s['password']];
-  $j = und_get(str_replace('{{KEY}}', rawurlencode($s['key']), $s['url']), $opts);
+  return und_get(str_replace('{{KEY}}', rawurlencode($s['key']), $s['url']), $opts);
+}
+
+/** What is in an answer, for clicking through in the card builder: one row per value, and one per list with the fields of its first item. */
+function und_json_tree($v, $path = '', array &$out = [], $depth = 0, $max = 300) {
+  if (count($out) >= $max) return $out;
+  if (!is_array($v)) {
+    $out[] = ['p' => $path, 't' => is_bool($v) ? 'bool' : (is_numeric($v) ? 'num' : ($v === null ? 'null' : 'str')), 'v' => is_bool($v) ? ($v ? 'yes' : 'no') : und_clip((string)$v, 60)];
+    return $out;
+  }
+  if ($v !== [] && array_keys($v) !== range(0, count($v) - 1)) {
+    if ($depth < 6) foreach ($v as $k => $x) und_json_tree($x, $path === '' ? (string)$k : $path . '.' . $k, $out, $depth + 1, $max);
+    return $out;
+  }
+  $fields = [];
+  if (is_array($v[0] ?? null)) und_json_tree($v[0], '', $fields, 3, 40);
+  $out[] = ['p' => $path, 't' => 'list', 'n' => count($v), 'f' => $fields];
+  return $out;
+}
+
+/** Reads the address of a custom API once and lists what came back. Values are cut short and the key never comes back. */
+function und_customapi_probe(array $cfg, $id) {
+  $s = und_service_full($cfg, $id);
+  if (!$s || $s['type'] !== 'customapi') return ['error' => 'Nothing to read.'];
+  if (trim($s['url']) === '') return ['error' => 'Enter the address first.'];
+  if (und_has($s['url'], '{{') && !und_has($s['url'], '{{KEY}}')) return ['error' => 'Unknown value in the address: ' . und_clip($s['url'], 120)];
+  $hide = [$s['key'] ?? '', $s['password'] ?? ''];
+  try { $j = und_customapi_get($s); }
+  catch (Throwable $e) { return ['error' => und_redact($e->getMessage(), $hide)]; }
+  $tree = und_json_tree($j);
+  foreach ($tree as &$r) if (isset($r['v'])) $r['v'] = und_redact($r['v'], $hide);
+  unset($r);
+  return ['tree' => $tree];
+}
+
+function und_w_customapi($s) {
+  $o = $s['options'];
+  $j = und_customapi_get($s);
   // one row per element of an array, each row written with templates
   if (($o['display'] ?? 'block') === 'items') {
     $arr = trim((string)($o['items'] ?? '')) === '' ? $j : und_jpath($j, $o['items']);

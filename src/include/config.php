@@ -31,13 +31,28 @@ function und_types() {
     'immich' => ['Immich', ['key'], true], 'peanut' => ['PeaNUT', ['key', 'username', 'password'], true],
     'scrutiny' => ['Scrutiny', [], true], 'tdarr' => ['Tdarr', ['key'], true], 'unmanic' => ['Unmanic', [], true], 'uptimekuma' => ['Uptime Kuma', [], true],
     'speedtest' => ['Speedtest Tracker', ['key'], true], 'gluetun' => ['Gluetun', ['key'], true], 'homeassistant' => ['Home Assistant', ['key'], true],
-    'weather' => ['Weather', [], false], 'releases' => ['GitHub releases', ['key'], false], 'bookmarks' => ['Bookmarks', [], false],
+    'weather' => ['Weather', [], false], 'rss' => ['RSS feed', [], false], 'releases' => ['GitHub releases', ['key'], false], 'bookmarks' => ['Bookmarks', [], false],
     'customapi' => ['Custom API (JSON)', ['key'], true], 'link' => ['Link only', [], false],
   ];
 }
 
+/** The extra pages, at most 12. A card is on one page: the first that lists it keeps it. */
+function und_pages_clean($pages, callable $list, callable $id) {
+  $out = []; $used = []; $ids = [];
+  foreach (array_slice(is_array($pages) ? $pages : [], 0, 12) as $p) {
+    if (!is_array($p)) continue;
+    $pid = preg_match('/^[a-f0-9]{8}$/', (string)($p['id'] ?? '')) ? $p['id'] : und_id();
+    if (isset($ids[$pid])) continue;
+    $ids[$pid] = 1; $cards = [];
+    foreach (array_slice(is_array($p['cards'] ?? null) ? $p['cards'] : [], 0, 300) as $c) if ($id($c) && !isset($used[$c])) { $used[$c] = 1; $cards[] = $c; }
+    $out[] = ['id' => $pid, 'name' => und_clip(trim((string)($p['name'] ?? '')), 30) ?: 'Page', 'cards' => $cards, 'lg' => $list($p['lg'] ?? [], 24), 'md' => $list($p['md'] ?? [], 12)];
+  }
+  return $out;
+}
+
 /** The card board: on, snap cards upward (compact), a layout per screen size ([{i, x, y, w, h, a}]; lg 24 columns, md 12; a = height follows the content) and the
- *  cards taken off it. Empty layouts are worked out by the page, which knows the cards. Only ids and numbers are kept. */
+ *  cards taken off it. Empty layouts are worked out by the page, which knows the cards. Only ids and numbers are kept.
+ *  Pages: Home is this object itself (home = its name); each other page lists the cards it holds and has layouts of its own. */
 function und_board_clean($b) {
   $b = is_array($b) ? $b : [];
   $id = function ($v) { return is_string($v) && preg_match('/^[a-z]+(:[a-z0-9_]{1,40})?$/', $v); };
@@ -52,6 +67,7 @@ function und_board_clean($b) {
     return $out;
   };
   return ['on' => array_key_exists('on', $b) ? !empty($b['on']) : true, 'compact' => array_key_exists('compact', $b) ? !empty($b['compact']) : true,
+          'home' => und_clip(trim((string)($b['home'] ?? '')), 30), 'pages' => und_pages_clean($b['pages'] ?? [], $list, $id),
           'lg' => $list($b['lg'] ?? [], 24), 'md' => $list($b['md'] ?? [], 12),
           'hidden' => array_values(array_unique(array_filter(array_slice(is_array($b['hidden'] ?? null) ? $b['hidden'] : [], 0, 300), $id)))];
 }

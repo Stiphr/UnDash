@@ -1,6 +1,7 @@
 # Builds the UnDash image (tests run inside the build) and pushes it to ghcr.io/stiphr/undash.
 # Runs only when you ask for it (Actions > Docker image > Run workflow) or when you push a version tag (v2026.10.30).
-# A build from the beta branch is published as :beta only and never replaces :latest.
+# A build from the beta branch is published as :beta only and never replaces :latest. It is numbered after the next
+# patch of the last stable release, with "be" behind it: after v0.9.7 that is 0.9.8be.
 name: Docker image
 on:
   workflow_dispatch:
@@ -14,6 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -21,7 +25,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "$GITHUB_REF_NAME" = beta ]; then
+            last=$(git tag | grep -E '^v[0-9]{1,3}\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+            last=${last#v}
+            echo "version=${last%.*}.$(( ${last##*.} + 1 ))be" >> "$GITHUB_OUTPUT"
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -29,4 +42,4 @@ jobs:
           build-args: VERSION=${{ steps.v.outputs.version }}
           tags: |
             ${{ !contains(github.ref_name, 'beta') && 'ghcr.io/stiphr/undash:latest' || '' }}
-            ghcr.io/stiphr/undash:${{ steps.v.outputs.version }}
+            ghcr.io/stiphr/undash:${{ steps.v.outputs.tag }}

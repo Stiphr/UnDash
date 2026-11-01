@@ -11,7 +11,7 @@
  * und_store_migrate) and moved to data/legacy/.
  */
 
-const UND_ENV_RESERVED = ['UNRAID_API_KEY', 'UNDASH_PASSWORD_HASH', 'UNDASH_AUTH', 'PEXELS_API_KEY', 'NOTIFY_DISCORD_URL', 'NOTIFY_TELEGRAM_TOKEN', 'NOTIFY_TELEGRAM_CHAT', 'NOTIFY_NTFY_URL', 'NOTIFY_NTFY_TOKEN', 'NOTIFY_GOTIFY_URL', 'NOTIFY_GOTIFY_TOKEN'];
+const UND_ENV_RESERVED = ['UNRAID_API_KEY', 'UNDASH_PASSWORD_HASH', 'UNDASH_AUTH', 'PEXELS_API_KEY', 'NOTIFY_DISCORD_URL', 'NOTIFY_TELEGRAM_TOKEN', 'NOTIFY_TELEGRAM_CHAT', 'NOTIFY_NTFY_URL', 'NOTIFY_NTFY_TOKEN', 'NOTIFY_GOTIFY_URL', 'NOTIFY_GOTIFY_TOKEN', 'UNDASH_GUEST_TOKEN'];
 const UND_CRED_FIELDS = ['key' => 'API_KEY', 'username' => 'USERNAME', 'password' => 'PASSWORD'];
 
 function und_data_dir() { $d = und_store_dir() . '/data'; @mkdir($d, 0700, true); return $d; }
@@ -144,7 +144,7 @@ function und_doc_write(array $parts) {
   $doc = und_doc();
   foreach ($parts as $k => $v) { if ($v === null) unset($doc[$k]); else $doc[$k] = $v; }
   unset($doc['schema']);       // version is the one that is written
-  $order = ['version', 'general', 'appearance', 'dashboard', 'media', 'downloads', 'apps', 'docker', 'vms', 'groups', 'unraid', 'ignored_alerts', 'notify', 'custom_css'];
+  $order = ['version', 'general', 'appearance', 'dashboard', 'media', 'downloads', 'apps', 'docker', 'vms', 'groups', 'unraid', 'ignored_alerts', 'notify', 'guest', 'custom_css'];
   $sorted = [];
   foreach ($order as $k) if (array_key_exists($k, $doc)) $sorted[$k] = $doc[$k];
   foreach ($doc as $k => $v) if (!array_key_exists($k, $sorted)) $sorted[$k] = $v;

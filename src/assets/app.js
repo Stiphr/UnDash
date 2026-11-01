@@ -5,6 +5,7 @@
   'use strict';
   var API = window.UND_API || '/plugins/undash/include/api.php';
   var UNRAID = window.UND_UNRAID || '';           // set on the standalone port: where Unraid's own web UI is
+  var GUEST = !!window.UND_GUEST, BASE = window.UND_BASE || '';     // the guest link runs this same page, read-only, under /guest/
   var root = document.getElementById('und');
   if (!root) return;
   var S = {
@@ -232,7 +233,7 @@
   function renewToken() {
     if (!window.UND_STANDALONE) return Promise.resolve(false);
     if (S.tokP) return S.tokP;
-    S.tokP = fetch('/csrf', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
+    S.tokP = fetch(BASE + '/csrf', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
       S.tokP = null;
       if (!j || !j.csrf) return false;
       window.UND_CSRF = j.csrf;
@@ -248,6 +249,7 @@
     var to = setTimeout(function () { if (ctl) ctl.abort(); }, timeoutMs || 30000);
     return fetch(API, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-Token': window.UND_CSRF || '' }, signal: ctl ? ctl.signal : undefined }).then(function (r) {
       clearTimeout(to);
+      if (r.status === 401 && GUEST) return staleSession();      // the page's address is the link itself: loading it again signs in
       if (r.status === 401) return { error: 'Signed out. Reload the page to sign in again.', auth: true };
       if (r.status === 403) return r.clone().text().then(function (t) { return /CSRF/.test(t) ? (again ? Promise.resolve(false) : renewToken()).then(function (ok) { return ok ? send(action, data, timeoutMs, true) : staleSession(); }) : r.json().catch(function () { return { error: t || 'Refused (HTTP 403).' }; }); });
       return r.json().catch(function () { return { error: 'Unexpected answer from the server (HTTP ' + r.status + ').' }; }).then(function (j) { if (!r.ok && !j.error) j.error = 'Request failed (HTTP ' + r.status + ').'; return j; });
@@ -413,7 +415,7 @@
   function themeAccent(a) { var t = THEMES[a.theme] || THEMES.default; return (t[lookMode(a)] || t.dark).accent; }
   /* the wallpaper in use: today's photo, the picture uploaded in Settings (served by UnDash itself), or an address */
   function wallUrl(a) {
-    var w = (S.boot && S.boot.wall) || {}, at = API.indexOf('/plugins/') === 0 ? '/plugins/undash/wall.php' : '/wallpaper';
+    var w = (S.boot && S.boot.wall) || {}, at = API.indexOf('/plugins/') === 0 ? '/plugins/undash/wall.php' : BASE + '/wallpaper';
     if (a.background === 'custom') return w.set ? at + '?v=' + w.v : '';
     if (a.background === 'local') return w.local ? at + '?local=1&v=' + w.local : '';
     return a.background || '';
@@ -583,24 +585,26 @@
       onkeydown: searchKey }) : null;
     R.bell = boardOn() ? h('button', { type: 'button', class: 'bell', hidden: true, 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: alertPop }, ic('bell'), R.bellT = h('span', { class: 'bt' })) : null;
     var acts = h('div', { class: 'acts' }, R.bell, R.live,
-      R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
+      GUEST ? null : R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
       window.UND_STANDALONE ? null : btn('', toggleFull, 'focus' + (S.full ? ' on' : ''), 'full', S.full ? 'Exit focus mode' : 'Focus mode (hide Unraid\'s menu)'),
       R.priv = btn('', togglePrivacy, 'priv', 'eye', 'Blur titles, posters, torrents and the server name'),
-      boardOn() ? btn('', boardEdit, 'bedit', 'edit', 'Edit dashboard') : null,
-      btn('', openSettings, '', 'gear', 'Settings'));
-    R.srvBtn.setAttribute('aria-haspopup', 'menu');
+      boardOn() && !GUEST ? btn('', boardEdit, 'bedit', 'edit', 'Edit dashboard') : null,
+      GUEST ? null : btn('', openSettings, '', 'gear', 'Settings'));
+    if (R.srvBtn) R.srvBtn.setAttribute('aria-haspopup', 'menu');
     paintPrivacy();
     root.appendChild(h('header', { class: 'top' },
       h('div', { class: 'brand' }, g.logo ? img(iconUrl(g.logo), 'logo', 'server') : logo(), h('div', { class: 'ell' }, R.brandName = h('h1', { class: 'und-name' }, brandName()),
         R.sub = h('div', { class: 'und-sub' }))),
-      R.search ? h('div', { class: 'search' }, ic('search'), R.search, R.sbox = h('div', { class: 'sbox', id: 'und-sbox', hidden: true, role: 'listbox', 'aria-label': 'Search results' })) : h('span', { class: 'grow' }), acts));
+      R.pages = h('nav', { class: 'pages', 'aria-label': 'Pages', hidden: true }),
+      R.search ? h('div', { class: 'search' }, ic('search'), R.search, R.sbox = h('div', { class: 'sbox', id: 'und-sbox', hidden: true, role: 'listbox', 'aria-label': 'Search results' })) : R.pagesGrow = h('span', { class: 'grow' }), acts));
+    if (boardOn()) pageCheck();
     var board = boardOn(), want = board ? boardWants() : null;
     root.classList.toggle('bui', board);
     if (board) boardScale();
     R.sections = h('main', { class: 'sections' + (board ? ' host' : '') }); R.noMatch = null;
     root.appendChild(R.sections);
     shellBody(board, want);
-    if (!S.selfT) { S.selfT = 1; checkSelf(); }
+    if (!S.selfT && !GUEST) { S.selfT = 1; checkSelf(); }
   }
   function shellBody(board, want) {
     S.L.dashboard.sections.forEach(function (sec) {
@@ -608,11 +612,12 @@
       // your own sections take their apps from the Apps section, even with its cards off
       if (board && sec.id === 'apps' ? sec.visible || S.L.groups.some(function (g) { return g.section; }) : sec.visible && (!board || want[sec.id])) buildSection(sec);
     });
-    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, 'Every section is hidden. Turn some on in Settings > Apps & cards.'));
+    if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, GUEST ? 'Nothing is shared here yet.' : 'Every section is hidden. Turn some on in Settings > Apps & cards.'));
     if (R.bell) R.bell.hidden = !R.alerts;
     if (R.bell && R.alerts && R.health) R.alerts.tools.insertBefore(btn('Endpoints', function () { alertClose(); endpointsDialog(); }, 'ghost sm', 'web', 'Every address UnDash checks, and how it answered'), R.alerts.tools.firstChild);
     if (board && (window.UND_STANDALONE || S.full) && !root.querySelector('.edgef')) root.appendChild(h('div', { class: 'edgef', 'aria-hidden': 'true' }));
     if (board) boardMount(); else packHalves();
+    paintPages();
     paintAll(); paintLive(); paintIdent();
   }
 
@@ -644,6 +649,7 @@
     if (window.UND_STANDALONE) document.title = brandName();
     var y = S.live || {}, s = y.system && !y.system.error ? y.system : null, b = S.boot.server || {};
     var name = (s && s.name) || b.name || '', ip = (s && s.ip) || b.ip || '', os = (s && s.os) || b.os || '', ou = (s && s.os_update) || {};
+    if (GUEST) { clear(R.sub).appendChild(h('span', { class: 'vchip' }, 'Guest view')); return; }
     var me = S.self || {};
     var sig = JSON.stringify([name, ip, os, ou.available, ou.latest, ou.staged, me.newer, me.latest]);
     if (R.sub._sig === sig) return; R.sub._sig = sig;
@@ -668,8 +674,64 @@
   var MD = window.matchMedia ? window.matchMedia('(max-width:1100px)') : null, SM = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
   function boardOn() { return !!(S.L.dashboard.board && S.L.dashboard.board.on); }
   function boardMode() { return SM && SM.matches ? 'sm' : MD && MD.matches ? 'md' : 'lg'; }
-  /* every card that exists now, in the classic order */
-  function boardCards() {
+  /* Pages: Home is the board itself, each other page lists its cards and keeps its own layouts. A card is on one page; a card no page
+     lists is on Home, so a new app always shows up. Only the sections of the open page are built, so the others cost nothing. */
+  function pagesOf() { return (S.edit && S.edit.pages) || S.L.dashboard.board.pages || []; }
+  function pageAt(id) { return pagesOf().filter(function (p) { return p.id === id; })[0] || null; }
+  function homeName() { return (S.edit ? S.edit.homeName : S.L.dashboard.board.home) || 'Home'; }
+  function pageList() {
+    var all = [{ id: '', name: homeName() }].concat(pagesOf());
+    if (!GUEST) return all;
+    var on = {}; boardShown().forEach(function (c) { on[pageOf(c.i)] = 1; });      // guests only get pages with something on them
+    return all.filter(function (p) { return on[p.id]; });
+  }
+  /* where the open page keeps its layouts */
+  function pageData() { return pageAt(S.page) || (S.edit ? S.edit.home : S.L.dashboard.board); }
+  function pageOf(i) { var at = ''; pagesOf().forEach(function (p) { if (p.cards.indexOf(i) >= 0) at = p.id; }); return at; }
+  function boardShown() { var gone = {}; (S.edit ? S.edit.hidden : S.L.dashboard.board.hidden || []).forEach(function (i) { gone[i] = 1; }); return boardAll().filter(function (c) { return !gone[c.i]; }); }
+  function pageCheck() {
+    if (S.page === undefined) S.page = LS.get('page', '');
+    if (!pageList().some(function (p) { return p.id === S.page; })) S.page = (pageList()[0] || { id: '' }).id;
+  }
+  function paintPages() {
+    var box = R.pages; if (!box) return;
+    var list = boardOn() ? pageList() : [], many = list.length > 1;
+    box.hidden = !many; if (R.pagesGrow) R.pagesGrow.hidden = many;
+    clear(box);
+    if (many) list.forEach(function (p, n) {
+      box.appendChild(h('button', { type: 'button', class: p.id === S.page ? 'on' : '', 'aria-current': p.id === S.page ? 'page' : null, title: n < 9 ? p.name + ' (' + (n + 1) + ')' : p.name, onclick: function () { pageGo(p.id); } }, p.name));
+    });
+  }
+  function pageGo(id) {
+    var E = S.edit;
+    if (id === S.page) return;
+    if (E) pageStore();
+    S.page = id; LS.set('page', id);
+    if (E) {
+      E.undo = []; E.redo = []; E.view = null; E.side.hidden = true; E.bAdd.classList.remove('on');
+      var d = pageData(); E.smart = !(d[E.mode] || []).length && !(d.lg || []).length;
+      E.list = boardLayout(E.mode, E.hidden);
+      E.list.forEach(function (c) { if (c.a && S.nat[c.i]) c.h = S.nat[c.i]; });
+      if (E.compact) gCompact(E.list);
+    }
+    boardRebuild();
+    window.scrollTo(0, 0);
+    var on = R.pages && R.pages.querySelector('.on');
+    if (on && document.activeElement === document.body) try { on.focus({ preventScroll: true }); } catch (x) { /* older browser */ }
+  }
+  /* what is being edited goes back to its page */
+  function pageStore() {
+    var E = S.edit, d = pageData();
+    if (E.smart) { d.lg = []; d.md = []; } else d[E.mode] = gCopy(E.list);
+  }
+  /* search results and shortcuts can point at a card on another page */
+  function pageReveal(test) {
+    var c = boardAll().filter(test)[0], at = c ? pageOf(c.i) : S.page;
+    if (at !== S.page) pageGo(at);
+  }
+  function boardCards() { return boardAll().filter(function (c) { return pageOf(c.i) === (S.page || ''); }); }
+  /* every card that exists now, on any page, in the classic order */
+  function boardAll() {
     var out = [], d = S.L.dashboard, api = S.boot.caps.mode === 'api';
     d.sections.forEach(function (sec) {
       if (!sec.visible || sec.id === 'alerts' || sec.id === 'health') return;     // alerts live in the header, and a dead endpoint is an alert
@@ -677,7 +739,8 @@
       else if (sec.id === 'media') { var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; }); MEDIA_ORDER.forEach(function (id) { if (vis[id] !== false) out.push({ i: 'media:' + id, t: MEDIA[id][0], s: 'media', w: 6, h: 18, minw: 3, minh: 6 }); }); }
       else if (sec.id === 'apps') S.L.groups.forEach(function (g) { if (!g.section) g.services.forEach(function (x) {
         if (x.zone !== 'apps' || x.hidden || (x.type === 'link' && !S.L.apps.links)) return;
-        out.push({ i: 'app:' + x.id, t: x.name, s: 'apps', link: x.type === 'link', w: x.type === 'link' ? 4 : 4, h: x.type === 'link' ? 3 : 7, minw: 2, minh: 3 });
+        var tall = x.type === 'rss' || x.type === 'releases' || x.type === 'bookmarks';
+        out.push({ i: 'app:' + x.id, t: x.name, s: 'apps', link: x.type === 'link', w: tall ? 6 : 4, h: x.type === 'link' ? 3 : tall ? 12 : 7, minw: 2, minh: 3 });
       }); });
       else {
         var size = { favorites: [24, 8], arr: [12, 20], downloads: [12, 16], playing: [12, 10], requests: [12, 16], docker: [24, 24], vms: [12, 10] }[sec.id] || [12, 10];
@@ -828,7 +891,7 @@
   function boardSeed(cards, cols) { return boardSmart(cards, cols); }
   /* the saved layout for this screen size, without cards that no longer exist and with new ones added */
   function boardLayout(mode, hidden) {
-    var bd = S.L.dashboard.board, cols = BOARD_COLS[mode === 'sm' ? 'lg' : mode], cards = boardCards(), have = {}, gone = {};
+    var bd = pageData(), cols = BOARD_COLS[mode === 'sm' ? 'lg' : mode], cards = boardCards(), have = {}, gone = {};
     cards.forEach(function (c) { have[c.i] = c; }); hidden.forEach(function (i) { gone[i] = 1; });
     var src = bd[mode === 'sm' ? 'lg' : mode] || [];
     if (!src.length && mode === 'md' && (bd.lg || []).length) {
@@ -875,14 +938,15 @@
     if (R.overview) { R.overview.open = ''; R.overview.detail.hidden = true; }
     list.forEach(function (it) {
       var c = cards[it.i], part = c && boardPart(c); if (!part) return;
-      var el = h('div', { class: 'gc gc-' + it.i.split(':')[0] + (part.classList.contains('alink') ? ' gc-l' : ''), 'data-i': it.i, 'data-tab': boardTab(c.s) }, h('div', { class: 'gc-c' }, part));
+      var el = h('div', { class: 'gc gc-' + it.i.split(':')[0] + (part.classList.contains('alink') ? ' gc-l' : ''), 'data-i': it.i, 'data-tab': pageList().length > 1 ? 'page' : boardTab(c.s) }, h('div', { class: 'gc-c' }, part));
       if (part.classList && part.classList.contains('sec')) part.classList.add('fill');
       R.cards[it.i] = { el: el, part: part, c: c };
       if (E) { boardChrome(el, it, c); if (E.view === it.i) el.classList.add('sel'); }
       R.board.appendChild(el);
     });
     if (E) R.board.addEventListener('pointerdown', function (e) { if (e.target === R.board) boardView(null); });
-    R.boardWrap = h('div', { class: 'bwrap' }, R.overview ? R.overview.stale : null, R.board);
+    R.boardWrap = h('div', { class: 'bwrap' }, R.overview ? R.overview.stale : null, R.board,
+      !list.length && !E ? h('div', { class: 'card empty bempty' }, GUEST ? 'Nothing is shared on this page.' : 'This page is empty. Use the edit button at the top to add cards.') : null);
     root.insertBefore(R.boardWrap, R.sections);
     S.boardHide = ''; S.boardNat = '';
     if (E) boardDock();
@@ -904,6 +968,15 @@
   }
   /* phones: one tab at a time, not one very long page */
   function boardNav() {
+    var pl = pageList();
+    if (pl.length > 1) {                        // your own pages take the place of the automatic tabs
+      R.nav = {}; R.pageNav = true;
+      R.boardWrap.appendChild(h('nav', { class: 'mnav pgs', 'aria-label': 'Pages' }, pl.map(function (p) {
+        return h('button', { type: 'button', class: p.id === S.page ? 'on' : '', 'aria-current': p.id === S.page ? 'page' : 'false', onclick: function () { pageGo(p.id); } }, ic(p.id ? 'grid' : 'server'), h('span', { class: 'ell' }, p.name));
+      })));
+      boardTabSet('page');
+      return;
+    }
     var have = {}; Object.keys(R.cards).forEach(function (i) { have[R.cards[i].el.getAttribute('data-tab')] = 1; });
     var tabs = BOARD_TABS.filter(function (t) { return have[t[0]]; }); if (!tabs.length) return;
     if (!have[S.tab]) S.tab = have[LS.get('tab', '')] ? LS.get('tab', '') : tabs[0][0];
@@ -928,7 +1001,7 @@
     });
   }
   /* search results and shortcuts jump to a section: on a phone it may be on another tab */
-  function boardReveal(id) { if (R.nav && R.cards[id]) boardTabSet(R.cards[id].el.getAttribute('data-tab')); }
+  function boardReveal(id) { if (R.nav && !R.pageNav && R.cards[id]) boardTabSet(R.cards[id].el.getAttribute('data-tab')); }
   /* text follows the screen: the whole board is scaled as one, so a 1440p monitor is not all tiny text and a laptop not all cramped.
      Sizes read from the page are screen pixels and go through boardTs() to become board pixels. */
   function boardTs() { return parseFloat(root.style.getPropertyValue('--ts')) || 1; }
@@ -991,7 +1064,7 @@
       if (compact) {
         list.forEach(function (c) { if (c.a && S.nat[c.i]) c.h = S.nat[c.i]; });
         // a board left to Smart arrange is worked out again with the real heights, so it has no holes
-        var bd = S.L.dashboard.board, mode = boardMode();
+        var bd = pageData(), mode = boardMode();
         if (mode !== 'sm' && !(bd[mode] || []).length && !(bd.lg || []).length) {
           var on = {}; list.forEach(function (c) { on[c.i] = 1; });
           list = boardSmart(boardCards().filter(function (c) { return on[c.i]; }), BOARD_COLS[mode]);
@@ -1029,10 +1102,12 @@
   /* ---- Edit dashboard: drag a card, drag its edges or use the keyboard; click a card to edit it and press Add for what is not on the
      board. App and section changes work on a copy of the settings and show at once through the preview; nothing is saved until Save. ---- */
   function boardEdit() {
-    if (S.edit) return;
+    if (S.edit || GUEST) return;
     if (boardMode() === 'sm') { toast('Edit the dashboard on a larger screen. A phone shows the cards in that order.', true); return; }
-    var bd = S.L.dashboard.board;
-    S.edit = { mode: boardMode(), hidden: (bd.hidden || []).slice(), list: null, compact: bd.compact, undo: [], redo: [], dirty: false, changed: false, smart: !(bd[boardMode()] || []).length && !(bd.lg || []).length, saved: S.L, view: null, seq: 0, dAt: 0 };
+    var bd = S.L.dashboard.board, d = pageData();
+    S.edit = { mode: boardMode(), hidden: (bd.hidden || []).slice(), list: null, compact: bd.compact, undo: [], redo: [], dirty: false, changed: false, smart: !(d[boardMode()] || []).length && !(d.lg || []).length, saved: S.L, view: null, seq: 0, dAt: 0,
+      pages: JSON.parse(JSON.stringify(bd.pages || [])), home: { lg: bd.lg, md: bd.md }, homeName: bd.home || '', known: {} };
+    boardAll().forEach(function (c) { S.edit.known[c.i] = 1; });
     S.edit.list = boardLayout(S.edit.mode, S.edit.hidden);
     S.edit.list.forEach(function (c) { if (c.a && S.nat[c.i]) c.h = S.nat[c.i]; });
     if (S.edit.compact) gCompact(S.edit.list);
@@ -1062,16 +1137,16 @@
     refreshNow();
   }
   function boardCols() { return BOARD_COLS[S.edit.mode]; }
-  function boardSnap() { var E = S.edit; return { list: gCopy(E.list), hidden: E.hidden.slice(), smart: E.smart, compact: E.compact, cfg: E.cj, cr: E.crj }; }
+  function boardSnap() { var E = S.edit; return { list: gCopy(E.list), hidden: E.hidden.slice(), smart: E.smart, compact: E.compact, cfg: E.cj, cr: E.crj, pages: JSON.stringify(E.pages), homeName: E.homeName }; }
   function boardMark() { var E = S.edit; E.undo.push(boardSnap()); if (E.undo.length > 60) E.undo.shift(); E.redo = []; E.dirty = true; E.smart = false; }
   function boardStep(from, to) {
     var E = S.edit, st = from.pop(); if (!st) return;
     to.push(boardSnap());
-    var rebuild = st.hidden.join() !== E.hidden.join(), cfg = st.cfg && st.cfg !== E.cj;
-    E.list = st.list; E.hidden = st.hidden; E.smart = st.smart; E.compact = st.compact; E.dirty = true;
+    var rebuild = st.hidden.join() !== E.hidden.join() || st.pages !== JSON.stringify(E.pages), cfg = st.cfg && st.cfg !== E.cj;
+    E.pages = JSON.parse(st.pages); E.homeName = st.homeName; E.list = st.list; E.hidden = st.hidden; E.smart = st.smart; E.compact = st.compact; E.dirty = true;
     if (cfg) { E.D.cfg = JSON.parse(st.cfg); E.D.creds = JSON.parse(st.cr); E.cj = st.cfg; E.crj = st.cr; E.changed = true; boardPreview(); }
-    else if (rebuild) boardRemount(); else { R.grid = E.list; boardPaint(); }
-    boardSide();
+    else if (rebuild) boardRebuild(); else { R.grid = E.list; boardPaint(); }
+    paintPages(); boardSide();
   }
   /* the settings behind the panel: the same ones Settings edits */
   function boardLoad() {
@@ -1109,14 +1184,16 @@
   }
   /* cards that came or went with the settings */
   function boardAdopt() {
-    var E = S.edit, cards = boardCards(), have = {}, gone = {}, on = {};
+    var E = S.edit, page = pageAt(S.page), have = {}, gone = {}, on = {};
+    boardAll().forEach(function (c) { if (!E.known[c.i]) { E.known[c.i] = 1; if (page) page.cards.push(c.i); } });      // what you add lands on the page you are on
+    var cards = boardCards();
     cards.forEach(function (c) { have[c.i] = 1; }); E.hidden.forEach(function (i) { gone[i] = 1; });
     if (E.smart) { E.list = boardSmart(cards.filter(function (c) { return !gone[c.i]; }), boardCols()); return; }
     E.list = E.list.filter(function (c) { return have[c.i]; });
     E.list.forEach(function (c) { on[c.i] = 1; });
     cards.forEach(function (c) { if (!on[c.i] && !gone[c.i]) gPlace(E.list, { i: c.i, x: 0, y: 0, w: Math.min(c.w, boardCols()), h: c.h, a: true }, boardCols()); });
     if (E.compact) gCompact(E.list);
-    if (E.view && E.view !== 'add' && E.view.indexOf('into:') && !have[E.view]) E.view = null;
+    if (E.view && E.view !== 'add' && E.view !== 'pages' && E.view.indexOf('into:') && !have[E.view]) E.view = null;
   }
   /* the small box: everything for the board, floating over it */
   function boardDock() {
@@ -1125,6 +1202,7 @@
       E.bUndo = btn('', function () { boardStep(E.undo, E.redo); }, 'sm ghost', 'undo', 'Undo (Ctrl+Z)');
       E.bRedo = btn('', function () { boardStep(E.redo, E.undo); }, 'sm ghost', 'redo', 'Redo (Ctrl+Shift+Z)');
       E.bAdd = btn('Add', function () { boardView(E.view === 'add' ? null : 'add'); }, 'sm ghost', 'plus', 'Add apps and cards');
+      E.bPages = btn('Pages', function () { boardView(E.view === 'pages' ? null : 'pages'); }, 'sm ghost', 'grid', 'Add, rename and order pages');
       var more = btn('Arrange', function () {
         menu(more, [['Smart arrange', 'grid', boardArrange], ['Fit all to content', 'fit', boardFitAll],
           [E.compact ? 'Snap up is on' : 'Snap up is off', E.compact ? 'check' : 'minus', function () { boardMark(); E.compact = !E.compact; if (E.compact) gCompact(E.list); boardPaint(); }], 'hr',
@@ -1132,7 +1210,7 @@
       }, 'sm ghost', 'grid', 'Arrange the cards');
       more.setAttribute('aria-haspopup', 'menu');
       var gap = function () { return h('span', { class: 'bd-sep', 'aria-hidden': 'true' }); };
-      E.dock = h('div', { class: 'bdock', role: 'toolbar', 'aria-label': 'Edit dashboard' }, E.bAdd, gap(), E.bUndo, E.bRedo, gap(), more, gap(), btn('Cancel', boardCancel, 'sm ghost'), btn('Save', boardSave, 'sm pri'));
+      E.dock = h('div', { class: 'bdock', role: 'toolbar', 'aria-label': 'Edit dashboard' }, E.bAdd, E.bPages, gap(), E.bUndo, E.bRedo, gap(), more, gap(), btn('Cancel', boardCancel, 'sm ghost'), btn('Save', boardSave, 'sm pri'));
       E.side = h('aside', { class: 'bside', 'aria-label': 'Edit', hidden: true });
       boardLoad();
     }
@@ -1161,19 +1239,78 @@
   function boardRemove(i) {
     var E = S.edit; boardMark();
     E.list = E.list.filter(function (c) { return c.i !== i; }); E.hidden.push(i);
+    pageDrop(i);
     if (E.compact) gCompact(E.list);
     if (E.view === i) E.view = null;
     boardRemount(); boardSide();
   }
   /* a removed card back on the board */
   function boardUnhide(i) {
-    var E = S.edit, c = boardCards().filter(function (x) { return x.i === i; })[0]; if (!c) return;
+    var E = S.edit, c = boardAll().filter(function (x) { return x.i === i; })[0]; if (!c) return;
     boardMark();
     E.hidden = E.hidden.filter(function (x) { return x !== i; });
+    pageTake(i);
     gPlace(E.list, { i: i, x: 0, y: 0, w: Math.min(c.w, boardCols()), h: c.h }, boardCols());
     if (boardPart(c)) boardRemount(); else boardRebuild();
     boardSide();
+    if (!R.cards[i]) return;
     var x = R.cards[i]; if (x) { x.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); x.el.focus({ preventScroll: true }); }
+  }
+  function pageDrop(i) { pagesOf().forEach(function (p) { p.cards = p.cards.filter(function (x) { return x !== i; }); }); }
+  /* a card comes to the open page */
+  function pageTake(i) { pageDrop(i); var p = pageAt(S.page); if (p) p.cards.push(i); }
+  /* sends a card to another page; it takes the first free spot there */
+  function boardToPage(i, to) {
+    var E = S.edit, p = pageAt(to); boardMark();
+    pageDrop(i); if (p) p.cards.push(i);
+    E.list = E.list.filter(function (c) { return c.i !== i; });
+    [].concat(pagesOf(), [E.home]).forEach(function (d) { d.lg = (d.lg || []).filter(function (c) { return c.i !== i; }); d.md = (d.md || []).filter(function (c) { return c.i !== i; }); });
+    if (to === (S.page || '')) { var c = boardAll().filter(function (x) { return x.i === i; })[0]; if (c) gPlace(E.list, { i: i, x: 0, y: 0, w: Math.min(c.w, boardCols()), h: c.h, a: true }, boardCols()); }
+    if (E.compact) gCompact(E.list);
+    E.view = null; E.side.hidden = true;
+    boardRebuild(); boardSide();
+    toast('Moved to ' + (p ? p.name : homeName()));
+  }
+  function boardPages(box) {
+    var E = S.edit, list = pagesOf();
+    var rename = function (p) { return function (e) { boardMark(); if (p) p.name = e.target.value; else E.homeName = e.target.value; paintPages(); }; };
+    var row = function (p, n) {
+      return h('div', { class: 'bs-pg' + ((p ? p.id : '') === (S.page || '') ? ' on' : '') },
+        h('button', { type: 'button', class: 'bs-go', title: 'Show this page', 'aria-label': 'Show ' + (p ? p.name : homeName()), onclick: function () { pageGo(p ? p.id : ''); boardView('pages'); } }, ic(p ? 'grid' : 'server')),
+        h('input', { type: 'text', value: p ? p.name : E.homeName, placeholder: 'Home', maxlength: 30, 'aria-label': 'Page name', onchange: rename(p) }),
+        p ? h('span', { class: 'bs-a' },
+          btn('', function () { if (n > 0) { boardMark(); list.splice(n - 1, 0, list.splice(n, 1)[0]); paintPages(); boardSide(); } }, 'sm ghost', 'up', 'Move ' + p.name + ' left'),
+          btn('', function () {
+            confirmBox('Delete the page "' + p.name + '"?', 'Its cards go to ' + homeName() + '. Nothing else changes.', 'Delete', true).then(function (y) {
+              if (!y || !S.edit) return;
+              E.undo = []; E.redo = []; E.dirty = true; list.splice(list.indexOf(p), 1);
+              if (S.page === p.id) { S.page = ''; LS.set('page', ''); }
+              E.list = boardLayout(E.mode, E.hidden);
+              boardRebuild(); boardSide();
+            });
+          }, 'sm ghost danger', 'minus', 'Delete ' + p.name)) : null);
+    };
+    box.appendChild(bsHead('Pages', h('span', { class: 'bs-i' }, ic('grid'))));
+    box.appendChild(h('div', { class: 'bs-b' }, h('p', { class: 'muted sm bs-e' }, list.length ? 'Each page has its own cards and layout. To move a card, click it and choose its page.' : 'Split a big dashboard into pages, each with its own cards. With one page there are no tabs at all.'),
+      h('div', { class: 'bs-pgs' }, row(null, -1), list.map(row)),
+      h('div', { class: 'inl', style: { 'margin-top': '10px' } }, list.length < 12 ? btn('Add page', function () {
+        boardMark();
+        var p = { id: rid(), name: 'Page ' + (list.length + 2), cards: [], lg: [], md: [] }; list.push(p);
+        pageGo(p.id); boardView('pages');
+        var f = E.side.querySelector('.bs-pg.on input'); if (f) { f.focus(); f.select(); }
+      }, 'sm', 'plus') : null,
+      !list.length ? btn('Split my cards', pagesSplit, 'sm ghost', 'grid', 'Media, Apps and Containers each get a page') : null)));
+  }
+  /* a first set of pages from the kind of each card, the same split a phone uses */
+  function pagesSplit() {
+    var E = S.edit, by = {}, list = pagesOf();
+    boardMark();
+    boardShown().forEach(function (c) { var t = boardTab(c.s); if (t !== 'home') (by[t] = by[t] || []).push(c.i); });
+    BOARD_TABS.forEach(function (t) { if (by[t[0]]) list.push({ id: rid(), name: t[0] === 'docker' ? 'Containers' : t[1], cards: by[t[0]], lg: [], md: [] }); });
+    if (!list.length) { toast('Your cards all belong on one page.'); return; }
+    E.home.lg = []; E.home.md = []; E.smart = true;
+    E.list = boardLayout(E.mode, E.hidden);
+    boardRebuild(); boardSide();
   }
   /* the panel: 'add' lists what can go on the board, a card's id shows that card, null closes it */
   function boardView(v) {
@@ -1182,7 +1319,7 @@
     Object.keys(R.cards).forEach(function (i) { R.cards[i].el.classList.toggle('sel', i === v); });
     var x = v && R.cards[v], r = x && x.el.getBoundingClientRect();
     E.side.classList.toggle('left', !!r && r.left + r.width / 2 > window.innerWidth * 0.55);      // never over the card it edits
-    E.bAdd.classList.toggle('on', v === 'add');
+    E.bAdd.classList.toggle('on', v === 'add'); E.bPages.classList.toggle('on', v === 'pages');
     boardSide();
   }
   function boardSide() {
@@ -1193,6 +1330,7 @@
     clear(box);
     if (!E.D) box.appendChild(h('div', { class: 'progress' }, h('i')));
     else if (E.view === 'add') boardLibrary(box);
+    else if (E.view === 'pages') boardPages(box);
     else if (E.view.indexOf('into:') === 0) boardLibrary(box, E.view.slice(5));
     else if (E.view.indexOf('grp:') === 0) boardGroupPanel(box, E.view.slice(4));
     else boardInspect(box, E.view);
@@ -1210,7 +1348,8 @@
   /* what is not on the board now */
   function boardSpare() {
     var E = S.edit, c = E.D.cfg, out = [], api2 = S.boot.caps.mode === 'api', all = {};
-    boardCards().forEach(function (x) { all[x.i] = x; });
+    boardAll().forEach(function (x) { all[x.i] = x; });
+    Object.keys(all).forEach(function (i) { var at = pageOf(i); if (at !== (S.page || '') && E.hidden.indexOf(i) < 0) { var pg = pageAt(at); out.push({ t: all[i].t, w: 'On ' + (pg ? pg.name : homeName()), icon: ic(SEC_ICON[all[i].s] || 'grid'), add: function () { boardToPage(i, S.page); } }); } });
     E.hidden.forEach(function (i) { if (all[i]) out.push({ t: all[i].t, w: all[i].grp || i === all[i].s ? 'Section' : all[i].s === 'apps' ? 'App' : (secT(all[i].s) || 'Card'), icon: ic(SEC_ICON[all[i].s] || 'grid'), add: function () { boardUnhide(i); } }); });
     var on = function (o) { return function () { o.visible = true; boardDirty(); boardSide(); }; }, shows = {};
     c.dashboard.sections.forEach(function (s) {
@@ -1312,6 +1451,7 @@
     });
     box.appendChild(h('div', { class: 'bs-b' }, bsSub('Apps', btn('Add', function () { boardView('into:' + id); }, 'sm ghost', 'plus', 'Add apps to this section')),
       rows.length ? h('div', { class: 'bs-l' }, rows) : h('div', { class: 'muted sm bs-e' }, 'No apps here yet.')));
+    if (pagesOf().length) box.appendChild(h('div', { class: 'bs-b' }, F('Page', h('select', { onchange: function (e) { boardToPage(i, e.target.value); } }, pageList().map(function (p) { return h('option', { value: p.id, selected: p.id === (S.page || '') }, p.name); })))));
     box.appendChild(h('div', { class: 'bs-f' }, btn('Remove from dashboard', function () { boardRemove(i); }, 'sm'), btn('Delete section…', function () {
       confirmBox('Delete the section "' + g.name + '"?', 'Its apps stay on your dashboard, each as a card of its own.', 'Delete', true).then(function (y) {
         if (!y || !S.edit) return;
@@ -1324,6 +1464,7 @@
   function boardInspect(box, i) {
     var E = S.edit, D = E.D, c = D.cfg, id = i.split(':')[0] === 'app' ? i.slice(4) : '', card = R.cards[i] ? R.cards[i].c : null;
     var foot = h('div', { class: 'bs-f' }, btn('Remove from dashboard', function () { boardRemove(i); }, 'sm'));
+    var pageSel = pagesOf().length ? h('div', { class: 'bs-b' }, F('Page', h('select', { onchange: function (e) { boardToPage(i, e.target.value); } }, pageList().map(function (p) { return h('option', { value: p.id, selected: p.id === (S.page || '') }, p.name); })))) : null;
     if (id) {
       var s = null, g = null;
       c.groups.forEach(function (x) { x.services.forEach(function (y) { if (y.id === id) { s = y; g = x; } }); });
@@ -1337,6 +1478,7 @@
         var to = c.groups.filter(function (x) { return x.id === e.target.value; })[0] || plainGroup(D);
         boardMove(s, g, to); boardView(to.section ? 'grp:' + to.id : i);
       } }, h('option', { value: '', selected: !g.section }, 'Its own card'), own.map(function (x) { return h('option', { value: x.id, selected: x === g }, x.name); })))));
+      if (pageSel) box.appendChild(pageSel);
       box.appendChild(h('div', { class: 'bs-b' }, h('div', { class: 'bs-l' }, bsRow(ic('gear'), 'Address and login', (D.types[s.type] || [''])[0].replace(/ \(.*\)$/, ''), ic('chev'), function () { editService(D, s, g, false, boardSide, boardDirty); }))));
       foot.appendChild(btn('Delete app…', function () { boardDeleteApp(s, g); }, 'sm ghost danger'));
       box.appendChild(foot);
@@ -1349,6 +1491,7 @@
     // the name on the card changes as you type, ahead of the preview
     var named = function (v) { var t = R[sid] && R[sid].el.querySelector('.sec-h h2 button'); if (t && t.lastChild) t.lastChild.textContent = v.trim() || TITLES[sid]; txt(box.querySelector('.bs-h b'), v.trim() || TITLES[sid]); };
     if (mine) box.appendChild(h('div', { class: 'bs-n' }, h('label', { class: 'bs-nl' }, 'Name', h('input', { type: 'text', value: sec.title || '', maxlength: 40, placeholder: TITLES[sid], oninput: function (e) { sec.title = e.target.value; named(sec.title); boardDirty(); } }))));
+    if (pageSel) box.appendChild(pageSel);
     box.appendChild(body);
     var more = h('div');
     if (sid === 'overview') {
@@ -1399,13 +1542,14 @@
     boardRemount();
   }
   function boardCancel() {
-    var E = S.edit, done = function () { boardDrop(); if (E.changed) { S.L = E.saved; shell(); refreshNow(); } else boardRebuild(); };
+    var E = S.edit, was = S.page, done = function () { boardDrop(); pageCheck(); if (E.changed || was !== S.page || E.pages.length !== (S.L.dashboard.board.pages || []).length) { S.L = E.saved; shell(); refreshNow(); } else boardRebuild(); };
     if (!E.dirty) return done();
     confirmBox('Discard your changes?', 'The dashboard goes back to how it was saved.', 'Discard', true).then(function (y) { if (y) done(); });
   }
   function boardSave() {
-    var E = S.edit, v = { hidden: E.hidden, compact: E.compact }; v[E.mode] = E.list;
-    if (E.smart) { v.lg = []; v.md = []; }              // an empty layout means: keep arranging it automatically
+    var E = S.edit, v = { hidden: E.hidden, compact: E.compact, pages: E.pages, home: E.homeName.trim() };
+    pageStore();                                         // an empty layout means: keep arranging it automatically
+    v.lg = E.home.lg; v.md = E.home.md;
     if (E.changed) {                                     // apps or sections changed: saved as Settings saves them, with the board in one go
       E.D.cfg.dashboard.board = Object.assign({}, E.D.cfg.dashboard.board, v);
       api('save', { config: E.D.cfg, creds: E.D.creds }).then(function (j) {
@@ -1688,6 +1832,10 @@
   }
   /* bring an app, container or VM on the dashboard into view and highlight it for a moment */
   function sbJump(zone, name, id) {
+    if (R.cards && !S.edit) {
+      var sid = id ? id.replace(/^w-/, '') : '', own = sid ? S.L.groups.filter(function (g) { return g.section && g.services.some(function (x) { return x.id === sid; }); })[0] : null;
+      pageReveal(function (c) { return own ? c.i === 'grp:' + own.id : sid ? c.i === 'app:' + sid : c.s === zone; });
+    }
     var sec = R.sections && R.sections.querySelector('section.sec[data-sec="' + zone + '"]');
     var el = (id && document.getElementById(id)) || (sec && [].filter.call(sec.querySelectorAll('[data-name]'), function (x) { return x.getAttribute('data-name') === name; })[0]) || sec;
     if (!el) { toast(name + ' is not on the dashboard (its section is hidden).'); return; }
@@ -1856,9 +2004,10 @@
     r.stale = h('div', { class: 'stale', hidden: true, role: 'status' });
     r.body.appendChild(r.stale); r.body.appendChild(r.bar); r.body.appendChild(r.detail);
     if (!r.bar.childNodes.length) r.bar.appendChild(h('div', { class: 'empty' }, 'No metrics are turned on (Settings > Apps & cards).'));
-    r.open = LS.get('detail', '');
+    r.open = GUEST ? '' : LS.get('detail', '');
   };
   function toggleDetail(id) {
+    if (GUEST) return;
     var r = R.overview; r.open = r.open === id ? '' : id; LS.set('detail', r.open);
     for (var k in r.tiles) r.tiles[k].el.setAttribute('aria-expanded', k === r.open ? 'true' : 'false');
     r.detailSig = null; paintDetail(S.live || {});
@@ -3357,6 +3506,10 @@
       var e = h('button', { type: 'button', class: 'err' + (r.unconfigured ? ' cfg' : ''), 'aria-expanded': 'false', onclick: function () { e.classList.toggle('open'); e.setAttribute('aria-expanded', e.classList.contains('open') ? 'true' : 'false'); } }, r.preview ? 'Loads once you save' : r.unconfigured ? 'Not configured' : r.offline ? 'Unreachable' : 'API error', h('div', { class: 'x' }, r.error));
       cb.appendChild(e); return;
     }
+    serviceBody(cb, r);
+  }
+  /* what an app's answer looks like on its card */
+  function serviceBody(cb, r) {
     if (r.blocks && r.blocks.length) cb.appendChild(blocks(r.blocks));
     if (r.list) {
       var l = h('div', { class: 'lst' });
@@ -3814,11 +3967,55 @@
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['General', 'clock', tabSystem, 'general'],
     ignored: ['Alerts', 'mute', tabIgnored],
+    guest: ['Guest link', 'eye', tabGuest],
     config: ['Server connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }],
     backup: ['Backup & restore', 'download', configCommon],
     about: ['About', 'info', tabAbout]
   };
-  var SET_NAV = [['Dashboard', ['dashboard', 'appearance']], ['Preferences', ['system', 'ignored']], ['Server', ['config', 'backup']], ['Advanced', ['css', 'about']]];
+  var SET_NAV = [['Dashboard', ['dashboard', 'appearance']], ['Preferences', ['system', 'ignored']], ['Server', ['config', 'guest', 'backup']], ['Advanced', ['css', 'about']]];
+  /* the guest link is saved as you go, like the alert channels: it has nothing to do with the settings you can preview */
+  function tabGuest(b) {
+    var box = h('div', null, h('div', { class: 'progress' }, h('i')));
+    b.appendChild(set('Guest link', 'A private address for family or friends. It shows part of your dashboard and cannot change anything.', box));
+    var base = window.UND_STANDALONE ? location.origin : S.boot.port_enabled ? location.protocol + '//' + location.hostname + ':' + S.boot.port : '';
+    var CHOICES = [['overview', 'System', 'CPU, memory, storage, network, uptime'], ['media', 'Media', 'Upcoming and recently added'], ['playing', 'Now playing', 'What is playing and who is watching'], ['apps', 'Apps', 'The apps ticked below']];
+    function paint(v) {
+      clear(box);
+      if (v.error) { box.appendChild(h('div', { class: 'banner bad' }, v.error)); return; }
+      if (!base) { box.appendChild(h('div', { class: 'banner' }, 'The guest link needs UnDash\'s own port. Turn it on under Server connection.')); return; }
+      var turn = function (on) { api('guest_turn', { on: on ? '1' : '0' }).then(function (j) { if (j.error) toast(j.error, true); paint(j.error ? v : j); }); };
+      box.appendChild(h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: v.on, onchange: function (e) { turn(e.target.checked); } }), 'Share a guest link'));
+      if (!v.on) return;
+      var url = h('input', { type: 'text', readonly: true, value: base + v.path, 'aria-label': 'Guest link', spellcheck: 'false', onfocus: function (e) { e.target.select(); } });
+      var copy = function () {
+        var ok = function () { toast('Link copied'); };
+        if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(url.value).then(ok, function () { toast('Select the link and copy it.', true); }); return; }
+        url.focus(); url.select();
+        try { if (document.execCommand('copy')) ok(); else toast('Select the link and copy it.', true); } catch (x) { toast('Select the link and copy it.', true); }
+      };
+      box.appendChild(h('div', { class: 'sec-in', style: { 'margin-top': '10px' } }, url, btn('Copy', copy, 'sm', 'check')));
+      if (S.boot.auth === 'none' || S.boot.auth === 'open') box.appendChild(h('div', { class: 'banner warn', style: { 'margin-top': '10px' } }, 'This dashboard has no password, so anyone with the plain address still gets everything. Set one under Server connection before you share this.'));
+      var save = function () { api('guest_save', { value: { sections: v.sections, apps: v.apps } }).then(function (j) { if (j.error) toast(j.error, true); }); };
+      box.appendChild(h('div', { class: 'ae-sub' }, 'What guests see'));
+      box.appendChild(h('div', { class: 'olist' }, CHOICES.map(function (c) {
+        return h('div', { class: 'oi nr' }, h('span', { class: 'crow still' }, h('span', { class: 'crt' }, h('b', null, c[1]), h('span', { class: 'muted xs ell' }, c[2]))), bsSwitch(!!v.sections[c[0]], 'Show ' + c[1] + ' to guests', function (on) { v.sections[c[0]] = on; save(); paint(v); }));
+      })));
+      if (v.sections.apps) {
+        box.appendChild(h('div', { class: 'ae-sub' }, 'Apps guests see'));
+        box.appendChild(v.all.length ? h('div', { class: 'olist' }, v.all.map(function (a) {
+          return h('div', { class: 'oi nr' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, img(iconUrl(a.icon), '', 'web')), h('span', { class: 'crt' }, h('b', { class: 'ell' }, a.name))), bsSwitch(v.apps.indexOf(a.id) >= 0, 'Show ' + a.name + ' to guests', function (on) {
+            v.apps = v.apps.filter(function (i) { return i !== a.id; }); if (on) v.apps.push(a.id); save();
+          }));
+        })) : h('div', { class: 'muted sm' }, 'No apps yet.'));
+        box.appendChild(h('p', { class: 'hint' }, 'New apps stay private until you tick them here. A card can show what the app reports, such as a public IP address.'));
+      }
+      box.appendChild(h('p', { class: 'hint' }, 'Guests never see containers, VMs, downloads, requests, alerts, addresses or Settings.'));
+      box.appendChild(h('div', { class: 'inl' }, btn('New link…', function () {
+        confirmBox('Make a new link?', 'The old link stops working at once, and anyone using it is signed out.', 'Make new link', true).then(function (y) { if (y) api('guest_new').then(function (j) { if (j.error) toast(j.error, true); else { paint(j); toast('New link made'); } }); });
+      }, 'sm')));
+    }
+    api('guest_get').then(paint);
+  }
   /* About: what is running, where its files are, and the tools for a closer look */
   function tabAbout(b, D) {
     var bt = S.boot, me = S.self || {}, api = bt.caps.mode === 'api', sv = bt.server || {};
@@ -4407,11 +4604,11 @@
   /* ---- Apps: every app is added, changed, hidden and removed here. Addresses go to config.yaml, keys and passwords to .env (server side) ---- */
   var APP_CATS = [['Arr Stack', ['radarr', 'sonarr', 'lidarr', 'readarr', 'prowlarr', 'bazarr', 'autobrr', 'overseerr', 'wizarr']],
     ['Downloads', ['qbittorrent', 'qui', 'sabnzbd']], ['Media', ['plex', 'jellyfin', 'emby', 'tautulli', 'tautulli_recent', 'calendar', 'tdarr', 'unmanic']],
-    ['Network and tools', ['adguard', 'pihole', 'npm', 'gluetun', 'immich', 'homeassistant', 'peanut']], ['Monitoring', ['scrutiny', 'uptimekuma', 'speedtest']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Widgets', ['weather', 'releases', 'bookmarks']], ['Other', ['customapi', 'link']]];
+    ['Network and tools', ['adguard', 'pihole', 'npm', 'gluetun', 'immich', 'homeassistant', 'peanut']], ['Monitoring', ['scrutiny', 'uptimekuma', 'speedtest']], ['Server', ['storage', 'docker_summary', 'vm_summary', 'ups']], ['Widgets', ['weather', 'rss', 'releases', 'bookmarks']], ['Other', ['customapi', 'link']]];
   var APP_PORT = { radarr: 7878, sonarr: 8989, lidarr: 8686, readarr: 8787, prowlarr: 9696, bazarr: 6767, autobrr: 7474, overseerr: 5055, wizarr: 5690, qbittorrent: 8080, qui: 7476, sabnzbd: 8080,
     plex: 32400, jellyfin: 8096, emby: 8096, tautulli: 8181, tautulli_recent: 8181, adguard: 3000, pihole: 80, npm: 81, immich: 2283, peanut: 8080, customapi: 80,
     scrutiny: 8080, tdarr: 8265, unmanic: 8888, uptimekuma: 3001, speedtest: 80, gluetun: 8000, homeassistant: 8123 };
-  var APP_ICON = { weather: '', releases: 'github', bookmarks: '', tdarr: 'tdarr.png', unmanic: 'unmanic.png', uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
+  var APP_ICON = { weather: '', rss: '', releases: 'github', bookmarks: '', tdarr: 'tdarr.png', unmanic: 'unmanic.png', uptimekuma: 'uptime-kuma', speedtest: 'speedtest-tracker', homeassistant: 'home-assistant', adguard: 'adguard-home', pihole: 'pi-hole', npm: 'nginx-proxy-manager', tautulli_recent: 'tautulli', storage: 'unraid', docker_summary: 'docker', vm_summary: 'qemu', ups: 'nut', customapi: '', link: '', calendar: '' };
   var KEY_WHERE = { radarr: 'Radarr: Settings > General', sonarr: 'Sonarr: Settings > General', lidarr: 'Lidarr: Settings > General', readarr: 'Readarr: Settings > General', prowlarr: 'Prowlarr: Settings > General',
     bazarr: 'Bazarr: Settings > General', overseerr: 'Overseerr / Jellyseerr: Settings > General', sabnzbd: 'SABnzbd: Config > General', qui: 'qui: Settings > API Keys', autobrr: 'autobrr: Settings > API Keys',
     tautulli: 'Tautulli: Settings > Web Interface', tautulli_recent: 'Tautulli: Settings > Web Interface', emby: 'Emby: Dashboard > Advanced > API Keys', jellyfin: 'Jellyfin: Dashboard > API Keys', immich: 'Immich: Account Settings > API Keys',
@@ -4703,7 +4900,15 @@
     var s = JSON.parse(JSON.stringify(orig)), c0 = D.creds[s.id] || {};
     var cr = { key: c0.key || '', username: c0.username || '', password: c0.password || '' }, stored = { key: c0.key === D.keep, password: c0.password === D.keep, username: false };
     if (!s.options || Array.isArray(s.options)) s.options = {};
-    var gid = group.id, form = h('div', { class: 'ae-form' }), noop = function () {};
+    var gid = group.id, form = h('div', { class: 'ae-form' }), noop = function () {}, built = { tree: null, err: '', adv: false };
+    // tries the form as it stands; nothing is saved
+    var trial = function (action) {
+      var cfg = JSON.parse(JSON.stringify(D.cfg)), creds = JSON.parse(JSON.stringify(D.creds));
+      var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0] || cfg.groups[0];
+      var k = gg.services.map(function (x) { return x.id; }).indexOf(s.id); if (k < 0) gg.services.push(s); else gg.services[k] = s;
+      creds[s.id] = cr;
+      return api(action, { config: cfg, creds: creds, shared: sharedOut(D), id: s.id }, 30000);
+    };
     var draw = function () {
       clear(form);
       var T = D.types[s.type] || ['', [], false], z = appZone(D, s), port = APP_PORT[s.type] || 80;
@@ -4762,34 +4967,19 @@
           followPicker(s.options.repos || '', function (txt) { s.options.repos = txt; draw(); });
         }, 'sm', 'box')));
       }
+      if (s.type === 'rss') form.appendChild(h('div', null, lines('feeds', 'https://selfh.st/rss/\nReleases | https://github.com/immich-app/immich/releases.atom', 'Feeds', 'One per line, up to ' + 10 + ': the address, or Name | address. RSS and Atom both work. Each is read at most every 15 minutes.'),
+        F('Stories to show', tIn(s.options, 'limit', noop, '8', 'number', { min: 1, max: 50 }))));
       if (s.type === 'bookmarks') form.appendChild(lines('links', 'Router | http://192.168.1.1\nhttps://selfh.st', 'Links', 'One per line: Title | https://… or just the address. Only http and https links are kept.'));
       if (s.type === 'uptimekuma') form.appendChild(F('Status page slug', tIn(s.options, 'slug', noop, 'home'), 'Uptime Kuma reads a status page: the end of its address, /status/NAME. Make one under Status Pages first.'));
       if (s.type === 'homeassistant') form.appendChild(F('Entities', h('textarea', { rows: 3, spellcheck: 'false', placeholder: 'sensor.living_room_temperature\nlight.kitchen', oninput: function (e) { s.options.entities = e.target.value; } }, s.options.entities || ''),
         'Entity ids, one per line, up to 8 (Developer tools > States lists them). Empty shows people home, lights on and switches on.'));
       if (s.type === 'emby' || s.type === 'jellyfin') adv.appendChild(cIn(s.options, 'hide_blocks', noop, 'Only show the streams (hide the library counts)'));
-      if (s.type === 'customapi') {
-        var js = function (k, def, lab) { var t = h('textarea', { rows: 6, spellcheck: 'false', 'aria-label': lab, oninput: function (e) { try { s.options[k] = JSON.parse(e.target.value || def); e.target.style.borderColor = ''; } catch (x) { e.target.style.borderColor = 'var(--bad)'; } } }); t.value = JSON.stringify(s.options[k] || JSON.parse(def), null, 2); return t; };
-        form.appendChild(h('div', { class: 'grid2' }, F('Display', sIn(s.options, 'display', noop, [['block', 'Numbers (blocks)'], ['items', 'A row for each item of a list'], ['list', 'Fixed rows']], draw)), F('Method', tIn(s.options, 'method', noop, 'GET'))));
-        form.appendChild(F('Headers (JSON)', js('headers', '{}', 'Headers'), '{{KEY}} is replaced by the API key above, e.g. {"X-Api-Key": "{{KEY}}"}.'));
-        if (s.options.display === 'items') {
-          form.appendChild(h('div', { class: 'grid2' },
-            F('List in the answer', tIn(s.options, 'items', noop, 'data.results'), 'Where the list is, as a path. Empty: the answer itself is the list.'),
-            F('Rows', tIn(s.options, 'limit', noop, '10', 'number', { min: 1, max: 50 })),
-            F('Title', tIn(s.options, 'title', noop, '{name}')), F('Second line', tIn(s.options, 'sub', noop, '{status} · {size|bytes}')),
-            F('Right side', tIn(s.options, 'right', noop, '{progress|percent}'), 'Not shown when there is a date.'), F('Date field', tIn(s.options, 'date', noop, 'added'), 'Shown as "2 h ago". ISO dates, seconds or milliseconds.'),
-            F('Link', tIn(s.options, 'link', noop, 'https://example.com/item/{id}'), 'Optional; opens when the row is clicked.')));
-          form.appendChild(h('div', { class: 'hint' }, 'In the boxes, {field} is replaced by that field of each item (a path like {user.name} works). Add a format after a bar: {size|bytes}, {speed|rate}, {done|percent}, {count|number}, {value|round}, {when|date}, {state|upper}.'));
-        } else form.appendChild(F('Mappings (JSON)', js('mappings', '[]', 'Mappings'), '[{"field": "data.users", "label": "Users", "format": "number"}] or a template: {"template": "{data.up} / {data.total}", "label": "Up"}. Formats: number, text, bytes, rate, percent; fixed rows can add "additional": {"field": "...", "format": "relativeDate", "scale": 1000}.'));
-      }
+      if (s.type === 'customapi') form.appendChild(apiBuilder(s, built, trial));
       if (adv.childNodes.length) form.appendChild(h('details', { class: 'ae-adv' }, h('summary', null, 'More options'), adv));
       var res = h('div', { role: 'status' });
-      if (T[2] || /^(calendar|customapi|ups|weather|releases|bookmarks)$/.test(s.type)) form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
+      if (s.type !== 'customapi' && (T[2] || /^(calendar|ups|weather|rss|releases|bookmarks)$/.test(s.type))) form.appendChild(h('div', { class: 'inl', style: { 'margin-top': '6px' } }, btn('Test', function () {
         clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
-        var cfg = JSON.parse(JSON.stringify(D.cfg)), creds = JSON.parse(JSON.stringify(D.creds));
-        var gg = cfg.groups.filter(function (x) { return x.id === group.id; })[0] || cfg.groups[0];
-        var k = gg.services.map(function (x) { return x.id; }).indexOf(s.id); if (k < 0) gg.services.push(s); else gg.services[k] = s;
-        creds[s.id] = cr;
-        api('test', { config: cfg, creds: creds, shared: sharedOut(D), id: s.id }).then(function (r) {
+        trial('test').then(function (r) {
           clear(res);
           if (r.error) res.appendChild(h('div', { class: 'banner bad' }, r.error));
           else res.appendChild(h('div', { class: 'banner ok' }, 'It works: ', r.blocks ? r.blocks.map(function (x) { return x.label + ' ' + fmt(x.value, x.fmt); }).join(' · ') : r.list ? r.list.length + ' rows' + (r.list.length ? ': ' + r.list.slice(0, 3).map(function (x) { return x.title + (x.sub ? ' (' + x.sub + ')' : ''); }).join(', ') + (r.list.length > 3 ? '…' : '') : '') : r.calendar ? r.calendar.length + ' events' : r.streams ? r.streams.length + ' streams' : 'ok'));
@@ -4809,6 +4999,117 @@
       }
       D.creds[s.id] = Object.assign({}, c0, cr); m.close(); dirtyOuter(); after();
     }, 'pri')], true);
+  }
+
+  /* ---- Custom API: read the address once, then click what belongs on the card. The boxes write the same options a hand-made card has ---- */
+  var KEY_HOW = [['', 'Not sent'], ['X-Api-Key', 'X-Api-Key header'], ['Authorization', 'Bearer token'], ['url', 'In the address, as {{KEY}}']];
+  var API_FMT = [['number', 'Number'], ['text', 'Text'], ['bytes', 'Size'], ['rate', 'Speed'], ['percent', 'Percent']];
+  function apiLabel(p) {
+    var w = String(p).split('.').filter(function (x) { return !/^\d+$/.test(x); }).pop() || 'Value';
+    w = w.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  function apiFormat(r) { return r.t !== 'num' ? 'text' : /percent|pct/i.test(r.p) ? 'percent' : /speed|bandwidth/i.test(r.p) ? 'rate' : /bytes|size/i.test(r.p) ? 'bytes' : 'number'; }
+  function apiKeyHow(s) {
+    var o = s.options.headers || {};
+    return o['X-Api-Key'] === '{{KEY}}' ? 'X-Api-Key' : o.Authorization === 'Bearer {{KEY}}' ? 'Authorization' : /\{\{KEY\}\}/.test(s.url || '') ? 'url' : '';
+  }
+  function apiBuilder(s, B, trial) {
+    var o = s.options, box = h('div', { class: 'jb' }), prev = h('div', { class: 'jp', role: 'status' }), timer = 0, last = null;
+    if (!o.headers || Array.isArray(o.headers)) o.headers = {};
+    if (!Array.isArray(o.mappings)) o.mappings = [];
+    o.display = o.display || 'block';
+    var soon = function () { clearTimeout(timer); timer = setTimeout(preview, 450); };
+    function preview() {
+      if (!B.tree) return;
+      trial('test').then(function (r) {
+        clear(prev);
+        var cb = h('div', { class: 'cb' });
+        if (r.error) { prev.appendChild(h('div', { class: 'banner bad' }, r.error)); return; }
+        serviceBody(cb, r);
+        prev.appendChild(h('div', { class: 'ae-sub' }, 'Preview'));
+        prev.appendChild(h('div', { class: 'card w ac' }, h('div', { class: 'ch' }, img(iconUrl(s.icon), 'aico', 'tag'), h('span', { class: 'nm' }, s.name || 'Custom API')), cb));
+      });
+    }
+    function load(bt) {
+      bt.disabled = true;
+      trial('probe').then(function (j) {
+        bt.disabled = false; B.err = j.error || ''; B.tree = j.error ? B.tree : j.tree;
+        if (!j.error) { B.fields = null; (B.tree || []).forEach(function (r) { if (r.t === 'list' && r.p === (o.items || '')) B.fields = r.f; }); }
+        paint(); preview();
+      });
+    }
+    var mapped = function (p) { return o.mappings.filter(function (m) { return m.field === p; })[0]; };
+    function useList(r) {
+      o.display = 'items'; o.items = r.p; B.fields = r.f;
+      var f = r.f || [], find = function (re) { return f.filter(function (x) { return x.t !== 'list' && re.test(x.p); })[0]; }, t = find(/^(name|title|label)$/i) || f.filter(function (x) { return x.t === 'str'; })[0] || f[0];
+      if (!o.title && t) o.title = '{' + t.p + '}';
+      var d = find(/(date|time|_at|added|created|updated)$/i), l = find(/^(url|href|link)$/i);
+      if (!o.date && d) o.date = d.p;
+      if (!o.link && l) o.link = '{' + l.p + '}';
+      paint(); soon();
+    }
+    function useValue(r) {
+      if (o.display !== 'block') o.display = 'block';
+      var m = mapped(r.p);
+      if (m) o.mappings.splice(o.mappings.indexOf(m), 1); else o.mappings.push({ field: r.p, label: apiLabel(r.p), format: apiFormat(r) });
+      paint(); soon();
+    }
+    function field(k, lab, ph, hint) {
+      var inp = h('input', { type: 'text', value: o[k] || '', placeholder: ph, spellcheck: 'false', oninput: function (e) { o[k] = e.target.value; soon(); }, onfocus: function (e) { last = { k: k, el: e.target }; } });
+      return F(lab, inp, hint);
+    }
+    function chip(r) {
+      return h('button', { type: 'button', class: 'jc', title: r.v === undefined ? '' : 'For example: ' + r.v, onmousedown: function (e) { e.preventDefault(); }, onclick: function () {
+        if (!last) { toast('Click a box first, then a field.'); return; }
+        var el = last.el, add = last.k === 'date' ? r.p : '{' + r.p + '}', at = last.k === 'date' ? 0 : el.selectionStart || 0, end = last.k === 'date' ? el.value.length : el.selectionEnd || 0;
+        el.value = el.value.slice(0, at) + add + el.value.slice(end); o[last.k] = el.value; soon();
+      } }, r.p);
+    }
+    function paint() {
+      clear(box);
+      box.appendChild(h('div', { class: 'ae-sub' }, 'Build the card'));
+      box.appendChild(F('Send the key', h('select', { onchange: function (e) {
+        delete o.headers['X-Api-Key']; delete o.headers.Authorization;
+        if (e.target.value === 'X-Api-Key') o.headers['X-Api-Key'] = '{{KEY}}';
+        if (e.target.value === 'Authorization') o.headers.Authorization = 'Bearer {{KEY}}';
+        paint();
+      } }, KEY_HOW.map(function (x) { return h('option', { value: x[0], selected: apiKeyHow(s) === x[0] }, x[1]); })), apiKeyHow(s) === 'url' ? null : 'Most apps name the header in their API documentation. Other headers are under More options.'));
+      var read = btn(B.tree ? 'Read again' : 'Read the address', function () { load(read); }, B.tree ? 'sm' : 'pri sm', 'search');
+      box.appendChild(h('div', { class: 'inl' }, read, h('span', { class: 'muted sm' }, B.tree ? 'Click what belongs on the card.' : 'UnDash asks once, then you click what you want to see.')));
+      if (B.err) box.appendChild(h('div', { class: 'banner bad', style: { 'margin-top': '8px' } }, B.err));
+      if (B.tree) {
+        var lists = B.tree.filter(function (r) { return r.t === 'list' && r.n > 0; });
+        if (!B.tree.length) box.appendChild(h('div', { class: 'muted sm jt' }, 'The answer is empty.'));
+        else box.appendChild(h('div', { class: 'jt', role: 'list' }, B.tree.map(function (r) {
+          var on = r.t === 'list' ? o.display === 'items' && (o.items || '') === r.p : o.display === 'block' && !!mapped(r.p);
+          return h('button', { type: 'button', class: 'jr' + (on ? ' on' : ''), 'aria-pressed': on ? 'true' : 'false', disabled: r.t === 'list' && !r.n, onclick: function () { if (r.t === 'list') useList(r); else useValue(r); } },
+            ic(on ? 'check' : r.t === 'list' ? 'array' : 'plus'), h('span', { class: 'jk ell' }, r.p || 'The whole answer'), h('span', { class: 'jv ell' }, r.t === 'list' ? (r.n === 1 ? 'List of 1' : 'List of ' + r.n) : r.v === '' ? 'empty' : r.v));
+        })));
+        if (lists.length && o.display === 'block') box.appendChild(h('p', { class: 'hint' }, 'Pick single values for numbers, or a list for one row per item.'));
+      }
+      if (o.display === 'block' && o.mappings.length) box.appendChild(h('div', { class: 'jm' }, o.mappings.map(function (m) {
+        return h('div', { class: 'jmr' },
+          h('input', { type: 'text', value: m.label || '', 'aria-label': 'Label', placeholder: 'Label', oninput: function (e) { m.label = e.target.value; soon(); } }),
+          m.template ? h('span', { class: 'muted xs ell' }, m.template) : h('select', { 'aria-label': 'Show as', onchange: function (e) { m.format = e.target.value; soon(); } }, API_FMT.map(function (f) { return h('option', { value: f[0], selected: (m.format || 'number') === f[0] }, f[1]); })),
+          h('span', { class: 'muted xs ell jmp', title: m.field || '' }, m.field || ''),
+          btn('', function () { o.mappings.splice(o.mappings.indexOf(m), 1); paint(); soon(); }, 'sm ghost danger', 'minus', 'Remove ' + (m.label || 'this value')));
+      })));
+      if (o.display === 'items') {
+        box.appendChild(h('div', { class: 'grid2' }, field('title', 'Title', '{name}'), field('sub', 'Second line', '{status}'), field('right', 'Right side', '{progress|percent}', 'Left out when the row has a date.'), field('date', 'Date field', 'added', 'Shown as "2 h ago".'), field('link', 'Link', 'https://example.com/{id}', 'Opens when the row is clicked.'), F('Rows', tIn(o, 'limit', soon, '10', 'number', { min: 1, max: 50 }))));
+        if (B.fields && B.fields.length) box.appendChild(h('div', { class: 'fld' }, h('label', null, 'Fields of each item'), h('div', { class: 'jcs' }, B.fields.filter(function (x) { return x.t !== 'list'; }).map(chip)), h('div', { class: 'hint' }, 'Click a box, then a field. Add a format after a bar: {size|bytes}, {speed|rate}, {done|percent}, {count|number}, {when|date}.')));
+      }
+      var js = function (k, def, lab) { var t = h('textarea', { rows: 5, spellcheck: 'false', 'aria-label': lab, onchange: function (e) { try { o[k] = JSON.parse(e.target.value || def); e.target.style.borderColor = ''; soon(); } catch (x) { e.target.style.borderColor = 'var(--bad)'; } } }); t.value = JSON.stringify(o[k] || JSON.parse(def), null, 2); return t; };
+      var more = h('details', { class: 'ae-adv', open: B.adv, ontoggle: function (e) { B.adv = e.target.open; } }, h('summary', null, 'More options'),
+        F('Method', sIn(o, 'method', soon, [['GET', 'GET'], ['POST', 'POST']])),
+        F('Headers (JSON)', js('headers', '{}', 'Headers'), '{{KEY}} is replaced by the API key above.'),
+        o.display === 'items' ? null : F('Values (JSON)', js('mappings', '[]', 'Values'), 'A template works too: {"template": "{data.up} / {data.total}", "label": "Up"}.'));
+      box.appendChild(more);
+      box.appendChild(prev);
+    }
+    paint();
+    if (B.tree) soon();
+    return box;
   }
 
   /* values several apps share ({{NAME}}): advanced, most setups have none */
@@ -5010,6 +5311,7 @@
   // g then a letter jumps to a section (it opens a collapsed one); ? lists everything
   var GOTO = { o: 'overview', a: 'alerts', f: 'favorites', m: 'media', s: 'arr', d: 'downloads', n: 'playing', q: 'requests', p: 'apps', c: 'docker', v: 'vms', h: 'health' };
   function jumpTo(id) {
+    if (R.cards && !S.edit && !R[id]) pageReveal(function (c) { return c.s === id; });
     var r = R[id]; if (!r) { toast((secT(id) || id) + ' is hidden (Settings > Apps & cards).', true); return; }
     if (r.pop) { alertPop(); return; }
     if (R.cards) boardReveal(id);
@@ -5033,7 +5335,7 @@
     var row = function (k, what) { return h('div', { class: 'kh' }, h('span', null, k.split(' ').map(function (x) { return h('kbd', null, x); })), h('span', null, what)); };
     var go = Object.keys(GOTO).map(function (k) { return row('g ' + k, secT(GOTO[k])); });
     modal('Keyboard shortcuts', h('div', { class: 'keys' },
-      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Search'), row('Ctrl K', 'Search (⌘ K on a Mac), also while typing'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
+      h('div', null, h('h4', { class: 'ign-h' }, 'Anywhere'), row('/', 'Search'), row('Ctrl K', 'Search (⌘ K on a Mac), also while typing'), row('1 – 9', 'Go to a page'), row('r', 'Refresh everything now'), row('p', 'Pause or resume live refresh'),
         row(',', 'Settings'), row('?', 'This list'), row('Esc', 'Close a dialog, menu or the filter')),
       h('div', null, h('h4', { class: 'ign-h' }, 'Go to a section'), go)), null, true);
   }
@@ -5052,10 +5354,11 @@
     }
     if (k === '/' && R.search) { e.preventDefault(); R.search.focus(); }
     else if (k === 'g') { S.gKey = Date.now(); }
+    else if (/^[1-9]$/.test(k) && R.cards && pageList().length > 1) { var pg = pageList()[+k - 1]; if (pg) { e.preventDefault(); pageGo(pg.id); } }
     else if (k === '?') { e.preventDefault(); keysHelp(); }
     else if (k === 'r') { e.preventDefault(); refreshAll(); }
     else if (k === 'p') { e.preventDefault(); togglePause(); toast(S.paused ? 'Live refresh paused' : 'Live refresh resumed'); }
-    else if (k === ',') { e.preventDefault(); openSettings(); }
+    else if (k === ',' && !GUEST) { e.preventDefault(); openSettings(); }
   });
   window.addEventListener('beforeunload', function (e) { if ((S.drawer && S.drawer.dirty) || (S.edit && S.edit.changed)) { e.preventDefault(); e.returnValue = ''; } });
 

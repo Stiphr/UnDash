@@ -145,6 +145,12 @@ switch ($action) {
     out(['ok' => true]);
   }
 
+  /* the guest link: the page only ever gets the address back here, in Settings */
+  case 'guest_get':  out(und_guest_view(und_load_config()));
+  case 'guest_turn': { $lk = und_config_lock(); $r = und_guest_turn($P('on') === '1', und_load_config()); if (isset($r['error'])) fail($r['error'], 500); und_history_add('server', 'Guest link', $P('on') === '1' ? 'on' : 'off', true); out(und_guest_view(und_load_config())); }
+  case 'guest_new':  { if (!und_guest_on()) fail('The guest link is off.'); if (!und_guest_token_set(bin2hex(random_bytes(24)))) fail('The .env file could not be written.', 500); und_history_add('server', 'Guest link', 'renewed', true); out(und_guest_view(und_load_config())); }
+  case 'guest_save': { $lk = und_config_lock(); $r = und_guest_save((array)$J('value')); if (isset($r['error'])) fail($r['error'], 500); out(und_guest_view(und_load_config())); }
+
   /* ignored alerts: hiding only, monitoring goes on */
   case 'ignores_list':  out(['now' => time(), 'rules' => und_ignores(), 'categories' => und_alert_categories()]);
   case 'ignore_add': {
@@ -228,7 +234,7 @@ switch ($action) {
       $k = $kind === 'docker_view' ? 'docker' : 'vms';
       $cfg[$k] = array_merge($cfg[$k], array_intersect_key($val, ['layout' => 1, 'sort' => 1, 'hide_stopped' => 1, 'view' => 1, 'filter' => 1, 'selected' => 1, 'columns' => 1]));
     } elseif ($kind === 'board') {
-      $cfg['dashboard']['board'] = und_board_clean(array_intersect_key($val, ['on' => 1, 'compact' => 1, 'lg' => 1, 'md' => 1, 'hidden' => 1]) + (array)($cfg['dashboard']['board'] ?? []));
+      $cfg['dashboard']['board'] = und_board_clean(array_intersect_key($val, ['on' => 1, 'compact' => 1, 'lg' => 1, 'md' => 1, 'hidden' => 1, 'home' => 1, 'pages' => 1]) + (array)($cfg['dashboard']['board'] ?? []));
     } elseif ($kind === 'apps_view') {
       if (isset($val['headers'])) $cfg['apps']['headers'] = (bool)$val['headers'];
     } elseif ($kind === 'group') {
@@ -253,6 +259,16 @@ switch ($action) {
     if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
     $GLOBALS['UND_TEST_SECRETS'] = ['vars' => array_diff_key($env, array_flip(UND_ENV_RESERVED)), 'svc' => [], 'unraid' => []];
     out(und_fetch_service($norm, $id));
+  }
+  /* the card builder: what the address answers, with what the form shows (nothing is written) */
+  case 'probe': {
+    $cfg = $J('config'); $id = $P('id');
+    if (!$cfg || !preg_match('/^[a-f0-9]{8}$/', $id)) fail('Nothing to read.');
+    $env = und_env(); $old = und_load_config();
+    $norm = und_creds_apply(und_normalize($cfg), $old, $J('creds') ?: [], $env);
+    if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
+    $GLOBALS['UND_TEST_SECRETS'] = ['vars' => array_diff_key($env, array_flip(UND_ENV_RESERVED)), 'svc' => [], 'unraid' => []];
+    out(und_customapi_probe($norm, $id));
   }
   case 'validate': out(['issues' => und_validate(und_load_config())]);
 
