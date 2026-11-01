@@ -7,5 +7,5 @@ while (true) {
   clearstatcache();
   $ok = true;
   if (time() - (int)@filemtime(und_tmp('viewer')) < 60) $ok = und_api_stats_read() !== null;
-  sleep($ok ? UND_STATS_EVERY : 4 * UND_STATS_EVERY);
+  sleep($ok ? UND_STATS_EVERY : 2 * UND_STATS_EVERY);
 }
