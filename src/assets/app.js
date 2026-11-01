@@ -563,6 +563,7 @@
   }
 
   var R = {};      // references to live parts of the page
+  var TOUCH = !!(window.matchMedia && window.matchMedia('(hover:none) and (pointer:coarse)').matches);
   function shell() {
     closeMenu(true);
     alertClose();
@@ -575,7 +576,7 @@
     R.live = h('div', { class: 'live', role: 'status' }, h('span', { class: 'dot' }), R.liveTxt = h('span', null, 'Connecting…'),
       R.pause = btn('', togglePause, 'ghost sm', 'pause', 'Pause live refresh'));
     var ph = searchPlaceholder();
-    R.search = ph ? h('input', { type: 'search', placeholder: ph + '  ( / )', 'aria-label': ph, value: S.q, role: 'combobox', 'aria-controls': 'und-sbox', 'aria-expanded': 'false', 'aria-autocomplete': 'list', autocomplete: 'off',
+    R.search = ph ? h('input', { type: 'search', placeholder: TOUCH ? ph : ph + '  ( / )', 'aria-label': ph, value: S.q, role: 'combobox', 'aria-controls': 'und-sbox', 'aria-expanded': 'false', 'aria-autocomplete': 'list', autocomplete: 'off',
       oninput: function () { S.q = R.search.value; searchRun(); },
       onfocus: function () { if (S.q.trim() && R.sbox.hidden) searchRun(); },
       onkeydown: searchKey }) : null;
@@ -1694,7 +1695,7 @@
     var count = h('span', { class: 'count' });
     var body = h('div', { class: 'sec-b', id: 'und-sec-' + sec.id });
     var el = h('section', { class: 'sec' + (sec.width === 'half' ? ' half' : '') + (sec.collapsed ? ' closed' : ''), 'data-sec': sec.id, 'aria-label': sec.title || TITLES[sec.id] },
-      h('div', { class: 'sec-h' }, h('h2', null, h('button', { type: 'button', 'aria-expanded': sec.collapsed ? 'false' : 'true', 'aria-controls': 'und-sec-' + sec.id, onclick: function (e) {
+      h('div', { class: 'sec-h' }, h('h2', null, h('button', { type: 'button', tabindex: boardOn() ? '-1' : null, 'aria-expanded': boardOn() ? null : sec.collapsed ? 'false' : 'true', 'aria-controls': boardOn() ? null : 'und-sec-' + sec.id, onclick: function (e) {
         if (R.cards) return;
         sec.collapsed = !sec.collapsed; el.classList.toggle('closed', sec.collapsed); e.currentTarget.setAttribute('aria-expanded', sec.collapsed ? 'false' : 'true');
         api('prefs', { kind: 'section', key: sec.id, value: { collapsed: sec.collapsed } });
@@ -2002,7 +2003,7 @@
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
       ['Check container updates', 'box', caps.docker_check ? checkUpdates : rereadUpdates, '', !!S.busy.dcheck], dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
-      caps.os_update ? ['Unraid OS update', 'up', osDialog] : ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], ['Keyboard shortcuts  ?', 'grid', keysHelp],
+      caps.os_update ? ['Unraid OS update', 'up', osDialog] : ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], TOUCH ? null : ['Keyboard shortcuts  ?', 'grid', keysHelp],
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
       window.UND_STANDALONE && S.boot.auth !== 'open' ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
       caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
@@ -2038,6 +2039,7 @@
     var n = out.length, lv = function (k) { return out.some(function (x) { return x.lv === k; }); }, sev = lv('bad') ? ' bad' : lv('warn') ? ' warn' : n ? ' info' : '';
     R.bell.className = 'bell' + sev;
     txt(R.bellT, n === 1 ? ALERT_CAT[out[0].cat] || '1 alert' : n ? n + ' alerts' : '');
+    R.bell.title = R.bellT.textContent || 'Alerts'; R.bell.setAttribute('aria-label', R.bell.title);                // a narrow screen shows the bell alone
     var say = n === 1 ? out[0].msg : n ? n + ' alerts' : 'No alerts';
     R.bell.title = say; R.bell.setAttribute('aria-label', 'Alerts: ' + say);
   }
@@ -4120,7 +4122,7 @@
       if (kind === 'url') {
         var seen = h('div', { class: 'wall-st', role: 'status' }), probe = null;
         var look = function () {
-          clearTimeout(probe); pd();
+          clearTimeout(probe);
           var u = String(a.background || '').trim();
           if (!u) { txt(seen, ''); return; }
           txt(seen, 'Loading…'); seen.classList.remove('t-bad');
@@ -4137,7 +4139,7 @@
             im.src = u;
           }, 400);
         };
-        var linkIn = tIn(a, 'background', look, 'https://…/picture.jpg', 'url');
+        var linkIn = tIn(a, 'background', function () { pd(); look(); }, 'https://…/picture.jpg', 'url');
         wallBox.appendChild(F('Picture link', h('div', { class: 'zoomf' }, linkIn, seen), 'A direct link to a picture. It usually ends in .jpg, .png or .webp.'));
         if (a.background) look();
       }
