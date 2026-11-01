@@ -2098,7 +2098,7 @@
       var left = a.resync_pct > 0 && a.resync_time ? a.resync_time * (100 - a.resync_pct) / a.resync_pct : 0;
       row(a.resync_action || 'Parity check', [(a.resync_pct === null ? '' : a.resync_pct + '%'), a.resync_paused ? 'paused' : '', a.resync_speed && a.resync_speed !== '0' ? a.resync_speed + ' MB/s' : '', left ? 'about ' + upt(left) + ' left' : ''].filter(Boolean).join(' · '));
     }
-    var pc = st.checks, last = pc && pc.last;
+    var pc = a.parity ? st.checks : null, last = pc && pc.last;      // a server without parity disks has nothing to check; old records may remain
     if (pc) {
       row('Last parity check', last ? [day(last.at), (PARITY_END[last.status] || last.status) + (last.duration ? ' after ' + upt(last.duration) : ''), last.errors ? last.errors.toLocaleString() + ' errors' : ''].filter(Boolean).join(' · ') : 'None on record');
       if (!last || last.status !== 'COMPLETED') row('Last finished check', pc.ok_at ? day(pc.ok_at) : 'None on record', pc.ok_at ? '' : 't-warn');
