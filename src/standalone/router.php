@@ -37,7 +37,7 @@ function sa_unraid_base() { $h = und_req_host(); return $h === '' ? '' : 'http:/
 /** The login / setup page (Docker version). Plain HTML, no script, so the strict CSP still applies. */
 function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
   $pre = bin2hex(random_bytes(16));
-  setcookie('undash_pre', $pre, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
+  setcookie(und_cookie('undash_pre'), $pre, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
   $e = function ($x) { return htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8'); };
   header('Content-Type: text/html; charset=utf-8'); header('Cache-Control: no-store');
   echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UnDash · ', $e($title), '</title>',
@@ -55,7 +55,7 @@ function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
   echo '</form></div></body></html>';
   exit;
 }
-function sa_pre_ok() { $c = (string)($_COOKIE['undash_pre'] ?? ''); return $c !== '' && hash_equals($c, (string)($_POST['pre'] ?? '')); }
+function sa_pre_ok() { $c = (string)($_COOKIE[und_cookie('undash_pre')] ?? ''); return $c !== '' && hash_equals($c, (string)($_POST['pre'] ?? '')); }
 function sa_ip() { return (string)($_SERVER['REMOTE_ADDR'] ?? ''); }
 
 /* ---- health check (Docker HEALTHCHECK): says nothing about the server ---- */
@@ -147,6 +147,8 @@ if ($uri === '/api') {
 }
 
 if ($uri === '/assets/app.js') sa_asset(UND_ROOT . $uri, 'application/javascript; charset=utf-8');
+// the page asks again when its token no longer matches (UnDash restarted, say), so it can carry on without reloading
+if ($uri === '/csrf') { header('Content-Type: application/json'); header('Cache-Control: no-store'); echo json_encode(['csrf' => $sess['csrf'], 'version' => UND_VERSION]); exit; }
 if ($uri === '/assets/boot.js') {
   // page settings as a script file, so the page needs no inline script (the CSP forbids it)
   header('Content-Type: application/javascript; charset=utf-8');
