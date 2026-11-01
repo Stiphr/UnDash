@@ -1440,3 +1440,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und.bui .allb{min-height:36px}
 }
 @media (pointer:coarse){.und input[type=range]{height:32px}}
+/* System tiles: one size, text on the same lines, and the graph in a band of its own under it */
+.und.bui .gc-m .stat,.und.bui .gc-m .stat:has(.upt){justify-content:flex-start;padding-bottom:calc(var(--cp) + 18px)}
+.und.bui .gc-m .stat .sp:not(:has(.upt)){height:28px;opacity:.75}
+.und.bui .board.measuring .gc-m .stat{min-height:0}
