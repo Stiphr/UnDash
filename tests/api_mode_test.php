@@ -108,7 +108,8 @@ t('in Docker mode the title shows the server (here: the API host, as the system 
 $GLOBALS['ANSWER'] = function ($req) {
   $q = $req['query']; $d = [];
   if (strpos($q, 'network {') !== false) $d['metrics'] = ['network' => [['name' => 'br0', 'rxSec' => 1000, 'txSec' => 200]]];
-  if (strpos($q, 'primaryNetwork') !== false) $d['info'] = ['cpu' => ['brand' => 'Test CPU', 'threads' => 8], 'primaryNetwork' => ['name' => 'br0', 'ipAddress' => '10.0.0.9'], 'os' => ['hostname' => 'tower'], 'versions' => ['core' => ['unraid' => '7.3.4']]];
+  if (strpos($q, 'primaryNetwork') !== false) $d['info'] = ['cpu' => ['brand' => 'Test CPU', 'threads' => 8], 'primaryNetwork' => ['name' => 'br0', 'ipAddress' => '10.0.0.9'], 'os' => ['hostname' => 'tower', 'uptime' => '100', 'kernel' => 'k'], 'versions' => ['core' => ['unraid' => '7.3.4']]];
+  if (strpos($q, 'temperature') !== false) $d['metrics'] = ['temperature' => ['sensors' => [['type' => 'CPU_PACKAGE', 'current' => ['value' => 41]]]]];
   if (strpos($q, 'percentTotal') !== false) $d += ['info' => ['os' => ['hostname' => 'tower', 'uptime' => '100', 'kernel' => 'k'], 'versions' => ['core' => ['unraid' => '7.3.4']]],
     'metrics' => ['cpu' => ['percentTotal' => 5, 'cpus' => []], 'memory' => ['total' => 100, 'available' => 50]], 'array' => ['state' => 'STARTED'], 'vars' => ['name' => 'Tower']];
   return ['json' => ['data' => $d]];
@@ -125,11 +126,17 @@ $sys = und_system(und_load_config());
 t('with the poller running a refresh never waits for the slow reads', $slowSent() === 0 && $sys['cpu']['pct'] === 5.0 && $sys['net']['rx'] === null, json_encode([$sys['net'], $slowSent()]));
 und_api_poll_due();
 t('the poller stores both slow reads', $slowSent() === 2 && is_file(UND_TMP . '/api-net.json') && is_file(UND_TMP . '/api-ident.json'));
+t('a refresh asks for neither temperatures nor OS details', !preg_grep('/temperature|uptime/', array_map(function ($x) { return (string)($x['body']['query'] ?? ''); }, array_filter($GLOBALS['SENT'], function ($x) { return strpos((string)($x['body']['query'] ?? ''), 'cpus') !== false; }))));
+t('the poller reads the temperature too', is_file(UND_TMP . '/api-temp.json'));
 und_api_poll_due();
 t('the poller asks again only when a copy is due', $slowSent() === 2);
 @unlink(UND_TMP . '/api-system.json');
 $sys = und_system(und_load_config());
-t('a refresh then shows the poller\'s copies', $sys['net']['rx'] === 1000.0 && $sys['cpu']['model'] === 'Test CPU' && $slowSent() === 2);
+t('a refresh then shows the poller\'s copies', $sys['net']['rx'] === 1000.0 && $sys['cpu']['model'] === 'Test CPU' && $sys['cpu']['temp'] === 41.0 && $sys['name'] === 'tower' && $slowSent() === 2);
+$w = json_decode(file_get_contents(UND_TMP . '/api-temp.json'), true); $w['t'] -= 100; file_put_contents(UND_TMP . '/api-temp.json', json_encode($w));
+$w = json_decode(file_get_contents(UND_TMP . '/api-net.json'), true); $w['t'] -= 100; file_put_contents(UND_TMP . '/api-net.json', json_encode($w));
+$GLOBALS['SENT'] = []; und_api_poll_due(false); $qs = array_map(function ($x) { return (string)($x['body']['query'] ?? ''); }, $GLOBALS['SENT']);
+t('with no page open only the temperature is read', count($qs) === 1 && strpos($qs[0], 'temperature') !== false);
 $GLOBALS['SENT'] = [];
 $id = und_server_identity();
 t('the page title comes from the stored identity, without a system read', $id === ['name' => 'tower', 'ip' => '10.0.0.9', 'os' => '7.3.4'] && !$GLOBALS['SENT'], json_encode($id));

@@ -35,7 +35,8 @@ switch ($action) {
 
   case 'boot': {
     $cfg = und_load_config(); $loc = und_loc();
-    out(['version' => UND_VERSION, 'layout' => und_layout_view($cfg), 'types' => und_types(), 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
+    $rec = und_read_json(und_tmp('config-recovered.json'), null); if ($rec) @unlink(und_tmp('config-recovered.json'));
+    out(['recovered' => $rec, 'version' => UND_VERSION, 'layout' => und_layout_view($cfg), 'types' => und_types(), 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
          'server' => und_server_identity(), 'wall' => und_wall_custom_view(),
          'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes' && !und_api_mode(), 'caps' => und_caps(),
          'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null,
@@ -68,7 +69,7 @@ switch ($action) {
     }
     // the rules in force now, by the server's clock, so every open tab hides the same alerts
     $r['ignores'] = array_map(function ($x) { return ['id' => $x['id'], 'kind' => $x['kind'], 'key' => $x['key'], 'until' => $x['until']]; }, und_ignores_active($r['at']));
-    $r['power'] = is_file(und_tmp('power-started')) ? trim((string)@file_get_contents(und_tmp('power-started'))) : '';
+    $r['power'] = und_power_started();
     out($r);
   }
 

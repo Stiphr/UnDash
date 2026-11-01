@@ -40,6 +40,15 @@ function und_history() { return array_reverse(und_read_json(und_history_file(), 
  *   power_prepare -> a one-time nonce bound to the operation, valid 120 s, plus anything that makes it a bad moment
  *   power         -> needs that nonce and the server's name typed back; the command starts 3 s later so the answer reaches the browser
  */
+/** The power action under way, or ''. One that has not taken the server down in 15 minutes failed: the flag must not block the buttons for ever. */
+function und_power_started() {
+  $f = und_tmp('power-started');
+  clearstatcache();
+  if (!is_file($f)) return '';
+  if (time() - (int)@filemtime($f) > 900) { @unlink($f); return ''; }
+  return trim((string)@file_get_contents($f));
+}
+
 function und_power_prepare($op) {
   if (und_api_mode()) return ['error' => 'The Unraid API has no restart or shutdown. Use Unraid\'s own Reboot / Shutdown buttons (or the UnDash plugin).'];
   if (!in_array($op, ['reboot', 'shutdown'], true)) return ['error' => 'Unknown power action.'];
@@ -64,7 +73,7 @@ function und_power($op, $nonce, $typed) {
   if (strcasecmp(trim((string)$typed), $name) !== 0) return ['error' => 'The server name you typed does not match.'];
   $lock = und_lock('power');
   if (!$lock) return ['error' => 'A power action is already in progress.'];
-  if (is_file(und_tmp('power-started'))) return ['error' => 'The server is already ' . ($op === 'reboot' ? 'restarting' : 'shutting down') . '.'];
+  if (und_power_started() !== '') return ['error' => 'The server is already ' . ($op === 'reboot' ? 'restarting' : 'shutting down') . '.'];
   @file_put_contents(und_tmp('power-started'), $op);
   und_history_add('server', $name, $op, true, 'requested from UnDash');
   if (function_exists('und_log_syslog')) und_log_syslog("server $op requested from UnDash");

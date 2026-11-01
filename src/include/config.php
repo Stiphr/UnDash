@@ -278,8 +278,34 @@ function und_restore($id) {
 
 /* ---------- load / save ---------- */
 
+/**
+ * config.yaml is there but has no apps while the newest backup does: the file was damaged (cut short, emptied, not YAML).
+ * Showing the defaults would look like everything was lost, and the next save would make it true. The damaged file is
+ * kept next to it, the backup comes back, and the page says so. A file somebody removed on purpose is not touched.
+ */
+function und_config_recover() {
+  $f = und_file('config.yaml');
+  if (!is_file($f)) return false;
+  $all = glob(und_backup_dir() . '/*.json') ?: [];
+  rsort($all);
+  foreach ($all as $b) {
+    $j = und_read_json($b, []); $y = (string)($j['yaml'] ?? ''); $d = und_yaml_read($y);
+    if (!is_array($d) || empty($d['groups'])) continue;
+    $keep = basename($f) . '.damaged-' . date('Ymd-His');
+    @copy($f, dirname($f) . '/' . $keep);
+    if (!und_store_write('config.yaml', $y)) return false;
+    und_store_reset();
+    und_write_json(und_tmp('config-recovered.json'), ['backup' => (int)($j['created'] ?? 0), 'kept' => $keep]);
+    und_history_add('server', 'Settings', 'restored', true, 'config.yaml was damaged; restored the newest backup');
+    error_log('undash: config.yaml was damaged; restored the newest backup, the damaged file is ' . $keep);
+    return true;
+  }
+  return false;
+}
+
 function und_load_config() {
   $c = und_doc();
+  if (!isset($c['groups']) && und_config_recover()) $c = und_doc();
   if (!isset($c['groups'])) return und_normalize(und_default_config());
   $c['schema'] = (int)($c['version'] ?? UND_SCHEMA);
   return und_normalize(und_migrate($c));
@@ -529,7 +555,7 @@ function und_normalize(array $c) {
       if (!is_array($s) || !isset($types[$s['type'] ?? ''])) continue;
       $opt = isset($s['options']) && is_array($s['options']) ? $s['options'] : [];
       $out['services'][] = ['id' => preg_match('/^[a-f0-9]{8}$/', (string)($s['id'] ?? '')) ? $s['id'] : und_id(), 'name' => und_clip(trim((string)($s['name'] ?? '')), 60) ?: $types[$s['type']][0],
-        'type' => $s['type'], 'icon' => und_clip((string)($s['icon'] ?? ''), 300), 'href' => und_clip((string)($s['href'] ?? ''), 500), 'url' => und_clip((string)($s['url'] ?? ''), 500),
+        'type' => $s['type'], 'icon' => und_clip((string)($s['icon'] ?? ''), 300), 'href' => preg_match('/^(javascript|data|vbscript):/i', preg_replace('/[\x00-\x20]+/', '', (string)($s['href'] ?? ''))) ? '' : und_clip((string)($s['href'] ?? ''), 500), 'url' => und_clip((string)($s['url'] ?? ''), 500),
         'description' => und_clip(trim((string)($s['description'] ?? '')), 200), 'hidden' => !empty($s['hidden']), 'favorite' => !empty($s['favorite']), 'span' => (int)($s['span'] ?? 1) === 2 ? 2 : 1,
         'fields' => array_values(array_filter(array_map('strval', (array)($s['fields'] ?? [])), function ($f) { return preg_match('/^[A-Za-z0-9_]{1,40}$/', $f); })),
         'options' => $opt ? $opt : new stdClass()]

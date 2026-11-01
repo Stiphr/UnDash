@@ -12,31 +12,68 @@
 
 /* ---------- HTTP ---------- */
 
+const UND_HTTP_MAX = 67108864;       // an answer larger than this is refused: 64 MB of JSON already takes most of a request's memory
+
 /** Certificates of the apps UnDash reads are not checked by default: on a LAN they are mostly self-signed. UNDASH_TLS_VERIFY=1
  *  turns the check on for every https:// address (apps behind a reverse proxy with real certificates). */
 function und_tls_verify() { static $v = null; if ($v === null) $v = in_array(strtolower((string)getenv('UNDASH_TLS_VERIFY')), ['1', 'true', 'yes', 'on'], true); return $v; }
 
+/** Where a redirect leads, as a full address; '' for anything but a web address. */
+function und_http_next($base, $loc) {
+  $loc = trim((string)$loc);
+  if (preg_match('#^https?://#i', $loc)) return $loc;
+  if ($loc === '' || preg_match('#^[a-z][a-z0-9+.-]*:#i', $loc)) return '';
+  $p = parse_url($base);
+  if (strpos($loc, '//') === 0) return $p['scheme'] . ':' . $loc;
+  $root = $p['scheme'] . '://' . $p['host'] . (isset($p['port']) ? ':' . $p['port'] : '');
+  return $root . ($loc[0] === '/' ? $loc : preg_replace('#/[^/]*$#', '/', $p['path'] ?? '/') . $loc);
+}
+
+/** Does a redirect stay on the same app? Only then do keys, passwords and cookies go along. http to https on the same host counts. */
+function und_http_same($a, $b) {
+  $x = parse_url($a); $y = parse_url($b);
+  if (strtolower((string)($x['host'] ?? '')) !== strtolower((string)($y['host'] ?? ''))) return false;
+  $port = function ($u) { return (int)($u['port'] ?? (strtolower((string)$u['scheme']) === 'https' ? 443 : 80)); };
+  if (strtolower((string)$x['scheme']) === 'https' && strtolower((string)$y['scheme']) === 'http') return false;
+  return $port($x) === $port($y) || ($port($x) === 80 && $port($y) === 443);
+}
+
 function und_http($method, $url, array $o = []) {
-  if (isset($GLOBALS['UND_HTTP_MOCK'])) { $r = call_user_func($GLOBALS['UND_HTTP_MOCK'], $method, $url, $o); if (is_array($r)) return $r; }
+  for ($hop = 0; ; $hop++) {
+    $r = und_http_once($method, $url, $o);
+    $next = in_array($r['code'], [301, 302, 303, 307, 308], true) ? und_http_next($url, $r['headers']['location'][0] ?? '') : '';
+    if ($next === '') return $r;
+    if ($hop >= 3) return ['err' => 'Too many redirects.'] + $r;
+    if (!und_http_same($url, $next)) {            // a key must never follow a redirect to another server
+      unset($o['basic'], $o['cookie']);
+      foreach (array_keys($o['headers'] ?? []) as $k) if (preg_match('/auth|key|token|cookie|session|sid/i', $k)) unset($o['headers'][$k]);
+    }
+    if ($r['code'] === 303 || (in_array($r['code'], [301, 302], true) && $method === 'POST')) { $method = 'GET'; unset($o['body']); }
+    $url = $next;
+  }
+}
+
+function und_http_once($method, $url, array $o) {
+  if (isset($GLOBALS['UND_HTTP_MOCK'])) { $r = call_user_func($GLOBALS['UND_HTTP_MOCK'], $method, $url, $o); if (is_array($r)) return $r + ['code' => 0, 'headers' => []]; }
   if (!preg_match('#^https?://#i', $url)) return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'The URL must start with http:// or https://', 'headers' => []];
   $ch = curl_init($url);
   $headers = [];
   foreach (($o['headers'] ?? []) as $k => $v) $headers[] = $k . ': ' . $v;
   $resp = [];
   curl_setopt_array($ch, [
-    CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
+    CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false,
     CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => (int)($o['timeout'] ?? 10), CURLOPT_HTTPHEADER => $headers,
     CURLOPT_SSL_VERIFYPEER => und_tls_verify() || !empty($o['verify']), CURLOPT_SSL_VERIFYHOST => und_tls_verify() || !empty($o['verify']) ? 2 : 0,
     CURLOPT_USERAGENT => 'UnDash/' . UND_VERSION, CURLOPT_ENCODING => '',
     CURLOPT_HEADERFUNCTION => function ($c, $h) use (&$resp) { $p = explode(':', $h, 2); if (count($p) === 2) $resp[strtolower(trim($p[0]))][] = trim($p[1]); return strlen($h); },
   ]);
   if (isset($o['body'])) curl_setopt($ch, CURLOPT_POSTFIELDS, $o['body']);
-  if (isset($o['max'])) { $max = (int)$o['max']; curl_setopt($ch, CURLOPT_NOPROGRESS, false); curl_setopt($ch, CURLOPT_XFERINFOFUNCTION, function ($c, $total, $now) use ($max) { return $now > $max ? 1 : 0; }); }
+  $max = (int)($o['max'] ?? UND_HTTP_MAX); curl_setopt($ch, CURLOPT_NOPROGRESS, false); curl_setopt($ch, CURLOPT_XFERINFOFUNCTION, function ($c, $total, $now) use ($max) { return $now > $max ? 1 : 0; });
   if (isset($o['basic'])) curl_setopt($ch, CURLOPT_USERPWD, $o['basic'][0] . ':' . $o['basic'][1]);
   if (isset($o['cookie'])) curl_setopt($ch, CURLOPT_COOKIE, $o['cookie']);
   $body = curl_exec($ch);
   $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-  $err = $body === false ? curl_error($ch) : '';
+  $err = $body === false ? (curl_errno($ch) === CURLE_ABORTED_BY_CALLBACK ? 'The answer was too large to read.' : curl_error($ch)) : '';
   if (PHP_VERSION_ID < 80000) curl_close($ch);      // a no-op since PHP 8.0, deprecated in 8.5
   $body = $body === false ? '' : $body;
   return ['code' => $code, 'body' => $body, 'json' => json_decode($body, true), 'err' => $err, 'headers' => $resp];
@@ -117,33 +154,39 @@ function und_w_link() { return ['native' => true]; }
 
 function und_arr_h($s) { return ['headers' => ['X-Api-Key' => $s['key'], 'Accept' => 'application/json']]; }
 
+/** A number worked out from an app's whole library: too large a read for every refresh. Tied to the address and key, so a changed app is read again. */
+function und_library($s, $ttl, callable $fn) { return und_api_cached('lib-' . $s['type'] . '-' . md5($s['url'] . $s['key']), $ttl, $fn); }
+
 function und_w_radarr($s) {
-  $movies = und_get(und_u($s['url'], '/api/v3/movie'), und_arr_h($s) + ['timeout' => 20]);
+  $lib = und_library($s, 60, function () use ($s) {
+    $movies = und_get(und_u($s['url'], '/api/v3/movie'), und_arr_h($s) + ['timeout' => 20]);
+    $wanted = $missing = 0;
+    foreach ((array)$movies as $m) if (!empty($m['monitored']) && empty($m['hasFile'])) { $missing++; if (!empty($m['isAvailable'])) $wanted++; }
+    return ['wanted' => $wanted, 'missing' => $missing, 'n' => count((array)$movies)];
+  });
   $q = und_get(und_u($s['url'], '/api/v3/queue/status'), und_arr_h($s));
-  $wanted = $missing = 0;
-  foreach ((array)$movies as $m) if (!empty($m['monitored']) && empty($m['hasFile'])) { $missing++; if (!empty($m['isAvailable'])) $wanted++; }
-  return ['blocks' => [und_b('wanted', 'Wanted', $wanted), und_b('missing', 'Missing', $missing), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('movies', 'Movies', count((array)$movies))]];
+  return ['blocks' => [und_b('wanted', 'Wanted', $lib['wanted']), und_b('missing', 'Missing', $lib['missing']), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('movies', 'Movies', $lib['n'])]];
 }
 
 function und_w_sonarr($s) {
   $w = und_get(und_u($s['url'], '/api/v3/wanted/missing?pageSize=1'), und_arr_h($s));
   $q = und_get(und_u($s['url'], '/api/v3/queue?pageSize=1&includeUnknownSeriesItems=false'), und_arr_h($s));
-  $series = und_get(und_u($s['url'], '/api/v3/series'), und_arr_h($s) + ['timeout' => 20]);
-  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalRecords'] ?? 0)), und_b('series', 'Series', count((array)$series))]];
+  $n = und_library($s, 300, function () use ($s) { return ['n' => count((array)und_get(und_u($s['url'], '/api/v3/series'), und_arr_h($s) + ['timeout' => 20]))]; })['n'];
+  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalRecords'] ?? 0)), und_b('series', 'Series', $n)]];
 }
 
 function und_w_lidarr($s) {
   $w = und_get(und_u($s['url'], '/api/v1/wanted/missing?pageSize=1'), und_arr_h($s));
   $q = und_get(und_u($s['url'], '/api/v1/queue/status'), und_arr_h($s));
-  $a = und_get(und_u($s['url'], '/api/v1/artist'), und_arr_h($s) + ['timeout' => 20]);
-  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('artists', 'Artists', count((array)$a))]];
+  $n = und_library($s, 300, function () use ($s) { return ['n' => count((array)und_get(und_u($s['url'], '/api/v1/artist'), und_arr_h($s) + ['timeout' => 20]))]; })['n'];
+  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('artists', 'Artists', $n)]];
 }
 
 function und_w_readarr($s) {
   $w = und_get(und_u($s['url'], '/api/v1/wanted/missing?pageSize=1'), und_arr_h($s));
   $q = und_get(und_u($s['url'], '/api/v1/queue/status'), und_arr_h($s));
-  $b = und_get(und_u($s['url'], '/api/v1/book'), und_arr_h($s) + ['timeout' => 20]);
-  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('books', 'Books', count((array)$b))]];
+  $n = und_library($s, 300, function () use ($s) { return ['n' => count((array)und_get(und_u($s['url'], '/api/v1/book'), und_arr_h($s) + ['timeout' => 20]))]; })['n'];
+  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('books', 'Books', $n)]];
 }
 
 function und_w_bazarr($s) {

@@ -97,15 +97,17 @@ function und_api_cached($name, $ttl, $fn) {
  * Every read asks only for what the documented key permissions cover: one refused field fails the whole query when it
  * cannot be null, as vars does, so a key without that permission would leave the whole dashboard empty.
  *
- * Two parts of the API are slow (about 2 s each on a busy server, whatever fields are asked for): the network interface
- * list and the primary interface. In Docker, scripts/apipoll.php keeps them fresh in the background while someone has the
+ * Some parts of the API are slow on a busy server, whatever other fields are asked for: the network interface list and
+ * the primary interface (about 2 s each), the temperature sensors (seen up to 10 s) and the OS details (up to 4 s). In Docker, scripts/apipoll.php keeps them fresh in the background while someone has the
  * dashboard open, so page loads and refreshes never wait for them. Without it (tests, dev server) they are read inline.
  * name => [refresh every N seconds, oldest copy still shown, query]
  */
 const UND_API_SLOW = [
-  'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname } versions { core { unraid } } } }'],
+  'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname uptime kernel } versions { core { unraid } } } }'],
   'net'   => [2, 20, 'query { metrics { network { name rxSec txSec } } }'],
+  'temp'  => [10, PHP_INT_MAX, 'query { metrics { temperature { sensors { type current { value } } } } }'],
 ];
+const UND_API_TEMP_IDLE = 60;       // with no page open the temperature is still read this often: the alert check needs it
 
 function und_api_poller_alive() { clearstatcache(); $b = @filemtime(und_tmp('apipoll.beat')); return $b && time() - $b < 30; }
 
@@ -118,11 +120,12 @@ function und_api_slow($name) {
 }
 
 /** One round of the background poller: refreshes what is due. Errors are not stored, so the last good copy stays. */
-function und_api_poll_due() {
+function und_api_poll_due($viewer = true) {
   foreach (UND_API_SLOW as $name => $x) {
+    if (!$viewer && $name !== 'temp') continue;
     $f = und_tmp('api-' . $name . '.json');
     $c = und_read_json($f, null);
-    if (is_array($c) && microtime(true) - (float)$c['t'] < $x[0]) continue;
+    if (is_array($c) && microtime(true) - (float)$c['t'] < ($viewer ? $x[0] : UND_API_TEMP_IDLE)) continue;
     $r = und_gql($x[2]);
     if (!isset($r['error'])) und_write_json($f, ['t' => microtime(true), 'v' => $r]);
   }
@@ -143,11 +146,9 @@ function und_api_bigint($v) { return is_numeric($v) ? (float)$v : 0.0; }
 /** Overview data in the same shape as the plugin's und_system(). */
 function und_api_system(array $cfg) {
   $q = 'query {
-    info { os { hostname uptime kernel } versions { core { unraid } } }
     metrics {
       cpu { percentTotal cpus { percentTotal } }
       memory { total used available swapTotal swapUsed percentTotal }
-      temperature { sensors { type current { value } } summary { hottest { current { value } } } }
     }
     array { state capacity { kilobytes { free used total } } parityCheckStatus { running progress status speed duration paused }
       parities { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
@@ -157,15 +158,16 @@ function und_api_system(array $cfg) {
   $r = und_api_cached('system', 1, function () use ($q) { return und_gql($q); });
   if (isset($r['error']) && empty($r['data'])) return ['error' => $r['error'], 'auth' => !empty($r['auth'])];
   $d = $r['data']; $now = time();
-  $m = $d['metrics'] ?? []; $info = $d['info'] ?? [];
-  $ident = und_api_slow('ident')['data']['info'] ?? [];
+  $m = $d['metrics'] ?? [];
+  $ident = und_api_slow('ident')['data']['info'] ?? []; $info = $ident;
+  $sensors = (array)(und_api_slow('temp')['data']['metrics']['temperature']['sensors'] ?? []);
   $mem = $m['memory'] ?? null;
   $total = und_api_bigint($mem['total'] ?? 0); $avail = und_api_bigint($mem['available'] ?? 0);
   $memOut = $mem ? ['total' => $total, 'used' => max(0, $total - $avail), 'free' => $avail, 'pct' => $total ? round(100 * ($total - $avail) / $total, 1) : null,
                     'swap_total' => und_api_bigint($mem['swapTotal'] ?? 0), 'swap_used' => und_api_bigint($mem['swapUsed'] ?? 0)] : ['total' => 0, 'used' => 0, 'free' => 0, 'pct' => null, 'swap_total' => 0, 'swap_used' => 0];
   $temp = null;
-  foreach ((array)($m['temperature']['sensors'] ?? []) as $sn) if (($sn['type'] ?? '') === 'CPU_PACKAGE') { $temp = (float)$sn['current']['value']; break; }
-  if ($temp === null) foreach ((array)($m['temperature']['sensors'] ?? []) as $sn) if (($sn['type'] ?? '') === 'CPU_CORE') $temp = max((float)$temp, (float)$sn['current']['value']);
+  foreach ($sensors as $sn) if (($sn['type'] ?? '') === 'CPU_PACKAGE') { $temp = (float)$sn['current']['value']; break; }
+  if ($temp === null) foreach ($sensors as $sn) if (($sn['type'] ?? '') === 'CPU_CORE') $temp = max((float)$temp, (float)$sn['current']['value']);
   // the main interface: Unraid's primary network, else the first bridge / bond / ethernet
   $nets = (array)(und_api_slow('net')['data']['metrics']['network'] ?? []); $want = (string)($ident['primaryNetwork']['name'] ?? ''); $net = null;
   foreach ($nets as $n) if ($n['name'] === $want) $net = $n;

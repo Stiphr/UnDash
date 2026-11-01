@@ -1408,6 +1408,50 @@ t('a new media list shows 5', $m[0]['count'] === 5);
 $c = und_hp_convert("- G:\n    - N:\n        widget:\n          type: paperlessngx\n          url: http://p\n          key: abc\n");
 t('Homepage import keeps the new app types', $c['config']['groups'][0]['services'][0]['type'] === 'paperless');
 
+/* ---------- audit fixes ---------- */
+$seen = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use (&$seen) {
+  $seen[] = [$m, $url, $o];
+  $to = ['http://a.lan:8/x' => 'http://evil.example/y', 'http://b.lan/x' => 'https://b.lan/x', 'http://c.lan/p/q' => 'r', 'http://d.lan/' => 'ftp://d.lan/', 'http://e.lan/' => 'http://e.lan/'][$url] ?? null;
+  if ($to) return ['code' => 302, 'body' => '', 'json' => null, 'err' => '', 'headers' => ['location' => [$to]]];
+  return ['code' => 200, 'body' => '{}', 'json' => [], 'err' => '', 'headers' => []];
+};
+$sec = ['headers' => ['X-Api-Key' => 'SECRET', 'Authorization' => 'Bearer s', 'Accept' => 'a/b'], 'basic' => ['u', 'p'], 'cookie' => 'SID=1', 'body' => 'x'];
+und_http('POST', 'http://a.lan:8/x', $sec); $last = end($seen);
+t('a redirect to another server carries no key, login or cookie', $last[1] === 'http://evil.example/y' && $last[0] === 'GET' && !isset($last[2]['basic']) && !isset($last[2]['cookie']) && !isset($last[2]['body']) && array_keys($last[2]['headers']) === ['Accept']);
+$seen = []; und_http('GET', 'http://b.lan/x', $sec); $last = end($seen);
+t('http to https on the same app keeps them', $last[1] === 'https://b.lan/x' && $last[2]['headers']['X-Api-Key'] === 'SECRET' && $last[2]['basic'] === ['u', 'p']);
+$seen = []; und_http('GET', 'http://c.lan/p/q'); t('a relative redirect is followed', end($seen)[1] === 'http://c.lan/p/r');
+$seen = []; und_http('GET', 'http://d.lan/'); t('a redirect to anything but the web is not', count($seen) === 1);
+$r = und_http('GET', 'http://e.lan/'); t('a redirect loop ends with an error', $r['err'] === 'Too many redirects.');
+t('https never drops to http with a key', !und_http_same('https://a.lan/', 'http://a.lan/'));
+t('another port is another app', !und_http_same('http://a.lan:8/', 'http://a.lan:9/'));
+unset($GLOBALS['UND_HTTP_MOCK']);
+foreach (['javascript:alert(1)', ' JavaScript:x', "java\tscript:x", 'data:text/html,x', 'vbscript:x'] as $bad) {
+  $m = und_normalize(['groups' => [['name' => 'g', 'services' => [['type' => 'link', 'name' => 'n', 'href' => $bad]]]]]);
+  t('an unsafe link is dropped: ' . addcslashes($bad, "\t"), $m['groups'][0]['services'][0]['href'] === '');
+}
+$m = und_normalize(['groups' => [['name' => 'g', 'services' => [['type' => 'link', 'name' => 'n', 'href' => '{{HOST}}/app'], ['type' => 'link', 'name' => 'm', 'href' => 'https://x.lan/a?b=1']]]]]);
+t('ordinary links stay', $m['groups'][0]['services'][0]['href'] === '{{HOST}}/app' && $m['groups'][0]['services'][1]['href'] === 'https://x.lan/a?b=1');
+$pf = und_tmp('power-started'); file_put_contents($pf, 'reboot');
+t('a power action under way shows', und_power_started() === 'reboot');
+touch($pf, time() - 1000); t('one that never finished stops blocking', und_power_started() === '' && !is_file($pf));
+und_store_reset();
+$cf = und_file('config.yaml'); $good = (string)@file_get_contents($cf);
+$svc = ['id' => 'abcd9999', 'type' => 'link', 'name' => 'Kept app', 'href' => 'http://k'];
+und_save_config(['groups' => [['name' => 'Mine', 'services' => [$svc]]]] + und_default_config()); und_backup('audit test');
+foreach (['cut short' => "version: 3\ngeneral:\n  name: x\n", 'emptied' => '', 'not YAML' => "\0\1 garbage"] as $why => $bad) {
+  @unlink(und_tmp('config-recovered.json')); foreach (glob($cf . '.damaged-*') ?: [] as $x) @unlink($x);
+  file_put_contents($cf, $bad); und_store_reset();
+  $c = und_load_config();
+  t("a damaged config.yaml comes back from the backup ($why)", ($c['groups'][0]['services'][0]['name'] ?? '') === 'Kept app' && !empty(und_read_json(und_tmp('config-recovered.json'), null)['kept']));
+  t("... and the damaged file is kept ($why)", count(glob($cf . '.damaged-*') ?: []) === 1);
+}
+@unlink($cf); @unlink(UND_DIR . '/config.yaml'); und_store_reset(); @unlink(und_tmp('config-recovered.json'));
+t('a file removed on purpose is not brought back', und_load_config()['groups'][0]['services'][0]['name'] !== 'Kept app' && !is_file($cf));
+foreach (glob($cf . '.damaged-*') ?: [] as $x) @unlink($x);
+if ($good !== '') file_put_contents($cf, $good); und_store_reset();
+
 rmrf($SANDBOX);
 
 echo "\n$pass passed, $fail failed\n";
