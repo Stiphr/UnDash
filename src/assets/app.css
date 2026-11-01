@@ -853,6 +853,23 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .bs-pg .bs-go{appearance:none;border:0;background:none;color:var(--faint);width:30px;height:30px;display:grid;place-items:center;border-radius:8px;cursor:pointer;flex:none}
 .und .bs-pg .bs-go svg{width:15px;height:15px}.und .bs-pg .bs-go:hover{background:var(--bar);color:var(--text)}
 .und .bs-pg.on .bs-go{color:var(--accent)}
+/* the setup wizard */
+.und .wz-w{min-height:min(460px,60vh)}
+.und .wz-t{font-size:24px;font-weight:650;letter-spacing:-.015em;margin:4px 0 6px}
+.und .wz-s{margin:0 0 18px;max-width:58ch}
+.und .wz-f{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%}
+.und .wz-d{display:flex;gap:6px}.und .wz-d i{width:7px;height:7px;border-radius:50%;background:var(--l2)}.und .wz-d i.done{background:var(--muted)}.und .wz-d i.on{background:var(--accent)}
+.und .wz-ps{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
+.und .wz-p{appearance:none;font:inherit;color:var(--text);text-align:left;display:flex;flex-direction:column;gap:3px;padding:12px 14px;background:var(--p2);border:1px solid var(--line);border-radius:var(--radius);cursor:pointer;transition:border-color .15s,background .15s}
+.und .wz-p:hover{border-color:var(--l2)}.und .wz-p.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.und .wz-l{margin-top:12px}
+.und .wz-r{flex-wrap:wrap;row-gap:6px}.und .wz-r .crow{flex:1 1 200px;min-width:0}.und .wz-v{flex:0 1 auto;flex-wrap:wrap}.und .wz-v button{white-space:nowrap}
+.und .wz-apps{display:flex;flex-direction:column;gap:8px}
+.und .wz-a{background:var(--p2);border:1px solid var(--line);border-radius:var(--radius);padding:4px 10px}
+.und .wz-ab{display:grid;gap:6px;padding:4px 0 10px}.und .wz-ab .inl{flex-wrap:wrap;gap:8px}
+.und .wz-ts{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px}
+.und .wz-th{appearance:none;font:inherit;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;background:var(--p2);border:1px solid var(--line);border-radius:var(--radius);cursor:pointer}
+.und .wz-th i{width:14px;height:14px;border-radius:50%;flex:none}.und .wz-th.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 /* the card builder */
 .und .jt{display:flex;flex-direction:column;gap:1px;max-height:240px;overflow:auto;margin-top:10px;padding:4px;background:var(--p2);border:1px solid var(--line);border-radius:var(--radius)}
 .und .jr{appearance:none;border:0;background:none;color:var(--text);font:inherit;font-size:12.5px;display:flex;align-items:center;gap:8px;min-height:30px;padding:0 8px;border-radius:6px;cursor:pointer;text-align:left}

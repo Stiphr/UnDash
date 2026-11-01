@@ -1205,6 +1205,7 @@
       E.bPages = btn('Pages', function () { boardView(E.view === 'pages' ? null : 'pages'); }, 'sm ghost', 'grid', 'Add, rename and order pages');
       var more = btn('Arrange', function () {
         menu(more, [['Smart arrange', 'grid', boardArrange], ['Fit all to content', 'fit', boardFitAll],
+          ['Presets…', 'list', boardPresets],
           [E.compact ? 'Snap up is on' : 'Snap up is off', E.compact ? 'check' : 'minus', function () { boardMark(); E.compact = !E.compact; if (E.compact) gCompact(E.list); boardPaint(); }], 'hr',
           ['Reset the layout', 'restart', boardReset]]);
       }, 'sm ghost', 'grid', 'Arrange the cards');
@@ -3809,7 +3810,7 @@
     var c = e.cloneNode(true); [].forEach.call(c.querySelectorAll('input,select,textarea,button,svg'), function (x) { x.remove(); });
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
-  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'dashboard name': 'title header brand rename server', 'dashboard icon': 'logo brand header picture', 'versions in the header': 'chips version unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
+  var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets setup wizard preset first time', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'dashboard name': 'title header brand rename server', 'dashboard icon': 'logo brand header picture', 'versions in the header': 'chips version unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
     wallpaper: 'background image picture blur link path upload', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backup': 'export import restore',
     'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
   var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Background', 'Animations', 'Dashboard password'];
@@ -4161,6 +4162,7 @@
     b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Apps'), h('span', { class: 'grow' }), btn('Add app', function () { addApp(D, null, null, function () { ed.draw(); }, dirty); }, 'pri sm', 'plus')),
       h('div', { class: 'ae-bar' }, find, chips), ed.grid(), foundSet));
     b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Cards'), h('span', { class: 'grow' }),
+      btn('Setup wizard', function () { D.close(); setTimeout(function () { if (!S.drawer) wizardStart(true); }, 60); }, 'sm', 'list', 'Answer a few questions to set up apps, layout and look again'),
       btn('Edit dashboard', function () { D.close(); setTimeout(function () { if (!S.drawer) boardEdit(); }, 60); }, 'sm', 'edit', 'Move, resize, add and rename cards on the dashboard itself')),
       h('p', { class: 'hint' }, 'Turn on what you want on your dashboard. Open a card to choose what it shows.'),
       h('div', { class: 'cardl' }, orderList(list, function (s) {
@@ -5112,6 +5114,308 @@
     return box;
   }
 
+  /* ---- Presets: ready-made dashboards. A preset says which cards show and where; it never adds or removes an app, key or setting.
+     Rows are [card, x, y, w, h] on the 24-column board; 'app:emby' is the first app of that type. The tiles take the first row. ---- */
+  var PRESET_PARTS = [['system', 'System info', 'CPU, memory, storage, network, health, disks, UPS, uptime', 'server'], ['arr', 'Arr Stack', 'Radarr, Sonarr, Prowlarr and the rest', 'tag'],
+    ['upcoming', 'Upcoming movies and series', 'From Radarr and Sonarr', 'clock'], ['recent', 'Recently added', 'New movies and episodes', 'play'], ['playing', 'Now playing', 'Who is watching what', 'play'],
+    ['downloads', 'Downloads', 'qBittorrent and SABnzbd', 'download'], ['requests', 'Requests', 'Overseerr or Jellyseerr', 'plus'], ['apps', 'Apps', 'Emby, Plex, Tautulli, AdGuard, Nginx Proxy Manager', 'grid'],
+    ['docker', 'Containers', 'Start, stop, update and logs', 'box'], ['vms', 'Virtual machines', 'Start, stop and console', 'vm']];
+  var PRESET_TILES = ['cpu', 'memory', 'storage', 'network', 'health', 'disks', 'ups', 'uptime'];
+  var PRESETS = {
+    all: ['Everything', 'The full dashboard: system, media, Arr, downloads, apps and containers.', ['system', 'arr', 'upcoming', 'recent', 'playing', 'downloads', 'requests', 'apps', 'docker', 'vms'],
+      [['media:upcoming_movies', 0, 7, 6, 12], ['media:upcoming_episodes', 6, 7, 6, 12], ['arr', 12, 7, 12, 24], ['media:recent_movies', 0, 19, 6, 17], ['media:recent_episodes', 6, 19, 6, 17], ['downloads', 12, 31, 12, 16], ['playing', 0, 36, 12, 10],
+       ['app:emby', 0, 46, 6, 7], ['app:plex', 6, 46, 6, 7], ['requests', 12, 47, 12, 11], ['app:adguard', 0, 53, 6, 7], ['app:npm', 6, 53, 6, 7], ['app:tautulli', 12, 58, 12, 7], ['docker', 0, 72, 24, 13], ['vms', 0, 85, 24, 7]]],
+    media: ['Media server', 'What is new, what is coming and who is watching.', ['system', 'upcoming', 'recent', 'playing', 'requests', 'apps'],
+      [['media:upcoming_movies', 0, 7, 6, 18], ['media:upcoming_episodes', 6, 7, 6, 18], ['media:recent_movies', 12, 7, 6, 18], ['media:recent_episodes', 18, 7, 6, 18], ['playing', 0, 25, 12, 12], ['requests', 12, 25, 12, 12],
+       ['app:emby', 0, 37, 8, 7], ['app:plex', 8, 37, 8, 7], ['app:tautulli', 16, 37, 8, 7]]],
+    server: ['Server monitor', 'Health, containers and VMs, nothing else.', ['system', 'apps', 'docker', 'vms'],
+      [['docker', 0, 7, 24, 16], ['vms', 0, 23, 24, 7], ['app:adguard', 0, 30, 12, 7], ['app:npm', 12, 30, 12, 7]]],
+    simple: ['Essentials', 'Just the numbers and your containers.', ['system', 'docker'], [['docker', 0, 7, 24, 16]]]
+  };
+  /* the choices inside each set. set(c, hid, L, cols) changes the settings being edited, the list of removed cards and the layout; is() says which one is in force */
+  function hidOff(hid, test) { for (var i = hid.length - 1; i >= 0; i--) if (test(hid[i])) hid.splice(i, 1); }
+  function setTiles(t, ids) {
+    return { t: t, set: function (c, hid, L, cols) {
+      c.dashboard.metrics.forEach(function (m) { m.visible = ids.indexOf(m.id) >= 0; }); hidOff(hid, function (i) { return i.indexOf('m:') === 0; });
+      if (!L) return;
+      // the tiles are one row, so a new set is laid out as one and the cards under it make room
+      var bottom = 0, w = Math.max(2, Math.floor(cols / ids.length)), per = Math.floor(cols / w);
+      for (var i = L.length - 1; i >= 0; i--) if (L[i].i.indexOf('m:') === 0) { bottom = Math.max(bottom, L[i].y + L[i].h); L.splice(i, 1); }
+      var more = Math.ceil(ids.length / per) * 7 - bottom;
+      L.forEach(function (r) { if (r.y >= bottom) r.y += more; });
+      ids.forEach(function (id, n) { L.push({ i: 'm:' + id, x: n % per * w, y: Math.floor(n / per) * 7, w: w, h: 7, a: true }); });
+    },
+      is: function (c) { var on = c.dashboard.metrics.filter(function (m) { return m.visible; }); return on.length === ids.length && on.every(function (m) { return ids.indexOf(m.id) >= 0; }); } };
+  }
+  function setLists(t, a, b, wa, wb) {
+    var vis = function (c, id) { return c.media.widgets.filter(function (w) { return w.id === id; })[0]; };
+    return { t: t, set: function (c, hid) { vis(c, a).visible = wa; vis(c, b).visible = wb; hidOff(hid, function (i) { return i === 'media:' + a || i === 'media:' + b; }); }, is: function (c) { return vis(c, a).visible === wa && vis(c, b).visible === wb; } };
+  }
+  function setValue(t, get, put, v) { return { t: t, set: function (c) { put(c, v); }, is: function (c) { return get(c) === v; } }; }
+  function setWide(id, t, full) {
+    return { t: t, size: true, set: function (c, hid, L, cols) { var x = L.filter(function (r) { return r.i === id; })[0]; if (x) gMove(L, id, { x: full ? 0 : Math.min(x.x, cols / 2), y: x.y, w: full ? cols : cols / 2, h: x.h }, true, cols); },
+      is: function (c, hid, L, cols) { var x = (L || []).filter(function (r) { return r.i === id; })[0]; return !!x && (x.w === cols) === full; } };
+  }
+  function setApps(t, types) {
+    var ids = function (c) { var out = []; c.groups.forEach(function (g) { if (!g.section) g.services.forEach(function (x) { if (x.type !== 'link' && (!types || types.indexOf(x.type) >= 0)) out.push('app:' + x.id); }); }); return out; };
+    return { t: t, set: function (c, hid) {
+      var want = ids(c);
+      c.groups.forEach(function (g) { if (!g.section) g.services.forEach(function (x) { var i = 'app:' + x.id, z = x.type === 'link'; if (z) return; if (want.indexOf(i) >= 0) hidOff(hid, function (k) { return k === i; }); else if (hid.indexOf(i) < 0) hid.push(i); }); });
+    }, is: function (c, hid) { var want = ids(c); return want.every(function (i) { return hid.indexOf(i) < 0; }) && (!types || c.groups.every(function (g) { return g.section || g.services.every(function (x) { return x.type === 'link' || want.indexOf('app:' + x.id) >= 0 || hid.indexOf('app:' + x.id) >= 0; }); })); } };
+  }
+  var dockerGet = function (c) { return c.docker.layout; }, dockerPut = function (c, v) { c.docker.layout = v; }, vmGet = function (c) { return c.vms.layout; }, vmPut = function (c, v) { c.vms.layout = v; };
+  var dlGet = function (c) { return c.downloads.items; }, dlPut = function (c, v) { c.downloads.items = v; }, rqGet = function (c) { return c.requests.style; }, rqPut = function (c, v) { c.requests.style = v; };
+  var SET_PRESETS = {
+    system: [setTiles('All tiles', PRESET_TILES), setTiles('Essentials', ['cpu', 'memory', 'storage', 'network']), setTiles('Performance', ['cpu', 'cores', 'memory', 'swap', 'network', 'uptime']), setTiles('Storage', ['storage', 'health', 'disks', 'ups'])],
+    arr: [setWide('arr', 'Half width', false), setWide('arr', 'Full width', true)],
+    upcoming: [setLists('Movies and series', 'upcoming_movies', 'upcoming_episodes', true, true), setLists('Movies', 'upcoming_movies', 'upcoming_episodes', true, false), setLists('Series', 'upcoming_movies', 'upcoming_episodes', false, true)],
+    recent: [setLists('Movies and series', 'recent_movies', 'recent_episodes', true, true), setLists('Movies', 'recent_movies', 'recent_episodes', true, false), setLists('Series', 'recent_movies', 'recent_episodes', false, true)],
+    playing: [setWide('playing', 'Half width', false), setWide('playing', 'Full width', true)],
+    downloads: [setValue('Active items', dlGet, dlPut, 4), setValue('Speeds only', dlGet, dlPut, 0), setValue('Long list', dlGet, dlPut, 10)],
+    requests: [setValue('Posters', rqGet, rqPut, 'art'), setValue('Text', rqGet, rqPut, 'text')],
+    apps: [setApps('All apps', null), setApps('Streaming', ['emby', 'plex', 'jellyfin', 'tautulli']), setApps('Network', ['adguard', 'pihole', 'npm', 'gluetun'])],
+    docker: [setValue('Grid', dockerGet, dockerPut, 'grid'), setValue('List', dockerGet, dockerPut, 'list'), setValue('Cards', dockerGet, dockerPut, 'cards')],
+    vms: [setValue('List', vmGet, vmPut, 'list'), setValue('Cards', vmGet, vmPut, 'cards')]
+  };
+  /* one choice bar; on says which button is lit */
+  function presetBar(part, on, pick) {
+    return h('div', { class: 'seg wz-v', role: 'group', 'aria-label': 'Style' }, SET_PRESETS[part].map(function (p, n) { return h('button', { type: 'button', class: on(p, n) ? 'on' : '', 'aria-pressed': on(p, n) ? 'true' : 'false', onclick: function () { pick(p, n); } }, p.t); }));
+  }
+  function presetTiles(c) {
+    var on = PRESET_TILES.concat(['cores', 'swap']).filter(function (t) { return !c || c.dashboard.metrics.some(function (m) { return m.id === t && m.visible; }); }), w = Math.max(3, Math.floor(24 / (on.length || 1)));
+    return on.map(function (t, n) { return ['m:' + t, n * w, 0, w, 7]; });
+  }
+  /* the rows of a preset as a saved layout, with apps as their real ids; what the list leaves out finds its own spot */
+  function presetRows(id, groups, off, c) {
+    var byType = {}, out = [];
+    groups.forEach(function (g) { g.services.forEach(function (x) { if (!byType[x.type] && !g.section) byType[x.type] = x.id; }); });
+    presetTiles(c).concat(PRESETS[id][3]).forEach(function (r) {
+      var card = r[0], t = card.indexOf('app:') === 0 ? card.slice(4) : '';
+      if (t) { if (!byType[t]) return; card = 'app:' + byType[t]; }
+      if (off && off[card]) return;
+      out.push({ i: card, x: r[1], y: r[2], w: r[3], h: r[4], a: true });
+    });
+    return out;
+  }
+  /* which part of a preset a card belongs to */
+  function presetPart(card) {
+    var p = card.split(':')[0], k = card.split(':')[1] || '';
+    return p === 'm' ? 'system' : p === 'media' ? (k.indexOf('upcoming') === 0 ? 'upcoming' : 'recent') : p === 'app' || p === 'grp' ? 'apps' : card;
+  }
+  /* Edit dashboard > Arrange: a preset for the page you are on. The other cards go to Add, ready to come back */
+  function boardPresets() {
+    var E = S.edit, body = h('div'), m; if (!E) return;
+    if (!E.D) { toast('Still loading. Try again in a moment.'); return; }
+    var draw = function () {
+      clear(body);
+      body.appendChild(h('div', { class: 'ae-sub' }, 'Whole page'));
+      body.appendChild(h('div', { class: 'wz-ps' }, Object.keys(PRESETS).map(function (id) { return h('button', { type: 'button', class: 'wz-p', onclick: function () { m.close(); boardPreset(id); } }, h('b', null, PRESETS[id][0]), h('span', { class: 'muted xs' }, PRESETS[id][1])); })));
+      body.appendChild(h('div', { class: 'ae-sub' }, 'One set at a time'));
+      body.appendChild(h('div', { class: 'olist wz-l' }, PRESET_PARTS.map(function (p) {
+        return h('div', { class: 'oi nr wz-r' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(p[3])), h('span', { class: 'crt' }, h('b', null, p[1]))),
+          presetBar(p[0], function (x) { return x.is(E.D.cfg, E.hidden, E.list, boardCols()); }, function (x) {
+            boardMark(); x.set(E.D.cfg, E.hidden, E.list, boardCols());
+            E.list = E.list.filter(function (c) { return E.hidden.indexOf(c.i) < 0; });
+            if (E.compact) gCompact(E.list);
+            boardDirty(); draw();
+          }));
+      })));
+    };
+    draw();
+    m = modal('Presets', body, [btn('Done', function () { m.close(); }, 'pri')], true);
+  }
+  function boardPreset(id) {
+    var E = S.edit, parts = {}; if (!E) return;
+    boardMark();
+    PRESETS[id][2].forEach(function (p) { parts[p] = 1; });
+    var all = boardAll(), keep = {};
+    all.forEach(function (c) { if (parts[presetPart(c.i)]) keep[c.i] = 1; });
+    all.forEach(function (c) {
+      if (keep[c.i]) { if (E.hidden.indexOf(c.i) >= 0 || pageOf(c.i) !== (S.page || '')) pageTake(c.i); E.hidden = E.hidden.filter(function (x) { return x !== c.i; }); }
+      else if (pageOf(c.i) === (S.page || '') && E.hidden.indexOf(c.i) < 0) { E.hidden.push(c.i); pageDrop(c.i); }
+    });
+    var cards = {}; boardCards().forEach(function (c) { cards[c.i] = c; });
+    E.list = presetFit(presetRows(id, S.L.groups, null, S.L).filter(function (c) { return cards[c.i]; }));
+    var on = {}; E.list.forEach(function (c) { on[c.i] = 1; });
+    Object.keys(cards).forEach(function (i) { if (!on[i] && !gGone(E, i)) gPlace(E.list, { i: i, x: 0, y: 0, w: Math.min(cards[i].w, boardCols()), h: cards[i].h, a: true }, boardCols()); });
+    E.smart = false; E.compact = true; gCompact(E.list);
+    E.view = null; E.side.hidden = true;
+    boardRebuild(); boardSide();
+    toast(PRESETS[id][0] + ' applied. Undo or Cancel takes it back.');
+  }
+  function gGone(E, i) { return E.hidden.indexOf(i) >= 0; }
+  /* a list without its partner takes the partner's room */
+  function presetFit(rows) {
+    [['media:upcoming_movies', 'media:upcoming_episodes'], ['media:recent_movies', 'media:recent_episodes']].forEach(function (pair) {
+      var got = rows.filter(function (r) { return pair.indexOf(r.i) >= 0; });
+      if (got.length === 1) { got[0].x -= got[0].x % 12; got[0].w = 12; }
+    });
+    return rows;
+  }
+
+  /* ---- Setup wizard: first start, or Settings > Apps & cards. One question at a time, and nothing is saved before Finish, except
+     the Unraid connection and the password, which need to work before the next step can. ---- */
+  function wizardStart(again) {
+    if (GUEST || S.wiz) return;
+    api('settings').then(function (j) {
+      if (j.error) { toast(j.error, true); return; }
+      var D = { cfg: j.config, creds: Array.isArray(j.creds) ? {} : j.creds, shared: j.shared || [], zones: j.zones || {}, types: j.types, keep: j.keep };
+      ['docker', 'vms'].forEach(function (k) { if (Array.isArray(D.cfg[k].items)) D.cfg[k].items = {}; });
+      wizard(D, again);
+    });
+  }
+  function wizard(D, again) {
+    var c = D.cfg, W = S.wiz = { step: 0, preset: again ? '' : 'all', parts: {}, pages: false, apps: null, found: [], vary: {} }, box = h('div', { class: 'wz' }), foot = h('div', { class: 'wz-f' }), m;
+    PRESETS.all[2].forEach(function (p) { W.parts[p] = true; });
+    var apiMode = S.boot.caps.mode === 'api', steps = [stepHello];
+    if (apiMode && !(S.boot.api && S.boot.api.configured)) steps.push(stepConnect);
+    if (apiMode && S.boot.auth === 'open') steps.push(stepPass);
+    steps.push(stepPreset, stepApps, stepLook, stepDone);
+    function head(t, sub) { box.appendChild(h('h2', { class: 'wz-t' }, t)); if (sub) box.appendChild(h('p', { class: 'muted wz-s' }, sub)); }
+    function stepHello() {
+      head(again ? 'Set up UnDash again' : 'Welcome to UnDash', again ? 'Your apps and keys stay. You choose whether the layout changes, and nothing is saved until the last step.' : 'A few questions and your dashboard is ready. You can change all of it later.');
+      box.appendChild(F('Name of this dashboard', tIn(c.general, 'title', function () {}, (S.boot.server && S.boot.server.name) || 'My server', 'text', { maxlength: 40 }), 'Shown at the top of the page. Empty uses the server name.'));
+    }
+    function stepConnect() {
+      head('Connect to your server', 'UnDash reads your server through the Unraid API. Paste the address and a key, then press Save.');
+      unraidConn(box);
+    }
+    function stepPass() {
+      head('Add a password', 'Without one, anyone who can open this address can see and control your containers and VMs.');
+      dashPass(box);
+    }
+    function stepPreset() {
+      head('What do you want to see?', 'Pick a starting point, then turn pieces on or off.');
+      var grid = h('div', { class: 'wz-ps' }), list = h('div', { class: 'olist wz-l' });
+      var drawList = function () {
+        clear(list);
+        if (!W.preset) return;
+        PRESET_PARTS.forEach(function (p) {
+          list.appendChild(h('div', { class: 'oi nr wz-r' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(p[3])), h('span', { class: 'crt' }, h('b', null, p[1]), h('span', { class: 'muted xs ell' }, p[2]))),
+            W.parts[p[0]] ? presetBar(p[0], function (x, n) { return (W.vary[p[0]] || 0) === n; }, function (x, n) { W.vary[p[0]] = n; drawList(); }) : null,
+            bsSwitch(!!W.parts[p[0]], 'Show ' + p[1], function (on) { W.parts[p[0]] = on; drawList(); })));
+        });
+        list.appendChild(h('div', { class: 'oi nr' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic('grid')), h('span', { class: 'crt' }, h('b', null, 'Split into pages'), h('span', { class: 'muted xs ell' }, 'Home, Media, Apps and Containers, instead of one long page'))),
+          bsSwitch(W.pages, 'Split into pages', function (on) { W.pages = on; })));
+      };
+      var choose = function (id) {
+        W.preset = id; W.parts = {}; W.vary = {};
+        if (id) PRESETS[id][2].forEach(function (p) { W.parts[p] = true; });
+        [].forEach.call(grid.children, function (b) { var on = b.getAttribute('data-p') === id; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+        drawList();
+      };
+      var card = function (id, t, sub) { return h('button', { type: 'button', class: 'wz-p' + (W.preset === id ? ' on' : ''), 'data-p': id, 'aria-pressed': W.preset === id ? 'true' : 'false', onclick: function () { choose(id); } }, h('b', null, t), h('span', { class: 'muted xs' }, sub)); };
+      if (again) grid.appendChild(card('', 'Keep my layout', 'Change nothing about the cards.'));
+      Object.keys(PRESETS).forEach(function (id) { grid.appendChild(card(id, PRESETS[id][0], PRESETS[id][1])); });
+      box.appendChild(grid); box.appendChild(list); drawList();
+    }
+    /* what UnDash found in your containers, ready to be added; a key is asked for here, so nothing opens on top */
+    function stepApps() {
+      head('Connect your apps', 'These are the apps found on your server. Turn off what you do not want, and paste a key where one is needed.');
+      var list = h('div', { class: 'wz-apps' }, h('div', { class: 'progress' }, h('i')));
+      box.appendChild(list);
+      var draw = function () {
+        if (W.apps === null) W.apps = [];
+        var known = {}; W.apps.forEach(function (a) { known[a.f.url + a.f.t] = 1; });
+        foundApps(D).forEach(function (f) { if (!known[f.url + f.t]) W.apps.push({ f: f, on: true, id: rid(), cr: { key: '', username: '', password: '' } }); });
+        clear(list);
+        var have = []; c.groups.forEach(function (g) { g.services.forEach(function (x) { if (x.type !== 'link') have.push(x); }); });
+        if (!W.apps.length && !have.length) list.appendChild(h('div', { class: 'muted sm' }, 'Nothing found yet. You can add apps later from Edit dashboard > Add.'));
+        W.apps.forEach(function (a) {
+          var T = D.types[a.f.t], res = h('span', { class: 'xs', role: 'status' });
+          var fields = (T[1] || []).map(function (k) { return h('input', { type: k === 'username' ? 'text' : 'password', autocomplete: k === 'username' ? 'off' : 'new-password', value: a.cr[k], spellcheck: 'false', placeholder: credLabel(a.f.t, k), 'aria-label': credLabel(a.f.t, k) + ' for ' + a.f.name, oninput: function (e) { a.cr[k] = e.target.value; } }); });
+          var body = a.on ? h('div', { class: 'wz-ab' }, h('input', { type: 'text', value: a.f.url, 'aria-label': 'Address of ' + a.f.name, spellcheck: 'false', oninput: function (e) { a.f.url = e.target.value; } }), fields,
+            h('div', { class: 'inl' }, btn('Test', function () {
+              txt(res, 'Trying…'); res.className = 'xs muted';
+              var cfg = JSON.parse(JSON.stringify(c)), creds = JSON.parse(JSON.stringify(D.creds));
+              wizardApp(cfg, D, a); creds[a.id] = a.cr;
+              api('test', { config: cfg, creds: creds, shared: sharedOut(D), id: a.id }, 30000).then(function (r) { txt(res, r.error ? r.error : 'It works'); res.className = 'xs ' + (r.error ? 't-bad' : 't-ok'); });
+            }, 'sm', 'check'), res, KEY_WHERE[a.f.t] ? h('span', { class: 'muted xs' }, 'Key: ' + KEY_WHERE[a.f.t]) : null)) : null;
+          list.appendChild(h('div', { class: 'wz-a' }, h('div', { class: 'oi nr' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, img(iconUrl(a.f.icon || appIcon(a.f.t)), '', 'web')), h('span', { class: 'crt' }, h('b', { class: 'ell' }, a.f.name), h('span', { class: 'muted xs ell' }, T[0]))),
+            bsSwitch(a.on, 'Add ' + a.f.name, function (on) { a.on = on; draw(); })), body));
+        });
+        if (have.length) list.appendChild(h('p', { class: 'muted sm' }, 'Already set up: ' + have.map(function (x) { return x.name; }).join(', ') + '.'));
+      };
+      api('live', { parts: 'docker' }, 30000).then(function (r) { if (!r.error && r.docker) S.live = Object.assign({}, S.live || {}, { docker: r.docker }); if (S.wiz === W && steps[W.step] === stepApps) draw(); });
+    }
+    function stepLook() {
+      head('Pick a look', 'It changes as you click. More colours and your own wallpaper are in Settings > Appearance.');
+      var a = c.appearance, seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Light or dark' }), grid = h('div', { class: 'wz-ts' });
+      var look = function () { applyLook(a); paint(); };
+      var paint = function () {
+        clear(seg); [['dark', 'Dark'], ['light', 'Light'], ['auto', 'Automatic']].forEach(function (x) { seg.appendChild(h('button', { type: 'button', class: a.mode === x[0] ? 'on' : '', 'aria-pressed': a.mode === x[0] ? 'true' : 'false', onclick: function () { a.mode = x[0]; look(); } }, x[1])); });
+        clear(grid); Object.keys(THEMES).filter(function (id) { return !THEMES[id].custom; }).forEach(function (id) {
+          var t = THEMES[id], p = t[lookMode(a)] || t.dark;
+          grid.appendChild(h('button', { type: 'button', class: 'wz-th' + (a.theme === id ? ' on' : ''), 'aria-pressed': a.theme === id ? 'true' : 'false', onclick: function () { a.theme = id; look(); } }, h('i', { style: { background: p.accent } }), themeName(t, lookMode(a))));
+        });
+      };
+      paint(); box.appendChild(F('Mode', seg)); box.appendChild(F('Theme', grid));
+    }
+    function stepDone() {
+      head('You are ready', 'Press Finish to save. Your settings are backed up first, and you can run this again from Settings > Apps & cards.');
+      var n = W.apps ? W.apps.filter(function (a) { return a.on; }).length : 0;
+      var row = function (i, t, sub) { return h('div', { class: 'oi nr' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(i)), h('span', { class: 'crt' }, h('b', null, t), h('span', { class: 'muted xs' }, sub)))); };
+      box.appendChild(h('div', { class: 'olist wz-l' }, row('grid', W.preset ? PRESETS[W.preset][0] + ' layout' : 'Your layout stays', W.pages ? 'Split into pages' : 'One page'), row('plus', n ? n + (n === 1 ? ' new app' : ' new apps') : 'No new apps', 'Add more any time from Edit dashboard'),
+        row('bell', 'Next: push alerts', 'Settings > Alerts sends problems to your phone'), row('eye', 'Next: a guest link', 'Settings > Guest link shares a read-only view')));
+    }
+    function draw() {
+      clear(box); clear(foot);
+      steps[W.step]();
+      box.scrollTop = 0;
+      var dots = h('span', { class: 'wz-d', 'aria-label': 'Step ' + (W.step + 1) + ' of ' + steps.length }, steps.map(function (x, i) { return h('i', { class: i === W.step ? 'on' : i < W.step ? 'done' : '' }); }));
+      foot.appendChild(W.step ? btn('Back', function () { W.step--; draw(); }) : btn(again ? 'Cancel' : 'Skip setup', skip, 'ghost'));
+      foot.appendChild(dots);
+      foot.appendChild(W.step < steps.length - 1 ? btn('Continue', function () { W.step++; draw(); }, 'pri') : btn('Finish', finish, 'pri'));
+    }
+    function skip() {
+      m.close();
+      if (!again) api('setup_done');
+    }
+    function finish(e) {
+      e.currentTarget.disabled = true;
+      (W.apps || []).forEach(function (a) { if (a.on) { wizardApp(c, D, a); D.creds[a.id] = a.cr; } });
+      if (W.preset) presetApply(c, D, W);
+      api('save', { config: c, creds: D.creds, shared: sharedOut(D) }).then(function (j) {
+        if (j.error) { toast(j.error, true); draw(); return; }
+        api('setup_done').then(function () { W.saved = true; m.close(); S.page = ''; LS.set('page', ''); reload().then(function () { toast('Your dashboard is ready'); }); });
+      });
+    }
+    m = modal('Setup', h('div', { class: 'wz-w' }, box), [foot], true);
+    m.onclose = function () { S.wiz = null; if (!W.saved) applyLook(); };
+    draw();
+  }
+  /* a found app in the settings being built, in the group that suits it */
+  function wizardApp(c, D, a) {
+    var f = a.f, zone = (D.zones || {})[f.t] || 'apps', g = c.groups.filter(function (x) { return !x.section && (zone !== 'apps' || x.services.some(function (s) { return ((D.zones || {})[s.type] || 'apps') === 'apps'; })); })[0];
+    if (!g) { g = { id: rid(), name: 'Apps', columns: 4, header: true, section: false, services: [] }; c.groups.push(g); }
+    if (!g.services.some(function (x) { return x.id === a.id; })) g.services.push({ id: a.id, name: f.name, type: f.t, icon: f.icon || appIcon(f.t), href: f.href, url: f.url, description: '', hidden: false, favorite: false, span: 1, fields: [], options: {} });
+  }
+  /* the chosen pieces in the settings being built: sections and lists on or off, the preset's rows, and pages when asked for */
+  function presetApply(c, D, W) {
+    var p = W.parts, b = c.dashboard.board, zone = function (x) { return (D.zones || {})[x.type] || 'apps'; };
+    var part = { overview: 'system', arr: 'arr', playing: 'playing', downloads: 'downloads', requests: 'requests', apps: 'apps', docker: 'docker', vms: 'vms' };
+    c.dashboard.sections.forEach(function (s) { if (part[s.id]) s.visible = !!p[part[s.id]]; if (s.id === 'media') s.visible = !!(p.upcoming || p.recent); });
+    c.media.widgets.forEach(function (w) { w.visible = !!p[w.id.indexOf('upcoming') === 0 ? 'upcoming' : 'recent']; });
+    b.on = true; b.compact = true; b.hidden = []; b.pages = []; b.md = [];
+    var choice = function (part) { return SET_PRESETS[part][W.vary[part] || 0]; };
+    PRESET_PARTS.forEach(function (x) { if (p[x[0]] && !choice(x[0]).size) choice(x[0]).set(c, b.hidden); });
+    var gone = {}; b.hidden.forEach(function (i) { gone[i] = 1; });
+    var rows = presetFit(presetRows(W.preset, c.groups, gone, c).filter(function (r) { return !!p[presetPart(r.i)] && (r.i.indexOf('media:') !== 0 || c.media.widgets.some(function (w) { return 'media:' + w.id === r.i && w.visible; })); }));
+    rows.sort(function (x, y) { return x.y - y.y || x.x - y.x; });
+    PRESET_PARTS.forEach(function (x) { if (p[x[0]] && choice(x[0]).size) choice(x[0]).set(c, b.hidden, rows, 24); });
+    if (W.pages) {
+      var made = [['Media', ['upcoming', 'recent', 'playing', 'requests']], ['Apps', ['arr', 'downloads', 'apps']], ['Containers', ['docker', 'vms']]], cards = {};
+      rows.forEach(function (r) { cards[presetPart(r.i)] = (cards[presetPart(r.i)] || []).concat(r.i); });
+      c.groups.forEach(function (g) { if (!g.section) g.services.forEach(function (x) { if (zone(x) === 'apps' && !x.hidden && x.type !== 'link' && (cards.apps || []).indexOf('app:' + x.id) < 0 && !gone['app:' + x.id] && p.apps) cards.apps = (cards.apps || []).concat('app:' + x.id); }); });
+      made.forEach(function (m) {
+        var list = []; m[1].forEach(function (k) { list = list.concat(cards[k] || []); });
+        if (list.length) b.pages.push({ id: rid(), name: m[0], cards: list, lg: [], md: [] });
+      });
+      rows = rows.filter(function (r) { return presetPart(r.i) === 'system'; });
+    }
+    b.lg = rows;
+  }
+
   /* values several apps share ({{NAME}}): advanced, most setups have none */
   function sharedOut(D) { return D.shared.filter(function (v) { return v.name; }).map(function (v) { return { name: v.name, value: v.value }; }); }
   function sharedValues(b, D, dirty) {
@@ -5372,5 +5676,6 @@
     if (S.paused) api('live', { parts: parts() }).then(function (r) { if (!r.error) { S.live = r; S.lastOk = Date.now(); S.conn = 'ok'; paintAll(); paintLive(); } });
     else tick();
     if (location.hash === '#settings') openSettings();
+    else if (S.boot.setup) wizardStart(false);
   });
 })();

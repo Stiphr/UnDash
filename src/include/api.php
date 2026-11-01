@@ -39,7 +39,7 @@ switch ($action) {
          'server' => und_server_identity(), 'wall' => und_wall_custom_view(),
          'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes' && !und_api_mode(), 'caps' => und_caps(),
          'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null,
-         'auth' => und_api_mode() ? und_auth_kind() : 'unraid']);
+         'auth' => und_api_mode() ? und_auth_kind() : 'unraid', 'setup' => und_setup_needed($cfg)]);
   }
 
   /* one call per refresh: system metrics, containers and VMs (each part can be skipped when its section is hidden) */
@@ -270,6 +270,7 @@ switch ($action) {
     $GLOBALS['UND_TEST_SECRETS'] = ['vars' => array_diff_key($env, array_flip(UND_ENV_RESERVED)), 'svc' => [], 'unraid' => []];
     out(und_customapi_probe($norm, $id));
   }
+  case 'setup_done': { $lk = und_config_lock(); if (!und_doc_write(['setup' => ['done' => true]])) fail('Could not save.', 500); out(['ok' => true]); }
   case 'validate': out(['issues' => und_validate(und_load_config())]);
 
   /* ---- Unraid API connection (Docker version) ---- */
