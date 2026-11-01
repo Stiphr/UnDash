@@ -149,6 +149,12 @@ The dashboard is made of sections: **System**, **Alerts**, **Favorites**, **Medi
 
 App widgets refresh every 15 seconds and the system every 2 seconds; change both in **Settings > General**.
 
+### Setup wizard and presets
+
+A new dashboard opens the setup wizard. It asks for a name, your Unraid connection, a password, what to show, which apps to connect and a look. Run it again from Settings > Apps & cards. Your apps and keys stay, and you can keep your layout.
+
+Presets come in two sizes. Whole dashboards: **Everything**, **Media server**, **Server monitor** and **Essentials**. Each set also has its own choices, such as System tiles (All, Essentials, Performance, Storage), Downloads (Active items, Speeds only, Long list) or Containers (Grid, List, Cards). Use them in the wizard, or in Edit dashboard > Arrange > **Presets**.
+
 ### Pages
 
 Edit dashboard > **Pages** adds and names pages, and **Split my cards** makes a first set from what you have. Click a card to send it to another page. Each page keeps its own layout. With one page there are no tabs; with more, press 1 to 9 to switch. On a phone your pages replace the bottom tabs.

@@ -1201,6 +1201,18 @@ t('and never shows it, even if the app echoes it', strpos(json_encode($r), 'sekr
 t('it only reads custom API apps', isset(und_customapi_probe($pc, 'abcdef03')['error']));
 unset($GLOBALS['UND_HTTP_MOCK'], $GLOBALS['UND_TEST_SECRETS']);
 
+/* ---- setup wizard ---- */
+reset_store();
+$sc = und_normalize([]);
+$sc['groups'] = [['id' => 'cccc0001', 'name' => 'G', 'columns' => 4, 'header' => true, 'section' => false, 'services' => []]];
+t('a new dashboard with no apps asks for setup', und_setup_needed($sc) === true);
+$sc2 = $sc; $sc2['groups'][0]['services'] = [['id' => 'cccc0002', 'type' => 'plex']];
+t('a dashboard that has apps is left alone', und_setup_needed($sc2) === false);
+t('finishing or skipping stops it asking', und_doc_write(['setup' => ['done' => true]]) && und_setup_needed($sc) === false);
+und_save_config(und_normalize([]), false);
+t('saving settings does not bring it back', !empty(und_doc()['setup']['done']));
+reset_store();
+
 /* ---- guest view ---- */
 t('the guest token is not a value apps can use', in_array('UNDASH_GUEST_TOKEN', UND_ENV_RESERVED, true));
 $gc = und_normalize(['general' => ['disk_path' => '/mnt/secret', 'ups_name' => 'myups'], 'appearance' => ['wall_path' => '/mnt/user/private/w.jpg'],

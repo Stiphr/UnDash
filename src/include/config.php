@@ -682,6 +682,13 @@ function und_layout_view(array $cfg) {
   return $cfg;
 }
 
+/** The setup wizard opens by itself once: on a dashboard with no apps yet, so an existing install never sees it uninvited. */
+function und_setup_needed(array $cfg) {
+  if (!empty(und_doc()['setup']['done'])) return false;
+  foreach ($cfg['groups'] as $g) if ($g['services']) return false;
+  return true;
+}
+
 /* ---------- validation ---------- */
 
 /** Problems a user can fix: widgets without a URL, unknown variables, calendar sources that no longer exist. */

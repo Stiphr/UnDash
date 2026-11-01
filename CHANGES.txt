@@ -1,4 +1,6 @@
 ###beta
+- Setup wizard: a new dashboard walks you through its name, the Unraid connection, a password, what to show, your apps and a look. Run it again from Settings > Apps & cards; your apps and keys stay
+- Presets: whole dashboards (Everything, Media server, Server monitor, Essentials) and choices for each set, such as System tiles (All, Essentials, Performance, Storage) or Containers (Grid, List, Cards), in the wizard and in Edit dashboard > Arrange > Presets
 - Pages: split the dashboard into pages, each with its own cards and layout. Edit dashboard > Pages adds and names them, Split my cards makes a first set, tabs appear only with more than one page, and keys 1 to 9 switch pages
 - RSS card: the newest stories from up to 10 RSS or Atom feeds, read at most every 15 minutes
 - Guest link: a private read-only address for family (Settings > Guest link) with its own session. You choose what it shows: System, Media, Now playing and each app. It never shows containers, VMs, downloads, requests, alerts, addresses or Settings
