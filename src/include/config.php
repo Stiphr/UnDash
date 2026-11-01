@@ -94,8 +94,8 @@ function und_default_config() {
   return [
     'schema' => UND_SCHEMA,
     'general' => ['title' => '', 'logo' => '', 'refresh' => 2, 'refresh_services' => 15, 'background_poll' => 'slow', 'disk_path' => '/mnt/user', 'search' => 'duckduckgo', 'search_in' => ['apps', 'web', 'seerr'],
-                  'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0],
-    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'accent_mode' => 'theme', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'icon_box' => true, 'header_chips' => true, 'zoom' => 0, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'wall_path' => '', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
+                  'show_search' => true, 'show_date' => true, 'os_check_hours' => 6, 'ups_name' => 'ups', 'ups_watts' => 0, 'glances' => ''],
+    'appearance' => ['theme' => 'default', 'mode' => 'dark', 'accent' => '', 'accent_mode' => 'theme', 'density' => 'comfortable', 'text_size' => 'm', 'radius' => 8, 'translucent' => true, 'gradient' => true, 'icon_box' => true, 'header_chips' => true, 'zoom' => 100, 'custom_themes' => [], 'glass_blur' => 26, 'glass_opacity' => 42, 'glass_saturation' => 170, 'glass_exposure' => 100, 'glass_contrast' => 100, 'wall_saturation' => 100, 'wall_contrast' => 100, 'wall_opacity' => 100, 'motion' => 'full', 'wall_path' => '', 'background' => '', 'blur' => 4, 'blur_target' => 'wallpaper', 'brightness' => 75, 'safe_x' => -1, 'safe_y' => -1, 'css_enabled' => true, 'sec_names' => true, 'icon_mode' => 'color'],
     'media' => ['radarr' => '', 'sonarr' => '', 'count' => 15, 'days_ahead' => 30, 'style' => 'art', 'widgets' => array_map(function ($id) { return ['id' => $id, 'visible' => true, 'count' => 15]; }, und_media_ids())],
     'downloads' => ['items' => 4],
     'requests' => ['style' => 'art'],
@@ -405,6 +405,7 @@ function und_normalize(array $c) {
   $g['search'] = in_array($g['search'], ['duckduckgo', 'google', 'bing', 'startpage', 'brave'], true) ? $g['search'] : 'duckduckgo';
   $g['ups_name'] = preg_match('/^[A-Za-z0-9_.@:-]{1,64}$/', (string)$g['ups_name']) ? (string)$g['ups_name'] : 'ups';
   $g['ups_watts'] = max(0, min(20000, (int)$g['ups_watts']));   // the UPS's rated power in W; 0 = what the UPS reports
+  $g['glances'] = preg_match('#^https?://[^\s"\'<>]+$#i', trim((string)$g['glances'])) ? und_clip(rtrim(trim((string)$g['glances']), '/'), 300) : '';    // the System tiles' source without an API key
 
   $a = (isset($c['appearance']) && is_array($c['appearance']) ? $c['appearance'] : []) + $d['appearance'];
   $a = array_intersect_key($a, $d['appearance']);
@@ -434,7 +435,7 @@ function und_normalize(array $c) {
   $a['background'] = in_array($a['background'], ['custom', 'local'], true) || preg_match('#^(https?://|/)[^"\'<>\s\\\\]*$#', (string)$a['background']) ? (string)$a['background'] : '';
   $a['blur'] = max(0, min(40, (int)$a['blur'])); $a['brightness'] = max(0, min(100, (int)$a['brightness']));
   // the margin around the dashboard in px; -1 = automatic
-  foreach (['safe_x', 'safe_y'] as $k) $a[$k] = (int)$a[$k] < 0 ? -1 : min(200, (int)$a[$k]);
+  foreach (['safe_x' => 480, 'safe_y' => 200] as $k => $max) $a[$k] = (int)$a[$k] < 0 ? -1 : min($max, (int)$a[$k]);
   $a['blur_target'] = in_array($a['blur_target'], ['wallpaper', 'cards'], true) ? $a['blur_target'] : 'wallpaper';   // blur the whole picture, or only what is behind the cards
   $a['css_enabled'] = !empty($a['css_enabled']);
   $a['sec_names'] = !empty($a['sec_names']);
@@ -699,6 +700,14 @@ function und_zone(array $s) {
 /** The layout sent to the browser: hrefs resolved (they are links the user clicks anyway), nothing secret. */
 function und_layout_view(array $cfg) {
   unset($cfg['presets']);          // Settings has its own copy; the page and guests have no use for them
+  // without a key these have nothing behind them. Only this view changes: the saved layout comes back with the key
+  if (und_api_mode() && !und_api_ready()) {
+    $tiles = und_glances_url($cfg) !== '' ? UND_GLANCES_TILES : [];
+    foreach ($cfg['dashboard']['sections'] as &$s) if (in_array($s['id'], ['docker', 'vms'], true) || ($s['id'] === 'overview' && !$tiles)) $s['visible'] = false;
+    unset($s);
+    foreach ($cfg['dashboard']['metrics'] as &$m) $m['visible'] = $m['visible'] && in_array($m['id'], $tiles, true);
+    unset($m);
+  }
   $vars = und_secrets()['vars'];
   foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$s) {
     $s['zone'] = und_zone($s);

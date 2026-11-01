@@ -25,6 +25,9 @@ function und_api_conf() {
   return ['url' => $url, 'key' => $key, 'from_env' => ['url' => (bool)getenv('UNRAID_API_URL'), 'key' => (bool)getenv('UNRAID_API_KEY')]];
 }
 
+/** Without an address and a key there is no Unraid to ask: no containers, VMs or array, so the page does not offer them. */
+function und_api_ready() { $c = und_api_conf(); return $c['url'] !== '' && $c['key'] !== ''; }
+
 /** Run one GraphQL operation. Returns ['data' => ...] or ['error' => readable message, 'auth' => bool]. */
 function und_gql($query, array $vars = [], $timeout = 10) {
   $c = und_api_conf();
@@ -130,6 +133,7 @@ function und_api_identity() {
   $id = und_read_json(und_tmp('api-ident.json'), null);
   $d = is_array($id) ? ($id['v']['data'] ?? []) : (und_api_cached('name', 600, function () { return und_gql('query { info { os { hostname } versions { core { unraid } } } }', [], 5); })['data'] ?? []);
   $host = (string)parse_url(und_api_conf()['url'], PHP_URL_HOST);
+  if (!und_api_ready()) $host = (string)parse_url(und_glances_url(und_load_config()), PHP_URL_HOST);
   return ['name' => (string)($d['info']['os']['hostname'] ?? '') ?: $host, 'ip' => (string)($d['info']['primaryNetwork']['ipAddress'] ?? '') ?: $host,
           'os' => (string)($d['info']['versions']['core']['unraid'] ?? '')];
 }
@@ -271,6 +275,7 @@ function und_api_mover() {
 }
 
 function und_api_storage() {
+  if (!und_api_ready()) return und_glances_storage(und_load_config());
   $s = und_api_system(und_load_config());
   if (isset($s['error'])) return $s;
   return $s['array']['_rows'];

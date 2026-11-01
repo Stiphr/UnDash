@@ -117,7 +117,7 @@ function und_disk($path) {
 
 /** Everything the overview needs, in one cheap call (no Docker, no network). */
 function und_system(array $cfg) {
-  if (und_api_mode()) return und_api_system($cfg);
+  if (und_api_mode()) return und_api_ready() ? und_api_system($cfg) : und_glances_system($cfg);
   $r = und_rates(); $mem = und_meminfo(); $v = und_var_ini();
   $hist = und_read_json(und_tmp('hist.json'), []);
   $now = time();

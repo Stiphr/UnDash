@@ -39,6 +39,14 @@
     e.appendChild(c.nodeType ? c : document.createTextNode(String(c)));
   }
   function clear(e) { while (e && e.firstChild) e.removeChild(e.firstChild); return e; }
+  /* the Docker version with no Unraid API key: no containers, VMs or array to read or control, and only some tiles with Glances */
+  function noKey() { return !!S.boot && S.boot.caps.unraid === false; }
+  var GLANCES_TILES = ['cpu', 'memory', 'storage', 'network', 'uptime', 'cores', 'swap'];
+  function tileOk(id) { return !noKey() || (!!S.boot.caps.glances && GLANCES_TILES.indexOf(id) >= 0); }
+  function secOk(id) { return !noKey() || (id !== 'docker' && id !== 'vms' && (id !== 'overview' || !!S.boot.caps.glances)); }
+  function presetParts() { return PRESET_PARTS.filter(function (p) { return p[0] === 'system' ? secOk('overview') : secOk(p[0]); }); }
+  /* rows of a list that keeps its full order, with some of them out of sight */
+  function hideRows(list, arr, ok) { [].forEach.call(list.children, function (e, i) { if (arr[i] && !ok(arr[i].id)) e.hidden = true; }); return list; }
   function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
   function txt(e, t) { if (e && e.textContent !== t) e.textContent = t; }
   var SVGNS = 'http://www.w3.org/2000/svg';
@@ -586,7 +594,7 @@
       onkeydown: searchKey }) : null;
     R.bell = boardOn() ? h('button', { type: 'button', class: 'bell', hidden: true, 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: alertPop }, ic('bell'), R.bellT = h('span', { class: 'bt' })) : null;
     var acts = h('div', { class: 'acts' }, R.bell, R.live,
-      GUEST ? null : R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
+      GUEST || noKey() ? null : R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
       window.UND_STANDALONE ? null : btn('', toggleFull, 'focus' + (S.full ? ' on' : ''), 'full', S.full ? 'Exit focus mode' : 'Focus mode (hide Unraid\'s menu)'),
       R.priv = btn('', togglePrivacy, 'priv', 'eye', 'Blur titles, posters, torrents and the server name'),
       boardOn() && !GUEST ? btn('', boardEdit, 'bedit', 'edit', 'Edit dashboard') : null,
@@ -1055,7 +1063,7 @@
   function boardMargins(a) {
     var ts = boardTs(), w = window.innerWidth / ts, sm = boardMode() === 'sm';
     var smart = sm ? 8 : Math.round(Math.max(10, Math.min(36, w * 0.012)));
-    ['x', 'y'].forEach(function (k) { var v = a['safe_' + k]; root.style.setProperty('--safe-' + k, (v === undefined || v < 0 ? smart : v) + 'px'); });
+    ['x', 'y'].forEach(function (k) { var v = a['safe_' + k]; root.style.setProperty('--safe-' + k, (v === undefined || v < 0 ? smart : Math.min(v, Math.round(w / 4))) + 'px'); });       // a wide margin never eats a small window
   }
   /* cards marked automatic are as tall as their content: measured together in one go, after data arrives or the screen changes */
   function boardAuto() {
@@ -1388,9 +1396,9 @@
     var on = function (o) { return function () { o.visible = true; boardDirty(); boardSide(); }; }, shows = {};
     c.dashboard.sections.forEach(function (s) {
       shows[s.id] = s.visible;
-      if (!s.visible && s.id !== 'alerts' && s.id !== 'health') out.push({ t: s.title || TITLES[s.id], w: 'Section', icon: ic(SEC_ICON[s.id] || 'grid'), add: on(s) });
+      if (!s.visible && s.id !== 'alerts' && s.id !== 'health' && secOk(s.id)) out.push({ t: s.title || TITLES[s.id], w: 'Section', icon: ic(SEC_ICON[s.id] || 'grid'), add: on(s) });
     });
-    if (shows.overview) c.dashboard.metrics.forEach(function (m) { if (!m.visible && MET[m.id] && !((m.id === 'load' || m.id === 'path') && api2)) out.push({ t: MET[m.id][0], w: 'System tile', icon: ic('server'), add: on(m) }); });
+    if (shows.overview) c.dashboard.metrics.forEach(function (m) { if (!m.visible && MET[m.id] && tileOk(m.id) && !((m.id === 'load' || m.id === 'path') && api2)) out.push({ t: MET[m.id][0], w: 'System tile', icon: ic('server'), add: on(m) }); });
     if (shows.media) c.media.widgets.forEach(function (w) { if (!w.visible) out.push({ t: MEDIA[w.id][0], w: 'Media list', icon: ic('play'), add: on(w) }); });
     if (shows.apps) c.groups.forEach(function (g) { g.services.forEach(function (s) {
       if (s.hidden && appZone(E.D, s) === 'apps') out.push({ t: s.name, w: 'App', icon: img(iconUrl(s.icon), '', 'web'), add: function () { s.hidden = false; boardDirty(); boardSide(); } });
@@ -3770,6 +3778,7 @@
       if (force !== true && D.dirty) { confirmBox('Close without saving?', 'Your changes in Settings are not saved yet.', 'Close without saving', true).then(function (y) { if (y) close(true); }); return; }
       document.removeEventListener('keydown', key);
       bg.remove(); drawer.remove(); if (pbar) pbar.remove(); S.drawer = null;
+      if (S.bootStale) { S.bootStale = false; reload(); }       // a connection changed: what the dashboard can show changed with it
       if (D.saved) { S.L = D.saved; D.saved = null; D.previewing = false; shell(); refreshNow(); }
       if (D.dirty) { applyLook(); applyCss(S.boot.css); }
       if (last && last.focus && document.body.contains(last)) try { last.focus(); } catch (e) { /* gone */ }
@@ -4022,7 +4031,7 @@
     system: ['General', 'clock', tabSystem, 'general'],
     ignored: ['Alerts', 'mute', tabIgnored, null, true],
     guest: ['Guest link', 'eye', tabGuest, null, true],
-    config: ['Server connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); dashPass(b); } else locPort(b, D); }, null, true],
+    config: ['Server connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); glancesConn(b); dashPass(b); } else locPort(b, D); }, null, true],
     backup: ['Backup & restore', 'download', configCommon, null, true],
     about: ['About', 'info', tabAbout, null, true]
   };
@@ -4064,7 +4073,7 @@
       row('grid', 'Apps & cards', 'Add apps and choose what each card shows', to('dashboard')).el,
       row('check', 'Setup wizard', 'Answer a few questions to set it all up again', function () { D.leave(function () { if (!S.drawer) wizardStart(true); }); }).el)),
       h('div', { class: 'grid2' }, F('Refresh every (seconds)', tIn(c.general, 'refresh', dirty, '2', 'number', { min: 1, max: 300 })), F('Dashboard name', tIn(c.general, 'title', dirty, String(sv.name || 'Your server').toUpperCase())))));
-    var conn = row('server', 'Connection', api2 ? (bt.api && bt.api.configured ? 'Connected to ' + (sv.name || 'your server') + (sv.os ? ' · Unraid ' + sv.os : '') : 'Not connected yet') : 'Running as a plugin on ' + (sv.name || 'your server'), to('config'), api2 && !(bt.api && bt.api.configured));
+    var conn = row('server', 'Connection', noKey() ? (bt.caps.glances ? 'No API key: system numbers from Glances. Containers and VMs are hidden' : 'No API key: containers, VMs and system tiles are hidden') : api2 ? 'Connected to ' + (sv.name || 'your server') + (sv.os ? ' · Unraid ' + sv.os : '') : 'Running as a plugin on ' + (sv.name || 'your server'), to('config'));
     var pass = api2 ? row('eye', 'Dashboard password', bt.auth === 'env' ? 'Set in the container settings' : bt.auth === 'file' ? 'On' : 'Off', to('config'), bt.auth === 'open') : null;
     var alerts = row('bell', 'Phone alerts', 'Checking…', to('ignored')), guest = row('web', 'Guest link', 'Checking…', to('guest')), back = row('download', 'Backups', 'Checking…', to('backup'));
     var ver = row('info', 'UnDash ' + bt.version, me.newer ? me.latest + ' is available' : 'About, diagnostics and shortcuts', to('about'));
@@ -4172,7 +4181,7 @@
     }
     var opts = {
       overview: function () { return [sub('Tiles', 'In this order. Click a tile on the dashboard for its details. A metric the server cannot measure says so instead of showing a made-up number.'),
-        orderList(c.dashboard.metrics, function (m) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: m.visible, onchange: function (e) { m.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MET[m.id][0]), h('span', { class: 'muted sm' }, ' · ' + MET_DESC[m.id]))); }, dirty, D.render),
+        hideRows(orderList(c.dashboard.metrics, function (m) { return h('label', { class: 'switch t', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: m.visible, onchange: function (e) { m.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, MET[m.id][0]), h('span', { class: 'muted sm' }, ' · ' + MET_DESC[m.id]))); }, dirty, D.render), c.dashboard.metrics, tileOk),
         ed.zone('overview')]; },
       media: function () {
         var radarrs = [['', 'First Radarr app']], sonarrs = [['', 'First Sonarr app']];
@@ -4219,7 +4228,7 @@
     });
     if (board) { boardSettings(b, D, dirty, ed, opts, foundBox); return; }
     b.appendChild(set('Sections', 'Tick the sections to show, drag to reorder, and open one for its options and apps. Half-width sections sit side by side on wide screens. Keys and passwords stay in .env on the server, never in the browser.',
-      orderList(c.dashboard.sections, function (s) {
+      hideRows(orderList(c.dashboard.sections, function (s) {
         var o = SEC_OPTS[s.id];
         if (o) chevs[s.id] = h('button', { type: 'button', class: 'btn sm ghost sec-opt', 'aria-controls': 'und-so-' + s.id, onclick: function () { open[s.id] = !open[s.id]; if (ed.q) { ed.q = ''; filter.value = ''; ed.draw(); } else paint(); } }, h('span', { class: 'lbl' }, o), ic('chev'));
         return [h('label', { class: 'switch t sec-sw', style: { margin: '0' } }, h('input', { type: 'checkbox', checked: s.visible, onchange: function (e) { s.visible = e.target.checked; dirty(); } }), h('span', null, h('b', null, s.title || TITLES[s.id]), h('span', { class: 'muted sm' }, ' · ' + SEC_DESC[s.id]))),
@@ -4227,7 +4236,7 @@
       }, dirty, D.render, function (s) {
         if (!opts[s.id]) return null;
         return (panels[s.id] = h('div', { class: 'sec-opts', id: 'und-so-' + s.id, hidden: true }, opts[s.id]()));
-      })));
+      }), c.dashboard.sections, secOk)));
     sharedValues(b, D, dirty);
     ed.draw();
   }
@@ -4263,12 +4272,12 @@
     b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Cards'), h('span', { class: 'grow' }),
       btn('Edit dashboard', function () { D.leave(boardEdit); }, 'sm', 'edit', 'Move, resize, add and rename cards on the dashboard itself')),
       h('p', { class: 'hint' }, 'Turn on what you want on your dashboard. Open a card to choose what it shows.'),
-      h('div', { class: 'cardl' }, orderList(list, function (s) {
+      h('div', { class: 'cardl' }, hideRows(orderList(list, function (s) {
         var n = apps(s.id);
         return [h('button', { type: 'button', class: 'crow', title: 'Options for ' + (s.title || TITLES[s.id]), onclick: function () { D.sub = s.id; D.render(); } },
           h('span', { class: 'cri' }, ic(SEC_ICON[s.id] || 'grid')), h('span', { class: 'crt' }, h('b', null, s.title || TITLES[s.id]), h('span', { class: 'muted xs ell' }, SEC_DESC[s.id])),
           n ? h('span', { class: 'muted xs nowrap' }, n + (n === 1 ? ' app' : ' apps')) : null, ic('chev')), sw(s, s.title || TITLES[s.id])];
-      }, sync, D.render))));
+      }, sync, D.render), list, secOk))));
     b.appendChild(set('Alerts', 'No card needed: the button at the top tells you when something is wrong.',
       h('div', { class: 'cardl' }, h('div', { class: 'olist' }, rest.map(function (s) {
         return h('div', { class: 'oi' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(s.id === 'alerts' ? 'bell' : 'web')), h('span', { class: 'crt' }, h('b', null, s.id === 'alerts' ? 'Alerts' : 'Endpoint checks'), h('span', { class: 'muted xs ell' }, s.id === 'alerts' ? SEC_DESC.alerts : 'Tells you when an app\'s address stops answering'))), sw(s, TITLES[s.id]));
@@ -4564,7 +4573,7 @@
     };
     var margin = function (k, lab) {
       var auto = a[k] < 0, out = h('span', { class: 'num muted sm', style: { 'min-width': '48px', 'text-align': 'right' } }, auto ? 'smart' : a[k] + ' px');
-      var r = h('input', { type: 'range', min: 0, max: 120, value: auto ? (k === 'safe_x' ? 32 : 16) : a[k], disabled: auto, 'aria-label': lab, style: { flex: '1' },
+      var r = h('input', { type: 'range', min: 0, max: k === 'safe_x' ? 480 : 120, value: auto ? (k === 'safe_x' ? 32 : 16) : a[k], disabled: auto, 'aria-label': lab, style: { flex: '1' },
         oninput: function (e) { a[k] = +e.target.value; txt(out, a[k] + ' px'); dirty(); preview(); } });
       return F(lab, h('div', { class: 'inl' }, h('label', { class: 'switch', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: auto, onchange: function (e) {
         a[k] = e.target.checked ? -1 : +r.value; r.disabled = e.target.checked; txt(out, e.target.checked ? 'smart' : a[k] + ' px'); dirty(); preview(); } }), 'Smart'), r, out));
@@ -5307,7 +5316,7 @@
       body.appendChild(h('div', { class: 'ae-sub' }, 'Whole page'));
       body.appendChild(h('div', { class: 'wz-ps' }, Object.keys(PRESETS).map(function (id) { return h('button', { type: 'button', class: 'wz-p', onclick: function () { m.close(); boardPreset(id); } }, h('b', null, PRESETS[id][0]), h('span', { class: 'muted xs' }, PRESETS[id][1])); })));
       body.appendChild(h('div', { class: 'ae-sub' }, 'One set at a time'));
-      body.appendChild(h('div', { class: 'olist wz-l' }, PRESET_PARTS.map(function (p) {
+      body.appendChild(h('div', { class: 'olist wz-l' }, presetParts().map(function (p) {
         return h('div', { class: 'oi nr wz-r' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(p[3])), h('span', { class: 'crt' }, h('b', null, p[1]))),
           presetBar(p[0], function (x) { return x.is(E.D.cfg, E.hidden, E.list, boardCols()); }, function (x) {
             boardMark(); x.set(E.D.cfg, E.hidden, E.list, boardCols());
@@ -5490,7 +5499,7 @@
       }))));
     function drawSets() {
       clear(sets);
-      sets.appendChild(h('div', { class: 'cardl' }, h('div', { class: 'olist' }, PRESET_PARTS.map(function (p) {
+      sets.appendChild(h('div', { class: 'cardl' }, h('div', { class: 'olist' }, presetParts().map(function (p) {
         var own = presetHome(c, p[0]), off = SET_PRESETS[p[0]][0].size && !own;
         return h('div', { class: 'oi nr wz-r' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(p[3])), h('span', { class: 'crt' }, h('b', null, p[1]), h('span', { class: 'muted xs ell' }, p[2]))),
           off ? h('span', { class: 'muted xs' }, 'Not on the dashboard') : presetBar(p[0], function (x) { return x.is(c, bd.hidden, own && own.lg, 24); }, function (x) {
@@ -5528,8 +5537,8 @@
       box.appendChild(F('Name of this dashboard', tIn(c.general, 'title', function () {}, (S.boot.server && S.boot.server.name) || 'My server', 'text', { maxlength: 40 }), 'Shown at the top of the page. Empty uses the server name.'));
     }
     function stepConnect() {
-      head('Connect to your server', 'UnDash reads your server through the Unraid API. Paste the address and a key, then press Save.');
-      unraidConn(box);
+      head('Connect to your server', 'With an Unraid API key UnDash shows and controls your containers and VMs. Paste the address and a key, then press Save. You can also go on without one: apps and media still work.');
+      unraidConn(box); glancesConn(box);
     }
     function stepPass() {
       head('Add a password', 'Without one, anyone who can open this address can see and control your containers and VMs.');
@@ -5541,7 +5550,7 @@
       var drawList = function () {
         clear(list);
         if (!W.preset) return;
-        PRESET_PARTS.forEach(function (p) {
+        presetParts().forEach(function (p) {
           list.appendChild(h('div', { class: 'oi nr wz-r' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(p[3])), h('span', { class: 'crt' }, h('b', null, p[1]), h('span', { class: 'muted xs ell' }, p[2]))),
             W.parts[p[0]] ? presetBar(p[0], function (x, n) { return (W.vary[p[0]] || 0) === n; }, function (x, n) { W.vary[p[0]] = n; drawList(); }) : null,
             bsSwitch(!!W.parts[p[0]], 'Show ' + p[1], function (on) { W.parts[p[0]] = on; drawList(); })));
@@ -5611,7 +5620,7 @@
       foot.appendChild(W.step < steps.length - 1 ? btn('Continue', function () { W.step++; draw(); }, 'pri') : btn('Finish', finish, 'pri'));
     }
     function skip() {
-      m.close();
+      m.close(); if (S.bootStale) { S.bootStale = false; reload(); }
       if (!again) api('setup_done');
     }
     function finish(e) {
@@ -5716,6 +5725,12 @@
   function unraidConn(b) {
     var box = h('div', null, h('div', { class: 'progress' }, h('i')));
     b.appendChild(set('Unraid connection', 'The Docker version reads the server through the official Unraid API. Create a key in Unraid under Settings > Management Access > API Keys with read access to Info, Array, Disk, Docker and VMs, plus update access to Docker and VMs for the buttons. Read access to UPS is optional: it is only needed for a UPS that Unraid\'s own UPS service runs.', box));
+    if (noKey()) b.appendChild(set('What an API key adds', 'Your apps, media, downloads and requests work without one. A key adds everything that needs Unraid itself:',
+      h('div', { class: 'cardl' }, h('div', { class: 'olist' }, [['box', 'Containers', 'See them all; start, stop, restart, update and read logs'], ['vm', 'Virtual machines', 'See them all; start, stop, restart and pause'],
+        ['array', 'Array and disks', 'Array state, disk health and temperatures, parity checks, when storage fills up'], ['bell', 'Server alerts', 'Failing disks, unhealthy containers and Unraid updates, on the page and on your phone'],
+        ['cpu', 'System tiles', 'CPU, memory, storage and network from Unraid, with no Glances needed'], ['search', 'Apps found for you', 'Setup finds Radarr, Plex and the rest in your containers, with their addresses filled in']].map(function (x) {
+        return h('div', { class: 'oi nr' }, h('span', { class: 'crow still' }, h('span', { class: 'cri' }, ic(x[0])), h('span', { class: 'crt' }, h('b', null, x[1]), h('span', { class: 'muted xs ell' }, x[2]))));
+      })))));
     api('unraid_conf').then(function (c) {
       clear(box);
       var u = { url: c.url || '', key: c.key_set ? S.KEEP || '__KEEP__' : '' };
@@ -5724,7 +5739,7 @@
         F('API address', h('input', { type: 'url', value: u.url, placeholder: 'http://192.168.1.10/graphql', disabled: c.from_env.url, oninput: function (e) { u.url = e.target.value; } }), c.from_env.url ? 'Set by UNRAID_API_URL in the container settings.' : 'Unraid\'s address followed by /graphql.'),
         F('API key', h('input', { type: 'password', autocomplete: 'off', value: '', placeholder: c.key_set ? 'stored (leave empty to keep)' : 'paste the key', disabled: c.from_env.key, oninput: function (e) { u.key = e.target.value || (c.key_set ? '__KEEP__' : ''); } }), c.from_env.key ? 'Set by UNRAID_API_KEY in the container settings.' : 'Kept on the server only.')));
       box.appendChild(h('div', { class: 'inl', style: { 'margin-top': '8px' } },
-        c.from_env.url && c.from_env.key ? null : btn('Save', function () { act('unraid_save', u, 'Saved').then(function (j) { if (!j.error) test(); }); }, 'pri'),
+        c.from_env.url && c.from_env.key ? null : btn('Save', function () { act('unraid_save', u, 'Saved').then(function (j) { if (!j.error) { S.bootStale = true; test(); } }); }, 'pri'),
         btn('Test connection', test, '', 'check')));
       box.appendChild(res);
       function test() {
@@ -5737,6 +5752,22 @@
         });
       }
     });
+  }
+  /* what stands in for the System tiles without an API key. Saved as soon as it answers */
+  function glancesConn(b) {
+    var v = { url: (S.L.general || {}).glances || '' }, res = h('div', { role: 'status', style: { 'margin-top': '10px' } });
+    var field = tIn(v, 'url', function () {}, 'http://192.168.1.10:61208', 'url');
+    var note = !noKey() ? 'Your Unraid API key is in use, so this is only kept for when there is none.' : S.boot.caps.glances ? 'In use: CPU, memory, storage, network and uptime come from Glances.' : 'Not set: there are no System tiles for now.';
+    b.appendChild(set('Glances', 'Without an API key UnDash cannot see Unraid, so containers, VMs and array details are hidden and they come back with the key. If you run Glances, its address brings back CPU, memory, storage, network and uptime. It needs no key.',
+      F('Glances address', field, note), h('div', { class: 'inl' }, btn('Save', function () {
+        clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
+        api('glances_save', { url: v.url }, 20000).then(function (j) {
+          clear(res);
+          if (j.error) { res.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
+          S.L.general.glances = v.url; S.bootStale = true;
+          res.appendChild(h('div', { class: 'banner ok' }, v.url ? 'Glances ' + j.version + ' answered, with ' + plural(j.pools, 'disk') + '.' : 'Glances is off.'));
+        });
+      }, '', 'check')), res));
   }
   function locPort(b, D) {
     var L = Object.assign({}, D.loc);
