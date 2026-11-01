@@ -115,6 +115,8 @@ const UND_API_SLOW = [
       disks { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
       caches { name device status temp numErrors fsSize fsFree fsType color isSpinning type } }
   }'],
+  'containers' => [3, 20, 'query { docker { containers { id names image state status autoStart iconUrl webUiUrl isUpdateAvailable isRebuildReady ports { privatePort publicPort type } hostConfig { networkMode } } } }'],
+  'vms' => [3, 20, 'query { vms { domains { id name state } } }'],
   'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname uptime kernel } versions { core { unraid } } } }'],
   'net'   => [5, 30, 'query { metrics { network { name rxSec txSec } } }'],
   'temp'  => [30, PHP_INT_MAX, 'query { metrics { temperature { sensors { type current { value } } } } }'],
@@ -306,8 +308,9 @@ function und_api_ups() {
 /* ---------- Docker ---------- */
 
 function und_api_containers($fresh = false) {
-  $fn = function () { return und_gql('query { docker { containers { id names image state status autoStart iconUrl webUiUrl isUpdateAvailable isRebuildReady ports { privatePort publicPort type } hostConfig { networkMode } } } }', [], 15); };
-  return $fresh ? $fn() : und_api_cached('containers', 1, $fn);
+  // an action always asks; it also removes the copy, so what it changed shows on the next refresh
+  $fn = function () { return und_gql(UND_API_SLOW['containers'][2], [], 15); };
+  return $fresh ? $fn() : (und_api_slow('containers') ?: und_api_cached('containers', 1, $fn));
 }
 
 /* ---------- per-container CPU and memory: the API's dockerContainerStats subscription (graphql-transport-ws) ---------- */
@@ -494,7 +497,7 @@ function und_api_vm_ops($state) {
 }
 
 function und_api_vm_live() {
-  $r = und_api_cached('vms', 1, function () { return und_gql('query { vms { domains { id name state } } }'); });
+  $r = und_api_slow('vms') ?: und_api_cached('vms', 1, function () { return und_gql(UND_API_SLOW['vms'][2]); });
   if (isset($r['error'])) return ['error' => preg_match('/permission/i', $r['error']) ? $r['error'] : 'VMs are not available: ' . $r['error']];
   $out = [];
   foreach ((array)($r['data']['vms']['domains'] ?? []) as $d) {
