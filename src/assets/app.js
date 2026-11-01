@@ -713,7 +713,7 @@
     });
     return list;
   }
-  /* every gap goes to the cards around it: first sideways, then down, so a row always ends at the edge and neighbours end level */
+  /* every gap goes to the cards around it: first sideways, so a row always ends at the edge, then down, so neighbouring columns end level */
   function gStretch(list, cols) {
     var band = function (a, b) { return a.y < b.y + b.h && b.y < a.y + a.h; }, over = function (a, b) { return a.x < b.x + b.w && b.x < a.x + a.w; };
     for (var pass = 0; pass < 2; pass++) {
@@ -725,13 +725,49 @@
       var left = 0; list.forEach(function (o) { if (o !== c && band(c, o) && o.x + o.w <= c.x) left = Math.max(left, o.x + o.w); });
       c.w += c.x - left; c.x = left;
     });
+    }
+    gEven(list);
+    // cards that do not form plain rows and columns: each takes what is left under it
     var bottom = list.reduce(function (m, c) { return Math.max(m, c.y + c.h); }, 0);
     list.slice().sort(function (a, b) { return b.y - a.y; }).forEach(function (c) {
       if (c.i.indexOf('m:') === 0) return;                 // System tiles keep one height
       var next = bottom; list.forEach(function (o) { if (o !== c && over(c, o) && o.y >= c.y + c.h) next = Math.min(next, o.y); });
       c.h = next - c.y;
     });
+    return list;
+  }
+  /* a shorter column shares what it lacks over all its rows, instead of one card at its end taking it all. System tiles never grow */
+  function gEven(list) {
+    var tile = function (c) { return c.i.indexOf('m:') === 0; };
+    // the groups of cards that no line along this axis cuts through
+    var groups = function (cs, at, size) {
+      var out = [], cur = null, end = 0;
+      cs.slice().sort(function (a, b) { return a[at] - b[at]; }).forEach(function (c) {
+        if (cur && c[at] < end) cur.push(c); else { cur = [c]; out.push(cur); end = 0; }
+        end = Math.max(end, c[at] + c[size]);
+      });
+      return out;
+    };
+    function lay(cs, y, height) {
+      // columns first: the card that happens to end level with the next column does not end a row
+      var parts = groups(cs, 'x', 'w');
+      if (parts.length > 1) { parts.forEach(function (g) { lay(g, y, height); }); return; }
+      var rows = groups(cs, 'y', 'h');
+      if (rows.length > 1) {
+        var hs = rows.map(function (g) { return Math.max.apply(null, g.map(function (c) { return c.y + c.h; })) - Math.min.apply(null, g.map(function (c) { return c.y; })); });
+        var open = rows.filter(function (g) { return !g.every(tile); }).length, extra = height - hs.reduce(function (a, b) { return a + b; }, 0);
+        var each = open ? Math.floor(extra / open) : 0, spare = open ? extra - each * open : 0, at = y;
+        rows.forEach(function (g, k) {
+          var add = g.every(tile) ? 0 : each + (spare-- > 0 ? 1 : 0);
+          lay(g, at, hs[k] + add); at += hs[k] + add;
+        });
+        return;
+      }
+      if (cs.length === 1) { cs[0].y = y; if (!tile(cs[0])) cs[0].h = height; return; }
+      var top = Math.min.apply(null, cs.map(function (c) { return c.y; }));
+      cs.forEach(function (c) { c.y += y - top; });
     }
+    if (list.length) lay(list, 0, list.reduce(function (m, c) { return Math.max(m, c.y + c.h); }, 0));
     return list;
   }
   /* the card goes where asked; the card it covers most swaps into the spot just left ($from) when it fits there, anything else moves down */
@@ -782,14 +818,11 @@
     var secs = S.L.dashboard.sections.filter(function (x) { return by[x.id]; }), y = 0, i = 0;
     while (i < secs.length) {
       if (secs[i].width !== 'half' || tight) { y = block(secs[i].id, 0, cols, y); i++; continue; }
-      var col = [y, y], first = out.length;
+      var col = [y, y];
       for (; i < secs.length && secs[i].width === 'half'; i++) { var c = col[0] <= col[1] ? 0 : 1; col[c] = block(secs[i].id, c * half, half, col[c]); }
-      // the shorter column's last row takes up the difference
-      var low = col[0] < col[1] ? 0 : 1, end = Math.max(col[0], col[1]);
-      out.slice(first).forEach(function (o) { if (o.x >= low * half && o.x < (low + 1) * half && o.y + o.h === col[low]) o.h += end - col[low]; });
-      y = end;
+      y = Math.max(col[0], col[1]);
     }
-    return out;
+    return gEven(out);
   }
   function boardSeed(cards, cols) { return boardSmart(cards, cols); }
   /* the saved layout for this screen size, without cards that no longer exist and with new ones added */
@@ -1878,7 +1911,7 @@
     if (s.error) { r.stale.hidden = false; txt(r.stale, s.error); return; }
     var a = s.array || {}, pools = (a.pools || []).filter(function (p) { return p.size > 0; }), dk = dockerStats(y), vm = vmStats(y);
     var c = s.cpu.pct;
-    tile('cpu', pct(c), (s.cpu.temp !== null && s.cpu.temp !== undefined ? Math.round(s.cpu.temp) + '°C · ' : '') + (s.cpu.threads ? s.cpu.threads + ' threads' : ''), c, s.cpu.temp >= 85 ? 'bad' : s.cpu.temp >= 75 ? 'warn' : lvl(c, 85, 97));
+    tile('cpu', pct(c), [s.cpu.temp !== null && s.cpu.temp !== undefined ? Math.round(s.cpu.temp) + '°C' : '', s.cpu.threads ? s.cpu.threads + ' threads' : ''].filter(Boolean).join(' · '), c, s.cpu.temp >= 85 ? 'bad' : s.cpu.temp >= 75 ? 'warn' : lvl(c, 85, 97));
     tile('memory', pct(s.mem.pct), bytes(s.mem.free) + ' free of ' + bytes(s.mem.total), s.mem.pct, lvl(s.mem.pct, 85, 95));
     var st = a.size ? [a.size, a.free] : pools.length ? pools.reduce(function (acc, p) { return [acc[0] + p.size, acc[1] + p.free]; }, [0, 0]) : null;
     if (st) { var sp = 100 * (st[0] - st[1]) / st[0]; tile('storage', bytes(st[1]) + ' free', pct(sp) + ' of ' + bytes(st[0]) + (a.size ? ' · array' : ' · ' + pools.length + ' pools'), sp, lvl(sp, 85, 95)); }

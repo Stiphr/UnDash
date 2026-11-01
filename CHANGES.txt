@@ -8,6 +8,7 @@
 - Security: container and VM preference names are checked like action targets; UNDASH_TLS_VERIFY=1 turns on certificate checks for the apps UnDash reads.
 - Prowlarr: "Fail grabs" and "Fail queries" are "Failed grabs" and "Failed queries".
 - Removed the styles of the Fluent theme, which had already become Golden Gate.
+- Columns of cards end level by sharing the difference over all the cards in the shorter column, instead of one card at the end taking it all.
 - System tiles: all the same size, with text on the same lines and the graph in its own band under the text.
 - UI pass: Settings no longer says Unsaved changes when a saved link wallpaper is simply opened. Tablets keep the full server name and tile values. Phones get larger tap targets and no keyboard hints. Now playing and app cards lose an inner box and an empty gap.
 - Your own sections: Add > New section makes a card with a name you choose, holding the apps and shortcuts you pick. Apps moved in leave their own cards, and taking one out or deleting the section puts them back.
