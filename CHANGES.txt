@@ -8,6 +8,7 @@
 - Security: container and VM preference names are checked like action targets; UNDASH_TLS_VERIFY=1 turns on certificate checks for the apps UnDash reads.
 - Prowlarr: "Fail grabs" and "Fail queries" are "Failed grabs" and "Failed queries".
 - Removed the styles of the Fluent theme, which had already become Golden Gate.
+- Your own sections: Add > New section makes a card with a name you choose, holding the apps and shortcuts you pick. Apps moved in leave their own cards, and taking one out or deleting the section puts them back.
 - Edit dashboard: Edit layout's long bar is now a small floating box (Add, undo, redo, Arrange, Cancel, Save). Click a card to edit it in a panel beside it: rename a section, add and delete its apps, tick which containers, VMs, System tiles and Media lists show, and change an app's name, icon, address or login. Add lists removed cards, hidden sections and containers found on the server. It all shows at once, undo covers it, and nothing is saved until Save.
 - Card board: the dashboard is a grid of cards. Every System tile, Media list, app and section is its own card. Edit layout (the pencil) moves them by dragging, resizes them by their edges, and swaps a card with the one it lands on while others make way. Undo and redo, Snap up on or off, Fit to content per card or for all, remove and add cards, Reset, and nothing is saved until Save.
 - Keyboard: arrow keys move the focused card, Shift + arrows resize it, Delete removes it, Ctrl+Z undoes.

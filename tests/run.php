@@ -980,6 +980,9 @@ $c = und_default_config(); $c['dashboard']['board']['lg'] = [['i' => 'arr', 'x' 
 $st = function ($t) { return und_normalize(['dashboard' => ['sections' => [['id' => 'docker', 'title' => $t]]]])['dashboard']['sections'][0]['title']; };
 t('a section keeps your name for it, empty by default', und_default_config()['dashboard']['sections'][0]['title'] === '' && $st('  My stack ') === 'My stack');
 t('a section name loses line breaks, is cut to 40 characters and cannot be a list', $st("a\nb") === 'a b' && mb_strlen($st(str_repeat('x', 90)), 'UTF-8') === 40 && $st(['x']) === '');
+$gs = und_normalize(['groups' => [['name' => 'Network', 'section' => true], ['name' => 'Other']]])['groups'];
+t('a group can be a section of its own, and is not one by default', $gs[0]['section'] === true && $gs[1]['section'] === false);
+t('the card of your own section survives on the board', und_board_clean(['lg' => [['i' => 'grp:0a1b2c3d', 'x' => 0, 'y' => 0, 'w' => 6, 'h' => 6]], 'hidden' => ['grp:0a1b2c3d']])['hidden'] === ['grp:0a1b2c3d'] && und_board_clean(['lg' => [['i' => 'grp:0a1b2c3d', 'w' => 6, 'h' => 6]]])['lg'][0]['i'] === 'grp:0a1b2c3d');
 t('a saved board survives loading the settings', und_normalize($c)['dashboard']['board']['lg'][0]['x'] === 2);
 
 $c = und_default_config(); $c['appearance']['radius'] = 500;
