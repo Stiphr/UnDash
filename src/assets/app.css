@@ -1380,4 +1380,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .gc-c>.sec>.sec-b>.panel{overflow:visible}
 .und.bui .gc-c>.card.w{overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
 .und.bui .gc-c>.card.w>.cb{flex:1 0 auto;min-height:auto}
+/* the wallpaper stays put behind the page; its blurred edges reach past the window without adding a scrollbar */
+.und.bui .und-bg{position:fixed;inset:-24px;border-radius:0}
 
