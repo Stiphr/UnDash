@@ -713,18 +713,6 @@
     });
     return list;
   }
-  /* neighbours that start level and nearly end level are one row: the taller sets the height, so no seam sits a row off. Cards sized by hand keep their size */
-  function gLevel(list) {
-    for (var again = true, n = 0; again && n < list.length; n++) {
-      again = false;
-      list.forEach(function (a) { list.forEach(function (b) {
-        if (!a.a || !b.a || a.y !== b.y || a.x + a.w !== b.x || a.h === b.h || Math.abs(a.h - b.h) > 2) return;
-        a.h = b.h = Math.max(a.h, b.h); again = true;
-      }); });
-      gCompact(list);
-    }
-    return list;
-  }
   /* every gap goes to the cards around it: first sideways, so a row always ends at the edge, then down, so neighbouring columns end level */
   function gStretch(list, cols) {
     var band = function (a, b) { return a.y < b.y + b.h && b.y < a.y + a.h; }, over = function (a, b) { return a.x < b.x + b.w && b.x < a.x + a.w; };
@@ -1006,7 +994,7 @@
         if (mode !== 'sm' && !(bd[mode] || []).length && !(bd.lg || []).length) {
           var on = {}; list.forEach(function (c) { on[c.i] = 1; });
           list = boardSmart(boardCards().filter(function (c) { return on[c.i]; }), BOARD_COLS[mode]);
-        } else if (mode !== 'sm') gStretch(gLevel(gCompact(list)), BOARD_COLS[mode]);
+        } else if (mode !== 'sm') gStretch(gCompact(list), BOARD_COLS[mode]);
       }
     }
     var seen = {}, bottom = 0;
