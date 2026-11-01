@@ -74,6 +74,16 @@ $w = req('GET', '/wallpaper?v=' . $wj['v'], [$C]);
 t('the picture is served with its own type and a long cache life', $w['code'] === 200 && ($w['h']['content-type'][0] ?? '') === 'image/png' && strpos($w['h']['cache-control'][0] ?? '', 'immutable') !== false && substr($w['body'], 1, 3) === 'PNG');
 t('a bad preference name is refused', req('POST', '/api', $H, 'action=prefs&kind=docker&key=' . urlencode("bad name\n") . '&value=' . urlencode('{"hidden":true}'))['code'] === 400);
 t('restoring the defaults needs a confirmation', req('POST', '/api', $H, 'action=reset')['code'] === 400);
+// a picture named by its path: what is sent comes from the saved setting, whatever the request asks for
+file_put_contents(UND_DIR . '/saved-wall.png', base64_decode($png));
+$wc = und_load_config(); $wc['appearance']['background'] = 'local'; $wc['appearance']['wall_path'] = UND_DIR . '/saved-wall.png'; und_save_config($wc, false);
+$lw = req('GET', '/wallpaper?local=1', [$C]);
+t('a saved local path is shown as the wallpaper', $lw['code'] === 200 && $lw['body'] === base64_decode($png));
+t('a saved local path needs a session', req('GET', '/wallpaper?local=1')['code'] === 401);
+t('a path in the request is ignored', req('GET', '/wallpaper?local=1&path=/etc/passwd', [$C])['body'] === base64_decode($png));
+$wc['appearance']['wall_path'] = '/etc/passwd'; und_save_config($wc, false);
+t('a saved path outside the allowed folders sends nothing', req('GET', '/wallpaper?local=1', [$C])['code'] === 404);
+$wc['appearance']['background'] = ''; $wc['appearance']['wall_path'] = ''; und_save_config($wc, false);
 t('the picture can be removed', !empty(json_decode(req('POST', '/api', $H, 'action=wallpaper_remove')['body'], true)['ok']) && req('GET', '/wallpaper', [$C])['code'] === 404);
 t('restore all needs confirmation', req('POST', '/api', $H, 'action=ignore_restore_all')['code'] === 400);
 $r = req('POST', '/api', $H, 'action=ignore_remove&ids=' . rawurlencode(json_encode([$j['rule']['id'] ?? ''])));
