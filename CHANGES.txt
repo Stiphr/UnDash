@@ -8,6 +8,7 @@
 - Security: container and VM preference names are checked like action targets; UNDASH_TLS_VERIFY=1 turns on certificate checks for the apps UnDash reads.
 - Prowlarr: "Fail grabs" and "Fail queries" are "Failed grabs" and "Failed queries".
 - Removed the styles of the Fluent theme, which had already become Golden Gate.
+- Edit dashboard: Edit layout's long bar is now a small floating box (Add, undo, redo, Arrange, Cancel, Save). Click a card to edit it in a panel beside it: rename a section, add and delete its apps, tick which containers, VMs, System tiles and Media lists show, and change an app's name, icon, address or login. Add lists removed cards, hidden sections and containers found on the server. It all shows at once, undo covers it, and nothing is saved until Save.
 - Card board: the dashboard is a grid of cards. Every System tile, Media list, app and section is its own card. Edit layout (the pencil) moves them by dragging, resizes them by their edges, and swaps a card with the one it lands on while others make way. Undo and redo, Snap up on or off, Fit to content per card or for all, remove and add cards, Reset, and nothing is saved until Save.
 - Keyboard: arrow keys move the focused card, Shift + arrows resize it, Delete removes it, Ctrl+Z undoes.
 - Desktop and tablet keep separate layouts; a phone shows the cards in order at their natural height. A new app appears by itself, and a card with nothing to show (no alerts) closes its gap.
@@ -17,7 +18,7 @@
 - Settings search finds any option as you type, with suggestions and your recent picks, and takes you to it. Settings and dialogs match the board: a panel in the middle of the screen, clearer navigation, roomier forms and toggle switches. On a phone Settings is full screen.
 - Privacy button at the top right: blurs movie and series names and posters, what is playing, requests, torrent names and the server name, until you turn it off. It is remembered in this browser.
 - Now playing is the one place for streams: app cards show stats instead of repeating them, and Tautulli's card has streams, direct, transcoding and bandwidth. Several streams sit side by side, each with who is watching, and the header counts the people.
-- Icon selector: browse every selfh.st and Dashboard Icons icon without searching, filter by source, choose colour, light or dark, and load more as you scroll. Open it from a container's or VM's menu, or the icon button on an app card in Edit layout.
+- Icon selector: browse every selfh.st and Dashboard Icons icon without searching, filter by source, choose colour, light or dark, and load more as you scroll. Open it from a container's or VM's menu, or an app's icon in Edit dashboard.
 - Alerts left the board: a button in the header names the problem in its colour, and opens the list with Ignore and History. With nothing wrong it is a quiet bell.
 - Five new themes in the spirit of qui's: Autobrr, The Kyle, Napster, Nightwalker and Swizzin, with their own palettes for the glass cards. Mono is rebuilt in clean greys with a soft light from above.
 - Fixed: with two UnDash open on one server (live and beta), each signed the other out, which showed "UnDash restarted" and reloaded the page. Each port now has its own session, and a page whose token goes stale renews it and carries on without reloading.

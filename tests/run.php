@@ -977,6 +977,9 @@ $b = und_board_clean(['on' => false, 'compact' => 0, 'hidden' => ['alerts', 'bad
 t('the board keeps only ids and numbers, inside the grid', $b['on'] === false && $b['compact'] === false && $b['lg'] === [['i' => 'm:cpu', 'x' => 0, 'y' => 0, 'w' => 24, 'h' => 1, 'a' => false]] && $b['hidden'] === ['alerts', 'app:a1b2c3d4'], json_encode($b));
 t('the board is on by default', und_board_clean(null)['on'] === true && und_default_config()['dashboard']['board']['lg'] === []);
 $c = und_default_config(); $c['dashboard']['board']['lg'] = [['i' => 'arr', 'x' => 2, 'y' => 3, 'w' => 6, 'h' => 9]];
+$st = function ($t) { return und_normalize(['dashboard' => ['sections' => [['id' => 'docker', 'title' => $t]]]])['dashboard']['sections'][0]['title']; };
+t('a section keeps your name for it, empty by default', und_default_config()['dashboard']['sections'][0]['title'] === '' && $st('  My stack ') === 'My stack');
+t('a section name loses line breaks, is cut to 40 characters and cannot be a list', $st("a\nb") === 'a b' && mb_strlen($st(str_repeat('x', 90)), 'UTF-8') === 40 && $st(['x']) === '');
 t('a saved board survives loading the settings', und_normalize($c)['dashboard']['board']['lg'][0]['x'] === 2);
 
 $c = und_default_config(); $c['appearance']['radius'] = 500;
