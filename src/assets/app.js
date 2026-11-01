@@ -2066,7 +2066,7 @@
     var st = a.size ? [a.size, a.free] : pools.length ? pools.reduce(function (acc, p) { return [acc[0] + p.size, acc[1] + p.free]; }, [0, 0]) : null;
     if (st) { var sp = 100 * (st[0] - st[1]) / st[0]; tile('storage', bytes(st[1]) + ' free', pct(sp) + ' of ' + bytes(st[0]) + (a.size ? ' · array' : ' · ' + pools.length + ' pools'), sp, lvl(sp, 85, 95)); }
     else tile('storage', 'n/a', a.state === 'STARTED' ? 'No sizes reported' : 'Array ' + (a.state || 'unknown').toLowerCase(), null, 'na');
-    tile('network', s.net.rx === null ? 'n/a' : rate(s.net.rx) + ' ↓', s.net.tx === null ? (s.net.iface || '') : rate(s.net.tx) + ' ↑ · ' + s.net.iface, null, s.net.rx === null ? 'na' : '');
+    tile('network', s.net.rx === null ? 'n/a' : rate(s.net.rx) + ' ↓', s.net.tx === null ? (s.net.iface || '') : rate(s.net.tx) + ' ↑' + (s.net.iface ? ' · ' + s.net.iface : ''), null, s.net.rx === null ? 'na' : '');
     var hl = a.state !== 'STARTED' ? 'warn' : a.bad || a.errors ? 'bad' : 'ok';
     tile('health', a.state !== 'STARTED' ? (a.state || 'unknown').toLowerCase() : a.bad ? a.bad + ' disk problem' + (a.bad > 1 ? 's' : '') : a.errors ? a.errors + ' errors' : 'Healthy',
       a.resync ? (a.resync_action || 'Parity check') + (a.resync_pct !== null ? ' ' + a.resync_pct + '%' : '') : (a.disks || 0) + ' disks · ' + (a.parity || 0) + ' parity · ' + pools.length + ' pools', a.resync_pct, hl);
