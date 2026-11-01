@@ -564,6 +564,7 @@
 
   var R = {};      // references to live parts of the page
   var TOUCH = !!(window.matchMedia && window.matchMedia('(hover:none) and (pointer:coarse)').matches);
+  var APP_MODE = !!(navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
   function shell() {
     closeMenu(true);
     alertClose();
@@ -1945,7 +1946,16 @@
     if (S.tempHist) sparkTile('disks', S.tempHist, 20, 60);
     paintDetail(y);
   }
+  /* the details are redrawn on every refresh; the history chart is one element carried over, and the scroll position stays */
   function paintDetail(y) {
+    var r = R.overview, top = r.detail.scrollTop;
+    detailBody(y);
+    if (r.detail.hidden) return;
+    var c = histChart(r.open);
+    if (c) r.detail.appendChild(c);
+    r.detail.scrollTop = top;
+  }
+  function detailBody(y) {
     var r = R.overview, s = y.system, id = r.open;
     r.detail.hidden = !id || !s || !r.tiles[id];
     if (r.detail.hidden) { r.detailSig = null; return; }
@@ -1979,6 +1989,92 @@
         h('span', null, 'Uptime'), h('span', null, upt(s.uptime) + ' · since ' + new Date((s.now - s.uptime) * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })),
         y.ups ? [h('span', null, 'UPS'), h('span', null, (y.ups.model || '') + ' · ' + y.ups.status + ' · ' + pct(y.ups.charge) + (y.ups.watts ? ' · ' + y.ups.watts + ' W' + (y.ups.nominal ? ' of ' + y.ups.nominal + ' W' : '') : '') + (y.ups.runtime ? ' · ' + Math.round(y.ups.runtime / 60) + ' min runtime' : ''))] : null));
     }
+  }
+  /* ---- history charts: the server keeps a reading a minute (include/metrics.php). One unit per chart: never two scales on one axis ---- */
+  var HC_RANGES = [['1h', '1H'], ['24h', '24H'], ['7d', '7D'], ['30d', '30D']];
+  var HC_PANELS = {
+    cpu: [{ t: 'CPU', u: '%', max: 100, s: [['cpu', 'CPU']] }, { t: 'CPU temperature', u: 'deg', s: [['temp', 'Temperature']] }],
+    memory: [{ t: 'Memory used', u: '%', max: 100, s: [['mem', 'Memory']] }],
+    network: [{ t: 'Network', u: 'rate', s: [['rx', 'Down'], ['tx', 'Up']] }],
+    storage: [{ t: 'Storage used', u: '%', max: 100, s: [['used', 'Used']] }],
+    disks: [{ t: 'Hottest disk', u: 'deg', s: [['disk_temp', 'Temperature']] }]
+  };
+  HC_PANELS.cores = HC_PANELS.cpu; HC_PANELS.swap = HC_PANELS.memory;
+  function hcFmt(u, v) { return v === null || v === undefined ? '-' : u === 'rate' ? rate(v) : u === 'deg' ? Math.round(v) + '°C' : (Math.round(v * 10) / 10) + '%'; }
+  function hcWhen(t, range, long) {
+    var o = range === '1h' || range === '24h' ? { hour: 'numeric', minute: '2-digit' } : { month: 'short', day: 'numeric' };
+    if (long) { o.month = 'short'; o.day = 'numeric'; o.hour = 'numeric'; o.minute = '2-digit'; }
+    return new Date(t * 1000).toLocaleString([], o);
+  }
+  function histChart(id) {
+    var P = HC_PANELS[id]; if (!P) return null;
+    var r = R.overview, all = r.hc = r.hc || {}, C = all[id];
+    if (!C) {
+      var body = h('div', { class: 'hc-b' }), bar = h('div', { class: 'seg', role: 'group', 'aria-label': 'Time range' });
+      C = all[id] = { el: h('div', { class: 'hc' }, h('div', { class: 'hc-h' }, h('span', { class: 'dk' }, 'History'), bar), body), body: body, bar: bar, at: 0 };
+      HC_RANGES.forEach(function (o) {
+        bar.appendChild(h('button', { type: 'button', 'data-r': o[0], 'aria-label': o[0], onclick: function () { LS.set('chartRange', o[0]); C.at = 0; hcLoad(C, P); } }, o[1]));
+      });
+    }
+    if (Date.now() - C.at > 60000) hcLoad(C, P);
+    return C.el;
+  }
+  function hcLoad(C, P) {
+    var range = LS.get('chartRange', '24h');
+    C.at = Date.now();
+    [].forEach.call(C.bar.children, function (b) { var on = b.getAttribute('data-r') === range; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    api('metrics', { range: range }).then(function (j) {
+      if (j.error) { clear(C.body).appendChild(h('div', { class: 'empty' }, j.error)); return; }
+      if (LS.get('chartRange', '24h') !== range) return;
+      clear(C.body);
+      P.forEach(function (p) { C.body.appendChild(hcPanel(p, j, range)); });
+    });
+  }
+  /* one chart. x runs over the whole range, so a young history starts part-way; a line breaks where the server was off */
+  function hcPanel(p, j, range) {
+    var col = {}; j.fields.forEach(function (f, i) { col[f] = i + 1; });
+    var W = 100, H = 40, x = function (t) { return (t - j.from) / (j.now - j.from) * W; };
+    var rows = j.rows.filter(function (q) { return p.s.some(function (s) { return q[col[s[0]]] !== null; }); });
+    var vals = []; rows.forEach(function (q) { p.s.forEach(function (s) { var v = q[col[s[0]]]; if (v !== null) vals.push(v); }); });
+    var head = h('div', { class: 'hc-t' }, h('b', null, p.t));
+    if (rows.length < 2) return h('div', { class: 'hc-p' }, head, h('div', { class: 'hc-none' }, 'Collecting. UnDash takes a reading every minute, so the chart fills in as time passes.'));
+    var main = p.s[0], first = rows.map(function (q) { return q[col[main[0]]]; }).filter(function (v) { return v !== null; }), sum = first.reduce(function (a, b) { return a + b; }, 0);
+    head.appendChild(h('span', { class: 'hc-s' }, 'now ' + hcFmt(p.u, first[first.length - 1]) + ' · avg ' + hcFmt(p.u, sum / first.length) + ' · peak ' + hcFmt(p.u, Math.max.apply(null, first))));
+    var lo = 0, hi = p.max || Math.max.apply(null, vals) * 1.1 || 1;
+    if (p.u === 'deg') { lo = Math.max(0, Math.floor(Math.min.apply(null, vals) / 5) * 5 - 5); hi = Math.ceil(Math.max.apply(null, vals) / 5) * 5 + 5; }
+    var y = function (v) { return H - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (H - 1); };
+    var svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('viewBox', '0 0 100 40'); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', p.t + ', ' + hcWhen(rows[0][0], range, true) + ' to now: ' + head.lastChild.textContent);
+    p.s.forEach(function (s, k) {
+      var line = '', fill = '', open = null, prev = 0, c = col[s[0]];
+      rows.forEach(function (q) {
+        var v = q[c];
+        if (v === null || (open !== null && q[0] - prev > j.step * 3)) { if (open !== null) fill += 'L' + x(prev).toFixed(2) + ',40 L' + open + ',40 Z '; open = null; if (v === null) return; }
+        var at = x(q[0]).toFixed(2) + ',' + y(v).toFixed(2);
+        if (open === null) { open = x(q[0]).toFixed(2); line += 'M' + at + ' '; fill += 'M' + open + ',40 L' + at + ' '; } else { line += 'L' + at + ' '; fill += 'L' + at + ' '; }
+        prev = q[0];
+      });
+      if (open !== null) fill += 'L' + x(prev).toFixed(2) + ',40 L' + open + ',40 Z';
+      if (p.s.length === 1) { var a = document.createElementNS(SVGNS, 'path'); a.setAttribute('class', 'a'); a.setAttribute('d', fill); svg.appendChild(a); }
+      var l = document.createElementNS(SVGNS, 'path'); l.setAttribute('class', 'l l' + k); l.setAttribute('d', line); l.setAttribute('vector-effect', 'non-scaling-stroke'); svg.appendChild(l);
+    });
+    var cross = h('i', { class: 'hc-x', hidden: true }), tip = h('div', { class: 'hc-tip', hidden: true });
+    var plot = h('div', { class: 'hc-plot' }, h('span', { class: 'hc-y up' }, hcFmt(p.u, hi)), h('span', { class: 'hc-y' }, hcFmt(p.u, lo)), svg, cross, tip);
+    var dots = p.s.map(function (s, k) { var d = h('i', { class: 'hc-dot k' + k, hidden: true }); plot.appendChild(d); return d; });
+    function show(e) {
+      var b = plot.getBoundingClientRect(), t = j.from + (e.clientX - b.left) / b.width * (j.now - j.from), q = rows[0];
+      rows.forEach(function (z) { if (Math.abs(z[0] - t) < Math.abs(q[0] - t)) q = z; });
+      var at = x(q[0]);
+      cross.hidden = tip.hidden = false; cross.style.left = at + '%';
+      p.s.forEach(function (s, k) { var v = q[col[s[0]]]; dots[k].hidden = v === null; if (v !== null) { dots[k].style.left = at + '%'; dots[k].style.top = y(v) / H * 100 + '%'; } });
+      clear(tip).appendChild(h('div', { class: 'hc-tt' }, hcWhen(q[0], range, true)));
+      p.s.forEach(function (s, k) { tip.appendChild(h('div', { class: 'hc-tr' }, p.s.length > 1 ? h('i', { class: 'hc-key k' + k }) : null, h('span', null, s[1]), h('b', null, hcFmt(p.u, q[col[s[0]]])))); });
+      tip.style.left = at > 60 ? 'auto' : 'calc(' + at + '% + 10px)'; tip.style.right = at > 60 ? 'calc(' + (100 - at) + '% + 10px)' : 'auto';
+    }
+    function hide() { cross.hidden = tip.hidden = true; dots.forEach(function (d) { d.hidden = true; }); }
+    plot.addEventListener('pointermove', show); plot.addEventListener('pointerdown', show); plot.addEventListener('pointerleave', hide);
+    return h('div', { class: 'hc-p' }, head, plot,
+      h('div', { class: 'hc-a' }, h('span', null, hcWhen(j.from, range)), p.s.length > 1 ? h('span', { class: 'hc-l' }, p.s.map(function (s, k) { return h('span', null, h('i', { class: 'hc-key k' + k }), s[1]); })) : null, h('span', null, hcWhen(j.now, range))));
   }
   function sparkBox(vals, max) {
     var s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', 'spark2'); s.setAttribute('viewBox', '0 0 100 40'); s.setAttribute('preserveAspectRatio', 'none'); s.setAttribute('role', 'img');
@@ -2041,7 +2137,7 @@
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
       ['Check container updates', 'box', caps.docker_check ? checkUpdates : rereadUpdates, '', !!S.busy.dcheck], dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
-      caps.os_update ? ['Unraid OS update', 'up', osDialog] : ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], TOUCH ? null : ['Keyboard shortcuts  ?', 'grid', keysHelp],
+      caps.os_update ? ['Unraid OS update', 'up', osDialog] : ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], TOUCH ? null : ['Keyboard shortcuts  ?', 'grid', keysHelp], TOUCH && !APP_MODE ? ['Add to home screen', 'download', phoneHelp] : null,
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
       window.UND_STANDALONE && S.boot.auth !== 'open' ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
       caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
@@ -2495,7 +2591,7 @@
   }
   function dVolatile(row, c) {
     var run = c.state === 'running';
-    var na = !S.boot.caps.docker_stats;      // the Unraid API offers no per-container CPU / memory over HTTP
+    var d = S.live && S.live.docker, na = !S.boot.caps.docker_stats || (d && d.stats === false);      // the Docker version's numbers come in the background: none yet, or the API key may not read them
     txt(row._cpu, na ? '' : run && c.cpu !== null ? c.cpu.toFixed(1) + '%' : run ? '…' : '-');
     txt(row._mem, na ? '' : run && c.mem !== null ? bytes(c.mem) : '');
     row._cpu.title = na ? '' : 'CPU: 100% = one core (as in Unraid\'s Docker tab)';
@@ -3956,6 +4052,46 @@
         h('div', { class: 'oi' }, src('seerr', 'Movies and series', seerr ? 'found in ' + seerr.name + ', with a Request button' : 'needs Overseerr or Jellyseerr in your apps')))));
   }
 
+  /* Push alerts: changes apply at once, like the ignored alerts below. Secrets stay on the server: the page only learns what is set */
+  var NOTIFY_HELP = {
+    discord: 'In Discord: channel settings > Integrations > Webhooks > New Webhook > Copy Webhook URL.',
+    telegram: 'Create a bot with @BotFather for its token. Send your bot a message, then ask @userinfobot for your chat ID.',
+    ntfy: 'Free, and no account is needed. Install the ntfy app and subscribe to a topic name nobody can guess.',
+    gotify: 'Your own Gotify server. Create an application in it to get the app token.'
+  };
+  function notifySettings(b) {
+    var rows = h('div', { class: 'olist' }, h('div', { class: 'progress' }, h('i'))), opts = h('div'), st = h('p', { class: 'muted sm', role: 'status' });
+    b.appendChild(set('Send alerts to your phone', 'UnDash checks your server every minute, also when no dashboard is open. A problem is sent when it lasts over a minute. Ignored alerts are not sent.', rows, opts, st));
+    function paint(v) {
+      clear(rows); clear(opts);
+      v.channels.forEach(function (c) {
+        rows.appendChild(h('div', { class: 'oi nr' }, h('span', { class: 'crow still' }, h('span', { class: 'crt' }, h('b', null, c.name), h('span', { class: 'muted xs ell' }, c.on ? 'On' : 'Not set up'))),
+          btn(c.on ? 'Change' : 'Set up', function () { dialog(c, paint); }, 'sm')));
+      });
+      if (!v.channels.some(function (c) { return c.on; })) { txt(st, ''); return; }
+      var P = v.prefs, save = function () { api('notify_prefs', { min: P.min, resolved: P.resolved ? '1' : '0' }).then(function (j) { if (j.error) toast(j.error, true); else toast('Saved.'); }); };
+      opts.appendChild(h('div', { class: 'grid2', style: { 'margin-top': '10px' } },
+        F('Send', sIn(P, 'min', save, [['bad', 'Critical only'], ['warn', 'Warnings and critical'], ['info', 'Everything, also update notices']])),
+        F('When a problem ends', sIn({ v: P.resolved ? '1' : '0' }, 'v', function () {}, [['1', 'Tell me'], ['0', 'Stay quiet']], function () { P.resolved = !P.resolved; save(); }))));
+      txt(st, v.last.error ? 'The last send failed. ' + v.last.error : v.last.at ? 'Last sent ' + new Date(v.last.at * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + '.' : '');
+    }
+    function dialog(c, done) {
+      var vals = {}, m, foot = h('div', { class: 'inl' });
+      var body = h('div', null, h('p', { class: 'muted sm' }, NOTIFY_HELP[c.id]), c.fields.map(function (f) {
+        vals[f.id] = f.value;
+        return F(f.label, h('input', { type: f.secret ? 'password' : 'text', autocomplete: 'off', spellcheck: 'false', value: f.value, placeholder: f.set ? 'stored (leave empty to keep)' : '', oninput: function (e) { vals[f.id] = e.target.value; } }));
+      }));
+      var save = function () { return api('notify_set', { channel: c.id, fields: JSON.stringify(vals) }).then(function (j) { if (j.error) { toast(j.error, true); return null; } done(j); return j; }); };
+      foot.appendChild(btn('Save', function () { save().then(function (j) { if (j) { toast(c.name + ' saved.'); m.close(); } }); }, 'pri'));
+      foot.appendChild(btn('Save and send a test', function () {
+        save().then(function (j) { if (j) api('notify_test', { channel: c.id }, 20000).then(function (t) { if (t.error) toast(t.error, true); else toast('Test sent to ' + c.name + '.'); }); });
+      }));
+      if (c.on) foot.appendChild(btn('Remove', function () { api('notify_off', { channel: c.id }).then(function (j) { if (j.error) { toast(j.error, true); return; } done(j); toast(c.name + ' removed.'); m.close(); }); }, 'danger'));
+      m = modal(c.name + ' alerts', body, foot.childNodes.length ? [].slice.call(foot.childNodes) : null);
+    }
+    api('notify_get').then(function (v) { if (v.error) { clear(rows).appendChild(h('div', { class: 'empty' }, v.error)); return; } paint(v); });
+  }
+
   /* Ignored alerts: changes apply at once (no Save needed); restoring only removes the rule, the next refresh shows the alert again if it still applies */
   function tabIgnored(b) {
     var list = h('div', { class: 'olist ign-list', 'aria-live': 'polite' }), V = { q: '', sev: '', rules: null, now: 0, cats: {} };
@@ -3967,6 +4103,7 @@
         if (y) act('ignore_restore_all', { confirm: 'yes' }).then(function (j) { if (!j.error) { toast('All ignored alerts restored.'); S.ignHold = []; refreshNow(); load(); } });
       });
     }, 'sm danger', 'restart');
+    notifySettings(b);
     b.appendChild(set('Ignored alerts', 'Ignoring only hides an alert on the dashboard. UnDash keeps checking, and an alert comes back when its rule is restored or runs out while the problem is still there.',
       h('div', null, h('div', { class: 'ign-bar' }, q, sev, h('span', { class: 'grow' }), btn('History', alertHistory, 'sm', 'clock', 'When each problem started and ended'), purge, all), list)));
     function when(t) { return new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
@@ -4862,6 +4999,12 @@
     if (R.media) loadMedia(true); if (R.arr) loadArr(true); if (R.downloads) loadDl(true);
     Object.keys(POLL).forEach(function (k) { pollKick(k); });
     toast('Refreshing everything');
+  }
+  function phoneHelp() {
+    var ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    modal('Add to home screen', h('div', null,
+      h('p', null, ios ? 'In Safari, tap Share, then Add to Home Screen.' : 'In your browser\'s menu, tap Add to Home screen.'),
+      h('p', { class: 'muted sm' }, 'UnDash then gets its own icon' + (ios ? ' and opens full screen, without the browser bars.' : '. On Android it only opens full screen when UnDash is served over HTTPS, for example through a reverse proxy; over plain HTTP it opens in a browser tab.'))));
   }
   function keysHelp() {
     var row = function (k, what) { return h('div', { class: 'kh' }, h('span', null, k.split(' ').map(function (x) { return h('kbd', null, x); })), h('span', null, what)); };

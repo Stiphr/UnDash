@@ -103,7 +103,9 @@ function und_alert_history() {
 /** One background check (scripts/alertcheck.php): the full system and container state, then the history. */
 function und_alerts_check() {
   $cfg = und_load_config();
+  if (und_api_mode()) und_api_poll_due();     // the network rates, which the background reader otherwise only keeps fresh while a page is open
   $sys = und_system($cfg);
+  und_metrics_record($sys);
   $dk = und_docker_live();
   $scopes = isset($sys['error']) ? [] : ['system'];
   if (is_array($dk) && !isset($dk['error'])) $scopes[] = 'docker';
@@ -111,6 +113,7 @@ function und_alerts_check() {
   if ($smart['checked']) $scopes[] = 'smart';
   $alerts = und_alerts($cfg, $sys, $dk, $smart);
   und_alerts_track($alerts, $scopes);
+  if ($conf = und_notify_conf()) und_notify_run($alerts, $scopes, $conf, und_notify_prefs(), und_ignores_active(), (string)($sys['name'] ?? ''));
   @file_put_contents(und_tmp('alertcheck.at'), (string)time());
   return count($alerts);
 }

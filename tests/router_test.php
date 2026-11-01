@@ -22,6 +22,10 @@ t('unauthenticated page redirects to Unraid\'s handoff', $r['code'] === 303 && (
 t('security headers are sent', isset($r['h']['content-security-policy'], $r['h']['x-frame-options']));
 $r = req('POST', '/api', ['Content-Type: application/x-www-form-urlencoded'], 'action=history');
 t('unauthenticated API refused', $r['code'] === 401);
+$r = req('GET', '/manifest.webmanifest');
+$mf = json_decode($r['body'], true);
+t('a phone can read the app manifest before signing in', $r['code'] === 200 && strpos($r['h']['content-type'][0] ?? '', 'manifest+json') !== false && ($mf['display'] ?? '') === 'standalone' && count($mf['icons'] ?? []) === 2);
+t('so can its icons', req('GET', '/icon-192.png')['code'] === 200 && (req('GET', '/icon-512.png')['h']['content-type'][0] ?? '') === 'image/png');
 $r = req('GET', '/?t=' . str_repeat('a', 48));
 t('unknown handoff token refused', $r['code'] === 403);
 // a valid handoff token (what handoff.php creates behind Unraid's login)

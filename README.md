@@ -9,12 +9,14 @@ A compact dashboard for Unraid. System health, alerts, media, Arr apps, download
 
 - **System**: CPU, memory, storage, network, array health, disk temperatures, uptime and UPS, with short history charts.
 - **Alerts**: problems only (unhealthy or restarting containers, disk errors and heat, array state, updates). Each alert can be ignored for a while or for good. A history keeps when each problem started and ended.
+- **Push alerts**: Discord, Telegram, ntfy or Gotify, set up in **Settings > Alerts**. Sent when a problem lasts over a minute and when it ends, also with no dashboard open.
+- **History charts**: click CPU, Memory, Network, Storage or Disk temps for the last hour, day, week or month. A reading is kept every minute.
 - **Media**: upcoming and recently added movies and episodes from Radarr and Sonarr.
 - **Arr Stack**, **Downloads** (qBittorrent, [qui](https://github.com/autobrr/qui), SABnzbd), **Now playing** (Plex, Emby, Jellyfin, Tautulli) and **Requests** (Overseerr / Jellyseerr, with approve and decline).
-- **Containers and VMs**: start, stop, restart, update and logs from one gear menu. Click an icon or name to open its web UI.
+- **Containers and VMs**: start, stop, restart, update and logs from one gear menu, with CPU and memory per container. Click an icon or name to open its web UI.
 - **Endpoint health**: HTTP status and latency of every app and container web UI.
 - **Search**: a list under the search box with your apps, containers and VMs, a web search and movies and series to request in Seerr. You choose which in Settings; the dashboard itself is never filtered.
-- Ten themes with light and dark versions, frosted-glass wallpapers, custom CSS. Works on phones too.
+- Ten themes with light and dark versions, frosted-glass wallpapers, custom CSS. Works on phones too, and goes on the home screen with its own icon (full screen on iPhone; on Android that needs HTTPS).
 
 ## Install
 

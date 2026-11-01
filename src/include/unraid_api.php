@@ -10,7 +10,7 @@
  *   INFO, ARRAY, DISK, VMS, DOCKER: read            for the dashboard
  *   DOCKER, VMS: update                              for start / stop / restart / pause / update
  * What the API does not offer (so the Docker image does not either): server restart / shutdown, Unraid OS updates,
- * per-container CPU and memory over plain HTTP (only as a WebSocket subscription), VM hibernate, VM vCPU / memory details.
+ * VM hibernate, VM vCPU / memory details. Per-container CPU and memory are a WebSocket subscription only: see und_api_stats_read.
  *
  * Connection settings: UNRAID_API_URL and UNRAID_API_KEY in the environment, or Settings > Server connection
  * (stored in secrets.json). The environment wins when both are set.
@@ -237,10 +237,87 @@ function und_api_containers($fresh = false) {
   return $fresh ? $fn() : und_api_cached('containers', 1, $fn);
 }
 
+/* ---------- per-container CPU and memory: the API's dockerContainerStats subscription (graphql-transport-ws) ---------- */
+
+const UND_STATS_EVERY = 15;          // seconds between reads, while a page is open
+const UND_STATS_READ = 6;            // seconds one read may take: the API runs `docker stats` for as long as it is subscribed
+const UND_STATS_OLD = 60;            // older numbers are not shown
+
+/** "18.65MiB / 62.5GiB" -> bytes of the first number. */
+function und_api_mem_bytes($s) {
+  if (!preg_match('/^\s*([\d.]+)\s*([KMGT]?)(i?)B/i', (string)$s, $m)) return null;
+  $p = strpos('KMGT', strtoupper($m[2])); $base = $m[3] !== '' ? 1024 : 1000;
+  return (int)round((float)$m[1] * ($m[2] === '' ? 1 : pow($base, $p + 1)));
+}
+/** The stats name a container by the part after the server id; the first row can carry a terminal control code from `docker stats`. */
+function und_api_stats_key($id) {
+  $id = preg_replace('/\x1b\[[0-9;?]*[A-Za-z]/', '', (string)$id);
+  $p = strrpos($id, ':');
+  return $p === false ? $id : substr($id, $p + 1);
+}
+function und_ws_send($s, $text) {
+  $n = strlen($text); $mask = random_bytes(4); $o = '';
+  for ($i = 0; $i < $n; $i++) $o .= $text[$i] ^ $mask[$i % 4];
+  return fwrite($s, "\x81" . ($n < 126 ? chr(0x80 | $n) : "\xFE" . pack('n', $n)) . $mask . $o);
+}
+/** One frame: [opcode, payload], or null when nothing came in time. */
+function und_ws_read($s) {
+  $h = fread($s, 2);
+  if ($h === false || strlen($h) < 2) return null;
+  $n = ord($h[1]) & 127;
+  if ($n === 126) $n = (int)unpack('n', (string)fread($s, 2))[1]; elseif ($n === 127) $n = (int)unpack('J', (string)fread($s, 8))[1];
+  if ($n > 1048576) return null;
+  $d = '';
+  while (strlen($d) < $n) { $p = fread($s, $n - strlen($d)); if ($p === false || $p === '') return null; $d .= $p; }
+  return [ord($h[0]) & 15, $d];
+}
+/** Listens for a few seconds and leaves the newest numbers of each container in the temp folder. Returns how many it heard, or null. */
+function und_api_stats_read() {
+  $c = und_api_conf(); $u = parse_url($c['url']);
+  if ($c['key'] === '' || empty($u['host'])) return null;
+  $tls = ($u['scheme'] ?? '') === 'https'; $port = (int)($u['port'] ?? ($tls ? 443 : 80)); $end = microtime(true) + UND_STATS_READ;
+  $ctx = stream_context_create(['ssl' => ['verify_peer' => und_tls_verify(), 'verify_peer_name' => und_tls_verify(), 'peer_name' => $u['host']]]);
+  $s = @stream_socket_client(($tls ? 'ssl://' : 'tcp://') . $u['host'] . ':' . $port, $en, $es, 4, STREAM_CLIENT_CONNECT, $ctx);
+  if (!$s) return null;
+  stream_set_timeout($s, 2);
+  fwrite($s, 'GET ' . ($u['path'] ?? '/graphql') . " HTTP/1.1\r\nHost: " . $u['host'] . ':' . $port . "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " . base64_encode(random_bytes(16))
+    . "\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: graphql-transport-ws\r\nx-api-key: " . $c['key'] . "\r\n\r\n");
+  $line = fgets($s);
+  if ($line === false || strpos($line, ' 101') === false) { fclose($s); return null; }
+  while (($l = fgets($s)) !== false && $l !== "\r\n");
+  und_ws_send($s, json_encode(['type' => 'connection_init', 'payload' => ['x-api-key' => $c['key']]]));
+  $seen = []; $out = [];
+  while (microtime(true) < $end) {
+    $f = und_ws_read($s);
+    if ($f === null) { if (stream_get_meta_data($s)['eof']) break; continue; }
+    if ($f[0] === 8) break;
+    $j = json_decode($f[1], true); $type = (string)($j['type'] ?? '');
+    if ($type === 'ping') und_ws_send($s, '{"type":"pong"}');
+    elseif ($type === 'connection_ack') und_ws_send($s, json_encode(['id' => '1', 'type' => 'subscribe', 'payload' => ['query' => 'subscription { dockerContainerStats { id cpuPercent memUsage memPercent } }']]));
+    elseif ($type === 'next' && ($x = $j['payload']['data']['dockerContainerStats'] ?? null)) {
+      $k = und_api_stats_key($x['id']);
+      $seen[$k] = ($seen[$k] ?? 0) + 1;
+      $out[$k] = ['cpu' => round((float)$x['cpuPercent'], 1), 'mem' => und_api_mem_bytes($x['memUsage'])];
+      // the first figure of each container is measured over no time at all, so everyone has to report twice
+      if (count($seen) > 1 && min($seen) >= 3) break;
+    } elseif ($type === 'error') break;
+  }
+  @und_ws_send($s, '{"id":"1","type":"complete"}');
+  fclose($s);
+  if (!$out) return null;
+  und_write_json(und_tmp('docker-stats.json'), ['t' => time(), 'v' => $out]);
+  return count($out);
+}
+/** The numbers for the page: container key => cpu, mem. Empty when none are recent. */
+function und_api_stats_seen($now = null) {
+  $c = und_read_json(und_tmp('docker-stats.json'), []);
+  return ($now ?? time()) - (int)($c['t'] ?? 0) < UND_STATS_OLD ? (array)($c['v'] ?? []) : [];
+}
+
 function und_api_docker_live() {
   $r = und_api_containers();
   if (isset($r['error']) && empty($r['data']['docker'])) return ['error' => $r['error']];
-  $out = [];
+  $out = []; $stats = und_api_stats_seen();
   foreach ((array)($r['data']['docker']['containers'] ?? []) as $c) {
     $name = ltrim((string)($c['names'][0] ?? ''), '/');
     $status = (string)$c['status'];
@@ -251,7 +328,8 @@ function und_api_docker_live() {
     $ports = [];
     foreach ((array)($c['ports'] ?? []) as $p) if (!empty($p['publicPort'])) $ports[$p['privatePort'] . '/' . strtolower((string)$p['type'])] = (int)$p['publicPort'];
     $job = und_job(und_tmp('docker-update-' . $name . '.log'));
-    $out[] = ['name' => $name, 'id' => (string)$c['id'], 'image' => (string)$c['image'], 'state' => $state, 'status' => $status, 'health' => $health, 'cpu' => null, 'mem' => null,
+    $st = $stats[und_api_stats_key($c['id'])] ?? null;
+    $out[] = ['name' => $name, 'id' => (string)$c['id'], 'image' => (string)$c['image'], 'state' => $state, 'status' => $status, 'health' => $health, 'cpu' => $st['cpu'] ?? null, 'mem' => $st['mem'] ?? null,
       'update' => $c['isUpdateAvailable'] === true || $c['isRebuildReady'] === true ? 'available' : ($c['isUpdateAvailable'] === false ? 'current' : 'unknown'),
       'icon' => preg_match('#^https?://#', (string)$c['iconUrl']) ? (string)$c['iconUrl'] : '', 'webui' => preg_match('#^https?://#', (string)$c['webUiUrl']) ? (string)$c['webUiUrl'] : '',
       'ports' => (object)$ports, 'network' => (string)($c['hostConfig']['networkMode'] ?? ''), 'autostart' => !empty($c['autoStart']), 'managed' => true, 'restarts' => null, 'started' => null,
@@ -259,7 +337,7 @@ function und_api_docker_live() {
       'job' => $job['state'] === 'running' ? 'updating' : ($job['state'] === 'done' && time() - (int)$job['at'] < 600 ? ($job['code'] === 0 ? 'updated' : 'update_failed') : '')];
   }
   usort($out, function ($a, $b) { return strcasecmp($a['name'], $b['name']); });
-  return ['containers' => $out, 'checking' => false, 'checked' => null];
+  return ['containers' => $out, 'checking' => false, 'checked' => null, 'stats' => (bool)$stats];
 }
 
 function und_api_container_id($name) {

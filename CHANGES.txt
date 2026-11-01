@@ -1,4 +1,8 @@
 ###beta
+- Push alerts to Discord, Telegram, ntfy and Gotify (Settings > Alerts)
+- History charts for CPU, memory, network, storage and disk temperature, kept for 30 days
+- CPU and memory per container in the Docker version
+- UnDash goes on a phone's home screen with its own icon
 - Accent colour from the wallpaper: Settings > Appearance > Accent colour can follow the theme, take its colour from the wallpaper, or use a colour of your own (presets or a picker). The wallpaper's colour is worked out in your browser from a small copy of the picture, never sent anywhere, and toned so buttons, links and selected items stay readable in light and dark mode. A colour you pick always wins.
 - Your own wallpaper: Settings > Appearance > Background offers the theme's gradient, a plain colour, a picture from an address, or a picture you upload (JPEG, PNG or WebP). Large photos are scaled down in your browser before they are sent; the picture is checked on the server, kept in the configuration folder and served only to signed-in browsers.
 - Settings: pages are grouped into Dashboard, Preferences, Server and Advanced, with a new About page (version, how UnDash runs, where its files are, action and alert history, diagnostics). Appearance and General have a Restore defaults button for that page alone; "Reset to defaults" is now "Restore all defaults" and asks first.

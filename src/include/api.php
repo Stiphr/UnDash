@@ -132,6 +132,18 @@ switch ($action) {
   case 'history':       out(['history' => und_history()]);
   case 'self_update':   out(und_self_update());
   case 'alert_history': out(und_alert_history());
+  case 'metrics':       out(und_metrics_range($P('range', '24h')));
+  case 'notify_get':    out(und_notify_view());
+  case 'notify_set':    { $r = und_notify_set($P('channel'), (array)$J('fields')); if (isset($r['error'])) fail($r['error'], 422); out(und_notify_view()); }
+  case 'notify_off':    { $r = und_notify_off($P('channel')); if (isset($r['error'])) fail($r['error']); out(und_notify_view()); }
+  case 'notify_prefs':  { $r = und_notify_save_prefs($P('min'), $P('resolved') === '1'); if (isset($r['error'])) fail($r['error'], 422); out(und_notify_view()); }
+  case 'notify_test':   {
+    $conf = und_notify_conf(); $id = $P('channel');
+    if (!isset($conf[$id])) fail('Set up this channel first.');
+    $e = und_notify_send($id, $conf[$id], 'UnDash test', 'Alerts from your server will arrive here.', false);
+    if ($e !== '') fail($e, 502);
+    out(['ok' => true]);
+  }
 
   /* ignored alerts: hiding only, monitoring goes on */
   case 'ignores_list':  out(['now' => time(), 'rules' => und_ignores(), 'categories' => und_alert_categories()]);
