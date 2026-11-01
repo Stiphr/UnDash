@@ -468,7 +468,7 @@ function und_normalize(array $c) {
   foreach ((array)($c['groups'] ?? []) as $gr) {
     if (!is_array($gr)) continue;
     $out = ['id' => preg_match('/^[a-f0-9]{8}$/', (string)($gr['id'] ?? '')) ? $gr['id'] : und_id(), 'name' => und_clip(trim((string)($gr['name'] ?? 'Group')), 60),
-            'columns' => max(1, min(8, (int)($gr['columns'] ?? 4))), 'header' => !isset($gr['header']) || !empty($gr['header']), 'services' => []];
+            'columns' => max(1, min(8, (int)($gr['columns'] ?? 4))), 'header' => !isset($gr['header']) || !empty($gr['header']), 'section' => !empty($gr['section']), 'services' => []];
     foreach ((array)($gr['services'] ?? []) as $s) {
       if (!is_array($s) || !isset($types[$s['type'] ?? ''])) continue;
       $opt = isset($s['options']) && is_array($s['options']) ? $s['options'] : [];

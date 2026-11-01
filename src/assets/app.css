@@ -1416,3 +1416,11 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .bside .pick-bar{flex-wrap:wrap;gap:6px}.und .bside .pick-bar input[type=search]{flex:1 1 100%;width:100%}
 .und .gc-x{position:absolute;top:-7px;left:-7px;z-index:3;display:grid;place-items:center;width:22px;height:22px;padding:0;background:var(--panel);color:var(--text);border:1px solid var(--line-2);border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.35);cursor:pointer}
 .und .gc-x svg{width:12px;height:12px;stroke-width:3}.und .gc-x:hover,.und .gc-x:focus-visible{background:var(--bad);border-color:var(--bad);color:#fff}
+/* your own section: its apps are rows in one card, not cards in a card */
+.und.bui .gcs-b,.und.bui .gc-c>.sec>.sec-b.gcs-b{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:0 20px;align-content:start}
+.und.bui .gcs-b>.card.w{height:auto;padding:10px 0;background:none;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none}
+.und.bui .gcs-b>.alink{display:flex;align-items:center;gap:10px;min-height:48px;padding:0;background:none;border:0;border-top:1px solid var(--line);border-radius:0;font-size:14px;font-weight:550;color:var(--title);text-decoration:none}
+.und.bui .gcs-b>.alink .aico,.und.bui .gcs-b>.alink img,.und.bui .gcs-b>.alink .ph{width:26px;height:26px;flex:none;object-fit:contain}
+.und.bui .gcs-b>a.alink:hover{color:var(--accent-text)}
+.und.bui .gcs .sec-h h2 button{cursor:default}
+.und .bs-back{display:grid;place-items:center;width:26px;height:26px;margin-left:-6px;padding:0;background:none;border:0;color:var(--muted);cursor:pointer}.und .bs-back svg{width:16px;height:16px;transform:rotate(90deg)}
