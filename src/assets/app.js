@@ -727,6 +727,7 @@
     });
     var bottom = list.reduce(function (m, c) { return Math.max(m, c.y + c.h); }, 0);
     list.slice().sort(function (a, b) { return b.y - a.y; }).forEach(function (c) {
+      if (c.i.indexOf('m:') === 0) return;                 // System tiles keep one height
       var next = bottom; list.forEach(function (o) { if (o !== c && over(c, o) && o.y >= c.y + c.h) next = Math.min(next, o.y); });
       c.h = next - c.y;
     });
@@ -932,6 +933,10 @@
       S.nat[c.i] = n; sig.push(n);
     });
     R.board.classList.remove('measuring');
+    // the System tiles are one family: all as tall as the tallest
+    var tall = 0, tiles = Object.keys(S.nat).filter(function (i) { return i.indexOf('m:') === 0; });
+    tiles.forEach(function (i) { tall = Math.max(tall, S.nat[i]); });
+    tiles.forEach(function (i) { S.nat[i] = tall; });
     keep.forEach(function (l, i) { if (l.scrollTop !== tops[i]) l.scrollTop = tops[i]; });
     sig = sig.join();
     if (sig !== S.boardNat) { S.boardNat = sig; boardPaint(); }
