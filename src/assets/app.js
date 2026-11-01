@@ -4127,7 +4127,13 @@
           probe = setTimeout(function () {
             var im = new Image();
             im.onload = function () { if (a.background === u) { txt(seen, 'Loaded: ' + im.naturalWidth + ' × ' + im.naturalHeight + ' pixels.'); seen.classList.remove('t-bad'); } };
-            im.onerror = function () { if (a.background === u) { txt(seen, 'That address did not give a picture. Use a direct link to the image file, not a web page.'); seen.classList.add('t-bad'); } };
+            // the browser does not say why a picture failed: a link that looks like a picture was most likely refused by its site
+            im.onerror = function () {
+              if (a.background !== u) return;
+              txt(seen, /\.(jpe?g|png|webp|avif|gif)([?#]|$)/i.test(u) ? 'This site would not give UnDash the picture. Many wallpaper sites only show theirs on their own pages, even from a direct link. Download it and upload it here instead.' : 'That address did not give a picture. Use a direct link to the image file, not a web page.');
+              seen.classList.add('t-bad');
+              seen.appendChild(h('div', { style: { 'margin-top': '8px' } }, btn('Upload a wallpaper', function () { D.wallKind = 'upload'; a.background = 'custom'; dirty(); preview(); wallDraw(); }, 'sm', 'download')));
+            };
             im.src = u;
           }, 400);
         };
