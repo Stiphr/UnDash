@@ -25,10 +25,22 @@ function und_guest_prefs() {
   return ['sections' => $on, 'apps' => array_values(array_filter((array)($p['apps'] ?? []), function ($i) { return is_string($i) && preg_match('/^[a-f0-9]{8}$/', $i); }))];
 }
 
-/** The apps that can be offered: those with a card of their own in the Apps section. */
+/** A link a guest may follow: only a public address. A LAN address tells them nothing useful and shows how your network is laid out. */
+function und_guest_href($u) {
+  $u = (string)$u; $p = parse_url($u);
+  $host = strtolower(trim((string)($p['host'] ?? ''), '[]'));
+  if ($host === '' || isset($p['user']) || !preg_match('#^https?://#i', $u)) return '';
+  if (filter_var($host, FILTER_VALIDATE_IP)) return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) ? $u : '';
+  return strpos($host, '.') === false || preg_match('/\.(local|lan|home|internal|intranet|localdomain|arpa|test)$/', $host) ? '' : $u;
+}
+
+/** The apps that can be offered: those with a card of their own in the Apps section. A shortcut needs somewhere a guest can go. */
 function und_guest_apps(array $cfg) {
   $out = [];
-  foreach ($cfg['groups'] as $g) foreach ($g['services'] as $s) if (und_zone($s) === 'apps' && empty($s['hidden'])) $out[] = ['id' => $s['id'], 'name' => $s['name'], 'type' => $s['type'], 'icon' => $s['icon']];
+  foreach (und_layout_view($cfg)['groups'] as $g) foreach ($g['services'] as $s) {
+    if ($s['zone'] !== 'apps' || !empty($s['hidden']) || ($s['type'] === 'link' && und_guest_href($s['href_resolved']) === '')) continue;
+    $out[] = ['id' => $s['id'], 'name' => $s['name'], 'type' => $s['type'], 'icon' => $s['icon']];
+  }
   return $out;
 }
 
@@ -109,8 +121,9 @@ function und_guest_layout(array $cfg, array $p) {
   foreach ($v['groups'] as $g) {
     $list = [];
     foreach ($g['services'] as $s) {
-      if (!in_array('apps', $on, true) || $s['zone'] !== 'apps' || !empty($s['hidden']) || !in_array($s['id'], $p['apps'], true)) continue;
-      $list[] = array_intersect_key($s, array_flip(['id', 'name', 'type', 'icon', 'description', 'span', 'zone', 'href_resolved'])) + ['hidden' => false, 'favorite' => false, 'href' => '', 'url' => '', 'fields' => [], 'options' => new stdClass()];
+      $href = und_guest_href($s['href_resolved']);
+      if (!in_array('apps', $on, true) || $s['zone'] !== 'apps' || !empty($s['hidden']) || !in_array($s['id'], $p['apps'], true) || ($s['type'] === 'link' && $href === '')) continue;
+      $list[] = ['href_resolved' => $href] + array_intersect_key($s, array_flip(['id', 'name', 'type', 'icon', 'description', 'span', 'zone'])) + ['hidden' => false, 'favorite' => false, 'href' => '', 'url' => '', 'fields' => [], 'options' => new stdClass()];
     }
     if ($list) $groups[] = ['id' => $g['id'], 'name' => $g['name'], 'columns' => $g['columns'], 'header' => $g['header'], 'section' => $g['section'], 'services' => $list];
   }
@@ -149,6 +162,8 @@ function und_guest_service(array $cfg, array $p, $id) {
   $r = und_fetch_service($cfg, $id);
   if (isset($r['error'])) return ['error' => 'Not available right now.'];
   if (isset($r['streams'])) $r['streams'] = und_guest_streams((array)$r['streams']);
+  if (isset($r['list'])) foreach ($r['list'] as &$row) if (isset($row['href'])) $row['href'] = und_guest_href($row['href']);
+  unset($row);
   return $r + ['at' => time()];
 }
 
@@ -168,7 +183,8 @@ function und_guest_api($action, array $post) {
       $k = (string)($post['kind'] ?? '');
       if (!$on['media'] || !in_array($k, und_media_ids(), true)) return ['error' => 'Not available.'];
       $r = und_media($cfg, $k);
-      return isset($r['error']) ? ['error' => 'Not available right now.'] : $r;
+      if (isset($r['error'])) return ['error' => 'Not available right now.'];
+      return ['items' => array_map(function ($it) { unset($it['href'], $it['list']); return $it; }, (array)($r['items'] ?? []))];      // the link goes to Radarr or Sonarr
     }
     case 'playing': {
       if (!$on['playing']) return ['error' => 'Not available.'];
