@@ -493,7 +493,7 @@
     if (a.accent_mode === 'auto' && wall) {
       var got = ACC.cache[wall + '|' + mode];
       if (got) return got;
-      accentFor(wall, mode, p.panel, function (hx) { if (hx && (S.drawer ? S.drawer.cfg && S.drawer.cfg.appearance === a : S.L && S.L.appearance === a)) applyLook(a); });
+      accentFor(wall, mode, p.panel, function (hx) { if (hx && (S.drawer ? S.drawer.cfg && S.drawer.cfg.appearance === a : S.edit && S.edit.D ? S.edit.D.cfg.appearance === a : S.L && S.L.appearance === a)) applyLook(a); });
       return S.lastAccent || p.accent;                                         // the previous accent stays until the picture is read
     }
     return p.accent;
@@ -518,7 +518,9 @@
     root.classList.toggle('translucent', !!a.translucent);
     root.classList.toggle('mesh', a.gradient !== false);
     root.classList.toggle('ibox', a.icon_box !== false);
-    root.classList.toggle('no-chips', a.header_chips === false);
+    ['logo', 'name', 'os', 'app', 'live', 'alerts', 'server', 'hide'].forEach(function (k) { root.classList.toggle('no-nav-' + k, a['nav_' + k] === false); });
+    root.classList.toggle('nav-float', a.nav_sticky === false);
+    root.setAttribute('data-nav-search', a.nav_search || 'normal');
     root.style.setProperty('--mesh', meshCss(a.theme, mode));
     root.setAttribute('data-motion', a.motion || 'full');
     var set = function (k, v) { root.style.setProperty(k, v); };
@@ -604,9 +606,9 @@
       onkeydown: searchKey }) : null;
     R.bell = boardOn() ? h('button', { type: 'button', class: 'bell', hidden: true, 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: alertPop }, ic('bell'), R.bellT = h('span', { class: 'bt' })) : null;
     var acts = h('div', { class: 'acts' }, R.bell, R.live,
-      GUEST || noKey() ? null : R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, '', 'server', 'Server actions'),
+      GUEST || noKey() ? null : R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, 'srv', 'server', 'Server actions'),
       window.UND_STANDALONE ? null : btn('', toggleFull, 'focus' + (S.full ? ' on' : ''), 'full', S.full ? 'Exit focus mode' : 'Focus mode (hide Unraid\'s menu)'),
-      R.priv = btn('', togglePrivacy, 'priv', 'eye', 'Blur titles, posters, torrents and the server name'),
+      R.priv = btn('', togglePrivacy, 'priv', 'eye', 'Hide titles, posters, torrents and the server name'),
       boardOn() && !GUEST ? btn('', boardEdit, 'bedit', 'edit', 'Edit dashboard') : null,
       GUEST ? null : btn('', openSettings, '', 'gear', 'Settings'));
     if (R.srvBtn) R.srvBtn.setAttribute('aria-haspopup', 'menu');
@@ -640,13 +642,14 @@
     paintAll(); paintLive(); paintIdent();
   }
 
-  /* privacy: blurs what you may not want on a screen share or a screenshot, on this browser only */
+  /* privacy: what you may not want on a screen share or a screenshot turns into plain bars, on this browser only */
   function paintPrivacy() {
     var on = !!LS.get('privacy', false);
     root.classList.toggle('privacy', on);
     if (!R.priv) return;
     R.priv.classList.toggle('on', on); R.priv.setAttribute('aria-pressed', on ? 'true' : 'false');
-    var t = on ? 'Show sensitive details' : 'Blur titles, posters, torrents and the server name';
+    if (window.UND_STANDALONE && S.L) document.title = on ? 'UnDash' : brandName();
+    var t = on ? 'Show sensitive details' : 'Hide titles, posters, torrents and the server name';
     R.priv.title = t; R.priv.setAttribute('aria-label', t);
     clear(R.priv).appendChild(ic(on ? 'eyeoff' : 'eye'));
   }
@@ -665,7 +668,7 @@
   function paintIdent() {
     if (!R.sub) return;
     txt(R.brandName, brandName());
-    if (window.UND_STANDALONE) document.title = brandName();
+    if (window.UND_STANDALONE) document.title = LS.get('privacy', false) ? 'UnDash' : brandName();
     var y = S.live || {}, s = y.system && !y.system.error ? y.system : null, b = S.boot.server || {};
     var name = (s && s.name) || b.name || '', ip = (s && s.ip) || b.ip || '', os = (s && s.os) || b.os || '', ou = (s && s.os_update) || {};
     if (GUEST) { clear(R.sub).appendChild(h('span', { class: 'vchip' }, 'Guest view')); return; }
@@ -676,9 +679,9 @@
     R.brandName.title = ip && ip !== name ? name + ' · ' + ip : name;
     if (os) {
       var osUp = ou.staged ? ['restart for ' + ou.staged, 'Unraid ' + ou.staged + ' is installed; it becomes active after a restart'] : ou.available ? [ou.latest + ' available', 'Unraid ' + ou.latest + ' is available'] : null;
-      R.sub.appendChild(h('span', { class: 'vchip' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { if (S.boot.caps.os_update) osDialog(); else window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
+      R.sub.appendChild(h('span', { class: 'vchip v-os' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { if (S.boot.caps.os_update) osDialog(); else window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
     }
-    R.sub.appendChild(h('span', { class: 'vchip' }, 'UnDash ' + S.boot.version, me.newer ? h('a', { class: 'upd', href: me.url, target: '_blank', rel: 'noopener',
+    R.sub.appendChild(h('span', { class: 'vchip v-app' }, 'UnDash ' + S.boot.version, me.newer ? h('a', { class: 'upd', href: me.url, target: '_blank', rel: 'noopener',
       title: 'UnDash ' + me.latest + ' is available. ' + (S.boot.caps.mode === 'api' ? 'Update the UnDash container in Unraid\'s Docker tab.' : 'Update it under Plugins in Unraid.') }, ic('up'), me.latest + ' available') : null));
   }
 
@@ -1208,7 +1211,7 @@
     api('settings').then(function (j) {
       if (S.edit !== E) return;
       if (j.error) { toast(j.error, true); E.view = null; boardSide(); return; }
-      E.D = { cfg: j.config, creds: Array.isArray(j.creds) ? {} : j.creds, shared: j.shared || [], zones: j.zones || {}, types: j.types, keep: j.keep };
+      E.D = { cfg: j.config, creds: Array.isArray(j.creds) ? {} : j.creds, shared: j.shared || [], zones: j.zones || {}, types: j.types, keep: j.keep, limits: j.limits, css: j.css };
       ['docker', 'vms'].forEach(function (k) { if (Array.isArray(E.D.cfg[k].items)) E.D.cfg[k].items = {}; });
       E.cj = JSON.stringify(E.D.cfg); E.crj = JSON.stringify(E.D.creds); E.links = boardLinks(E.D.cfg);
       boardSide();
@@ -1231,7 +1234,7 @@
     api('preview', { config: E.D.cfg }).then(function (j) {
       if (S.edit !== E || my !== E.seq) return;
       if (j.error) { toast(j.error, true); return; }
-      S.L = j.layout; boardAdopt(); boardRebuild();
+      S.L = j.layout; applyLook(E.D.cfg.appearance); boardAdopt(); boardRebuild();
       if (E.reveal && R.cards[E.reveal]) { R.cards[E.reveal].el.classList.add('sel'); R.cards[E.reveal].el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
       E.reveal = null;
     });
@@ -1257,6 +1260,7 @@
       E.bRedo = btn('', function () { boardStep(E.redo, E.undo); }, 'sm ghost', 'redo', 'Redo (Ctrl+Shift+Z)');
       E.bAdd = btn('Add', function () { boardView(E.view === 'add' ? null : 'add'); }, 'sm ghost', 'plus', 'Add apps and cards');
       E.bPages = btn('Pages', function () { boardView(E.view === 'pages' ? null : 'pages'); }, 'sm ghost', 'grid', 'Add, rename and order pages');
+      E.bLook = btn('Appearance', function () { boardView(E.view === 'look' ? null : 'look'); }, 'sm ghost', 'sun', 'Theme, colors, navbar and more');
       var more = btn('Arrange', function () {
         menu(more, [['Smart arrange', 'grid', boardArrange], ['Fit all to content', 'fit', boardFitAll],
           ['Presets…', 'list', boardPresets],
@@ -1265,7 +1269,7 @@
       }, 'sm ghost', 'grid', 'Arrange the cards');
       more.setAttribute('aria-haspopup', 'menu');
       var gap = function () { return h('span', { class: 'bd-sep', 'aria-hidden': 'true' }); };
-      E.dock = h('div', { class: 'bdock', role: 'toolbar', 'aria-label': 'Edit dashboard' }, E.bAdd, E.bPages, gap(), E.bUndo, E.bRedo, gap(), more, gap(), btn('Cancel', boardCancel, 'sm ghost'), btn('Save', boardSave, 'sm pri'));
+      E.dock = h('div', { class: 'bdock', role: 'toolbar', 'aria-label': 'Edit dashboard' }, E.bAdd, E.bPages, E.bLook, gap(), E.bUndo, E.bRedo, gap(), more, gap(), btn('Cancel', boardCancel, 'sm ghost'), btn('Save', boardSave, 'sm pri'));
       E.side = h('aside', { class: 'bside', 'aria-label': 'Edit', hidden: true });
       boardLoad();
     }
@@ -1374,7 +1378,7 @@
     Object.keys(R.cards).forEach(function (i) { R.cards[i].el.classList.toggle('sel', i === v); });
     var x = v && R.cards[v], r = x && x.el.getBoundingClientRect();
     E.side.classList.toggle('left', !!r && r.left + r.width / 2 > window.innerWidth * 0.55);      // never over the card it edits
-    E.bAdd.classList.toggle('on', v === 'add'); E.bPages.classList.toggle('on', v === 'pages');
+    E.bAdd.classList.toggle('on', v === 'add'); E.bPages.classList.toggle('on', v === 'pages'); E.bLook.classList.toggle('on', v === 'look');
     boardSide();
   }
   function boardSide() {
@@ -1386,10 +1390,28 @@
     if (!E.D) box.appendChild(h('div', { class: 'progress' }, h('i')));
     else if (E.view === 'add') boardLibrary(box);
     else if (E.view === 'pages') boardPages(box);
+    else if (E.view === 'look') boardLook(box);
     else if (E.view.indexOf('into:') === 0) boardLibrary(box, E.view.slice(5));
     else if (E.view.indexOf('grp:') === 0) boardGroupPanel(box, E.view.slice(4));
     else boardInspect(box, E.view);
     box.scrollTop = top;
+  }
+  /* the Appearance settings, the same controls as Settings, one folding group each */
+  function boardLook(box) {
+    var E = S.edit, D = E.D, open = E.lookOpen || (E.lookOpen = { Navbar: true }), tmp = h('div');
+    D.render = boardSide;
+    if (D.css === undefined) D.css = S.boot.css || '';
+    box.appendChild(bsHead('Appearance', h('span', { class: 'bs-i' }, ic('sun'))));
+    tabAppearance(tmp, D, boardDirty);
+    LOOK_SETS.forEach(function (want) {
+      [].slice.call(tmp.children).forEach(function (el) {
+        var t = el.querySelector('h3'); if (!t || t.textContent !== want) return;
+        var d = h('details', { class: 'bs-m bs-look' }, h('summary', null, want), el);
+        d.open = !!open[want];
+        d.addEventListener('toggle', function () { open[want] = d.open; });
+        box.appendChild(d);
+      });
+    });
   }
   function bsHead(title, icon) {
     return h('div', { class: 'bs-h' }, icon, h('b', { class: 'ell' }, title), h('span', { class: 'grow' }), btn('', function () { boardView(null); }, 'sm ghost', 'x', 'Close'));
@@ -3939,7 +3961,7 @@
   }
   var SET_WORDS = { 'corner radius': 'round rounded edges', 'text size': 'font bigger smaller', 'apps & cards': 'sections layout widgets', presets: 'layout template import export share save wizard setup first time', 'quick settings': 'home start status', appearance: 'theme look colours', general: 'refresh display search', 'server connection': 'unraid api key password login', 'dashboard name': 'title header brand rename server', 'dashboard icon': 'logo brand header picture', 'versions in the header': 'chips version unraid hide top bar', 'zoom level': 'zoom scale size resolution display window auto density fit', 'side margin': 'safe edge padding gap', 'top margin': 'safe edge padding gap', density: 'compact spacing', accent: 'colour color', colours: 'theme themes dark light mode color make new import export', 'card board (beta)': 'drag grid layout classic',
     wallpaper: 'background image picture blur link path upload', animations: 'motion effects transitions skip speed reduce smooth', gradient: 'background colours mesh plain', 'icon boxes': 'rounded square logo apple tile', 'translucent effect': 'glass frosted apple transparent blur see through liquid', 'card blur': 'frosted glass', 'card opacity': 'transparency glass', 'card exposure': 'brightness', exposure: 'brightness wallpaper', 'background opacity': 'wallpaper fade transparency', 'custom css': 'style stylesheet', 'dashboard password': 'login auth sign in security', 'unraid connection': 'api key address graphql', 'backups': 'export import restore download', 'disk and ups': 'battery power watts path', 'name and icon': 'title brand logo',
-    'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', 'container and vm icons': 'selfh.st logo images' };
+    'ignored alerts': 'mute silence hide notifications', 'section names': 'titles headers', navbar: 'header top bar search width logo version clock', 'container and vm icons': 'selfh.st logo images' };
   var SET_POPULAR = ['Translucent Effect', 'Corner radius', 'Text size', 'Background', 'Animations', 'Dashboard password'];
   function settingsIndex(D) {
     var out = [], seen = {};
@@ -4096,12 +4118,13 @@
       titles.forEach(function (want) { kids.forEach(function (el) { var t = el.querySelector('h3'); if (t && t.textContent === want) b.appendChild(el); }); });
     };
   }
+  var LOOK_SETS = ['Theme', 'Accent colour', 'Background', 'Navbar', 'Card style', 'Size and density', 'Details', 'Margins'];
   /* Settings pages: [title, icon, builder, the part of the configuration a "Restore defaults" button puts back (optional)] */
   var SET_PAGES = {
     home: ['Quick settings', 'gear', tabHome],
     dashboard: ['Apps & cards', 'grid', tabDashboard],
     presets: ['Presets', 'list', tabPresets],
-    appearance: ['Appearance', 'sun', pick(tabAppearance, ['Theme', 'Accent colour', 'Background', 'Card style', 'Size and density', 'Details', 'Margins']), 'appearance'],
+    appearance: ['Appearance', 'sun', pick(tabAppearance, LOOK_SETS), 'appearance'],
     css: ['Custom CSS', 'edit', pick(tabAppearance, ['Custom CSS'])],
     system: ['General', 'clock', tabSystem, 'general'],
     ignored: ['Alerts', 'mute', tabIgnored, null, true],
@@ -4658,17 +4681,21 @@
       F('Text size', sIn(a, 'text_size', dirty, [['s', 'Small'], ['m', 'Normal'], ['l', 'Large']], function () { boardScale(a); }), 'Fine-tunes the text on top of the zoom level.'),
       F('Density', sIn(a, 'density', dirty, [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']], preview)),
       F('Corner radius', rng('radius', 0, 28, ' px', 'Corner radius'), 'How round the cards are on the card board, from square to 28 px.'))));
+    var navSw = function (k, lab) { return h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a[k] !== false, onchange: function (e) { a[k] = e.target.checked; dirty(); preview(); } }), lab); };
+    b.appendChild(set('Navbar', 'What the bar at the top shows. Settings and Edit always stay.', h('div', { class: 'grid2' },
+      F('Dashboard name', tIn(D.cfg.general, 'title', dirty, String((S.boot.server || {}).name || 'Your server').toUpperCase())),
+      F('Search bar', sIn(a, 'nav_search', dirty, [['normal', 'Normal'], ['wide', 'Wide'], ['full', 'Full width'], ['off', 'Hidden']], preview))),
+      h('div', { class: 'nav-sw' }, navSw('nav_logo', 'Logo'), navSw('nav_name', 'Dashboard name'), navSw('nav_os', 'Unraid version'), navSw('nav_app', 'UnDash version'), navSw('nav_live', 'Live status and clock'), navSw('nav_alerts', 'Alerts'), navSw('nav_server', 'Server actions button'), navSw('nav_hide', 'Hide sensitive details button'), navSw('nav_sticky', 'Stay on top when scrolling'))));
     b.appendChild(set('Details', 'The small things around the cards.', h('div', { class: 'grid2' },
       F('Animations', sIn(a, 'motion', dirty, [['full', 'Full'], ['fast', 'Fast'], ['nointro', 'Skip the opening'], ['off', 'Off']], preview), 'Skip the opening keeps the small transitions and shows the dashboard at once. Pressing anything also skips it.'),
       F('Section names', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.sec_names !== false, onchange: function (e) { a.sec_names = e.target.checked; dirty(); preview(); } }), 'Show System, Media, Arr Stack…'),
         'Off hides the names above the sections. Their buttons (History, Overseerr…) stay, and a collapsed section still shows its name.'),
-      F('Versions in the header', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.header_chips !== false, onchange: function (e) { a.header_chips = e.target.checked; dirty(); preview(); } }), 'Unraid and UnDash versions'), 'Off hides them. An update notice still shows when there is one.'),
       F('Icon boxes', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: a.icon_box !== false, onchange: function (e) { a.icon_box = e.target.checked; dirty(); preview(); } }), 'Logos in rounded boxes'), 'Off shows the logos on their own.'),
       F('Container and VM icons', sIn(a, 'icon_mode', function () { dirty(); }, [['color', 'selfh.st, in colour'], ['auto', 'selfh.st, light or dark to suit the theme'], ['light', 'selfh.st, light'], ['dark', 'selfh.st, dark'], ['off', 'Unraid\'s own icons']], preview),
         'Found by the container\'s name or image (binhex-, linuxserver and similar prefixes are ignored). When selfh.st has none, Unraid\'s icon is used. An icon picked for a container in Apps & cards always wins.'))));
     b.appendChild(set('Margins', 'The safe margin around the dashboard, the same in every theme. Smart adapts to the screen.', h('div', { class: 'grid2' },
       margin('safe_x', 'Side margin'), margin('safe_y', 'Top margin'),
-      F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'))));
+      S.edit ? null : F('Card board (beta)', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: D.cfg.dashboard.board.on, onchange: function (e) { D.cfg.dashboard.board.on = e.target.checked; dirty(); } }), 'Draggable cards'), 'Off: the classic sections. Your card layout is kept.'))));
     var pd = function () { dirty(); preview(); };
     function rng(k, lo, hi, unit, lab) {
       var out = h('span', { class: 'num muted sm', style: { 'min-width': '44px', 'text-align': 'right' } }, a[k] + unit);
@@ -5452,7 +5479,7 @@
 
   /* ---- Presets of your own: Settings > Presets. A preset is how the dashboard is laid out and viewed, and its look when you keep that.
      It never holds an app, an address or a key, so a file of one is safe to share. ---- */
-  var PRESET_LOOK = ['theme', 'mode', 'accent', 'accent_mode', 'density', 'text_size', 'radius', 'translucent', 'gradient', 'icon_box', 'header_chips', 'zoom', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity', 'motion', 'blur', 'blur_target', 'brightness', 'safe_x', 'safe_y', 'sec_names', 'icon_mode'];
+  var PRESET_LOOK = ['theme', 'mode', 'accent', 'accent_mode', 'density', 'text_size', 'radius', 'translucent', 'gradient', 'icon_box', 'header_chips', 'nav_logo', 'nav_name', 'nav_os', 'nav_app', 'nav_live', 'nav_alerts', 'nav_server', 'nav_hide', 'nav_sticky', 'nav_search', 'zoom', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity', 'motion', 'blur', 'blur_target', 'brightness', 'safe_x', 'safe_y', 'sec_names', 'icon_mode'];
   var PRESET_MAX = 20;
   function keysOf(o, ks) { var r = {}; ks.forEach(function (k) { r[k] = o[k]; }); return r; }
   function presetTake(c, name, desc, look) {

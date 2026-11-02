@@ -1494,6 +1494,17 @@ t('an image that is up to date is not marked', empty(und_docker_skips([['name' =
 @unlink(und_path(UND_UPDSTATUS));
 reset_store();
 
+/* ---------------- navbar ---------------- */
+group('navbar');
+$n = und_normalize(['appearance' => []])['appearance'];
+t('the navbar shows everything by default', $n['nav_logo'] && $n['nav_name'] && $n['nav_os'] && $n['nav_app'] && $n['nav_live'] && $n['nav_alerts'] && $n['nav_server'] && $n['nav_hide'] && $n['nav_sticky'] && $n['nav_search'] === 'normal');
+$n = und_normalize(['appearance' => ['header_chips' => false]])['appearance'];
+t('the old versions switch carries over to both', !$n['nav_os'] && !$n['nav_app']);
+$n = und_normalize(['appearance' => ['header_chips' => false, 'nav_os' => true, 'nav_app' => false]])['appearance'];
+t('each version has its own switch', $n['nav_os'] && !$n['nav_app']);
+t('an unknown search width is refused', und_normalize(['appearance' => ['nav_search' => 'huge']])['appearance']['nav_search'] === 'normal');
+t('a search width is kept', und_normalize(['appearance' => ['nav_search' => 'wide']])['appearance']['nav_search'] === 'wide');
+
 rmrf($SANDBOX);
 
 echo "\n$pass passed, $fail failed\n";
