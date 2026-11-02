@@ -83,42 +83,10 @@ function und_host_allowed($host = null) {
   return false;
 }
 
-/** Is this browser logged in to Unraid? Reads Unraid's PHP session file (read-only, so Unraid's session is never touched). */
-function und_unraid_logged_in() {
-  if (und_api_mode()) return false;            // a container cannot see Unraid's sessions
-  $host = und_req_host();
-  if ($host === '') return false;
-  $sid = (string)($_COOKIE['unraid_' . md5($host)] ?? '');
-  if (!preg_match('/^[A-Za-z0-9,-]{16,128}$/', $sid)) return false;
-  $path = isset($GLOBALS['UND_PHPSESS_DIR']) ? $GLOBALS['UND_PHPSESS_DIR'] : (ini_get('session.save_path') ?: '/var/lib/php');
-  $f = rtrim(preg_replace('/^\d+;/', '', $path), '/') . '/sess_' . $sid;
-  $data = @file_get_contents($f);
-  if (!is_string($data) || !preg_match('/(^|;|\})unraid_login\|i:(\d+);/', $data, $m)) return false;
-  // Unraid's session lifetime (php.ini session.gc_maxlifetime) bounds how old a login may be
-  $max = (int)(ini_get('session.gc_maxlifetime') ?: 172800);
-  return (int)@filemtime($f) > time() - $max;
-}
 
-/* ---------- handoff from Unraid's web UI ---------- */
 
-function und_handoff_create() {
-  $t = bin2hex(random_bytes(24));
-  $d = und_tmp('handoff'); @mkdir($d, 0700, true);
-  foreach (glob("$d/*") ?: [] as $f) if (filemtime($f) < time() - 120) @unlink($f);
-  @file_put_contents("$d/" . hash('sha256', $t), (string)(time() + 60));
-  return $t;
-}
 
-function und_handoff_use($t) {
-  if (und_api_mode()) return false;
-  if (!preg_match('/^[a-f0-9]{48}$/', (string)$t)) return false;
-  $f = und_tmp('handoff') . '/' . hash('sha256', $t);
-  $exp = (int)@file_get_contents($f);
-  @unlink($f);                                   // single use
-  return $exp >= time();
-}
-
-/* ---------- password sign-in (Docker version: there is no Unraid session to reuse) ---------- */
+/* ---------- password sign-in ---------- */
 
 function und_setup_file() { return UND_DIR . '/setup-code.txt'; }
 

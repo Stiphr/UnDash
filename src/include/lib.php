@@ -14,18 +14,10 @@ define('UND_LIB_LOADED', 1);
 
 define('UND_VERSION', '@@VERSION@@');
 define('UND_NAME',    'UnDash');
-/*
- * Two ways to run the same code:
- *   plugin  (default) inside Unraid: reads /proc and Unraid's state files, runs docker / virsh / plugin directly.
- *   api     the Docker image (UNDASH_MODE=api): everything about the server comes from the official Unraid GraphQL API
- *           (include/unraid_api.php); nothing on the host is touched directly. Settings live in UNDASH_CONFIG (/config).
- */
-if (!defined('UND_MODE')) define('UND_MODE', getenv('UNDASH_MODE') === 'api' ? 'api' : 'plugin');
-if (!defined('UND_ROOT')) define('UND_ROOT',    UND_MODE === 'api' ? dirname(__DIR__) : '/usr/local/emhttp/plugins/undash');
-if (!defined('UND_DIR')) define('UND_DIR',     UND_MODE === 'api' ? rtrim(getenv('UNDASH_CONFIG') ?: '/config', '/') : '/boot/config/plugins/undash');
+/* Everything about the server comes from its own API (include/unraid_api.php); nothing on the host is touched directly. Settings live in UNDASH_CONFIG (/config). */
+if (!defined('UND_ROOT')) define('UND_ROOT',    dirname(__DIR__));
+if (!defined('UND_DIR')) define('UND_DIR',     rtrim(getenv('UNDASH_CONFIG') ?: '/config', '/'));
 if (!defined('UND_TMP')) define('UND_TMP',     '/tmp/undash');
-define('UND_DM',      '/usr/local/emhttp/plugins/dynamix.docker.manager');
-define('UND_UPDSTATUS', '/var/lib/docker/unraid-update-status.json');
 define('UND_KEEP',    '__KEEP__');     // stands in for a stored secret in everything sent to the browser
 
 /** System paths go through here so the dev harness can point them at fixtures. */
@@ -159,43 +151,18 @@ function und_clip($s, $max) {
   return strlen($s) > $max ? substr($s, 0, $max - 3) . '...' : $s;
 }
 
-
 /* ---------- Unraid ---------- */
-
-function und_var_ini() { $v = @parse_ini_string(und_read('/var/local/emhttp/var.ini')); return is_array($v) ? $v : []; }
-
-function und_api_mode() { return UND_MODE === 'api'; }
 
 /** What this deployment can do; the UI hides what is not available instead of failing. */
 function und_caps() {
-  $p = !und_api_mode();
-  return ['unraid' => $p || und_api_ready(), 'glances' => und_glances_url(und_load_config()) !== '', 'power' => $p, 'os_update' => $p, 'docker_check' => $p, 'docker_stats' => true, 'docker_inspect' => true, 'vm_hibernate' => $p, 'vm_details' => $p,
-          'vnc' => $p, 'storage_detail' => true, 'mode' => UND_MODE,
-          'docker_write' => $p || und_api_can('docker'), 'vm_write' => $p || und_api_can('vms')];
-}
-
-function und_os_version() {
-  $v = @parse_ini_string(und_read('/etc/unraid-version'));
-  return is_array($v) && !empty($v['version']) ? (string)$v['version'] : '';
+  return ['unraid' => und_api_ready(), 'glances' => und_glances_url(und_load_config()) !== '', 'docker_stats' => true, 'docker_inspect' => true, 'storage_detail' => true,
+          'docker_write' => und_api_can('docker'), 'vm_write' => und_api_can('vms')];
 }
 
 /** Name, address and Unraid version of the server for the title bar. In a container the local host name and address are the
  *  container's own, so they come from the Unraid API there (its system read is cached, so this costs nothing extra). */
-function und_server_identity() {
-  if (und_api_mode()) return und_api_identity();
-  return ['name' => (string)(und_var_ini()['NAME'] ?? gethostname()), 'ip' => und_server_ip(), 'os' => function_exists('und_os_version') ? und_os_version() : ''];
-}
-
-function und_server_ip() {
-  $n = @parse_ini_string(und_read('/var/local/emhttp/network.ini'), true);
-  if (is_array($n)) foreach ($n as $sec) if (is_array($sec) && !empty($sec['IPADDR:0'])) return (string)$sec['IPADDR:0'];
-  $ip = $_SERVER['SERVER_ADDR'] ?? '';
-  return $ip !== '' ? $ip : '127.0.0.1';
-}
-
-$__ident = @parse_ini_string(und_read('/boot/config/ident.cfg'));
-if (is_array($__ident) && !empty($__ident['timezone'])) @date_default_timezone_set($__ident['timezone']);
-unset($__ident);
+function und_server_identity() { return und_api_identity(); }
+function und_server_ip() { return (string)und_api_identity()['ip']; }
 
 } // UND_LIB_LOADED
 

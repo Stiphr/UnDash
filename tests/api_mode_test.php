@@ -2,7 +2,7 @@
 /* Tests of the Docker version's Unraid API layer (UNDASH_MODE=api) against a fake GraphQL endpoint. php tests/api_mode_test.php */
 error_reporting(E_ALL);
 $SB = sys_get_temp_dir() . '/undash-apitest-' . getmypid();
-define('UND_MODE', 'api'); define('UND_DIR', "$SB/config"); define('UND_TMP', "$SB/tmp"); define('UND_ROOT', dirname(__DIR__) . '/src');
+define('UND_DIR', "$SB/config"); define('UND_TMP', "$SB/tmp"); define('UND_ROOT', dirname(__DIR__) . '/src');
 @mkdir(UND_DIR, 0777, true);
 $GLOBALS['SENT'] = []; $GLOBALS['ANSWER'] = null;
 $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
@@ -18,7 +18,7 @@ function t($n, $c, $d = '') { global $pass, $fail; if ($c) $pass++; else { $fail
 function clear_cache() { foreach (glob(UND_TMP . '/api-*') ?: [] as $f) unlink($f); }
 function clear_cache_keep_none() { foreach (glob(UND_TMP . '/api-*.json') ?: [] as $f) unlink($f); }
 
-t('caps hide what the API cannot do', und_caps()['power'] === false && und_caps()['os_update'] === false && und_caps()['docker_stats'] === true && und_caps()['mode'] === 'api');
+t('caps say what the API offers', und_caps()['docker_stats'] === true && !isset(und_caps()['power']));
 t('settings live in /config (UNDASH_CONFIG)', und_store_dir() === UND_DIR);
 $da = 'sha256:' . str_repeat('a', 64); $db = 'sha256:' . str_repeat('b', 64);
 $cs = und_load_config(); $cs['docker']['items'] = ['s' => ['skip_update' => $da]]; und_save_config($cs, false);
@@ -29,7 +29,6 @@ t('skip: a new digest brings the update back', empty(und_docker_skips([['name' =
 und_write_json(und_tmp('image-digests.json'), []);
 t('skip: stands while the registry cannot be read', !empty(und_docker_skips([['name' => 's', 'image' => 'img/s', 'update' => 'available']])[0]['skip']));
 $cs['docker']['items'] = new stdClass(); und_save_config($cs, false); @unlink(und_tmp('image-digests.json'));
-t('the port is not changeable from the UI', isset(und_save_loc(['PORT' => '9100'])['error']));
 t('no API configured: clear error, no request', isset(und_gql('query { online }')['error']) && !$GLOBALS['SENT']);
 und_save_secrets(['vars' => [], 'svc' => [], 'unraid' => ['url' => 'http://tower.local', 'key' => 'SECRETKEY123']]);
 $GLOBALS['ANSWER'] = ['json' => ['data' => ['online' => true]]];
@@ -86,8 +85,6 @@ t('force stop maps to vm.forceStop', isset(und_vm_action('Win', 'kill')['ok']) &
 t('restart maps to vm.reboot', isset(und_vm_action('Win', 'restart')['ok']) && end($GLOBALS['MUT']) === ['reboot', 'v1']);
 t('starting a running VM refused', isset(und_vm_action('Win', 'start')['error']));
 // power and OS are not offered
-t('server power refused in Docker mode', isset(und_power_prepare('reboot')['error']) && isset(und_power('reboot', 'x', 'y')['error']));
-t('OS update refused in Docker mode', strpos(und_os_update()['error'] ?? '', 'not available') !== false);
 // secrets
 $view = json_encode([und_creds_view(und_load_config()), und_shared_view(und_load_config())]);
 t('the API key is not in the settings view', strpos($view, 'SECRETKEY123') === false);
@@ -140,7 +137,6 @@ if ($GLOBALS['UND_HTTP_MOCK_WAS']) $GLOBALS['UND_HTTP_MOCK'] = $GLOBALS['UND_HTT
 putenv('UNDASH_PASSWORD=from-env-password');
 t('UNDASH_PASSWORD takes over', und_auth_kind() === 'env' && und_password_ok('from-env-password') && !und_password_ok('a long password'));
 putenv('UNDASH_PASSWORD');
-t('Unraid sessions and handoff links are ignored in Docker mode', und_unraid_logged_in() === false && und_handoff_use(str_repeat('a', 48)) === false);
 $gl = array_values(array_filter(und_docker_live()['containers'] ?? [], function ($c) { return $c['name'] === 'gluetun'; }));
 t('a restart loop reported as EXITED + "Restarting" is a restart loop', $gl && $gl[0]['state'] === 'restarting', json_encode($gl));
 $ar = und_api_array(['state' => 'STARTED', 'parities' => [['name' => 'parity', 'status' => 'DISK_OK', 'temp' => 38, 'fsSize' => 0, 'numErrors' => 0]],

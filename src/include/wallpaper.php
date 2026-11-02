@@ -67,7 +67,7 @@ function und_wall_remove() {
 const UND_WALL_LOCAL_MAX = 30 * 1048576;
 
 function und_wall_roots() {
-  $r = und_api_mode() ? [UND_DIR, '/wallpapers'] : ['/mnt', '/boot/config/plugins/undash', UND_DIR];
+  $r = [UND_DIR, '/wallpapers'];
   return array_values(array_filter(array_map('realpath', $r)));
 }
 
@@ -75,8 +75,8 @@ function und_wall_roots() {
 function und_wall_local($path) {
   $path = trim((string)$path);
   if ($path === '') return ['error' => 'Type the path of a picture.'];
-  if (und_api_mode()) $path = preg_replace('#^/mnt/[^/]+/appdata/[^/]+/#', rtrim(UND_DIR, '/') . '/', $path);
-  $outside = und_api_mode() ? 'The Docker version can only read its own appdata folder, or a folder mapped to /wallpapers in the container\'s settings.' : 'Use a picture under /mnt.';
+  $path = preg_replace('#^/mnt/[^/]+/appdata/[^/]+/#', rtrim(UND_DIR, '/') . '/', $path);
+  $outside = 'UnDash can only read its own appdata folder, or a folder mapped to /wallpapers in the container\'s settings.';
   $real = realpath($path);
   if ($real === false || !is_file($real)) return ['error' => 'No file at that path. ' . $outside];
   $inside = false;

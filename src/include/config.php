@@ -4,8 +4,6 @@
  *
  * Where it lives
  *   The configuration directory defaults to /mnt/user/appdata/undash and is set in /boot/config/plugins/undash/undash.cfg.
- *   Every save is mirrored to the flash drive, so UnDash keeps working while the array (and with it /mnt/user) is stopped.
- *   Reads prefer the configuration directory and fall back to the flash copy.
  *
  * Files in the configuration directory (see include/store.php)
  *   config.yaml   everything you set up; credentials only as references like {{RADARR_API_KEY}}
@@ -124,99 +122,28 @@ function und_id() { return bin2hex(random_bytes(4)); }
 
 /* ---------- location ---------- */
 
-/** undash.cfg on the flash drive: CONFIG_DIR, PORT, BIND, STANDALONE. */
-function und_loc() {
-  if (und_api_mode()) return ['CONFIG_DIR' => UND_DIR, 'PORT' => (string)((int)(getenv('UNDASH_PORT') ?: 9099)), 'BIND' => '0.0.0.0', 'STANDALONE' => 'yes'];
-  $d = ['CONFIG_DIR' => '/mnt/user/appdata/undash', 'PORT' => '9099', 'BIND' => '0.0.0.0', 'STANDALONE' => 'yes'];
-  $v = @parse_ini_string(und_read_flash('undash.cfg'));
-  $v = is_array($v) ? $v + $d : $d;
-  if (!und_valid_cfg_dir($v['CONFIG_DIR'])) $v['CONFIG_DIR'] = $d['CONFIG_DIR'];
-  $p = (int)$v['PORT']; $v['PORT'] = (string)($p >= 1024 && $p <= 65535 ? $p : 9099);
-  if (!filter_var($v['BIND'], FILTER_VALIDATE_IP)) $v['BIND'] = '0.0.0.0';
-  $v['STANDALONE'] = $v['STANDALONE'] === 'no' ? 'no' : 'yes';
-  return $v;
-}
+function und_loc() { return ['CONFIG_DIR' => UND_DIR, 'PORT' => (string)((int)(getenv('UNDASH_PORT') ?: 9099)), 'BIND' => '0.0.0.0', 'STANDALONE' => 'yes']; }
 
-/** The configuration directory must be an absolute path on a user share, a pool or the flash plugin folder: never anything else. */
-function und_valid_cfg_dir($p) {
-  $p = (string)$p;
-  if (strpos($p, '..') !== false || strpos($p, "\0") !== false) return false;
-  return preg_match('#^(/mnt/[A-Za-z0-9_.-]+(/[A-Za-z0-9_. -]+)*|' . preg_quote(UND_DIR, '#') . ')/?$#', $p) === 1;
-}
 
-function und_read_flash($name) { $s = @file_get_contents(UND_DIR . '/' . $name); return $s === false ? '' : $s; }
 
-function und_save_loc(array $v) {
-  if (und_api_mode()) return ['error' => 'In the Docker version the port and the /config folder are set in the container settings.'];
-  $cur = und_loc();
-  foreach (['CONFIG_DIR', 'PORT', 'BIND', 'STANDALONE'] as $k) if (isset($v[$k])) $cur[$k] = (string)$v[$k];
-  if (!und_valid_cfg_dir($cur['CONFIG_DIR'])) return ['error' => 'The configuration directory must be a path under /mnt (for example /mnt/user/appdata/undash).'];
-  $p = (int)$cur['PORT'];
-  if ($p < 1024 || $p > 65535) return ['error' => 'The port must be between 1024 and 65535.'];
-  if (!filter_var($cur['BIND'], FILTER_VALIDATE_IP)) return ['error' => 'The listen address must be an IP address (0.0.0.0 = all).'];
-  $txt = '';
-  foreach (['CONFIG_DIR', 'PORT', 'BIND', 'STANDALONE'] as $k) $txt .= $k . '="' . str_replace('"', '', $cur[$k]) . "\"\n";
-  @mkdir(UND_DIR, 0755, true);
-  if (@file_put_contents(UND_DIR . '/undash.cfg', $txt) === false) return ['error' => 'Could not write ' . UND_DIR . '/undash.cfg.'];
-  return ['ok' => true, 'loc' => $cur];
-}
 
-/**
- * The directory UnDash writes to: the configured directory when it can be used, else the flash folder.
- * A missing directory is created only when its parent exists (so a stopped array never creates a stray folder on the RAM disk).
- */
-function und_store_dir() {
-  static $cache = [];
-  $dir = und_path(rtrim(und_loc()['CONFIG_DIR'], '/'));
-  if (isset($cache[$dir]) && is_dir($cache[$dir])) return $cache[$dir];
-  $ok = false;
-  if ($dir === UND_DIR) $ok = true;
-  elseif (is_dir($dir)) $ok = is_writable($dir);
-  elseif (is_dir(dirname($dir)) && is_writable(dirname($dir)) && und_array_mounted($dir)) $ok = @mkdir($dir, 0755, true);
-  if ($ok) und_migrate_into($dir);
-  return $cache[$dir] = $ok ? $dir : UND_DIR;
-}
+/** The folder UnDash writes to: /config in the container. */
+function und_store_dir() { @mkdir(UND_DIR, 0755, true); return UND_DIR; }
 
-/** /mnt/user (and pools) only exist while the array is started; before that /mnt is a plain RAM-disk folder. */
-function und_array_mounted($dir) {
-  if (isset($GLOBALS['UND_FS'])) return true;
-  if (strpos($dir, '/mnt/') !== 0) return true;
-  $top = '/mnt/' . explode('/', substr($dir, 5))[0];
-  foreach (@file('/proc/mounts', FILE_IGNORE_NEW_LINES) ?: [] as $l) { $c = explode(' ', $l); if (($c[1] ?? '') === $top) return true; }
-  return false;
-}
 
-/** First use of a configuration directory: copy the flash files into it, never over existing ones. */
-function und_migrate_into($dir) {
-  if ($dir === UND_DIR) return;
-  // files of older versions only where there are no new ones yet (they are converted on first use)
-  $old = is_file("$dir/config.yaml") || is_file(UND_DIR . '/config.yaml') ? [] : ['config.json', 'secrets.json', 'custom.css', 'ignores.json'];
-  foreach (array_merge(['config.yaml', '.env'], $old) as $f) {
-    if (!is_file("$dir/$f") && is_file(UND_DIR . "/$f")) { @copy(UND_DIR . "/$f", "$dir/$f"); if ($f === 'secrets.json' || $f === '.env') @chmod("$dir/$f", 0600); }
-  }
-}
 
-function und_file($name) {
-  $d = und_store_dir();
-  return is_file("$d/$name") || $d === UND_DIR ? "$d/$name" : UND_DIR . "/$name";
-}
+function und_file($name) { return und_store_dir() . "/$name"; }
 
-/** Write one file to the configuration directory and mirror it to the flash drive. */
+/** Write one file to the configuration directory. */
 function und_store_write($name, $content, $private = false) {
-  $dirs = array_unique([und_store_dir(), UND_DIR]);
-  $ok = false;
-  foreach ($dirs as $i => $d) {
-    @mkdir($d, 0755, true);
-    $f = "$d/$name";
-    if (is_file($f) && @file_get_contents($f) === $content) { if ($i === 0) $ok = true; continue; }
-    $tmp = $f . '.tmp' . getmypid();
-    $w = @file_put_contents($tmp, $content) !== false;
-    if ($w && $private) @chmod($tmp, 0600);
-    $w = $w && @rename($tmp, $f);
-    if (!$w) @unlink($tmp);
-    if ($i === 0) $ok = $w;
-  }
-  return $ok;
+  $f = und_store_dir() . "/$name";
+  if (is_file($f) && @file_get_contents($f) === $content) return true;
+  $tmp = $f . '.tmp' . getmypid();
+  $w = @file_put_contents($tmp, $content) !== false;
+  if ($w && $private) @chmod($tmp, 0600);
+  $w = $w && @rename($tmp, $f);
+  if (!$w) @unlink($tmp);
+  return $w;
 }
 
 /* ---------- backups ---------- */
@@ -743,7 +670,7 @@ function und_zone(array $s) {
 function und_layout_view(array $cfg) {
   unset($cfg['presets']);          // Settings has its own copy; the page and guests have no use for them
   // without a key these have nothing behind them. Only this view changes: the saved layout comes back with the key
-  if (und_api_mode() && !und_api_ready()) {
+  if (!und_api_ready()) {
     $tiles = und_glances_url($cfg) !== '' ? UND_GLANCES_TILES : [];
     foreach ($cfg['dashboard']['sections'] as &$s) if (in_array($s['id'], ['docker', 'vms'], true) || ($s['id'] === 'overview' && !$tiles)) $s['visible'] = false;
     unset($s);
@@ -787,6 +714,5 @@ function und_validate(array $cfg) {
     }
     if ($s['type'] === 'calendar') foreach ((array)(((array)$s['options'])['integrations'] ?? []) as $in) if (!isset($ids[$in['service'] ?? ''])) $issues[] = ['level' => 'warn', 'msg' => "$where refers to a Radarr/Sonarr widget that was removed."];
   }
-  if (und_store_dir() !== und_path(rtrim(und_loc()['CONFIG_DIR'], '/'))) $issues[] = ['level' => 'warn', 'msg' => 'The configuration directory ' . und_loc()['CONFIG_DIR'] . ' is not available (is the array started?). Settings are read from and saved to the flash drive until it is.'];
   return $issues;
 }

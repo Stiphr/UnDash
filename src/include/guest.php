@@ -141,7 +141,7 @@ function und_guest_boot(array $cfg) {
   $id = und_server_identity();
   return ['version' => UND_VERSION, 'layout' => und_guest_layout($cfg, und_guest_prefs()), 'types' => [], 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
           'server' => ['name' => (string)($id['name'] ?? '')], 'wall' => und_wall_custom_view(), 'standalone' => true, 'port' => 0, 'port_enabled' => false,
-          'caps' => ['mode' => und_api_mode() ? 'api' : 'plugin', 'docker_stats' => false], 'api' => null, 'auth' => 'guest', 'guest' => true];
+          'caps' => ['docker_stats' => false], 'api' => null, 'auth' => 'guest', 'guest' => true];
 }
 
 /** Numbers for the System tiles. Disk rows, the address, versions and update state stay on the server. */
@@ -180,7 +180,7 @@ function und_guest_api($action, array $post) {
     case 'boot': return und_guest_boot($cfg);
     case 'live': {
       if (!$on['overview']) return ['at' => time()];
-      if (und_api_mode()) @touch(und_tmp('viewer'));
+      @touch(und_tmp('viewer'));
       $r = ['at' => time(), 'system' => und_guest_system(und_system($cfg)), 'alerts' => [], 'ignores' => [], 'power' => ''];
       if (in_array('ups', explode(',', (string)($post['parts'] ?? '')), true)) $r['ups'] = und_ups($cfg['general']['ups_name'], $cfg['general']['ups_watts']);
       return $r;

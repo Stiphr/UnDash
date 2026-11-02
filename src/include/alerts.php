@@ -36,8 +36,7 @@ function und_alerts(array $cfg, $sys, $dk, $smart = null) {
     foreach ((array)($a['error_disks'] ?? []) as $d) $add('bad', $d['name'] . ' reported ' . $d['errors'] . ' read/write error' . ($d['errors'] > 1 ? 's' : '') . '.', 'disk.errors', $d['name']);
     foreach ((array)($a['hot_disks'] ?? []) as $d) $add('warn', $d['name'] . ' is at ' . $d['temp'] . '°C.', 'disk.hot', $d['name']);
     $o = $sys['os_update'] ?? [];
-    if (!empty($o['staged'])) $add('info', 'Unraid ' . $o['staged'] . ' is installed and becomes active after a restart.', 'os.staged', $o['staged'], 'restart');
-    elseif (!empty($o['available'])) $add('info', 'Unraid ' . $o['latest'] . ' is available (running ' . $o['installed'] . ').', 'os.available', $o['latest'], 'os');
+    if (!empty($o['available'])) $add('info', 'Unraid ' . $o['latest'] . ' is available (running ' . $o['installed'] . ').', 'os.available', $o['latest'], 'os');
     if (!empty($o['error']) && empty($o['available'])) $add('warn', 'The Unraid update check failed: ' . $o['error'], 'os.check_failed', 'server');
   }
   if (is_array($dk) && !isset($dk['error'])) {
@@ -57,11 +56,9 @@ function und_alerts(array $cfg, $sys, $dk, $smart = null) {
     $res = trim(preg_replace('/[^A-Za-z0-9_.+@ -]/', '', (string)$d['disk'])) ?: 'disk';
     $add('bad', $d['disk'] . ($d['model'] !== '' ? ' (' . $d['model'] . ')' : '') . ' ' . ($why[(int)$d['status']] ?? 'failed') . ' in ' . $d['app'] . '. Back up its data and plan a replacement.', 'disk.smart', $res);
   }
-  if (und_api_mode()) {
-    if (!function_exists('und_login_seen')) require_once __DIR__ . '/auth.php';
-    $g = und_login_seen();
-    if ($g['n'] >= UND_LOGIN_TRIES) $add('warn', $g['n'] . ' wrong passwords in the last 24 hours, the last from ' . $g['ip'] . '. If that was not you, someone may be guessing your password.', 'auth.guess', 'login');
-  }
+  if (!function_exists('und_login_seen')) require_once __DIR__ . '/auth.php';
+  $g = und_login_seen();
+  if ($g['n'] >= UND_LOGIN_TRIES) $add('warn', $g['n'] . ' wrong passwords in the last 24 hours, the last from ' . $g['ip'] . '. If that was not you, someone may be guessing your password.', 'auth.guess', 'login');
   return $out;
 }
 
@@ -120,7 +117,7 @@ function und_alert_history() {
 /** One background check (scripts/alertcheck.php): the full system and container state, then the history. */
 function und_alerts_check() {
   $cfg = und_load_config();
-  if (und_api_mode()) { und_api_poll_due(); und_api_facts_refresh(); }     // the network rates, which the background reader otherwise only keeps fresh while a page is open, and the slow facts
+  und_api_poll_due(); und_api_facts_refresh();     // the network rates, which the background reader otherwise only keeps fresh while a page is open, and the slow facts
   $sys = und_system($cfg);
   und_metrics_record($sys);
   $dk = und_docker_live();

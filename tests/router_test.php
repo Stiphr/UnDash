@@ -1,10 +1,10 @@
 <?php
-/* End-to-end test of the standalone port: sign-in, handoff, CSRF and origin checks, file serving. php tests/router_test.php */
+/* End-to-end test of the standalone port: sign-in, CSRF and origin checks, file serving. php tests/router_test.php */
 $SB = sys_get_temp_dir() . '/undash-rt-' . getmypid();
 foreach (["$SB/flash", "$SB/tmp", "$SB/php", "$SB/fs/var/local/emhttp"] as $d) @mkdir($d, 0777, true);
 file_put_contents("$SB/fs/var/local/emhttp/var.ini", "NAME=\"Tower\"\n");
 $port = 9300 + getmypid() % 500;
-$proc = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/router_harness.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, null, ['UND_SANDBOX' => $SB, 'PATH' => getenv('PATH')]);
+$proc = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/router_harness.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, null, ['UND_SANDBOX' => $SB, 'UNDASH_PASSWORD' => 'a test password', 'PATH' => getenv('PATH')]);
 usleep(600000);
 $pass = 0; $fail = 0;
 function t($n, $c, $d = '') { global $pass, $fail; if ($c) $pass++; else { $fail++; echo "FAIL $n" . ($d !== '' ? " -- $d" : '') . "\n"; } }
@@ -17,8 +17,14 @@ function req($method, $path, $headers = [], $body = null) {
   $hdr = []; foreach ($h as $l) if (strpos($l, ':')) { list($k, $v) = explode(':', $l, 2); $hdr[strtolower(trim($k))][] = trim($v); }
   return ['code' => (int)($m[1] ?? 0), 'body' => (string)$out, 'h' => $hdr];
 }
+/* the sign-in form: its one-time value comes with a cookie of its own */
+function signin() {
+  $f = req('GET', '/login'); $pre = preg_match('/name="pre" value="([a-f0-9]+)"/', $f['body'], $m) ? $m[1] : '';
+  $ck = []; foreach ($f['h']['set-cookie'] ?? [] as $l) $ck[] = explode(';', $l)[0];
+  return req('POST', '/login', ['Content-Type: application/x-www-form-urlencoded', 'Cookie: ' . implode('; ', $ck)], http_build_query(['password' => 'a test password', 'pre' => $pre]));
+}
 $r = req('GET', '/');
-t('unauthenticated page redirects to Unraid\'s handoff', $r['code'] === 303 && ($r['h']['location'][0] ?? '') === 'http://tower.local/plugins/undash/handoff.php', json_encode($r['h']['location'] ?? null));
+t('unauthenticated page goes to the sign-in form', $r['code'] === 303 && ($r['h']['location'][0] ?? '') === '/login', json_encode($r['h']['location'] ?? null));
 t('security headers are sent', isset($r['h']['content-security-policy'], $r['h']['x-frame-options']));
 $r = req('POST', '/api', ['Content-Type: application/x-www-form-urlencoded'], 'action=history');
 t('unauthenticated API refused', $r['code'] === 401);
@@ -26,19 +32,14 @@ $r = req('GET', '/manifest.webmanifest');
 $mf = json_decode($r['body'], true);
 t('a phone can read the app manifest before signing in', $r['code'] === 200 && strpos($r['h']['content-type'][0] ?? '', 'manifest+json') !== false && ($mf['display'] ?? '') === 'standalone' && count($mf['icons'] ?? []) === 2);
 t('so can its icons', req('GET', '/icon-192.png')['code'] === 200 && (req('GET', '/icon-512.png')['h']['content-type'][0] ?? '') === 'image/png');
-$r = req('GET', '/?t=' . str_repeat('a', 48));
-t('unknown handoff token refused', $r['code'] === 403);
-// a valid handoff token (what handoff.php creates behind Unraid's login)
 define('UND_DIR', "$SB/flash"); define('UND_TMP', "$SB/tmp"); define('UND_ROOT', dirname(__DIR__) . '/src');
 $GLOBALS['UND_FS'] = "$SB/fs";
 require UND_ROOT . '/include/lib.php'; require UND_ROOT . '/include/auth.php';
-$tok = und_handoff_create();
-$r = req('GET', '/?t=' . $tok);
+$r = signin();
 $cookie = preg_match('/(undash_sid(?:_\d+)?)=([a-f0-9]{64})/', implode(';', $r['h']['set-cookie'] ?? []), $m) ? $m[2] : ''; $cname = $m[1] ?? 'undash_sid';
 t('the session cookie is per port, so two UnDash on one server keep their sessions', preg_match('/^undash_sid_\d+$/', $cname) === 1, $cname);
-t('handoff token gives a session cookie', $r['code'] === 303 && $cookie !== '');
+t('the right password gives a session cookie', $r['code'] === 303 && $cookie !== '');
 t('session cookie is HttpOnly and SameSite=Strict', stripos(implode(';', $r['h']['set-cookie']), 'httponly') !== false && stripos(implode(';', $r['h']['set-cookie']), 'samesite=strict') !== false);
-t('handoff token cannot be reused', req('GET', '/?t=' . $tok)['code'] === 403);
 $C = "Cookie: $cname=$cookie";
 $r = req('GET', '/assets/boot.js', [$C]);
 $csrf = preg_match('/UND_CSRF="([a-f0-9]+)"/', $r['body'], $m) ? $m[1] : '';
@@ -101,7 +102,6 @@ t('unknown paths are 404', req('GET', '/include/config.php', [$C])['code'] === 4
 $sid = 'abcdefghijklmnopqrstuvwxyz12';
 file_put_contents("$SB/php/sess_$sid", 'unraid_login|i:' . time() . ';');
 $r = req('GET', '/', ['Cookie: unraid_' . md5('tower.local') . "=$sid"]);
-t('an Unraid login is accepted directly', $r['code'] === 200 && preg_match('/undash_sid_\d+=/', implode(';', $r['h']['set-cookie'] ?? [])) === 1);
 t('logout ends the session', req('GET', '/logout', [$C])['code'] === 303 && req('POST', '/api', [$C, "X-CSRF-Token: $csrf", 'Content-Type: application/x-www-form-urlencoded'], 'action=history')['code'] === 401);
 // static files
 $ac = req('GET', '/assets/app.css');
@@ -115,7 +115,7 @@ t('icons over plain http may load', strpos($ac['h']['content-security-policy'][0
 /* ---- the guest link: its own area, with its own cookie ---- */
 $form = ['Content-Type: application/x-www-form-urlencoded'];
 $probe = str_repeat('a', 48);
-$r = req('GET', '/?t=' . und_handoff_create());
+$r = signin();
 $C = 'Cookie: ' . (preg_match('/(undash_sid(?:_\d+)?=[a-f0-9]{64})/', implode(';', $r['h']['set-cookie'] ?? []), $m) ? $m[1] : '');
 $csrf = preg_match('/UND_CSRF="([a-f0-9]+)"/', req('GET', '/assets/boot.js', [$C])['body'], $m) ? $m[1] : '';
 t('with the link off there is no guest area', req('GET', "/guest/$probe")['code'] === 404 && req('POST', '/guest/api', $form, 'action=boot')['code'] === 404);
