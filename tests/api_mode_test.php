@@ -143,7 +143,7 @@ t('a copy older than 30 seconds is not shown as live', count($GLOBALS['SENT']) =
 $w = json_decode(file_get_contents(UND_TMP . '/api-temp.json'), true); $w['t'] -= 100; file_put_contents(UND_TMP . '/api-temp.json', json_encode($w));
 $w = json_decode(file_get_contents(UND_TMP . '/api-net.json'), true); $w['t'] -= 100; file_put_contents(UND_TMP . '/api-net.json', json_encode($w));
 $GLOBALS['SENT'] = []; und_api_poll_due(false); $qs = array_map(function ($x) { return (string)($x['body']['query'] ?? ''); }, $GLOBALS['SENT']);
-t('with no page open only the temperature is read', count($qs) === 1 && strpos($qs[0], 'temperature') !== false);
+t('with no page open the copies stay fresh, but not the network rates', preg_grep('/temperature/', $qs) && !preg_grep('/network \{/', $qs));
 $GLOBALS['SENT'] = [];
 $id = und_server_identity();
 t('the page title comes from the stored identity, without a system read', $id === ['name' => 'tower', 'ip' => '10.0.0.9', 'os' => '7.3.4'] && !$GLOBALS['SENT'], json_encode($id));
