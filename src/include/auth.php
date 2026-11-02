@@ -153,9 +153,18 @@ function und_password_ok($pw) {
   return $h !== '' && password_verify($pw, $h);
 }
 
+/** The first things anyone tries: a common word with numbers around it, one key held down, or a row of the keyboard. */
+function und_password_weak($pw) {
+  $l = strtolower((string)$pw); $w = preg_replace('/[^a-z]/', '', strtr(trim($l, "0123456789!#%^&*.,-_+= "), ['@' => 'a', '$' => 's', '0' => 'o', '1' => 'l', '3' => 'e']));
+  if (count(array_unique(str_split($l))) < 4 || ctype_digit($l)) return true;
+  foreach (['password', 'passwort', 'qwerty', 'qwertyuiop', 'asdfgh', 'letmein', 'welcome', 'admin', 'administrator', 'changeme', 'unraid', 'undash', 'iloveyou', 'abc', 'root', 'test'] as $c) if ($w === $c) return true;
+  return false;
+}
+
 function und_password_set($pw) {
   if (strlen((string)$pw) < 10) return ['error' => 'Use at least 10 characters.'];
-  if (!und_auth_set(['UNDASH_PASSWORD_HASH' => password_hash((string)$pw, PASSWORD_DEFAULT)])) return ['error' => 'Could not write the .env file. Check the /config volume.'];
+  if (und_password_weak($pw)) return ['error' => 'That password is too easy to guess. Try a few unrelated words.'];
+  if (!und_auth_set(['UNDASH_PASSWORD_HASH' => password_hash((string)$pw, PASSWORD_DEFAULT, ['cost' => UND_PW_COST])])) return ['error' => 'Could not write the .env file. Check the /config volume.'];
   @unlink(und_setup_file());
   return ['ok' => true];
 }
@@ -172,14 +181,98 @@ function und_setup_code_ensure() {
   return $c;
 }
 
-/** At most 5 wrong passwords per address in 15 minutes, and 30 from all addresses together (a guess spread over many
- *  addresses, or every user behind one reverse proxy, is slowed down too). */
-function und_login_recent($f) { return array_values(array_filter(und_read_json($f, []), function ($t) { return $t > time() - 900; })); }
-function und_login_throttled($ip) {
-  return count(und_login_recent(und_tmp('login-' . hash('sha256', (string)$ip) . '.json'))) >= 5 || count(und_login_recent(und_tmp('login-all.json'))) >= 30;
+/*
+ * Wrong passwords. 5 from one address lock it out for 15 minutes, and every lockout after that lasts twice as long, up to a day,
+ * so a slow guess gets a few dozen tries a day instead of hundreds. 30 from all addresses together lock everyone out for 15 minutes:
+ * that one does not grow, or a flood could keep the owner out. A session that is signed in is not affected. The counts live in
+ * /tmp, and the container start clears them: only the owner can restart the container, so that is the way back in.
+ */
+const UND_LOGIN_TRIES = 5;
+const UND_LOGIN_ALL = 30;
+const UND_LOGIN_LOCK = 900;
+const UND_LOGIN_LOCK_MAX = 86400;
+const UND_LOGIN_FORGET = 604800;         // a week without a wrong password starts over
+const UND_PW_COST = 12;
+
+/** One person holds a whole IPv6 /64, so it counts as one address. */
+function und_login_key($ip) {
+  $b = @inet_pton((string)$ip);
+  if ($b === false) return (string)$ip;
+  if (strlen($b) !== 16) return inet_ntop($b);
+  return substr($b, 0, 12) === "\0\0\0\0\0\0\0\0\0\0\xff\xff" ? inet_ntop(substr($b, 12)) : bin2hex(substr($b, 0, 8));
+}
+function und_login_file($ip) { return und_tmp('login-' . hash('sha256', und_login_key($ip)) . '.json'); }
+function und_login_read($f) {
+  $s = und_read_json($f, []);
+  if (!isset($s['fails']) || (int)($s['at'] ?? 0) < time() - UND_LOGIN_FORGET) $s = ['fails' => [], 'locks' => 0, 'until' => 0, 'at' => 0];
+  $s['fails'] = array_values(array_filter((array)$s['fails'], function ($t) { return $t > time() - UND_LOGIN_LOCK; }));
+  return $s;
+}
+/** Seconds until this address may try again. */
+function und_login_wait($ip) {
+  return max(0, (int)und_login_read(und_login_file($ip))['until'] - time(), (int)und_login_read(und_tmp('login-all.json'))['until'] - time());
+}
+function und_login_throttled($ip) { return und_login_wait($ip) > 0; }
+function und_login_msg($ip) {
+  $m = (int)ceil(und_login_wait($ip) / 60);
+  return 'Too many wrong passwords. Try again in ' . ($m > 90 ? ceil($m / 60) . ' hours' : $m . ' minute' . ($m === 1 ? '' : 's')) . '. If this is you, restart the UnDash container.';
 }
 function und_login_failed($ip) {
-  foreach ([und_tmp('login-' . hash('sha256', (string)$ip) . '.json'), und_tmp('login-all.json')] as $f) {
-    $a = und_login_recent($f); $a[] = time(); und_write_json($f, array_slice($a, -100), true);
+  $f = und_login_file($ip); $s = und_login_read($f); $s['fails'][] = time(); $s['at'] = time();
+  if (count($s['fails']) >= UND_LOGIN_TRIES) {
+    $s['locks'] = (int)$s['locks'] + 1; $s['fails'] = [];
+    $for = (int)min(UND_LOGIN_LOCK_MAX, UND_LOGIN_LOCK * 2 ** min(10, $s['locks'] - 1));
+    $s['until'] = time() + $for;
+    if (function_exists('und_history_add')) und_history_add('server', 'Sign-in', 'locked out', false, $ip . ' after ' . UND_LOGIN_TRIES . ' wrong passwords, for ' . round($for / 60) . ' minutes');
+    error_log('undash: sign-in locked for ' . round($for / 60) . ' minutes: ' . $ip);
   }
+  und_write_json($f, $s, true);
+  $g = und_tmp('login-all.json'); $a = und_login_read($g); $a['fails'][] = time(); $a['at'] = time();
+  if (count($a['fails']) >= UND_LOGIN_ALL) { $a['fails'] = []; $a['until'] = time() + UND_LOGIN_LOCK; }
+  und_write_json($g, $a, true);
+  // for the alert: wrong passwords of the last day, wherever they came from
+  $l = und_tmp('login-log.json'); $j = und_read_json($l, []); $t = array_filter((array)($j['t'] ?? []), function ($x) { return $x > time() - 86400; }); $t[] = time();
+  und_write_json($l, ['t' => array_slice(array_values($t), -500), 'ip' => (string)$ip], true);
+}
+/** Wrong passwords of the last day and where the last one came from. */
+function und_login_seen() {
+  $j = und_read_json(und_tmp('login-log.json'), []);
+  return ['n' => count(array_filter((array)($j['t'] ?? []), function ($x) { return $x > time() - 86400; })), 'ip' => (string)($j['ip'] ?? '')];
+}
+/** Checks a password: one at a time, or twelve workers would each get past the count at the same moment. ok, wrong or locked. */
+function und_login_check($ip, $pw) {
+  $lk = @fopen(und_tmp('login.lock'), 'c');
+  if ($lk) flock($lk, LOCK_EX);
+  if (und_login_throttled($ip)) { if ($lk) fclose($lk); return 'locked'; }
+  $ok = und_password_ok($pw);
+  if ($ok) {
+    @unlink(und_login_file($ip));
+    $h = (string)(und_env()['UNDASH_PASSWORD_HASH'] ?? '');
+    if ($h !== '' && und_auth_kind() === 'file' && password_needs_rehash($h, PASSWORD_DEFAULT, ['cost' => UND_PW_COST])) und_auth_set(['UNDASH_PASSWORD_HASH' => password_hash((string)$pw, PASSWORD_DEFAULT, ['cost' => UND_PW_COST])]);
+  } else und_login_failed($ip);
+  if ($lk) fclose($lk);
+  return $ok ? 'ok' : 'wrong';
+}
+/** The visitor's address. X-Forwarded-For can be typed by anyone, so it counts only from a proxy named in UNDASH_TRUSTED_PROXIES. */
+function und_client_ip() {
+  $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+  $list = array_filter(preg_split('/[\s,]+/', (string)(getenv('UNDASH_TRUSTED_PROXIES') ?: (und_env()['UNDASH_TRUSTED_PROXIES'] ?? ''))));
+  if (!$list || !und_ip_in($ip, $list)) return $ip;
+  foreach (array_reverse(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''))) as $x) {
+    $x = trim($x);
+    if (!filter_var($x, FILTER_VALIDATE_IP)) return $ip;
+    if (!und_ip_in($x, $list)) return $x;
+  }
+  return $ip;
+}
+function und_ip_in($ip, array $list) {
+  $b = @inet_pton((string)$ip); if ($b === false) return false;
+  foreach ($list as $net) {
+    $p = explode('/', (string)$net, 2); $n = @inet_pton($p[0]);
+    if ($n === false || strlen($n) !== strlen($b)) continue;
+    $bits = isset($p[1]) ? (int)$p[1] : strlen($b) * 8; $whole = intdiv($bits, 8); $rest = $bits % 8;
+    if (substr($b, 0, $whole) !== substr($n, 0, $whole)) continue;
+    if (!$rest || (ord($b[$whole]) >> (8 - $rest)) === (ord($n[$whole]) >> (8 - $rest))) return true;
+  }
+  return false;
 }

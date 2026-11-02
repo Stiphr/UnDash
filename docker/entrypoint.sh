@@ -10,6 +10,9 @@ if ! touch /config/.write-test 2>/dev/null; then
 fi
 rm -f /config/.write-test
 
+# wrong-password counts start over: restarting is the owner's way back in after a lockout
+rm -f /tmp/undash/login-*.json
+
 # copies plugin settings on the very first start (if mounted), creates the setup code, prints what to do next
 php -d auto_prepend_file= /usr/local/bin/firstrun.php
 

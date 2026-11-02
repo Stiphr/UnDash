@@ -68,7 +68,7 @@ function sa_page($boot, $app) {
   exit;
 }
 function sa_pre_ok() { $c = (string)($_COOKIE[und_cookie('undash_pre')] ?? ''); return $c !== '' && hash_equals($c, (string)($_POST['pre'] ?? '')); }
-function sa_ip() { return (string)($_SERVER['REMOTE_ADDR'] ?? ''); }
+function sa_ip() { return und_client_ip(); }
 
 /* ---- health check (Docker HEALTHCHECK): says nothing about the server ---- */
 if ($uri === '/health') { header('Content-Type: text/plain'); header('Cache-Control: no-store'); echo "ok\n"; exit; }
@@ -142,7 +142,7 @@ if (!$sess && und_api_mode()) {
     } elseif ($method === 'POST') {
       $code = trim((string)@file_get_contents(und_setup_file()));
       if (!sa_pre_ok()) $err = 'The form expired. Try again.';
-      elseif (und_login_throttled(sa_ip())) $err = 'Too many attempts. Wait 15 minutes.';
+      elseif (und_login_throttled(sa_ip())) $err = und_login_msg(sa_ip());
       elseif ($code === '' || !hash_equals($code, strtoupper(trim((string)($_POST['code'] ?? ''))))) { und_login_failed(sa_ip()); $err = 'The setup code is wrong. It is in the container log.'; }
       elseif ((string)($_POST['password'] ?? '') !== (string)($_POST['password2'] ?? '')) $err = 'The passwords do not match.';
       else { $r = und_password_set((string)$_POST['password']); if (isset($r['error'])) $err = $r['error']; else { und_sess_new('setup'); header('Location: /', true, 303); exit; } }
@@ -156,9 +156,12 @@ if (!$sess && und_api_mode()) {
     $err = '';
     if ($method === 'POST' && $uri === '/login') {
       if (!sa_pre_ok()) $err = 'The form expired. Try again.';
-      elseif (und_login_throttled(sa_ip())) $err = 'Too many wrong passwords. Wait 15 minutes.';
-      elseif (!und_password_ok((string)($_POST['password'] ?? ''))) { und_login_failed(sa_ip()); usleep(400000); $err = 'Wrong password.'; error_log('undash: failed sign-in from ' . sa_ip()); }
-      else { und_sess_new('password'); header('Location: /', true, 303); exit; }
+      else {
+        $tried = und_login_check(sa_ip(), (string)($_POST['password'] ?? ''));
+        if ($tried === 'ok') { und_sess_new('password'); header('Location: /', true, 303); exit; }
+        if ($tried === 'locked') $err = und_login_msg(sa_ip());
+        else { usleep(400000); $err = und_login_throttled(sa_ip()) ? und_login_msg(sa_ip()) : 'Wrong password.'; error_log('undash: failed sign-in from ' . sa_ip()); }
+      }
     } elseif ($uri === '/') { header('Location: /login', true, 303); exit; }
     sa_form_page('UnDash', 'Sign in to the dashboard.', [['password', 'Password', 'password', 'current-password']], $err);
   }

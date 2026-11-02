@@ -9,7 +9,7 @@
  * of a category (kind "type", key "<category>"). until is a Unix time, or null for "permanently".
  */
 
-/** The alert categories the dashboard raises and lets you ignore. Connection and sign-in alerts are never ignorable. */
+/** The alert categories the dashboard raises and lets you ignore. Connection and sign-in alerts are never ignorable, nor is someone guessing the password. */
 function und_alert_categories() {
   return ['docker.unhealthy' => 'Container unhealthy', 'docker.restarting' => 'Container restarting', 'docker.exited' => 'Container stopped with an error',
           'docker.update_failed' => 'Container update failed', 'array.state' => 'Array not started', 'array.resync' => 'Parity operation running',
