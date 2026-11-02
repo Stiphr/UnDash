@@ -43,6 +43,8 @@
   /* the Docker version with no Unraid API key: no containers, VMs or array to read or control, and only some tiles with Glances */
   function noKey() { return !!S.boot && S.boot.caps.unraid === false; }
   /* a key that can read but not change: no buttons that cannot work. Learned from Unraid's answer when the key cannot say (see und_api_can) */
+  function osName() { return (S.boot && S.boot.caps.platform_name) || 'Unraid'; }
+  function isTn() { return !!S.boot && S.boot.caps.platform === 'truenas'; }
   function dCan() { return S.boot.caps.docker_write !== false; }
   function vCan() { return S.boot.caps.vm_write !== false; }
   var READ_ONLY = ['Read-only API key: no controls', 'info', function () {}, '', true];
@@ -697,7 +699,7 @@
     R.brandName.title = ip && ip !== name ? name + ' · ' + ip : name;
     if (os) {
       var osUp = ou.available ? [ou.latest + ' available', 'Unraid ' + ou.latest + ' is available'] : null;
-      R.sub.appendChild(h('span', { class: 'vchip v-os' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
+      R.sub.appendChild(h('span', { class: 'vchip v-os' }, osName() + ' ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
     }
     R.sub.appendChild(h('span', { class: 'vchip v-app' }, 'UnDash ' + S.boot.version, me.newer ? h('a', { class: 'upd', href: me.url, target: '_blank', rel: 'noopener',
       title: 'UnDash ' + me.latest + ' is available. ' + ('Update the UnDash container in Unraid\'s Docker tab.') }, ic('up'), me.latest + ' available') : null));
@@ -2417,14 +2419,14 @@
     var st = S.storage;
     if (!st) return h('div', { class: 'empty' }, 'Loading disks…');
     if (st.error) return h('div', { class: 'empty' }, st.error);
-    var rows = [].concat((st.parity || []).map(function (d) { d.k = 'Parity'; return d; }), (st.array || []).map(function (d) { d.k = 'Array'; return d; }), (st.pools || []).map(function (d) { d.k = 'Pool'; return d; }));
-    if (!rows.length) return h('div', { class: 'empty' }, 'No disk information. Is the array started?');
+    var rows = [].concat((st.parity || []).map(function (d) { d.k = 'Parity'; return d; }), (st.array || []).map(function (d) { d.k = d.k || 'Array'; return d; }), (st.pools || []).map(function (d) { d.k = 'Pool'; return d; }));
+    if (!rows.length) return h('div', { class: 'empty' }, isTn() ? 'No disk information yet.' : 'No disk information. Is the array started?');
     var smart = rows.some(function (d) { return d.smart; });
     return h('div', { class: 'tw' }, h('table', { class: 't' }, h('thead', null, h('tr', null, h('th', null, 'Disk'), h('th', null, 'Health'), smart ? h('th', null, 'SMART') : null, h('th', null, 'Temp'), h('th', null, 'Usage'))),
       h('tbody', null, rows.map(function (d) {
         var p = d.size ? 100 * (d.size - d.free) / d.size : 0;
         return h('tr', null, h('td', null, h('b', null, d.name), h('span', { class: 'muted xs' }, ' ' + d.k + (d.device ? ' · ' + d.device : '') + (d.fs ? ' · ' + d.fs : ''))),
-          h('td', null, h('span', { class: 'badge ' + (d.health === 'ok' ? 'ok' : d.health === 'warn' ? 'warn' : 'bad'), title: d.status }, d.health === 'ok' ? 'ok' : String(d.status).replace('DISK_', '').toLowerCase()), d.errors ? h('span', { class: 'badge bad' }, d.errors + ' errors') : null),
+          h('td', null, d.health === 'none' ? h('span', { class: 'muted' }, '-') : h('span', { class: 'badge ' + (d.health === 'ok' ? 'ok' : d.health === 'warn' ? 'warn' : 'bad'), title: d.status }, d.health === 'ok' ? 'ok' : String(d.status).replace('DISK_', '').toLowerCase()), d.errors ? h('span', { class: 'badge bad' }, d.errors + ' errors') : null),
           smart ? h('td', { title: d.model || null }, d.smart === 'ok' ? 'OK' : h('span', { class: 'muted' }, d.smart ? 'not reported' : '-')) : null,
           h('td', { class: 'num' }, d.temp === null ? h('span', { class: 'muted' }, d.spun ? '-' : 'spun down') : h('span', { class: d.temp >= 55 ? 't-bad' : d.temp >= 50 ? 't-warn' : '' }, d.temp + '°C')),
           h('td', { style: { 'min-width': '160px' } }, d.size ? [h('div', { class: 'xs num' }, bytes(d.size - d.free) + ' / ' + bytes(d.size)), h('div', { class: 'meter' }, h('i', { class: meterCls(p), style: { width: p.toFixed(1) + '%' } }))] : h('span', { class: 'muted' }, '-')));
@@ -2435,7 +2437,7 @@
     api('storage').then(function (j) { S.storageBusy = false; S.storage = j; if (R.overview) { R.overview.detailSig = null; paintDetail(S.live || {}); } });
   }
   function portLink(cls) {
-    return UNRAID ? h('a', { class: 'btn ' + cls, href: UNRAID + '/Dashboard', target: '_blank', rel: 'noopener' }, ic('web'), 'Open Unraid') : null;
+    return UNRAID ? h('a', { class: 'btn ' + cls, href: UNRAID + (isTn() ? '/ui/' : '/Dashboard'), target: '_blank', rel: 'noopener' }, ic('web'), 'Open ' + osName()) : null;
   }
   /* the Docker version: Unraid's release service says what the latest OS is; installing stays in Unraid */
   function checkOs() {
@@ -2463,7 +2465,7 @@
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
       ['Check container updates', 'box', rereadUpdates, '', !!S.busy.dcheck], dk && dk.updates && dCan() ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
-      ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], TOUCH ? null : ['Keyboard shortcuts  ?', 'grid', keysHelp], TOUCH && !APP_MODE ? ['Add to home screen', 'download', phoneHelp] : null,
+      caps.os_check === false ? null : ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], TOUCH ? null : ['Keyboard shortcuts  ?', 'grid', keysHelp], TOUCH && !APP_MODE ? ['Add to home screen', 'download', phoneHelp] : null,
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
       S.boot.auth !== 'open' ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null]);
   }
@@ -2505,7 +2507,7 @@
   /* Alert ids are "<category>:<resource>" (see include/ignores.php); an alert without a category cannot be ignored. */
   var ALERT_CAT = {
     'docker.unhealthy': 'Container unhealthy', 'docker.restarting': 'Container restarting', 'docker.exited': 'Container stopped with an error', 'docker.update_failed': 'Container update failed',
-    'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature', 'disk.smart': 'Disk failed SMART (Scrutiny)', 'disk.smart_lost': 'Disk SMART status', 'array.parity_errors': 'Parity check errors', 'array.parity_old': 'Parity check overdue',
+    'array.state': 'Array not started', 'array.resync': 'Parity operation running', 'disk.bad': 'Disk disabled or missing', 'truenas.alert': 'TrueNAS alert', 'disk.errors': 'Disk read/write errors', 'disk.hot': 'Disk temperature', 'disk.smart': 'Disk failed SMART (Scrutiny)', 'disk.smart_lost': 'Disk SMART status', 'array.parity_errors': 'Parity check errors', 'array.parity_old': 'Parity check overdue',
     'auth.open': 'No dashboard password', 'health.down': 'Endpoint not answering', 'os.staged': 'Unraid update waiting for restart', 'os.available': 'Unraid update available', 'os.check_failed': 'Unraid update check failed', 'api.error': 'Unraid API problem'
   };
   /* the rules in force, by the server's clock (live.at), plus this tab's own changes until the next refresh confirms them */
@@ -2871,7 +2873,7 @@
           : run || c.state === 'restarting' ? ['Stop', 'stop', function () { dAct(c, 'stop'); }, 'danger', busy]
           : ['Start', 'play', function () { dAct(c, 'start'); }, '', busy],
         dCan() && c.state !== 'paused' ? ['Restart', 'restart', function () { dAct(c, 'restart'); }, '', busy] : null,
-        dCan() && run ? ['Pause', 'pause', function () { dAct(c, 'pause'); }, '', busy] : null,
+        dCan() && run && S.boot.caps.docker_pause !== false ? ['Pause', 'pause', function () { dAct(c, 'pause'); }, '', busy] : null,
         dCan() ? [updOn(c) ? 'Update (new version available)' : 'Update (force)', 'up', function () { updateMany([c.name]); }, updOn(c) ? 'upd' : '', busy] : null,
         c.update === 'available' && S.L.docker.update_check !== false && !p.no_update ? updActions(c, p)[0] : null,
         'hr', ['Logs', 'logs', function () { logs(c.name); }], ['Details', 'info', function () { inspect(c.name); }], 'hr',
@@ -3169,7 +3171,7 @@
     if (x.state !== 'running') return '';
     var path = vPath(x), host = location.hostname;
     if (!UNRAID) return '';
-    if (!path) return UNRAID + '/VMs';
+    if (!path) return UNRAID + (isTn() ? '/ui/vm' : '/VMs');
     try { if (UNRAID) host = new URL(UNRAID).hostname; } catch (e) { /* keep this page's host */ }
     return UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(host) + '&port=&path=' + encodeURIComponent(path);
   }
@@ -4143,7 +4145,7 @@
       row('grid', 'Apps & cards', 'Add apps and choose what each card shows', to('dashboard')).el,
       row('check', 'Setup wizard', 'Answer a few questions to set it all up again', function () { D.leave(function () { if (!S.drawer) wizardStart(true); }); }).el)),
       h('div', { class: 'grid2' }, F('Refresh every (seconds)', tIn(c.general, 'refresh', dirty, '2', 'number', { min: 1, max: 300 })), F('Dashboard name', tIn(c.general, 'title', dirty, String(sv.name || 'Your server').toUpperCase())))));
-    var conn = row('server', 'Connection', noKey() ? (bt.caps.glances ? 'No API key: system numbers from Glances. Containers and VMs are hidden' : 'No API key: containers, VMs and system tiles are hidden') : api2 ? 'Connected to ' + (sv.name || 'your server') + (sv.os ? ' · Unraid ' + sv.os : '') : 'Running as a plugin on ' + (sv.name || 'your server'), to('config'));
+    var conn = row('server', 'Connection', noKey() ? (bt.caps.glances ? 'No API key: system numbers from Glances. Containers and VMs are hidden' : 'No API key: containers, VMs and system tiles are hidden') : 'Connected to ' + (sv.name || 'your server') + (sv.os ? ' · ' + osName() + ' ' + sv.os : ''), to('config'));
     var pass = row('eye', 'Dashboard password', bt.auth === 'env' ? 'Set in the container settings' : bt.auth === 'file' ? 'On' : 'Off', to('config'), bt.auth === 'open');
     var alerts = row('bell', 'Phone alerts', 'Checking…', to('ignored')), guest = row('web', 'Guest link', 'Checking…', to('guest')), back = row('download', 'Backups', 'Checking…', to('backup'));
     var ver = row('info', 'UnDash ' + bt.version, me.newer ? me.latest + ' is available' : 'About, diagnostics and shortcuts', to('about'));
@@ -4201,8 +4203,8 @@
     var row = function (k, v) { return v ? [h('span', null, k), h('span', null, v)] : null; };
     b.appendChild(set('UnDash', null, h('div', { class: 'kv2' },
       row('Version', 'UnDash ' + bt.version + (me.newer ? ' · ' + me.latest + ' is available' : me.latest ? ' · up to date' : '')),
-      row('Running as', 'Docker container, reading the server through the Unraid API'),
-      row('Server', (sv.name || '') + (sv.os ? ' · Unraid ' + sv.os : '')),
+      row('Running as', 'Docker container, reading the server through the ' + osName() + ' API'),
+      row('Server', (sv.name || '') + (sv.os ? ' · ' + osName() + ' ' + sv.os : '')),
       row('Settings folder', D.store || ''),
       row('Sign-in', bt.auth === 'env' ? 'Password from the container settings (UNDASH_PASSWORD)' : bt.auth === 'file' ? 'Password set in Settings' : 'No password: anyone who reaches this address is signed in')),
       h('div', { class: 'inl', style: { 'margin-top': '12px' } },
@@ -4213,7 +4215,7 @@
       h('div', { class: 'inl' }, btn('Action history', historyDialog, 'sm', 'history', 'Every start, stop, update and other action UnDash ran'),
         btn('Alert history', alertHistory, 'sm', 'bell', 'When each problem started and ended'),
         btn('Check configuration', function () { D.go({ tab: 'backup', label: 'Check configuration' }); }, 'sm', 'check', 'Looks for apps without an address, unknown values and removed sources'),
-        btn('Test the Unraid connection', function () { D.go({ tab: 'config', label: 'Unraid connection' }); }, 'sm', 'server'),
+        btn('Test the server connection', function () { D.go({ tab: 'config', label: 'Server connection' }); }, 'sm', 'server'),
         btn('Keyboard shortcuts', keysHelp, 'sm', 'list'))));
   }
   /* older page names (links in messages) open Apps & cards with that part unfolded */
@@ -4337,7 +4339,7 @@
     var paintChips = function () { clear(chips); zones.forEach(function (z) { chips.appendChild(h('button', { type: 'button', class: (ed.zoneF || '') === z[0] ? 'on' : '', 'aria-pressed': (ed.zoneF || '') === z[0] ? 'true' : 'false', onclick: function () { ed.zoneF = z[0]; D.appz = z[0]; paintChips(); ed.draw(); } }, z[1])); }); };
     ed.zoneF = D.appz || ''; paintChips();
     var find = h('input', { type: 'search', placeholder: 'Find an app…', 'aria-label': 'Find an app', value: ed.q, oninput: function () { ed.q = find.value.trim().toLowerCase(); ed.draw(); } });
-    b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Apps'), h('span', { class: 'grow' }), btn('Add app', function () { addApp(D, null, null, function () { ed.draw(); }, dirty); }, 'pri sm', 'plus')),
+    b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Apps'), h('span', { class: 'grow' }), btn('Bulk edit', function () { bulkEdit(D, function () { dirty(); ed.draw(); }); }, 'sm', 'edit', 'Change the addresses, ports and API keys of many apps at once'), btn('Add app', function () { addApp(D, null, null, function () { ed.draw(); }, dirty); }, 'pri sm', 'plus')),
       h('div', { class: 'ae-bar' }, find, chips), ed.grid(), foundSet));
     b.appendChild(h('section', { class: 'set' }, h('div', { class: 'seth' }, h('h3', null, 'Cards'), h('span', { class: 'grow' }),
       btn('Edit dashboard', function () { D.leave(boardEdit); }, 'sm', 'edit', 'Move, resize, add and rename cards on the dashboard itself')),
@@ -5091,6 +5093,56 @@
     m = modal('Add an app', h('div', null, h('div', { style: { 'margin-bottom': '10px' } }, find), grid), [btn('Cancel', function () { m.close(); })], true);
   }
 
+  /* addresses, ports and keys of every app in one table. A saved key stays with its address (und_creds_moved), so a row that moves needs its key typed again */
+  function bulkEdit(D, after) {
+    var rows = [], err = h('div', { role: 'alert' }), find = h('input', { type: 'text', placeholder: 'Old address, e.g. 192.168.1.10', 'aria-label': 'Old address', autocomplete: 'off' }), put = h('input', { type: 'text', placeholder: 'New address', 'aria-label': 'New address', autocomplete: 'off' });
+    D.cfg.groups.forEach(function (g) { g.services.forEach(function (s) {
+      var T = D.types[s.type] || ['', [], false], fs = T[1] || [], sec = fs.indexOf('key') >= 0 ? 'key' : fs.indexOf('password') >= 0 ? 'password' : '';
+      if (!T[2] && !sec) return;
+      var m = /^(https?:\/\/)([^\/:?#]+)(?::(\d+))?(.*)$/i.exec(String(s.url || '').trim());
+      rows.push({ s: s, sec: sec, stored: !!sec && (D.creds[s.id] || {})[sec] === D.keep, typed: '', fixed: !!s.url && !m, scheme: m ? m[1] : 'http://', host: m ? m[2] : '', port: m ? m[3] || '' : '', rest: m ? m[4] : '', host0: m ? m[2] : '', port0: m ? m[3] || '' : '', url: !!T[2] });
+    }); });
+    var list = h('div', { class: 'bulk' });
+    var draw = function () {
+      clear(list);
+      rows.forEach(function (r) {
+        var edit = r.url && !r.fixed, moved = r.host !== r.host0 || r.port !== r.port0, need = moved && r.stored && !r.typed;
+        list.appendChild(h('div', { class: 'bulk-r' + (need ? ' need' : '') },
+          h('span', { class: 'ell', title: r.s.url || null }, img(iconUrl(r.s.icon), '', 'web'), ' ', h('b', null, r.s.name || r.s.type)),
+          edit ? h('input', { type: 'text', value: r.host, 'aria-label': 'Address of ' + r.s.name, autocomplete: 'off', onchange: function (e) { r.host = e.target.value.trim(); draw(); } }) : h('span', { class: 'muted xs' }, r.fixed ? r.s.url : '-'),
+          edit ? h('input', { type: 'text', inputmode: 'numeric', value: r.port, 'aria-label': 'Port of ' + r.s.name, autocomplete: 'off', onchange: function (e) { r.port = e.target.value.trim(); draw(); } }) : h('span', { class: 'muted xs' }, '-'),
+          r.sec ? h('input', { type: 'password', value: r.typed, 'aria-label': (r.sec === 'key' ? 'API key of ' : 'Password of ') + r.s.name, autocomplete: 'new-password', placeholder: need ? 'type it again' : r.stored ? 'stored' : r.sec === 'key' ? 'API key' : 'password', onchange: function (e) { r.typed = e.target.value.trim(); draw(); } }) : h('span', { class: 'muted xs' }, '-')));
+      });
+    };
+    var replace = function () {
+      var a = find.value.trim().toLowerCase(), b = put.value.trim(), n = 0;
+      if (!a || !b) return;
+      rows.forEach(function (r) { if (r.url && !r.fixed && r.host.toLowerCase() === a) { r.host = b; n++; } });
+      clear(err); if (!n) err.appendChild(h('div', { class: 'banner warn' }, 'No app uses ' + find.value.trim() + '.'));
+      draw();
+    };
+    var apply = function () {
+      var bad = rows.filter(function (r) { return r.url && !r.fixed && (r.host || r.port) && (!/^[A-Za-z0-9._{}\[\]-]+$/.test(r.host) || (r.port !== '' && !(+r.port >= 1 && +r.port <= 65535 && /^\d+$/.test(r.port)))); });
+      var need = rows.filter(function (r) { return (r.host !== r.host0 || r.port !== r.port0) && r.stored && !r.typed; });
+      clear(err);
+      if (bad.length) { err.appendChild(h('div', { class: 'banner bad' }, 'Check the address or port of ' + bad.map(function (r) { return r.s.name; }).join(', ') + '.')); return; }
+      if (need.length) { err.appendChild(h('div', { class: 'banner bad' }, 'Type the key or password again for ' + need.map(function (r) { return r.s.name; }).join(', ') + ': a saved one is only sent to the address it was saved for.')); return; }
+      rows.forEach(function (r) {
+        if (r.url && !r.fixed && (r.host !== r.host0 || r.port !== r.port0)) {
+          r.s.url = r.host ? r.scheme + r.host + (r.port ? ':' + r.port : '') + r.rest : '';
+          if (r.host0 && r.s.href) r.s.href = r.s.href.split(r.host0).join(r.host);
+        }
+        if (r.typed) D.creds[r.s.id] = Object.assign({}, D.creds[r.s.id], (function (o) { o[r.sec] = r.typed; return o; })({}));
+      });
+      m.close(); after(); toast('Applied. Press Save to keep the changes.');
+    };
+    draw();
+    var body = h('div', null, !rows.length ? h('div', { class: 'empty' }, 'No apps with an address or a key yet.') : h('div', null,
+      h('p', { class: 'hint' }, 'Change one row, or replace an address in every app that uses it. Keys are never shown; leave a key empty to keep it. A saved key is only sent to the address it was saved for, so an app that moves needs its key typed again.'),
+      h('div', { class: 'bulk-find' }, find, put, btn('Replace', replace, 'sm')), err, h('div', { class: 'bulk-r bulk-h', 'aria-hidden': 'true' }, h('span', null, 'App'), h('span', null, 'IP or host name'), h('span', null, 'Port'), h('span', null, 'API key or password')), list));
+    var m = modal('Bulk edit apps', body, [btn('Cancel', function () { m.close(); }), rows.length ? btn('Apply', apply, 'pri') : null], true);
+  }
+
   function editService(D, orig, group, isNew, after, dirtyOuter) {
     var s = JSON.parse(JSON.stringify(orig)), c0 = D.creds[s.id] || {};
     var cr = { key: c0.key || '', username: c0.username || '', password: c0.password || '' }, stored = { key: c0.key === D.keep, password: c0.password === D.keep, username: false };
@@ -5627,7 +5679,7 @@
       box.appendChild(F('Name of this dashboard', tIn(c.general, 'title', function () {}, (S.boot.server && S.boot.server.name) || 'My server', 'text', { maxlength: 40 }), 'Shown at the top of the page. Empty uses the server name.'));
     }
     function stepConnect() {
-      head('Connect to your server', 'With an Unraid API key UnDash shows and controls your containers and VMs. Paste the address and a key, then press Save. You can also go on without one: apps and media still work.');
+      head('Connect to your server', 'With an API key from Unraid or TrueNAS, UnDash shows and controls your apps and VMs. Choose your server, paste its address and a key, then press Save. You can also go on without one: apps and media still work.');
       unraidConn(box); glancesConn(box);
     }
     function stepPass() {
@@ -5786,7 +5838,7 @@
   /* Docker version: the dashboard's own password (it can be skipped at setup and added here later) */
   function dashPass(b) {
     var box = h('div', null, h('div', { class: 'progress' }, h('i')));
-    b.appendChild(set('Dashboard password', 'Protects this dashboard. It is separate from your Unraid login.', box));
+    b.appendChild(set('Dashboard password', 'Protects this dashboard. It is separate from your server\'s own login.', box));
     function paint(kind) {
       clear(box);
       S.boot.auth = kind;
@@ -5814,7 +5866,8 @@
   }
   function unraidConn(b) {
     var box = h('div', null, h('div', { class: 'progress' }, h('i')));
-    b.appendChild(set('Unraid connection', 'The Docker version reads the server through the official Unraid API. Create a key in Unraid under Settings > Management Access > API Keys with read access to Info, Array, Disk, Docker and VMs, plus update access to Docker and VMs for the buttons. Read access to UPS is optional: it is only needed for a UPS that Unraid\'s own UPS service runs.', box));
+    var help = h('p', { class: 'muted sm' });
+    b.appendChild(set('Your server', 'UnDash reads your server through its official API.', box));
     if (noKey()) b.appendChild(set('What an API key adds', 'Your apps, media, downloads and requests work without one. A key adds everything that needs Unraid itself:',
       h('div', { class: 'cardl' }, h('div', { class: 'olist' }, [['box', 'Containers', 'See them all; start, stop, restart, update and read logs'], ['vm', 'Virtual machines', 'See them all; start, stop, restart and pause'],
         ['array', 'Array and disks', 'Array state, disk health and temperatures, parity checks, when storage fills up'], ['bell', 'Server alerts', 'Failing disks, unhealthy containers and Unraid updates, on the page and on your phone'],
@@ -5823,11 +5876,23 @@
       })))));
     api('unraid_conf').then(function (c) {
       clear(box);
-      var u = { url: c.url || '', key: c.key_set ? S.KEEP || '__KEEP__' : '' };
+      var u = { url: c.url || '', key: c.key_set ? S.KEEP || '__KEEP__' : '', type: c.type || 'unraid', user: c.user || '' };
+      var HELP = { unraid: 'In Unraid, go to Settings > Management Access > API Keys. Give the key read access to Info, Array, Disk, Docker and VMs, plus update access to Docker and VMs for the buttons.',
+        truenas: 'In TrueNAS 25.04 or newer, open your user\'s menu at the top right, then My API Keys. The user needs the Read-Only Administrator role to show everything, plus APPS_WRITE and VM_WRITE for the buttons. Use the https:// address.' };
+      var form = h('div'), draw = function () {
+        clear(form); txt(help, HELP[u.type]);
+        var tn = u.type === 'truenas';
+        form.appendChild(h('div', { class: 'grid2' },
+          F('API address', h('input', { type: 'url', value: u.url, placeholder: tn ? 'https://192.168.1.10' : 'http://192.168.1.10/graphql', disabled: c.from_env.url, oninput: function (e) { u.url = e.target.value; } }), c.from_env.url ? 'Set in the container settings.' : tn ? 'TrueNAS\'s https:// address.' : 'Unraid\'s address followed by /graphql.'),
+          F('API key', h('input', { type: 'password', autocomplete: 'off', value: '', placeholder: c.key_set ? 'stored (leave empty to keep)' : 'paste the key', disabled: c.from_env.key, oninput: function (e) { u.key = e.target.value || (c.key_set ? '__KEEP__' : ''); } }), c.from_env.key ? 'Set in the container settings.' : ''),
+          tn ? F('User name', h('input', { type: 'text', autocomplete: 'off', value: u.user, placeholder: 'truenas_admin', disabled: c.from_env.type, oninput: function (e) { u.user = e.target.value; } }), 'The user the key belongs to.') : null));
+      };
       var res = h('div', { role: 'status', style: { 'margin-top': '10px' } });
-      box.appendChild(h('div', { class: 'grid2' },
-        F('API address', h('input', { type: 'url', value: u.url, placeholder: 'http://192.168.1.10/graphql', disabled: c.from_env.url, oninput: function (e) { u.url = e.target.value; } }), c.from_env.url ? 'Set by UNRAID_API_URL in the container settings.' : 'Unraid\'s address followed by /graphql.'),
-        F('API key', h('input', { type: 'password', autocomplete: 'off', value: '', placeholder: c.key_set ? 'stored (leave empty to keep)' : 'paste the key', disabled: c.from_env.key, oninput: function (e) { u.key = e.target.value || (c.key_set ? '__KEEP__' : ''); } }), c.from_env.key ? 'Set by UNRAID_API_KEY in the container settings.' : 'Kept on the server only.')));
+      box.appendChild(help);
+      if (!c.from_env.type) box.appendChild(F('Server', h('div', { class: 'seg' }, [['unraid', 'Unraid'], ['truenas', 'TrueNAS']].map(function (o) {
+        return h('button', { type: 'button', class: u.type === o[0] ? 'on' : '', onclick: function (e) { u.type = o[0]; [].forEach.call(e.currentTarget.parentNode.children, function (x) { x.classList.toggle('on', x === e.currentTarget); }); draw(); } }, o[1]);
+      }))));
+      box.appendChild(form); draw();
       box.appendChild(h('div', { class: 'inl', style: { 'margin-top': '8px' } },
         c.from_env.url && c.from_env.key ? null : btn('Save', function () { act('unraid_save', u, 'Saved').then(function (j) { if (!j.error) { S.bootStale = true; test(); } }); }, 'pri'),
         btn('Test connection', test, '', 'check')));
@@ -5837,7 +5902,7 @@
         api('unraid_test', {}, 60000).then(function (t) {
           clear(res);
           if (!t.ok) { res.appendChild(h('div', { class: 'banner bad' }, t.error || 'The connection failed.')); return; }
-          res.appendChild(h('div', { class: 'banner ok' }, 'Connected to ' + t.hostname + ' (Unraid ' + t.unraid + ', API ' + t.api + ').'));
+          res.appendChild(h('div', { class: 'banner ok' }, 'Connected to ' + t.hostname + ' (' + (u.type === 'truenas' ? 'TrueNAS ' : 'Unraid ') + t.unraid + (t.api ? ', API ' + t.api : '') + ').'));
           res.appendChild(h('div', { class: 'kv2 sm' }, Object.keys(t.access).map(function (k) { var y = t.access[k] === 'ok', opt = !y && (t.optional || {})[k]; return [h('span', null, k), h('span', { class: y ? 't-ok' : opt ? 'muted' : 't-bad', title: opt ? t.access[k] : null }, y ? 'readable' : opt || t.access[k])]; })));
         });
       }
@@ -5847,8 +5912,8 @@
   function glancesConn(b) {
     var v = { url: (S.L.general || {}).glances || '' }, res = h('div', { role: 'status', style: { 'margin-top': '10px' } });
     var field = tIn(v, 'url', function () {}, 'http://192.168.1.10:61208', 'url');
-    var note = !noKey() ? 'Your Unraid API key is in use, so this is only kept for when there is none.' : S.boot.caps.glances ? 'In use: CPU, memory, storage, network and uptime come from Glances.' : 'Not set: there are no System tiles for now.';
-    b.appendChild(set('Glances', 'Without an API key UnDash cannot see Unraid, so containers, VMs and array details are hidden and they come back with the key. If you run Glances, its address brings back CPU, memory, storage, network and uptime. It needs no key.',
+    var note = !noKey() ? 'Your API key is in use, so this is only kept for when there is none.' : S.boot.caps.glances ? 'In use: CPU, memory, storage, network and uptime come from Glances.' : 'Not set: there are no System tiles for now.';
+    b.appendChild(set('Glances', 'Without an API key UnDash cannot see your server, so apps, VMs and storage details are hidden and they come back with the key. If you run Glances, its address brings back CPU, memory, storage, network and uptime. It needs no key.',
       F('Glances address', field, note), h('div', { class: 'inl' }, btn('Save', function () {
         clear(res).appendChild(h('div', { class: 'progress' }, h('i')));
         api('glances_save', { url: v.url }, 20000).then(function (j) {
@@ -6022,6 +6087,7 @@
     if (j.recovered) toast('Your settings file was damaged, so UnDash restored the newest backup. The damaged file is kept as ' + j.recovered.kept + '.', true);
     if (j.error) { clear(root).appendChild(h('div', { class: 'und-loading' }, 'UnDash could not start: ' + j.error)); return; }
     S.boot = j; S.L = j.layout;
+    if (isTn()) MET.health[0] = 'Pool health';
     shell();
     if (S.paused) api('live', { parts: parts() }).then(function (r) { if (!r.error) { S.live = r; S.lastOk = Date.now(); S.conn = 'ok'; paintAll(); paintLive(); } });
     else tick();

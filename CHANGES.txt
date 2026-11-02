@@ -1,4 +1,7 @@
 ###beta
+- Bulk edit in Settings, Apps & cards: change the IP, port and API key of many apps in one table, or replace an address everywhere it is used
+- TrueNAS support: choose TrueNAS in Settings > Server connection (TrueNAS 25.04 or newer, HTTPS only). Shows pools, disks, apps, VMs, CPU, memory, network and TrueNAS's own alerts, and starts, stops, restarts and updates apps and VMs. Not yet tested on a real TrueNAS server
+- UnDash is now Docker only: the Unraid plugin is gone, with the features only it had (server restart and shutdown, Unraid OS install, VM hibernate and console details). Your old settings can still be imported through /import
 - Undo works across pages in edit mode: switching pages keeps your steps, and undoing one goes back to the page it was on
 - A read-only API key no longer shows controls it cannot use. UnDash asks Unraid when the key allows that, and otherwise hides them after the first refusal, for an hour
 - A saved key or password is only sent to the address it was saved for. Moving an app to a new address asks for it again, so nobody can point an app at their own server to read its key

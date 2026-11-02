@@ -155,7 +155,9 @@ function und_clip($s, $max) {
 
 /** What this deployment can do; the UI hides what is not available instead of failing. */
 function und_caps() {
+  $tn = und_is_truenas();
   return ['unraid' => und_api_ready(), 'glances' => und_glances_url(und_load_config()) !== '', 'docker_stats' => true, 'docker_inspect' => true, 'storage_detail' => true,
+          'platform' => $tn ? 'truenas' : 'unraid', 'platform_name' => $tn ? 'TrueNAS' : 'Unraid', 'docker_pause' => !$tn, 'os_check' => !$tn,
           'docker_write' => und_api_can('docker'), 'vm_write' => und_api_can('vms')];
 }
 
@@ -166,7 +168,7 @@ function und_server_ip() { return (string)und_api_identity()['ip']; }
 
 } // UND_LIB_LOADED
 
-foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', 'widgets', 'import', 'ops', 'unraid_api', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'notify', 'glances', 'guest', 'metrics', 'health', 'playing', 'requests', 'icons', 'wallpaper'] as $__m) {
+foreach (['store', 'config', 'transfer', 'system', 'docker', 'vm', 'services', 'widgets', 'import', 'ops', 'unraid_api', 'truenas', 'media', 'arr', 'downloads', 'ignores', 'alerts', 'notify', 'glances', 'guest', 'metrics', 'health', 'playing', 'requests', 'icons', 'wallpaper'] as $__m) {
   $__f = __DIR__ . '/' . $__m . '.php';
   if (is_file($__f)) require_once $__f;
 }

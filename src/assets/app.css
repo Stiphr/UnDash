@@ -1565,3 +1565,12 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 /* the page tabs sit on the navbar's own glass, and the open one wears the accent */
 .und.und .top .pages{background:color-mix(in srgb,var(--text) 7%,transparent);border-radius:calc(var(--radius) + 2px)}
 .und.und .top .pages button.on{background:var(--accent-soft);color:var(--accent-text)}
+/* bulk edit of apps */
+.bulk-find{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin:10px 0}
+.bulk{display:grid;gap:4px;max-height:52vh;overflow-y:auto}
+.bulk-r{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) 84px minmax(0,1.2fr);gap:8px;align-items:center;padding:4px 2px;border-radius:8px}
+.bulk-r>span img{width:18px;height:18px;vertical-align:-4px}
+.bulk-r input{width:100%;min-width:0}
+.bulk-h{font-size:11px;color:var(--faint);margin-top:10px;padding-bottom:0}
+.bulk-r.need{background:var(--warn-soft)}
+@media (max-width:600px){.bulk-find{grid-template-columns:1fr}.bulk-h{display:none}.bulk-r{grid-template-columns:minmax(0,1fr) 84px;padding:8px 2px}.bulk-r>span:first-child,.bulk-r>:last-child{grid-column:1/-1}}

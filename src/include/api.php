@@ -277,20 +277,23 @@ switch ($action) {
   /* ---- Unraid API connection (Docker version) ---- */
   case 'unraid_conf': {
     $c = und_api_conf();
-    out(['url' => $c['url'], 'key_set' => $c['key'] !== '', 'from_env' => $c['from_env'], 'mode' => 'api']);
+    out(['url' => $c['url'], 'key_set' => $c['key'] !== '', 'from_env' => $c['from_env'], 'type' => $c['type'], 'user' => $c['user']]);
   }
   case 'unraid_save': {
-    $url = trim($P('url')); $key = $P('key');
+    $url = trim($P('url')); $key = $P('key'); $type = $P('type') === 'truenas' ? 'truenas' : 'unraid'; $user = trim($P('user'));
     if ($url !== '' && !preg_match('#^https?://[^\s"\'<>]+$#i', $url)) fail('The address must start with http:// or https://, e.g. http://192.168.1.10/graphql');
-    $sec = und_secrets();
-    // the saved key is only ever sent to the address it was entered for: a new server address needs the key again
-    $was = parse_url((string)und_api_conf()['url']); $now = parse_url($url);
-    if ($key === UND_KEEP && und_api_conf()['key'] !== '' && $url !== '' && strtolower(($was['host'] ?? '') . ':' . ($was['port'] ?? '')) !== strtolower(($now['host'] ?? '') . ':' . ($now['port'] ?? '')))
+    if ($url !== '' && $type === 'truenas' && !preg_match('#^https://#i', $url)) fail('The TrueNAS address must start with https://: the API key must not travel unencrypted.');
+    if ($type === 'truenas' && !preg_match('/^[A-Za-z0-9_.@\\\\-]{0,100}$/', $user)) fail('That does not look like a TrueNAS user name.');
+    $sec = und_secrets(); $c = und_api_conf();
+    // the saved key is only ever sent to the address and the kind of server it was entered for
+    $was = parse_url((string)$c['url']); $now = parse_url($url);
+    if ($key === UND_KEEP && $c['key'] !== '' && $url !== '' && ($type !== $c['type'] || strtolower(($was['host'] ?? '') . ':' . ($was['port'] ?? '')) !== strtolower(($now['host'] ?? '') . ':' . ($now['port'] ?? ''))))
       fail('Enter the API key again: it is only sent to the server it was saved for.');
-    $sec['unraid']['url'] = und_clip($url, 300);
+    $sec['unraid']['url'] = und_clip($url, 300); $sec['unraid']['type'] = $type; $sec['unraid']['user'] = $type === 'truenas' ? $user : '';
     if ($key !== UND_KEEP) $sec['unraid']['key'] = und_clip(trim($key), 300);
     und_save_secrets($sec);
     foreach (['system', 'containers', 'vms', 'ups', 'ident', 'net', 'name'] as $n) @unlink(und_tmp('api-' . $n . '.json'));
+    foreach (array_merge(array_keys(UND_TN_READS), ['status', 'realtime', 'temps']) as $n) @unlink(und_tn_file($n));
     @unlink(und_tmp('api-ups.none'));
     out(['ok' => true]);
   }

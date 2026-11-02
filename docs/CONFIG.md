@@ -1,7 +1,6 @@
 # Settings files
 
-UnDash keeps two files in its configuration folder (`/config` in Docker, `/mnt/user/appdata/undash` for the plugin,
-mirrored to the flash drive):
+UnDash keeps two files in its configuration folder (`/config`):
 
 | File | What is in it |
 |---|---|
@@ -150,11 +149,9 @@ ignored_alerts:
 ```
 
 Categories: `docker.unhealthy` `docker.restarting` `docker.exited` `docker.update_failed` `array.state`
-`array.resync` `disk.bad` `disk.errors` `disk.hot` `os.staged` `os.available` `os.check_failed` `api.error`.
+`array.resync` `disk.bad` `disk.errors` `disk.hot` `os.available` `os.check_failed` `api.error` `truenas.alert`.
 Connection and sign-in alerts cannot be ignored. Rules only hide alerts; UnDash keeps checking, and rules that ran
 out more than 30 days ago are removed on the next change.
-
-`undash.cfg` on the flash drive (plugin only) holds `CONFIG_DIR`, `PORT`, `BIND` and `STANDALONE` (see the README).
 
 ## Presets
 

@@ -1,10 +1,10 @@
 # UnDash as a Docker container
 
-The Docker image runs the same dashboard as the plugin, but reads and manages the server only through the
-**official Unraid API** (GraphQL, API key). It needs no Docker socket, no privileged mode and no host folders
+UnDash reads and manages the server only through its official API: the **Unraid API** (GraphQL) or the **TrueNAS API**
+(JSON-RPC over a WebSocket, TrueNAS 25.04 or newer), with an API key. It needs no Docker socket, no privileged mode and no host folders
 besides its own `/config`.
 
-## What works and what does not
+## What works on Unraid
 
 Everything was checked against the API's own schema for Unraid API 4.37.7 (Unraid 7.3.4),
 [docs/unraid-api-schema-4.37.7.graphql](unraid-api-schema-4.37.7.graphql).
@@ -14,7 +14,7 @@ Everything was checked against the API's own schema for Unraid API 4.37.7 (Unrai
 | CPU (total, per core), memory, swap, CPU temperature, network speed | `metrics { cpu memory temperature network }` | ✓ |
 | Host, kernel, uptime, Unraid version | `info { os cpu versions primaryNetwork }`, `vars { name }` | ✓ |
 | Array state, capacity, every disk with status, temperature, errors; parity check | `array { state parities disks caches parityCheckStatus }` | ✓ |
-| UPS | `upsDevices` | ✓ apcupsd only: the Unraid API reads the UPS through `apcaccess`, so a UPS run by NUT shows as not found (the plugin reads NUT directly) |
+| UPS | `upsDevices` | ✓ apcupsd only: the Unraid API reads the UPS through `apcaccess`, so UnDash reads a UPS run by NUT from its own port |
 | Containers: list, state, health, update available, icon, WebUI | `docker { containers }` | ✓ |
 | Start, stop, restart, pause, resume | `docker { start stop restart pause unpause }` | ✓ |
 | Update a container | `docker { updateContainer }` | ✓ (runs in the background, progress in the dialog) |
@@ -25,14 +25,37 @@ Everything was checked against the API's own schema for Unraid API 4.37.7 (Unrai
 | Container CPU / memory | only `dockerContainerStats` (WebSocket subscription) | — not shown |
 | "Check for updates now" | no mutation | — Unraid checks on its own schedule |
 | VM hibernate, vCPUs, memory, VNC | not in the schema | — |
-| Restart / shut down the server | not in the schema | — use Unraid's own buttons, or the plugin |
-| Unraid OS update | not in the schema | — use Tools > Update OS, or the plugin |
+| Restart / shut down the server | not in the schema | — use Unraid's own buttons |
+| Unraid OS update | not in the schema | — use Tools > Update OS |
 | Load average, a custom disk path | not in the schema | — hidden |
 
-If you need the missing ones, keep using the **plugin**; it has all of them. The two can run side by side
-(see "Running both" below).
+## What works on TrueNAS
 
-## 1. Create an API key in Unraid
+Every method and field is from the API reference at [api.truenas.com/v25.10](https://api.truenas.com/v25.10/). So far this was tested against
+`tests/fake_truenas.php`, a stand-in built from that reference, not a real TrueNAS server.
+
+| Feature | API used | Status |
+|---|---|---|
+| CPU (total, per core, temperature), memory, network speed | `reporting.realtime` event | ✓ |
+| Host, version, uptime, CPU model | `system.info` | ✓ |
+| Pools: size, free, health, scrub or resilver progress | `pool.query` | ✓ |
+| Disks: model, pool, temperature | `disk.query`, `disk.temperatures` | ✓ no health per disk: the pool has it |
+| TrueNAS's own alerts | `alert.list` | ✓ shown in the bell; dismissed ones are left out |
+| Apps: list, state, update available, icon, web address, ports | `app.query` | ✓ |
+| App CPU and memory | `app.stats` event | ✓ |
+| Start, stop, restart | `app.start`, `app.stop` | ✓ a restart is a stop and a start |
+| Update | `app.upgrade`, or `app.pull_images` for newer images of the same version | ✓ runs in the background |
+| App logs and details | `app.container_log_follow` event, `app.query` | ✓ no env names, no health log |
+| VMs: list, state, start, shut down, force stop, restart, pause, resume | `vm.query`, `vm.start`, `vm.stop`, `vm.poweroff`, `vm.restart`, `vm.suspend`, `vm.resume` | ✓ |
+| Pausing an app, swap, UPS through the API | not used | — a NUT UPS is read from its own port |
+| Restart / shut down the server, TrueNAS updates | offered by the API | — left to TrueNAS |
+
+UnDash holds one connection open and shares what it reads, because every login is written to TrueNAS's audit log. A plain
+`http://` address is refused: the key must not travel unencrypted. TrueNAS 25.04 is the first version with this API; TrueNAS CORE is not supported.
+
+## On Unraid
+
+### 1. Create an API key
 
 Settings > Management Access > API Keys > Create. Give it only what UnDash needs:
 
@@ -46,7 +69,7 @@ Without the update permissions the dashboard still shows everything; the buttons
 (The `unraid-api apikey --create --permissions …` command of API 4.37.7 rejects permission lists with
 "Invalid data structure"; create the key in the web UI.)
 
-## 2. Install the container
+### 2. Install the container
 
 **With the template**: download it into Unraid's user templates (Unraid terminal), then Docker > Add Container > Template > **UnDash**:
 
@@ -56,12 +79,12 @@ wget -O /boot/config/plugins/dockerMan/templates-user/my-UnDash.xml https://raw.
 
 | Setting | Default | Notes |
 |---|---|---|
-| WebUI port | 9099 | change the host port if the plugin's own 9099 port is on |
+| WebUI port | 9099 | change the host port if 9099 is taken |
 | /config | `/mnt/user/appdata/undash-docker` | settings, secrets (mode 600), backups; survives updates and re-creation |
 | `UNRAID_API_URL` | | `http://YOUR_SERVER_IP/graphql` (https if Unraid forces it) |
 | `UNRAID_API_KEY` | | the key from step 1; never sent to the browser |
 | `UNDASH_PASSWORD` | | optional; otherwise choose it with the setup code (step 3) |
-| /import (advanced, read-only) | | map the plugin's `/mnt/user/appdata/undash` to copy its settings on the first start |
+| /import (advanced, read-only) | | map the old plugin's `/mnt/user/appdata/undash` to copy its settings on the first start |
 
 **From the command line**:
 
@@ -102,18 +125,10 @@ apps at the addresses in their settings. No host networking, no privileged mode.
 bridge to reach it; UnDash then shows it like any other app. When an app cannot be reached, its card says so
 with the error (connection refused, timeout, wrong key …).
 
-## Running both (plugin and container)
+## Moving from the old plugin
 
-They do not share anything: the plugin keeps its settings in `/mnt/user/appdata/undash` and the flash drive,
-the container in its own `/config`. Two things to watch:
-
-* **Port**: both default to 9099. Turn the plugin's port off (plugin Settings > Connection) or give the
-  container another host port.
-* **Settings**: map the plugin's folder to `/import` (read-only) once to start the container with the same
-  layout, apps and keys. Nothing in `/config` is ever overwritten; remove the mapping afterwards.
-  Or download `config.yaml` and `.env` in the plugin's Settings > Backup & import and import both in the container.
-
-Nothing is removed from the plugin. Keep it if you need server power, OS updates, hibernate or container CPU/memory.
+The plugin is gone from UnDash 1.0. It is not removed from your server for you: uninstall it under Plugins when the container works.
+To keep your layout, apps and keys, map its folder to `/import` (read-only) once. Nothing in `/config` is ever overwritten; remove the mapping afterwards.
 
 ## Updating
 
@@ -126,14 +141,14 @@ everything; settings from older versions are migrated on read, and a backup is t
 docker build --build-arg VERSION=2026.10.30 -t undash:2026.10.30 .
 ```
 
-The first build stage lints every PHP file and runs the three test suites; the image is only produced when they
+The first build stage lints every PHP file and runs the test suites; the image is only produced when they
 pass. The GitHub workflow `.github/workflows/docker.yml` builds and publishes `ghcr.io/stiphr/undash` when you
 run it by hand or push a version tag.
 
 ## Security
 
 * Runs as uid 99 / gid 100 (Unraid's nobody:users), unprivileged, read-only code, `tini` as init (clean stop).
-* No Docker socket: containers are managed through the Unraid API with the key's own permissions.
+* No Docker socket: containers are managed through the server's API with the key's own permissions.
 * The API key and app credentials stay on the server (`/config/.env`, mode 600); the browser only sees
   "saved". `config.yaml` never holds them.
 * The dashboard password is stored as a hash; 5 wrong attempts lock an address out for 15 minutes, and each lockout after that lasts twice as long, up to a day (restarting the container clears them); sessions are

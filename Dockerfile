@@ -1,5 +1,4 @@
-# UnDash - Docker image. The same PHP code as the plugin, in "api" mode: the server is read and managed through the
-# official Unraid GraphQL API with an API key. No Docker socket, no privileged mode, no host mounts.
+# UnDash - Docker image. The server is read and managed through its official API (Unraid or TrueNAS) with an API key. No Docker socket, no privileged mode, no host mounts.
 
 # ---- stage 1: check the code and run the test suite; the image is only built when they pass ----
 FROM php:8.3-cli-alpine AS check
@@ -10,14 +9,14 @@ COPY tests/ tests/
 COPY examples/ examples/
 RUN set -e; \
     for f in $(find src tests -name '*.php'); do php -l "$f" > /dev/null; done; \
-    php tests/run.php; php tests/api_mode_test.php; php tests/router_test.php; php tests/docker_auth_test.php; \
+    php tests/run.php; php tests/api_mode_test.php; php tests/truenas_test.php; php tests/router_test.php; php tests/docker_auth_test.php; \
     sed -i "s/@@VERSION@@/${VERSION}/" src/include/lib.php
 
 # ---- stage 2: the runtime image ----
 FROM php:8.3-cli-alpine
 ARG VERSION=docker-dev
 LABEL org.opencontainers.image.title="UnDash" \
-      org.opencontainers.image.description="Server dashboard for Unraid using the official Unraid API" \
+      org.opencontainers.image.description="Server dashboard for Unraid and TrueNAS using their official APIs" \
       org.opencontainers.image.source="https://github.com/Stiphr/UnDash" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.licenses="Apache-2.0"
@@ -31,8 +30,7 @@ COPY assets/icon.png /app/images/undash.png
 COPY docker/entrypoint.sh docker/firstrun.php /usr/local/bin/
 RUN chmod 755 /usr/local/bin/entrypoint.sh && find /app -type d -exec chmod 755 {} + && find /app -type f -exec chmod 644 {} +
 
-ENV UNDASH_MODE=api \
-    UNDASH_CONFIG=/config \
+ENV UNDASH_CONFIG=/config \
     UNDASH_PORT=9099 \
     PHP_CLI_SERVER_WORKERS=12
 VOLUME /config
