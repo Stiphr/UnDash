@@ -79,6 +79,26 @@ function und_qbit_req(array $s, $path, $method = 'GET', $body = null) {
   return $r;
 }
 
+/** Every torrent, with what the card needs. A big library is megabytes of JSON, so the whole list is read every 30 seconds and the ones moving on each refresh. */
+function und_qbit_list(array $s) {
+  $keep = array_flip(['hash', 'name', 'state', 'progress', 'dlspeed', 'eta', 'size']);
+  $list = und_api_cached('qbit-list-' . $s['id'], 30, function () use ($s, $keep) {
+    $l = und_qbit_req($s, '/api/v2/torrents/info')['json'];
+    if (!is_array($l)) throw new Exception('qBittorrent did not answer.');
+    return array_map(function ($t) use ($keep) { return array_intersect_key((array)$t, $keep); }, $l);
+  });
+  $now = und_qbit_req($s, '/api/v2/torrents/info?filter=active')['json'];
+  if (!is_array($now)) throw new Exception('qBittorrent did not answer.');
+  $at = [];
+  foreach ($list as $n => $t) if (isset($t['hash'])) $at[$t['hash']] = $n;
+  foreach ($now as $t) {
+    if (!isset($t['hash'])) continue;
+    $t = array_intersect_key((array)$t, $keep);
+    if (isset($at[$t['hash']])) $list[$at[$t['hash']]] = $t; else $list[] = $t;
+  }
+  return $list;
+}
+
 function und_dl_status(array $cfg, $id) {
   $s = und_dl_service($cfg, $id);
   if (!$s) return ['error' => 'Unknown download client.'];
@@ -88,8 +108,7 @@ function und_dl_status(array $cfg, $id) {
     try {
       if ($s['type'] === 'qbittorrent') {
         $tr = und_qbit_req($s, '/api/v2/transfer/info')['json'];
-        $list = und_qbit_req($s, '/api/v2/torrents/info')['json'];
-        if (!is_array($list)) throw new Exception('qBittorrent did not answer.');
+        $list = und_qbit_list($s);
         $c = ['downloading' => 0, 'seeding' => 0, 'paused' => 0, 'stalled' => 0, 'queued' => 0, 'completed' => 0, 'error' => 0];
         $active = [];
         foreach ($list as $t) {
@@ -165,7 +184,7 @@ function und_dl_action(array $cfg, $id, $op) {
       if (empty($j['status'])) throw new Exception('SABnzbd did not confirm the ' . $op . '.');
     }
     und_unlock($lock);
-    @unlink(und_tmp('api-dl-' . $id . '.json'));
+    @unlink(und_tmp('api-dl-' . $id . '.json')); @unlink(und_tmp('api-qbit-list-' . $id . '.json'));
     und_history_add('download', $s['name'], $op, true, 'all downloads');
     return ['ok' => true];
   } catch (Throwable $e) {
