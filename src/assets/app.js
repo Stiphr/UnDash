@@ -699,8 +699,10 @@
   var BOARD_ROW = 20, BOARD_GAP = 10, BOARD_COLS = { lg: 24, md: 12 };
   var BOARD_DARK = { bg: '#101114', panel: '#1b1c20', p2: '#141518', bar: '#26272c', field: '#131417', line: '#2c2d33', l2: '#3c3d44', text: '#f2f2f4', muted: '#a3a4ad', faint: '#74757f', accent: '#ec6a35' };
   var BOARD_LIGHT = { bg: '#eceef1', panel: '#ffffff', p2: '#f4f5f7', bar: '#ebedf0', field: '#ffffff', line: '#dcdfe4', l2: '#c8ccd3', text: '#1d1d1f', muted: '#5f6168', faint: '#86878f', accent: '#d9531e' };
-  var BOARD_TABS = [['home', 'Home', 'server'], ['media', 'Media', 'play'], ['apps', 'Apps', 'grid'], ['docker', 'Docker', 'box']];
-  function boardTab(s) { return { media: 'media', arr: 'apps', downloads: 'apps', apps: 'apps', docker: 'docker', vms: 'docker' }[s] || 'home'; }
+  var BOARD_TABS = [['home', 'Home', 'server'], ['media', 'Media', 'play'], ['apps', 'Apps', 'grid']];
+  /* which page a section belongs on: phone tabs, Split my cards and the first-run pages all go by this */
+  var CARD_PAGE = { media: 'Media', arr: 'Media', downloads: 'Media', playing: 'Media', requests: 'Media', apps: 'Apps', docker: 'Apps', vms: 'Apps' };
+  function boardTab(s) { return (CARD_PAGE[s] || 'home').toLowerCase(); }
   var MD = window.matchMedia ? window.matchMedia('(max-width:1100px)') : null, SM = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
   function boardOn() { return !!(S.L.dashboard.board && S.L.dashboard.board.on); }
   function boardMode() { return SM && SM.matches ? 'sm' : MD && MD.matches ? 'md' : 'lg'; }
@@ -1372,7 +1374,7 @@
   function pagesSplit() {
     var E = S.edit, by = {}, list = pagesOf();
     boardMark();
-    boardShown().forEach(function (c) { var t = { media: 'Media', arr: 'Media', downloads: 'Media', playing: 'Media', requests: 'Media', apps: 'Apps', docker: 'Apps', vms: 'Apps' }[c.s]; if (t) (by[t] = by[t] || []).push(c.i); });
+    boardShown().forEach(function (c) { var t = CARD_PAGE[c.s]; if (t) (by[t] = by[t] || []).push(c.i); });
     ['Media', 'Apps'].forEach(function (n) { if (by[n]) list.push({ id: rid(), name: n, cards: by[n], lg: [], md: [] }); });
     if (!list.length) { toast('Your cards all belong on one page.'); return; }
     E.home.lg = []; E.home.md = []; E.smart = true;
@@ -5783,7 +5785,7 @@
     rows.sort(function (x, y) { return x.y - y.y || x.x - y.x; });
     PRESET_PARTS.forEach(function (x) { if (p[x[0]] && choice(x[0]).size) choice(x[0]).set(c, b.hidden, rows, 24); });
     if (W.pages) {
-      var made = [['Media', ['upcoming', 'recent', 'playing', 'requests']], ['Apps', ['arr', 'downloads', 'apps']], ['Containers', ['docker', 'vms']]], cards = {};
+      var made = [['Media', ['upcoming', 'recent', 'playing', 'requests', 'arr', 'downloads']], ['Apps', ['apps', 'docker', 'vms']]], cards = {};
       rows.forEach(function (r) { cards[presetPart(r.i)] = (cards[presetPart(r.i)] || []).concat(r.i); });
       c.groups.forEach(function (g) { if (!g.section) g.services.forEach(function (x) { if (zone(x) === 'apps' && !x.hidden && x.type !== 'link' && (cards.apps || []).indexOf('app:' + x.id) < 0 && !gone['app:' + x.id] && p.apps) cards.apps = (cards.apps || []).concat('app:' + x.id); }); });
       made.forEach(function (m) {
