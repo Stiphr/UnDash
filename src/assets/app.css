@@ -1447,6 +1447,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .bs-ico{flex:none;width:38px;height:38px;padding:5px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r2,10px);cursor:pointer}.und .bs-ico:hover{border-color:var(--accent)}.und .bs-ico img{width:100%;height:100%;object-fit:contain}
 .und .bs-q{padding:2px 14px 6px}.und .bs-q input{width:100%}
 .und .bs-b{padding:0 14px 6px}
+.und .bs-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .und .bs-s{display:flex;align-items:center;justify-content:space-between;min-height:30px;margin-top:6px;font-size:12px;font-weight:600;color:var(--muted)}
 .und .bs-l{display:flex;flex-direction:column}
 .und .bs-r{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:6px 0;margin:0;background:none;border:0;border-top:1px solid var(--line);border-radius:0;color:inherit;font:inherit;text-align:left}
@@ -1542,6 +1543,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.und .bside .pick-list .oi input.oname:hover{border-color:var(--line-2)!important}
 .und.und .bside .pick-list .oi input.oname:focus{background:var(--field)!important;border-color:var(--accent)!important;outline:0}
 .und.und .bside .pick-list .oi input.oname:focus::placeholder{color:var(--faint)}
+/* phones have no edit mode: the name in the Settings list is the field, as in the edit panel */
+@media (max-width:600px){.und .pick-list .oi:has(.oname) .t{flex:none;min-width:0}.und .pick-list .oi:has(.oname) .t b{display:none}.und .pick-list .oi input.oname{display:block;flex:1 1 0;min-width:0}}
 /* every icon in the container and VM lists takes the same room, the UnDash logo and the plain box too */
 .und .ico-btn>*{width:21px;height:21px;flex:none;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box}.und .ico-btn>.logo{border-radius:5px}
 /* the navbar: what shows is chosen in Appearance, or in edit mode */

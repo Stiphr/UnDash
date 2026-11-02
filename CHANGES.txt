@@ -1,4 +1,6 @@
 ###beta
+- Rename containers and VMs on a phone: Settings, Dashboard, Containers or Virtual machines. The name field was hidden on small screens
+- Smart arrange and resizing for apps: click an app card in edit mode to set its size, give every app that size, or line the apps up in even rows that fit their content. The other cards stay put. Smart arrange in the Arrange menu now also fits every card to its content, so nothing is cut off
 - Split my cards puts Now playing and Requests on Media
 - Phone tabs and the pages the first-run setup makes now match: Home, Media and Apps. Containers and VMs sit on Apps instead of a separate Docker tab
 - Much less work for your apps: qBittorrent's whole torrent list is read every 30 seconds instead of on every refresh, Prowlarr's heavy totals every 30 minutes in the background, and Nginx Proxy Manager's hosts every minute
