@@ -3206,7 +3206,7 @@
       return [web ? [vConsole(web) ? 'Open console (VNC)' : 'Open Unraid\'s VMs page (console)', 'screen', function () { vOpen(web); }] : null, web ? 'hr' : null]
         .concat(vCan() ? [] : [READ_ONLY])
         .concat((vCan() ? x.ops : []).map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' || o === 'stop' ? 'danger' : '', b]; }))
-        .concat([x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
+        .concat([vCan() && x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
           [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('vms', x.name, { favorite: !p.favorite }); }],
           ['Change icon…', 'tag', function () { iconPicker(p.label || x.name, function (v) { savePref('vms', x.name, { icon: v }); }, p.icon || '-'); }],
           [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('vms', x.name, { hidden: !p.hidden }); }],
