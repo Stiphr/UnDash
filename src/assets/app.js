@@ -1372,7 +1372,7 @@
   function pagesSplit() {
     var E = S.edit, by = {}, list = pagesOf();
     boardMark();
-    boardShown().forEach(function (c) { var t = { media: 'Media', arr: 'Media', downloads: 'Media', apps: 'Apps', docker: 'Apps', vms: 'Apps' }[c.s]; if (t) (by[t] = by[t] || []).push(c.i); });
+    boardShown().forEach(function (c) { var t = { media: 'Media', arr: 'Media', downloads: 'Media', playing: 'Media', requests: 'Media', apps: 'Apps', docker: 'Apps', vms: 'Apps' }[c.s]; if (t) (by[t] = by[t] || []).push(c.i); });
     ['Media', 'Apps'].forEach(function (n) { if (by[n]) list.push({ id: rid(), name: n, cards: by[n], lg: [], md: [] }); });
     if (!list.length) { toast('Your cards all belong on one page.'); return; }
     E.home.lg = []; E.home.md = []; E.smart = true;

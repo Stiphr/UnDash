@@ -195,9 +195,22 @@ function und_w_bazarr($s) {
   return ['blocks' => [und_b('missingEpisodes', 'Missing episodes', (int)($b['episodes'] ?? 0)), und_b('missingMovies', 'Missing movies', (int)($b['movies'] ?? 0))]];
 }
 
+const UND_PROWLARR_TTL = 1800;
 function und_w_prowlarr($s) {
-  // Prowlarr works these totals out from its whole 30-day history (10 s and more on a busy instance), so they are kept for 10 minutes
-  $st = und_api_cached('prowlarr-' . md5($s['url'] . $s['key']), 600, function () use ($s) { return und_get(und_u($s['url'], '/api/v1/indexerstats'), und_arr_h($s) + ['timeout' => 30]); });
+  // Prowlarr works these totals out from its whole 30-day history (10 s and more on a busy instance, at full CPU), so they are kept for
+  // 30 minutes. An old copy still answers at once while scripts/refresh.php gets a new one: no page waits, however long Prowlarr takes
+  $name = 'prowlarr-' . md5($s['url'] . $s['key']);
+  $old = empty($GLOBALS['UND_FRESH']) ? und_read_json(und_tmp('api-' . $name . '.json'), null) : null;
+  if (is_array($old)) {
+    $st = $old['v'];
+    $mark = und_tmp('refresh-' . $s['id'] . '.mark');
+    if (microtime(true) - (float)$old['t'] >= UND_PROWLARR_TTL && time() - (int)@filemtime($mark) > 120) {
+      @touch($mark);
+      und_spawn([PHP_BINARY ?: 'php', '-d', 'auto_prepend_file=', UND_ROOT . '/scripts/refresh.php', $s['id']], und_tmp('refresh-' . $s['id'] . '.log'));
+    }
+  } else {
+    $st = und_api_cached($name, empty($GLOBALS['UND_FRESH']) ? UND_PROWLARR_TTL : 0, function () use ($s) { return und_get(und_u($s['url'], '/api/v1/indexerstats'), und_arr_h($s) + ['timeout' => 30]); });
+  }
   $t = ['g' => 0, 'q' => 0, 'fg' => 0, 'fq' => 0];
   foreach ((array)($st['indexers'] ?? []) as $i) { $t['g'] += (int)($i['numberOfGrabs'] ?? 0); $t['q'] += (int)($i['numberOfQueries'] ?? 0); $t['fg'] += (int)($i['numberOfFailedGrabs'] ?? 0); $t['fq'] += (int)($i['numberOfFailedQueries'] ?? 0); }
   return ['blocks' => [und_b('numberOfGrabs', 'Grabs', $t['g']), und_b('numberOfQueries', 'Queries', $t['q']), und_b('numberOfFailGrabs', 'Failed grabs', $t['fg']), und_b('numberOfFailQueries', 'Failed queries', $t['fq'])]];
@@ -352,7 +365,7 @@ function und_w_npm($s) {
     $tok = ['token' => $j['token'], 'expires' => (string)($j['expires'] ?? '')];
     und_write_json($tf, $tok, true);
   }
-  $hosts = und_get(und_u($s['url'], '/api/nginx/proxy-hosts'), ['headers' => ['Authorization' => 'Bearer ' . $tok['token']]]);
+  $hosts = und_api_cached('npm-hosts-' . $s['id'], 60, function () use ($s, $tok) { return und_get(und_u($s['url'], '/api/nginx/proxy-hosts'), ['headers' => ['Authorization' => 'Bearer ' . $tok['token']]]); });
   $on = 0; foreach ((array)$hosts as $x) if (!empty($x['enabled'])) $on++;
   return ['blocks' => [und_b('enabled', 'Enabled', $on), und_b('disabled', 'Disabled', count((array)$hosts) - $on), und_b('total', 'Total', count((array)$hosts))]];
 }

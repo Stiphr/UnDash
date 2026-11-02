@@ -1494,6 +1494,46 @@ t('an image that is up to date is not marked', empty(und_docker_skips([['name' =
 @unlink(und_path(UND_UPDSTATUS));
 reset_store();
 
+/* ---------------- less work for slow apps ---------------- */
+group('slow apps');
+reset_store();
+$mkS = function ($id, $type, $name) { return ['id' => $id, 'type' => $type, 'name' => $name, 'url' => 'http://app.lan:1', 'href' => '', 'key' => 'k', 'username' => 'u', 'password' => 'p']; };
+$cfgQ = und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'Dl', 'services' => [$mkS('b0000001', 'qbittorrent', 'Qb'), $mkS('b0000002', 'prowlarr', 'Pr')]]]]);
+$saved = $GLOBALS['UND_HTTP_MOCK'] ?? null; $GLOBALS['SEEN'] = []; $GLOBALS['QA'] = 0.5;
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['SEEN'][] = $url;
+  $j = function ($v) { return ['code' => 200, 'json' => $v, 'body' => json_encode($v), 'err' => '', 'headers' => []]; };
+  if (strpos($url, '/auth/login') !== false) return ['code' => 200, 'json' => null, 'body' => 'Ok.', 'err' => '', 'headers' => ['set-cookie' => ['SID=x; path=/']]];
+  if (strpos($url, '/transfer/info') !== false) return $j(['dl_info_speed' => 1, 'up_info_speed' => 2, 'connection_status' => 'connected']);
+  if (strpos($url, 'filter=active') !== false) return $j([['hash' => 'a', 'name' => 'Moving', 'state' => 'downloading', 'progress' => $GLOBALS['QA'], 'dlspeed' => 9, 'eta' => 5, 'size' => 1, 'magnet_uri' => 'long']]);
+  if (strpos($url, '/torrents/info') !== false) return $j([['hash' => 'a', 'name' => 'Moving', 'state' => 'downloading', 'progress' => 0.1, 'dlspeed' => 1, 'eta' => 5, 'size' => 1, 'tracker' => 'http://secret/announce'], ['hash' => 'b', 'name' => 'Done', 'state' => 'stalledUP', 'progress' => 1, 'dlspeed' => 0, 'eta' => 0, 'size' => 1]]);
+  if (strpos($url, 'indexerstats') !== false) return $j(['indexers' => [['numberOfGrabs' => 7, 'numberOfQueries' => 8]]]);
+  return null;
+};
+$full = function () { return count(array_filter($GLOBALS['SEEN'], function ($u) { return strpos($u, '/torrents/info') !== false && strpos($u, 'filter=') === false; })); };
+$a = und_dl_status($cfgQ, 'b0000001');
+t('the card counts come from the whole list', $a['counts']['downloading'] === 1 && $a['counts']['seeding'] === 1 && $a['counts']['completed'] === 1);
+t('a moving torrent is the fresh one', ($a['items'][0]['progress'] ?? 0) == 50.0, json_encode($a['items']));
+@unlink(und_tmp('api-dl-b0000001.json')); $GLOBALS['QA'] = 0.75;
+$a = und_dl_status($cfgQ, 'b0000001');
+t('the second refresh reads the active ones only', $full() === 1 && ($a['items'][0]['progress'] ?? 0) == 75.0, $full() . ' ' . json_encode($a['items']));
+t('the kept list holds only what the card needs', strpos((string)file_get_contents(und_tmp('api-qbit-list-b0000001.json')), 'secret') === false);
+$GLOBALS['SPAWNED'] = []; $GLOBALS['UND_SPAWN_MOCK'] = function ($argv, $log) { $GLOBALS['SPAWNED'][] = $argv; };
+$pr = ['id' => 'b0000002', 'url' => 'http://app.lan:1', 'key' => 'k', 'username' => '', 'password' => '', 'fields' => []];
+$r = und_w_prowlarr($pr);
+t('first Prowlarr read waits for the numbers', $r['blocks'][0]['value'] == 7 && !$GLOBALS['SPAWNED'], json_encode($r['blocks'][0]));
+$GLOBALS['SEEN'] = []; und_w_prowlarr($pr);
+t('a fresh copy asks nothing', !$GLOBALS['SEEN'] && !$GLOBALS['SPAWNED']);
+$pf = und_tmp('api-prowlarr-' . md5($pr['url'] . $pr['key']) . '.json'); $oldC = und_read_json($pf, null); $oldC['t'] = microtime(true) - 7200; und_write_json($pf, $oldC);
+$r = und_w_prowlarr($pr);
+t('an old copy answers at once and refreshes behind', $r['blocks'][0]['value'] == 7 && !$GLOBALS['SEEN'] && count($GLOBALS['SPAWNED']) === 1);
+und_w_prowlarr($pr);
+t('the refresh starts only once', count($GLOBALS['SPAWNED']) === 1);
+$GLOBALS['UND_FRESH'] = true; und_w_prowlarr($pr); unset($GLOBALS['UND_FRESH']);
+t('the refresh itself asks Prowlarr', count($GLOBALS['SEEN']) === 1);
+if ($saved) $GLOBALS['UND_HTTP_MOCK'] = $saved; else unset($GLOBALS['UND_HTTP_MOCK']);
+reset_store();
+
 /* ---------------- navbar ---------------- */
 group('navbar');
 $n = und_normalize(['appearance' => []])['appearance'];
