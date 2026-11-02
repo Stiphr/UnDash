@@ -972,6 +972,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.privacy :is(.mlist>:not(.empty),.pl,.rq)::after{content:"";position:absolute;left:var(--hl,0);top:50%;width:calc(var(--hw,56%)*.6);height:8px;margin-top:4px;border-radius:4px;background:var(--hid);opacity:.7;visibility:visible}
 .und.privacy :is(.mlist>:nth-child(3n+2),.pl:nth-child(3n+2),.rq:nth-child(3n+2)){--hw:42%}.und.privacy :is(.mlist>:nth-child(3n),.pl:nth-child(3n),.rq:nth-child(3n)){--hw:50%}
 .und.privacy :is(.pl:not(.in),.rq){--hl:14px}
+.und.privacy :is(.mi.ml,.rq.line)::before{margin-top:-5px}.und.privacy :is(.mi.ml,.rq.line)::after{display:none}
 .und.privacy .dln>.ell{flex:0 0 52%}.und.privacy .und-name{min-width:96px;--hw:100%}.und.privacy .ais{min-height:22px}
 .und .btn.priv.on{background:var(--accent-soft)!important;color:var(--accent-text)!important;border-color:var(--accent)!important}
 
