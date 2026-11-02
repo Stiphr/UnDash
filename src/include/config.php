@@ -593,7 +593,7 @@ function und_secrets() {
   if (isset($GLOBALS['UND_TEST_SECRETS'])) { $s = $GLOBALS['UND_TEST_SECRETS']; return ['vars' => (array)($s['vars'] ?? []), 'svc' => (array)($s['svc'] ?? []), 'unraid' => (array)($s['unraid'] ?? [])]; }
   $env = und_env();
   $vars = array_diff_key($env, array_flip(UND_ENV_RESERVED));
-  return ['vars' => $vars, 'svc' => [], 'unraid' => ['url' => (string)(und_doc()['unraid']['url'] ?? ''), 'key' => (string)($env['UNRAID_API_KEY'] ?? '')]];
+  return ['vars' => $vars, 'svc' => [], 'unraid' => ['url' => (string)(und_doc()['unraid']['url'] ?? ''), 'key' => (string)($env['UNRAID_API_KEY'] ?? ''), 'type' => (string)(und_doc()['unraid']['type'] ?? ''), 'user' => (string)(und_doc()['unraid']['user'] ?? '')]];
 }
 /** vars replace the .env values (UnDash's own entries are kept); unraid sets the address and key; svc (old per-widget credentials) become references. */
 function und_save_secrets(array $s) {
@@ -603,7 +603,7 @@ function und_save_secrets(array $s) {
   $new = array_diff_key($new, array_flip(UND_ENV_RESERVED)) + $keep;
   if (isset($s['unraid']) && is_array($s['unraid'])) {
     if (array_key_exists('key', $s['unraid'])) { if ((string)$s['unraid']['key'] === '') unset($new['UNRAID_API_KEY']); else $new['UNRAID_API_KEY'] = (string)$s['unraid']['key']; }
-    if (array_key_exists('url', $s['unraid'])) und_doc_write(['unraid' => (string)$s['unraid']['url'] === '' ? null : ['url' => (string)$s['unraid']['url']]]);
+    if (array_key_exists('url', $s['unraid'])) und_doc_write(['unraid' => (string)$s['unraid']['url'] === '' ? null : array_filter(['url' => (string)$s['unraid']['url'], 'type' => (string)($s['unraid']['type'] ?? '') === 'truenas' ? 'truenas' : '', 'user' => (string)($s['unraid']['user'] ?? '')])]);
   }
   if (!empty($s['svc']) && is_array($s['svc'])) {
     // credentials from an old export or backup: into .env under readable names, referenced from the config

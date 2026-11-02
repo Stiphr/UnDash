@@ -635,11 +635,17 @@ function und_github_repo_of($u) {
  */
 function und_container_sources() {
   $rows = [];
+  if (und_is_truenas()) {
+    $dk = und_docker_live();
+    if (isset($dk['error'])) return ['error' => $dk['error']];
+    foreach ((array)$dk['containers'] as $c) $rows[] = ['name' => $c['name'], 'image' => $c['image'], 'source' => ''];
+  } else {
   $r = und_gql('query { docker { containers { names image labels } } }', [], 15);
   $list = (array)($r['data']['docker']['containers'] ?? []);
   if (!$list) { $r = und_gql('query { docker { containers { names image } } }', [], 15); $list = (array)($r['data']['docker']['containers'] ?? []); }
   if (!$list && isset($r['error'])) return ['error' => $r['error']];
   foreach ($list as $c) $rows[] = ['name' => ltrim((string)($c['names'][0] ?? ''), '/'), 'image' => (string)($c['image'] ?? ''), 'source' => (string)(((array)($c['labels'] ?? []))['org.opencontainers.image.source'] ?? '')];
+  }
   $out = [];
   foreach ($rows as $c) {
     if ($c['name'] === '') continue;

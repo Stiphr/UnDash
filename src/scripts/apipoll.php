@@ -4,6 +4,7 @@
 if (!defined('UND_ROOT')) define('UND_ROOT', dirname(__DIR__));
 require_once UND_ROOT . '/include/lib.php';
 while (true) {
+  if (und_is_truenas()) und_tn_poll_forever();
   @touch(und_tmp('apipoll.beat'));
   clearstatcache();
   und_api_poll_due(time() - (int)@filemtime(und_tmp('viewer')) < 60);

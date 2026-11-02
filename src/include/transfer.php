@@ -57,7 +57,7 @@ function und_import_parse($raw) {
   $cfg = $doc; $cfg['schema'] = (int)($doc['version'] ?? UND_SCHEMA);
   $cfg = und_normalize(und_migrate($cfg));
   return und_import_summary(['kind' => 'config', 'config' => $cfg, 'css' => is_string($doc['custom_css'] ?? null) ? $doc['custom_css'] : null,
-    'ignored' => is_array($doc['ignored_alerts'] ?? null) ? $doc['ignored_alerts'] : null, 'unraid_url' => (string)($doc['unraid']['url'] ?? ''), 'env' => [], 'presets_in' => isset($doc['presets'])], $doc['groups']);
+    'ignored' => is_array($doc['ignored_alerts'] ?? null) ? $doc['ignored_alerts'] : null, 'unraid_url' => (string)($doc['unraid']['url'] ?? ''), 'unraid_type' => (string)($doc['unraid']['type'] ?? ''), 'unraid_user' => (string)($doc['unraid']['user'] ?? ''), 'env' => [], 'presets_in' => isset($doc['presets'])], $doc['groups']);
 }
 
 /** An export of an older UnDash (JSON with config, vars and per-widget credentials): converted like the old files. */
@@ -107,7 +107,7 @@ function und_import_apply($raw) {
   $parts = [];
   if ($f['css'] !== null) $parts['custom_css'] = trim(und_sanitize_css($f['css'])) === '' ? null : und_sanitize_css($f['css']);
   if ($f['ignored'] !== null) $parts['ignored_alerts'] = $f['ignored'] ? und_ignore_clean($f['ignored']) : null;
-  if ($f['unraid_url'] !== '' && preg_match('#^https?://#i', $f['unraid_url']) && (string)(und_doc()['unraid']['url'] ?? '') === '') $parts['unraid'] = ['url' => und_clip($f['unraid_url'], 300)];
+  if ($f['unraid_url'] !== '' && preg_match('#^https?://#i', $f['unraid_url']) && (string)(und_doc()['unraid']['url'] ?? '') === '') $parts['unraid'] = array_filter(['url' => und_clip($f['unraid_url'], 300), 'type' => ($f['unraid_type'] ?? '') === 'truenas' ? 'truenas' : '', 'user' => und_clip((string)($f['unraid_user'] ?? ''), 100)]);
   if ($parts) und_doc_write($parts);
   // values from the file fill empty ones; a {{NAME}} the config uses but .env lacks gets an empty entry, so Settings lists it to fill in
   $env = und_env(); $before = $env;

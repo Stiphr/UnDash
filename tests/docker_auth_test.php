@@ -101,6 +101,22 @@ t('so is Test, which would send it there', apicall('test', ['id' => 'abcd1234', 
 t('and the card builder', apicall('probe', ['id' => 'abcd1234', 'config' => json_encode($cfg), 'creds' => '{}'])['code'] === 400);
 t('typing the key again moves it', apicall('save', ['config' => json_encode($cfg), 'creds' => json_encode(['abcd1234' => ['key' => 'second-key-value']])])['code'] === 200);
 
+/* ---- connecting a TrueNAS server through Settings ---- */
+$u = apicall('unraid_save', ['url' => 'http://nas.test', 'key' => 'tn-secret-key', 'type' => 'truenas', 'user' => 'dash']);
+t('a TrueNAS address without https is refused', $u['code'] !== 200 && strpos((string)($u['j']['error'] ?? ''), 'https://') !== false, json_encode($u));
+$u = apicall('unraid_save', ['url' => 'https://nas.test', 'key' => 'tn-secret-key', 'type' => 'truenas', 'user' => 'bad name;']);
+t('an odd user name is refused', $u['code'] !== 200);
+$u = apicall('unraid_save', ['url' => 'https://nas.test', 'key' => 'tn-secret-key', 'type' => 'truenas', 'user' => 'dash']);
+t('a TrueNAS connection saves', !empty($u['j']['ok']), json_encode($u));
+$v = apicall('unraid_conf');
+t('it comes back without its key', ($v['j']['type'] ?? '') === 'truenas' && ($v['j']['user'] ?? '') === 'dash' && ($v['j']['url'] ?? '') === 'https://nas.test' && !empty($v['j']['key_set']) && strpos(json_encode($v['j']), 'tn-secret-key') === false, json_encode($v));
+t('the page is told what it is talking to', (apicall('boot')['j']['caps']['platform'] ?? '') === 'truenas');
+$u = apicall('unraid_save', ['url' => 'https://nas.test/graphql', 'key' => '__KEEP__', 'type' => 'unraid', 'user' => '']);
+t('the saved key is not handed to another kind of server', $u['code'] !== 200 && strpos((string)($u['j']['error'] ?? ''), 'Enter the API key again') !== false, json_encode($u));
+$u = apicall('unraid_save', ['url' => 'https://other.test', 'key' => '__KEEP__', 'type' => 'truenas', 'user' => 'dash']);
+t('nor to another address', $u['code'] !== 200);
+$u = apicall('unraid_save', ['url' => '', 'key' => '', 'type' => 'unraid', 'user' => '']);
+t('the connection can be cleared', !empty($u['j']['ok']) && (apicall('boot')['j']['caps']['platform'] ?? '') === 'unraid', json_encode($u));
 proc_terminate($proc);
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";

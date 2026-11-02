@@ -94,6 +94,7 @@ function und_ver_norm($v) { return preg_replace('/[-.]?(rc|beta|alpha)[.-]?/i', 
 
 
 function und_os_check() {
+  if (und_is_truenas()) return ['error' => 'TrueNAS shows its own updates under System > Update.'];
   // the API cannot check or install, but Unraid's public release service says what the latest version is
   $cur = (string)(und_system(und_load_config())['os_update']['installed'] ?? '');
   if ($cur === '') $cur = (string)(und_gql('query { info { versions { core { unraid } } } }', [], 8)['data']['info']['versions']['core']['unraid'] ?? '');

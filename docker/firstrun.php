@@ -21,7 +21,7 @@ if (is_file('/config/config.json') && !is_file('/config/config.yaml')) {
   if (is_file('/config/config.yaml')) echo "Settings converted to config.yaml and .env. The old files are kept in /config/data/legacy.\n";
 }
 $c = und_api_conf();
-if ($c['url'] === '' || $c['key'] === '') echo "The Unraid API is not configured yet: set UNRAID_API_URL and UNRAID_API_KEY, or enter them in Settings > Connection.\n";
+if ($c['url'] === '' || $c['key'] === '') echo "Your server is not connected yet: enter its address and API key in Settings > Server connection.\n";
 $code = und_setup_code_ensure();
 if ($code !== null) {
   echo "------------------------------------------------------------\n";

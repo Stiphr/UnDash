@@ -32,9 +32,10 @@ function und_alerts(array $cfg, $sys, $dk, $smart = null) {
       if (!$ok) $add('warn', 'No parity check on record has finished. Run one from Main in Unraid.', 'array.parity_old', 'array');
       elseif (time() - $ok > UND_PARITY_OLD_DAYS * 86400) $add('warn', 'The last finished parity check was ' . floor((time() - $ok) / 86400) . ' days ago.', 'array.parity_old', 'array');
     }
-    foreach ((array)($a['bad_disks'] ?? []) as $n) $add('bad', $n . ' is disabled, missing or emulated. Check Main in Unraid.', 'disk.bad', $n);
+    foreach ((array)($a['bad_disks'] ?? []) as $n) $add('bad', und_is_truenas() ? 'Pool ' . $n . ' is not healthy. Check Storage in TrueNAS.' : $n . ' is disabled, missing or emulated. Check Main in Unraid.', 'disk.bad', $n);
     foreach ((array)($a['error_disks'] ?? []) as $d) $add('bad', $d['name'] . ' reported ' . $d['errors'] . ' read/write error' . ($d['errors'] > 1 ? 's' : '') . '.', 'disk.errors', $d['name']);
     foreach ((array)($a['hot_disks'] ?? []) as $d) $add('warn', $d['name'] . ' is at ' . $d['temp'] . '°C.', 'disk.hot', $d['name']);
+    if (und_is_truenas()) foreach (und_tn_alerts() as $x) $add($x[0], $x[1], 'truenas.alert', $x[2]);
     $o = $sys['os_update'] ?? [];
     if (!empty($o['available'])) $add('info', 'Unraid ' . $o['latest'] . ' is available (running ' . $o['installed'] . ').', 'os.available', $o['latest'], 'os');
     if (!empty($o['error']) && empty($o['available'])) $add('warn', 'The Unraid update check failed: ' . $o['error'], 'os.check_failed', 'server');
