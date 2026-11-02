@@ -100,12 +100,129 @@ function und_docker_cgroup(array $ps) {
 function und_docker_updates() {
   return und_read_json(und_path(UND_UPDSTATUS), []);
 }
+function und_image_key($image) { return und_has(basename($image), ':') || und_has($image, '@') ? $image : $image . ':latest'; }
 function und_docker_update_state(array $upd, $image) {
-  $key = und_has(basename($image), ':') || und_has($image, '@') ? $image : $image . ':latest';
-  $u = $upd[$key] ?? null;
+  $u = $upd[und_image_key($image)] ?? null;
   if (!is_array($u)) return 'unknown';
   $s = (string)($u['status'] ?? '');
   return $s === 'false' ? 'available' : ($s === 'true' ? 'current' : 'unknown');
+}
+
+/*
+ * Skipping one version of a container. Neither Unraid nor its API names a version, only "update available", so the skip is
+ * kept as the digest the image's tag points at. A new digest means a newer version, and the update shows again.
+ * The plugin reads the digest from Unraid's status file. The Docker version asks the registry itself, for skipped images only.
+ */
+const UND_SKIP_TTL = 21600;      // ask the registry about a skipped image every 6 hours
+const UND_SKIP_TICK = 300;       // and about one image every 5 minutes at most: the poller must not stall
+const UND_MANIFEST_TYPES = 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json';
+
+/** Registry, repository and tag of an image; null for one pinned to a digest (it cannot change) or a name that does not parse. */
+function und_image_ref($image) {
+  $image = trim((string)$image);
+  if ($image === '' || und_has($image, '@')) return null;
+  $p = explode('/', $image);
+  $host = 'registry-1.docker.io';
+  if (count($p) > 1 && (strpbrk($p[0], '.:') !== false || $p[0] === 'localhost')) $host = array_shift($p);
+  if ($host === 'docker.io' || $host === 'index.docker.io') $host = 'registry-1.docker.io';
+  $last = explode(':', array_pop($p), 2);
+  $p[] = $last[0];
+  $repo = implode('/', $p);
+  if ($host === 'registry-1.docker.io' && count($p) === 1) $repo = 'library/' . $repo;
+  $tag = $last[1] ?? 'latest';
+  if (!preg_match('/^[A-Za-z0-9.-]+(:\d+)?$/', $host) || !preg_match('#^[a-z0-9][a-z0-9._/-]*$#', $repo) || !preg_match('/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/', $tag)) return null;
+  return ['host' => $host, 'repo' => $repo, 'tag' => $tag];
+}
+
+/** The digest a tag points at now, asked anonymously (no key or login is ever sent); '' when the registry will not say. */
+function und_registry_digest($image) {
+  $r = und_image_ref($image);
+  if (!$r) return '';
+  $url = 'https://' . $r['host'] . '/v2/' . $r['repo'] . '/manifests/' . $r['tag'];
+  $o = ['timeout' => 6, 'verify' => true, 'headers' => ['Accept' => UND_MANIFEST_TYPES]];
+  $a = und_http('HEAD', $url, $o);
+  $ask = $a['headers']['www-authenticate'][0] ?? '';
+  if ($a['code'] === 401 && preg_match('/realm="(https:[^"]+)"/i', $ask, $realm)) {
+    $q = ['scope' => 'repository:' . $r['repo'] . ':pull'];
+    if (preg_match('/service="([^"]+)"/i', $ask, $m)) $q['service'] = $m[1];
+    $t = und_http('GET', $realm[1] . '?' . http_build_query($q), ['timeout' => 6, 'verify' => true]);
+    $tok = (string)($t['json']['token'] ?? $t['json']['access_token'] ?? '');
+    if ($tok === '') return '';
+    $o['headers']['Authorization'] = 'Bearer ' . $tok;
+    $a = und_http('HEAD', $url, $o);
+  }
+  $d = $a['code'] === 200 ? (string)($a['headers']['docker-content-digest'][0] ?? '') : '';
+  return preg_match('/^sha256:[a-f0-9]{64}$/', $d) ? $d : '';
+}
+
+/** The newest digest known for an image. */
+function und_remote_digest($image) {
+  if (!und_api_mode()) { $d = (string)(und_docker_updates()[und_image_key($image)]['remote'] ?? ''); return preg_match('/^sha256:[a-f0-9]{64}$/', $d) ? $d : ''; }
+  $f = und_tmp('image-digests.json');
+  $d = und_registry_digest($image);
+  $seen = und_read_json($f, []);
+  $seen[$image] = ['d' => $d !== '' ? $d : (string)($seen[$image]['d'] ?? ''), 'at' => time()];
+  und_write_json($f, $seen);
+  return $d;
+}
+
+/** Marks the containers whose update is the skipped version. A skip stands while the registry cannot be read: it only ever hides that one update. */
+function und_docker_skips(array $list) {
+  $items = (array)(und_load_config()['docker']['items'] ?? []);
+  $api = und_api_mode();
+  $seen = $api ? und_read_json(und_tmp('image-digests.json'), []) : und_docker_updates();
+  foreach ($list as &$c) {
+    $s = (string)($items[$c['name']]['skip_update'] ?? '');
+    if ($s === '' || $c['update'] !== 'available') continue;
+    $now = $api ? (string)($seen[$c['image']]['d'] ?? '') : (string)($seen[und_image_key($c['image'])]['remote'] ?? '');
+    if ($now === '' || $now === $s) $c['skip'] = true;
+  }
+  unset($c);
+  return $list;
+}
+
+function und_docker_skip($name, $on) {
+  $l = und_docker_live(false);
+  if (isset($l['error'])) return $l;
+  $c = null;
+  foreach ($l['containers'] as $x) if ($x['name'] === $name) $c = $x;
+  if (!$c) return ['error' => 'That container no longer exists.'];
+  $d = '';
+  if ($on) {
+    if ($c['update'] !== 'available') return ['error' => $name . ' has no update to skip.'];
+    $d = und_remote_digest($c['image']);
+    if ($d === '') return ['error' => 'Could not read this image\'s version from its registry, so a newer version could not be told apart. Use Ignore updates instead.'];
+  }
+  $lk = und_config_lock();
+  $cfg = und_load_config();
+  $items = (array)$cfg['docker']['items'];
+  $row = (array)($items[$name] ?? []);
+  if ($on) $row['skip_update'] = $d; else unset($row['skip_update']);
+  $items[$name] = $row;
+  $cfg['docker']['items'] = $items;
+  if (!und_save_config($cfg, false)) return ['error' => 'Could not save.'];
+  und_history_add('docker', $name, 'update', true, $on ? 'skipped this version' : 'stopped skipping');
+  return ['ok' => true];
+}
+
+/** Docker version: rereads the oldest skipped image once its digest is old (called by the poller, every second). */
+function und_docker_skip_tick($now = null) {
+  $now = $now ?? time();
+  $mark = und_tmp('skip.tick');
+  if ($now - (int)@filemtime($mark) < UND_SKIP_TICK) return;
+  @touch($mark, $now);
+  $items = (array)(und_load_config()['docker']['items'] ?? []);
+  $names = array_filter($items, function ($p) { return !empty($p['skip_update']); });
+  if (!$names) return;
+  $l = und_docker_live(false);
+  $seen = und_read_json(und_tmp('image-digests.json'), []);
+  $next = ''; $old = $now - UND_SKIP_TTL + 1;
+  foreach ((array)($l['containers'] ?? []) as $c) {
+    if (!isset($names[$c['name']]) || $c['update'] !== 'available') continue;
+    $at = (int)($seen[$c['image']]['at'] ?? 0);
+    if ($at < $old) { $old = $at; $next = $c['image']; }
+  }
+  if ($next !== '') und_remote_digest($next);
 }
 
 /** Everything the dashboard shows about containers. Cheap enough for every refresh. */
@@ -130,7 +247,7 @@ function und_docker_live($withDetails = true) {
   }
   usort($out, function ($a, $b) { return strcasecmp($a['name'], $b['name']); });
   $chk = und_job(und_tmp('docker-check.log'));
-  return ['containers' => $out, 'checking' => $chk['state'] === 'running', 'checked' => is_file(und_path(UND_UPDSTATUS)) ? (int)@filemtime(und_path(UND_UPDSTATUS)) : null];
+  return ['containers' => und_docker_skips($out), 'checking' => $chk['state'] === 'running', 'checked' => is_file(und_path(UND_UPDSTATUS)) ? (int)@filemtime(und_path(UND_UPDSTATUS)) : null];
 }
 
 function und_docker_action($name, $op) {
@@ -239,9 +356,10 @@ function und_docker_summary() {
   $l = und_docker_live(false);
   if (isset($l['error'])) return $l;
   $s = ['running' => 0, 'stopped' => 0, 'paused' => 0, 'updates' => 0, 'unhealthy' => 0, 'total' => count($l['containers'])];
+  $d = und_load_config()['docker'];
   foreach ($l['containers'] as $c) {
     if ($c['state'] === 'running') $s['running']++; elseif ($c['state'] === 'paused') $s['paused']++; else $s['stopped']++;
-    if ($c['update'] === 'available') $s['updates']++;
+    if ($c['update'] === 'available' && empty($c['skip']) && !empty($d['update_check']) && empty(((array)$d['items'])[$c['name']]['no_update'])) $s['updates']++;
     if ($c['health'] === 'unhealthy') $s['unhealthy']++;
   }
   return $s;

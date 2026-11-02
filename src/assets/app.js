@@ -1560,8 +1560,9 @@
       more.appendChild(F('Show as', sIn(c.media, 'style', boardDirty, [['art', 'Posters'], ['text', 'Text only']])));
       boardZone(body, 'media');
     } else if (sid === 'docker' || sid === 'vms') {
+      if (sid === 'docker') body.appendChild(h('div', { class: 'bs-l' }, bsRow(ic('up'), 'Show updates', 'A mark on each container that has one', bsSwitch(c.docker.update_check !== false, 'Show container updates', function (on) { c.docker.update_check = on; boardDirty(); }))));
       body.appendChild(h('div', { class: 'bs-names' }, namesList(c, boardDirty, sid)));
-      if (sid === 'docker') more.appendChild(dockerOpts(c, boardDirty));
+      if (sid === 'docker') more.appendChild(dockerOpts(c, boardDirty, true));
     } else if (sid === 'arr' || sid === 'downloads' || sid === 'requests') {
       if (sid === 'downloads') more.appendChild(F('Active items per client', tIn(c.downloads, 'items', boardDirty, '4', 'number', { min: 0, max: 20 })));
       if (sid === 'requests') more.appendChild(F('Show as', sIn(c.requests, 'style', boardDirty, [['art', 'Posters'], ['text', 'Text only']])));
@@ -2603,12 +2604,42 @@
     var m = { running: ['running', 'ok'], exited: ['stopped', 'off'], paused: ['paused', 'warn'], restarting: ['restarting', 'warn'], created: ['created', 'off'], dead: ['dead', 'bad'], removing: ['removing', 'warn'] }[c.state] || [c.state, 'off'];
     return h('span', { class: 'badge ' + m[1] }, m[0]);
   }
-  /* an update counts unless update checks are off (Settings > Apps & cards > Containers), for all or for this container */
-  function updOn(c) { return c.update === 'available' && S.L.docker.update_check !== false && !pref('docker', c.name).no_update; }
+  /* an update counts unless updates are off (Settings > Apps & cards > Containers), ignored for this container, or this version was skipped */
+  function updOn(c) { return c.update === 'available' && !c.skip && S.L.docker.update_check !== false && !pref('docker', c.name).no_update; }
+  function updHeld(c) { return c.update === 'available' && S.L.docker.update_check !== false && !updOn(c); }
+  function updSkip(c, on) {
+    return api('docker_skip', { name: c.name, skip: on ? '1' : '0' }, 20000).then(function (j) {
+      if (j.error) { toast(j.error, true); return; }
+      S.L = j.layout; refreshNow();
+      toast(on ? c.name + ': this version is skipped. The update shows again when a newer one comes out.' : c.name + ': skipped version is back.', false, on ? ['Undo', function () { updSkip(c, false); }] : null);
+    });
+  }
+  function updActions(c, p) {
+    return c.skip ? [['Stop skipping this version', 'up', function () { updSkip(c, false); }]]
+      : [['Skip this version', 'eyeoff', function () { updSkip(c, true); }]];
+  }
+  function updIgnore(c, p) {
+    return [p.no_update ? 'Stop ignoring updates' : 'Ignore updates for this container', 'mute', function () { savePref('docker', c.name, { no_update: !p.no_update }); }];
+  }
+  /* the mark on a container: what it can do opens right there, the gear stays for everything else */
+  function dUpdMark(c, p, label) {
+    var on = updOn(c);
+    if (!on && !(S.fd === 'updates' && updHeld(c))) return null;
+    var t = on ? 'Update available for ' + c.name : c.name + ': update ' + (p.no_update ? 'ignored' : 'version skipped');
+    var b = h('button', { type: 'button', class: label ? 'updl' + (on ? '' : ' off') : 'cup' + (on ? '' : ' off'), title: t, 'aria-label': t, 'aria-haspopup': 'menu', onclick: function (e) {
+      e.stopPropagation();
+      var busy = !!S.busy['d:' + c.name] || c.job === 'updating';
+      menu(b, (on ? [['Update now', 'up', function () { updateMany([c.name]); }, 'upd', busy], 'hr'] : []).concat(p.no_update ? [] : updActions(c, p), [updIgnore(c, p)]));
+    } }, label || ic('up'));
+    return b;
+  }
   function dUpdBadge(c) {
     if (c.job === 'update_failed') return h('span', { class: 'badge bad', title: 'The last update failed; see the logs' }, 'update failed');
-    if (S.L.docker.update_check === false || pref('docker', c.name).no_update) return h('span', { class: 'badge plain' }, 'not checked');
-    if (c.update === 'available') return h('span', { class: 'muted sm upd-t' }, 'update available');
+    var p = pref('docker', c.name);
+    if (S.L.docker.update_check === false) return h('span', { class: 'badge plain' }, 'not checked');
+    if (p.no_update) return dUpdMark(c, p, 'updates ignored') || h('span', { class: 'badge plain' }, 'updates ignored');
+    if (c.skip) return dUpdMark(c, p, 'version skipped') || h('span', { class: 'badge plain' }, 'version skipped');
+    if (c.update === 'available') return dUpdMark(c, p, 'update available');
     if (c.update === 'current') return h('span', { class: 'badge ok' }, 'up to date');
     return h('span', { class: 'badge plain', title: c.managed ? 'Unraid has not checked this image yet, or the check failed: unknown, not "up to date"' : 'Not created from an Unraid template, so Unraid cannot check it' }, c.managed ? 'not checked' : 'no update check');
   }
@@ -2677,7 +2708,7 @@
       if (S.fd === 'selected') return D.selected.indexOf(c.name) >= 0;
       if (S.fd === 'running') return c.state === 'running';
       if (S.fd === 'stopped') return c.state !== 'running';
-      if (S.fd === 'updates') return updOn(c);
+      if (S.fd === 'updates') return updOn(c) || updHeld(c);
       if (S.fd === 'problems') return c.health === 'unhealthy' || c.state === 'restarting' || c.job === 'update_failed' || (c.state === 'exited' && c.exit && c.autostart);
       if (S.fd === 'favorites') return !!p.favorite;
       if (D.hide_stopped && c.state !== 'running') { hiddenN++; return false; }
@@ -2696,7 +2727,7 @@
     list.forEach(function (c, i) {
       var p = pref('docker', c.name);
       // rows are only rebuilt when something structural changes, so menus and focus survive the 2-second refresh
-      var sig = JSON.stringify([c.state, c.health, c.update, c.job, c.webui, c.managed, S.busy['d:' + c.name] || '', p, c.icon, c.image, D.layout, D.view, D.show, D.update_check, D.selected.indexOf(c.name) >= 0]);
+      var sig = JSON.stringify([c.state, c.health, c.update, c.skip, S.fd === 'updates', c.job, c.webui, c.managed, S.busy['d:' + c.name] || '', p, c.icon, c.image, D.layout, D.view, D.show, D.update_check, D.selected.indexOf(c.name) >= 0]);
       var row = r.map[c.name];
       if (!row || row._sig !== sig) {
         var had = row && row.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
@@ -2717,6 +2748,7 @@
       r.fSig = fs; clear(r.foot); clear(r.updAll);
       if (S.fd !== 'all' && list.length < d.containers.length) r.foot.appendChild(h('button', { type: 'button', class: 'allb', title: 'Show every container', onclick: function () { S.fd = 'all'; S.fdSet = true; shell(); } }, 'Show all ' + d.containers.length, ic('chev')));
       if (hiddenN || S.showHidden) r.foot.appendChild(btn(S.showHidden ? 'Hide hidden containers' : 'Show ' + hiddenN + ' hidden', function () { S.showHidden = !S.showHidden; r.fSig = null; if (R.vms) R.vms.sig = null; paintAll(); }, 'sm ghost', S.showHidden ? 'eyeoff' : 'eye'));
+      [].forEach.call(r.filters.childNodes, function (b) { if (/^Updates/.test(b.textContent)) txt(b, 'Updates' + (dk.updates ? ' ' + dk.updates : '')); });
       if (dk.updates) r.updAll.appendChild(btn('Update all (' + dk.updates + ')', function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up', 'Update every container that has an update'));
     }
   }
@@ -2742,12 +2774,13 @@
         c.state !== 'paused' ? ['Restart', 'restart', function () { dAct(c, 'restart'); }, '', busy] : null,
         run ? ['Pause', 'pause', function () { dAct(c, 'pause'); }, '', busy] : null,
         [updOn(c) ? 'Update (new version available)' : 'Update (force)', 'up', function () { updateMany([c.name]); }, updOn(c) ? 'upd' : '', busy],
+        c.update === 'available' && S.L.docker.update_check !== false && !p.no_update ? updActions(c, p)[0] : null,
         'hr', ['Logs', 'logs', function () { logs(c.name); }], ['Details', 'info', function () { inspect(c.name); }], 'hr',
         [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('docker', c.name, { favorite: !p.favorite }); }],
         [S.L.docker.selected.indexOf(c.name) >= 0 ? 'Remove from "Selected"' : 'Show in "Selected"', 'check', function () { toggleSelected(c.name); }],
         ['Change icon…', 'tag', function () { iconPicker(p.label || c.name, function (v) { savePref('docker', c.name, { icon: v }); }, p.icon || '-'); }],
         [p.hidden ? 'Show on dashboard' : 'Hide from dashboard', p.hidden ? 'eye' : 'eyeoff', function () { savePref('docker', c.name, { hidden: !p.hidden }); }],
-        S.L.docker.update_check !== false ? [p.no_update ? 'Check this container for updates' : 'Don\'t check this container for updates', 'up', function () { savePref('docker', c.name, { no_update: !p.no_update }); }] : null,
+        S.L.docker.update_check !== false ? updIgnore(c, p) : null,
         ['Customize…', 'edit', function () { customize('docker', c); }]];
     }, updOn(c)));
     return a;
@@ -2777,7 +2810,7 @@
     row.appendChild(h('div', { class: 'who c-who' }, webA(web, wt, cIcon(c, p, '')), webA(web, wt, h('span', { class: 'nm ell' }, p.label || c.name, p.favorite ? ic('star', true) : null))));
     row.appendChild(h('div', { class: 'c-st' }, dStateBadge(c)));
     row.appendChild(row._cpu); row.appendChild(row._mem);
-    row.appendChild(h('div', { class: 'c-upd' }, c.job === 'update_failed' ? dUpdBadge(c) : null));
+    row.appendChild(h('div', { class: 'c-upd' }, c.job === 'update_failed' ? dUpdBadge(c) : dUpdMark(c, p)));
     row.appendChild(dActions(c, p));
     return row;
   }
@@ -2798,6 +2831,7 @@
     }
     var web = dWeb(c), wt = web ? 'Open the web UI of ' + c.name : c.name + ' · ' + c.image;
     cell.appendChild(webA(web, wt, cIcon(c, p, 'cico')));
+    var mark = dUpdMark(c, p); if (mark) cell.appendChild(mark);
     cell.appendChild(h('div', { class: 'cn' }, h('span', { class: 'cname ell' }, dot, webA(web, wt, p.label || c.name), p.favorite ? ic('star', true) : null), sub));
     if (c.job === 'update_failed') cell.appendChild(dUpdBadge(c));
     cell.appendChild(dActions(c, p));
@@ -4319,7 +4353,7 @@
     if (adv.childNodes.length) b.appendChild(h('details', { class: 'adv' }, h('summary', null, 'Advanced'), adv));
     ed.draw();
   }
-  function dockerOpts(c, dirty) {
+  function dockerOpts(c, dirty, inPanel) {
     var D2 = c.docker;
     var shows = [['cpu', 'CPU'], ['memory', 'Memory'], ['uptime', 'Uptime'], ['image', 'Image']];
     var showBox = h('div', { class: 'inl' }, shows.map(function (x) {
@@ -4332,7 +4366,7 @@
         F('Layout', sIn(D2, 'layout', dirty, [['grid', 'Compact grid'], ['list', 'Table'], ['cards', 'Cards']])),
         F('Grid columns', sIn(D2, 'columns', dirty, [[0, 'Automatic (fits the width)'], [1, '1'], [2, '2'], [3, '3'], [4, '4']])),
         F('Sort by', sIn(D2, 'sort', dirty, [['name', 'Name'], ['status', 'Status'], ['cpu', 'CPU'], ['memory', 'Memory']]))),
-      cIn(D2, 'update_check', dirty, 'Check for container updates: the gear turns orange when a container has one'),
+      inPanel ? null : cIn(D2, 'update_check', dirty, 'Show container updates: a mark on each container that has one'),
       F('Details on each container', showBox, S.boot.caps.docker_stats ? null : 'CPU and memory are not available through the Unraid API (Docker version).'));
   }
   /* which containers (or VMs) the dashboard shows, plus display name, icon, favorite and update check, kept by name */
@@ -4361,7 +4395,7 @@
           h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
           h('label', { class: 'switch ico-t', title: 'Favorite' }, h('input', { type: 'checkbox', checked: !!p.favorite, 'aria-label': 'Favorite ' + it.name, onchange: function (e) { p.favorite = e.target.checked; put(); } }), ic('star')),
-          dk ? h('label', { class: 'switch ico-t', title: 'Check for updates' }, h('input', { type: 'checkbox', checked: !p.no_update, 'aria-label': 'Check ' + it.name + ' for updates', onchange: function (e) { p.no_update = !e.target.checked; put(); } }), ic('up')) : null);
+          dk ? h('label', { class: 'switch ico-t', title: 'Show updates for this container' }, h('input', { type: 'checkbox', checked: !p.no_update, 'aria-label': 'Show updates for ' + it.name, onchange: function (e) { p.no_update = !e.target.checked; put(); } }), ic('up')) : null);
         list.appendChild(row);
       });
       if (!list.childNodes.length) list.appendChild(h('div', { class: 'empty' }, items.length ? 'Nothing matches.'

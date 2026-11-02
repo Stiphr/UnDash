@@ -1,4 +1,7 @@
 ###beta
+- Containers with an update now show it: a small badge on the icon in the grid, for every layout. Click it to update, skip this version or ignore updates for that container. Updates shows the count, and also lists what you skipped or ignored so you can undo it
+- Skip this version: the update comes back by itself when a newer version comes out. The Docker version checks skipped images with their registry every 6 hours. Images with no registry, like your own local builds, can be ignored instead
+- Turn update marks off in Settings or in edit mode: click the Containers card, Show updates
 - Arr Stack has a new look: a tile per app with its two main numbers and problem count, and one panel under them for the app you open, with every number, its problems and a link to the app. Every app opens now, Bazarr included, and opening one no longer pushes the others apart
 - The dashboard loads and refreshes much faster on a busy server: the Unraid API answers one request at a time, so one background reader now asks it and every open page shares that copy. Numbers on the page are never more than 30 seconds old, a page opened after a quiet spell appears at once, and an action in UnDash shows on the next refresh. Temperature alerts stay current with no page open, and the API gets far fewer requests
 - Settings are safe from a damaged file: if config.yaml is cut short or emptied, UnDash keeps the damaged copy, restores the newest backup and tells you, instead of showing an empty dashboard
