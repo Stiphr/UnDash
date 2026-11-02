@@ -324,10 +324,10 @@ switch ($action) {
     if (!und_api_mode()) fail('The plugin signs in with your Unraid login.');
     $kind = und_auth_kind();
     if ($kind === 'env') fail('The password comes from UNDASH_PASSWORD in the container settings; change it there.');
-    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
     if ($kind === 'file') {
-      if (und_login_throttled($ip)) fail('Too many wrong passwords. Wait 15 minutes.', 429);
-      if (!und_password_ok($P('current'))) { und_login_failed($ip); fail('The current password is wrong.', 403); }
+      $ip = und_client_ip(); $tried = und_login_check($ip, $P('current'));
+      if ($tried === 'locked') fail(und_login_msg($ip), 429);
+      if ($tried !== 'ok') fail('The current password is wrong.', 403);
     }
     if ($action === 'password_remove') { if ($P('confirm') !== 'yes') fail('Confirm going without a password.'); $r = und_auth_open(); }
     else { if ($P('password') !== $P('password2')) fail('The passwords do not match.'); $r = und_password_set($P('password')); }

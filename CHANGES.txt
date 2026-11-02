@@ -1,4 +1,5 @@
 ###beta
+- Stronger protection against password guessing: each lockout lasts twice as long as the last, up to a day, guesses are checked one at a time, passwords are hashed more strongly, the commonest passwords are refused, and repeated wrong passwords raise an alert with the address. Restarting the container clears a lockout. Behind a reverse proxy, set UNDASH_TRUSTED_PROXIES so one visitor cannot lock out the others
 - The Network tile says Checking… instead of n/a while its first reading comes in
 - Rename containers and VMs on a phone: Settings, Dashboard, Containers or Virtual machines. The name field was hidden on small screens
 - Smart arrange and resizing for apps: click an app card in edit mode to set its size, give every app that size, or line the apps up in even rows that fit their content. The other cards stay put. Smart arrange in the Arrange menu now also fits every card to its content, so nothing is cut off

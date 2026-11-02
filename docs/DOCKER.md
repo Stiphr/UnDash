@@ -83,6 +83,7 @@ Environment variables:
 | `UNDASH_PORT` | 9099 | the port inside the container (normally leave it and change the host port) |
 | `PHP_CLI_SERVER_WORKERS` | 12 | parallel requests |
 | `UNDASH_TLS_VERIFY` | | `1` checks the certificate of every https:// app address (off by default: LAN apps mostly use self-signed certificates) |
+| `UNDASH_TRUSTED_PROXIES` | | addresses of your reverse proxies (IPs or CIDR, comma separated). Set it when UnDash sits behind one: each visitor then counts on their own for wrong passwords, instead of all sharing the proxy's address |
 | `UNDASH_ALLOWED_HOSTS` | | host names that may open a dashboard that has no password (see the template) |
 
 ## 3. First start
@@ -135,7 +136,7 @@ run it by hand or push a version tag.
 * No Docker socket: containers are managed through the Unraid API with the key's own permissions.
 * The API key and app credentials stay on the server (`/config/.env`, mode 600); the browser only sees
   "saved". `config.yaml` never holds them.
-* The dashboard password is stored as a hash; 5 wrong attempts lock an address out for 15 minutes; sessions are
+* The dashboard password is stored as a hash; 5 wrong attempts lock an address out for 15 minutes, and each lockout after that lasts twice as long, up to a day (restarting the container clears them); sessions are
   HttpOnly, SameSite=Strict cookies with a CSRF token; a strict Content-Security-Policy is sent.
 * The health check (`/health`) answers "ok" and nothing else.
 * The wallpaper you upload in Settings is checked by its bytes (JPEG, PNG or WebP only, at most 6 MB and 8192 px), kept in `/config/data/wallpaper` with mode 600 and served only to a signed-in browser.

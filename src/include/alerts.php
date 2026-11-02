@@ -57,6 +57,11 @@ function und_alerts(array $cfg, $sys, $dk, $smart = null) {
     $res = trim(preg_replace('/[^A-Za-z0-9_.+@ -]/', '', (string)$d['disk'])) ?: 'disk';
     $add('bad', $d['disk'] . ($d['model'] !== '' ? ' (' . $d['model'] . ')' : '') . ' ' . ($why[(int)$d['status']] ?? 'failed') . ' in ' . $d['app'] . '. Back up its data and plan a replacement.', 'disk.smart', $res);
   }
+  if (und_api_mode()) {
+    if (!function_exists('und_login_seen')) require_once __DIR__ . '/auth.php';
+    $g = und_login_seen();
+    if ($g['n'] >= UND_LOGIN_TRIES) $add('warn', $g['n'] . ' wrong passwords in the last 24 hours, the last from ' . $g['ip'] . '. If that was not you, someone may be guessing your password.', 'auth.guess', 'login');
+  }
   return $out;
 }
 
