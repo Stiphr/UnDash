@@ -498,6 +498,14 @@
     }
     return p.accent;
   }
+  /* the tab icon: your own logo, or the UnDash mark in your accent colour. Inside Unraid's pages the tab stays Unraid's */
+  function paintFavicon(acc, ink) {
+    var el = document.querySelector('link[rel="icon"]'), g = S.L && S.L.general;
+    if (!el || !S.boot || !S.boot.standalone) return;
+    var box = function (x, y, w, ht, o) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + ht + '" rx="4" fill="' + ink + '" opacity="' + o + '"/>'; };
+    var href = (g && g.logo && iconUrl(g.logo)) || 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="' + acc + '"/>' + box(12, 12, 18, 24, 1) + box(34, 12, 18, 12, .85) + box(34, 28, 18, 24, 1) + box(12, 40, 18, 12, .85) + '</svg>');
+    if (el.getAttribute('href') !== href) el.setAttribute('href', href);
+  }
   function applyLook(a) {
     a = a || S.L.appearance;
     syncThemes(a);
@@ -530,6 +538,7 @@
     set('--accent', acc);
     set('--accent-btn', mix(c, [0, 0, 0], light ? 0.06 : 0.12));
     set('--accent-ink', L1 > 0.45 ? '#111' : '#fff');
+    paintFavicon(acc, L1 > 0.45 ? '#111' : '#fff');
     set('--accent-soft', 'rgba(' + c.join(',') + ',' + (light ? 0.12 : 0.16) + ')');
     // link text must stay readable on the panel colour: darken on light, lighten on dark
     set('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : acc) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
