@@ -170,7 +170,8 @@ function und_api_mode() { return UND_MODE === 'api'; }
 function und_caps() {
   $p = !und_api_mode();
   return ['unraid' => $p || und_api_ready(), 'glances' => und_glances_url(und_load_config()) !== '', 'power' => $p, 'os_update' => $p, 'docker_check' => $p, 'docker_stats' => true, 'docker_inspect' => true, 'vm_hibernate' => $p, 'vm_details' => $p,
-          'vnc' => $p, 'storage_detail' => true, 'mode' => UND_MODE];
+          'vnc' => $p, 'storage_detail' => true, 'mode' => UND_MODE,
+          'docker_write' => $p || und_api_can('docker'), 'vm_write' => $p || und_api_can('vms')];
 }
 
 function und_os_version() {

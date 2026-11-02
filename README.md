@@ -144,6 +144,8 @@ Containers and VMs need no setup: UnDash lists everything it finds on the server
 5. Pick the **layout** (compact grid, table or cards), **sort order**, what each container shows (CPU, memory, uptime, image) and which ones show by default: running, all, or **Selected**.
 6. Press **Save**.
 
+With a read-only API key the controls are hidden, and the dashboard stays useful for watching. If Unraid does not tell UnDash what the key may do, they disappear after the first refused action and are tried again an hour later.
+
 The list stays empty until UnDash can read the server. In the Docker version, check **Settings > Server connection** and that the API key has read access to *Docker* and *VMs* (see [Install](#docker-container)).
 
 On the dashboard, the gear on each container or VM has the controls: start, stop, restart, update, logs, **Show in "Selected"** and **Hide from the dashboard**. Click the icon or name to open its web UI.
@@ -158,7 +160,7 @@ To hide all update badges, turn off **Show updates** in the container options.
 
 ### Arrange the dashboard
 
-Press the pencil at the top right to edit the dashboard in place. Nothing changes until you press **Save**, and **Undo** steps back through your changes. Edit mode needs a screen wider than a phone.
+Press the pencil at the top right to edit the dashboard in place. Nothing changes until you press **Save**, and **Undo** steps back through your changes, on every page. Edit mode needs a screen wider than a phone.
 
 - **Move and resize:** drag a card, or drag its edges. Click a card for its options: name, which page it is on, and what it shows.
 - **Add** brings back cards you removed and adds new apps. **Pages** adds and names pages. **Appearance** has the theme, accent colour, background, navbar, card style and size beside your cards.

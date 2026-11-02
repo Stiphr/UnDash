@@ -8,5 +8,6 @@ while (true) {
   clearstatcache();
   und_api_poll_due(time() - (int)@filemtime(und_tmp('viewer')) < 60);
   und_docker_skip_tick();
+  und_api_perms_tick();
   sleep(1);
 }

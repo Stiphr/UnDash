@@ -42,6 +42,17 @@
   function clear(e) { while (e && e.firstChild) e.removeChild(e.firstChild); return e; }
   /* the Docker version with no Unraid API key: no containers, VMs or array to read or control, and only some tiles with Glances */
   function noKey() { return !!S.boot && S.boot.caps.unraid === false; }
+  /* a key that can read but not change: no buttons that cannot work. Learned from Unraid's answer when the key cannot say (see und_api_can) */
+  function dCan() { return S.boot.caps.docker_write !== false; }
+  function vCan() { return S.boot.caps.vm_write !== false; }
+  var READ_ONLY = ['Read-only API key: no controls', 'info', function () {}, '', true];
+  function keyRefused(kind, msg) {
+    if (!/missing a permission/i.test(msg || '')) return;
+    S.boot.caps[kind] = false;
+    toast('This API key can only read. In Unraid, give it update access to ' + (kind === 'vm_write' ? 'VMs' : 'Docker') + ' to use the controls.', true);
+    if (R.docker) R.docker.fSig = null;
+    paintAll();
+  }
   var GLANCES_TILES = ['cpu', 'memory', 'storage', 'network', 'uptime', 'cores', 'swap'];
   function tileOk(id) { return !noKey() || (!!S.boot.caps.glances && GLANCES_TILES.indexOf(id) >= 0); }
   function secOk(id) { return !noKey() || (id !== 'docker' && id !== 'vms' && (id !== 'overview' || !!S.boot.caps.glances)); }
@@ -741,7 +752,7 @@
     if (E) pageStore();
     S.page = id; LS.set('page', id);
     if (E) {
-      E.undo = []; E.redo = []; E.view = null; E.side.hidden = true; E.bAdd.classList.remove('on');
+      E.view = null; E.side.hidden = true; E.bAdd.classList.remove('on');
       var d = pageData(); E.smart = !(d[E.mode] || []).length && !(d.lg || []).length;
       E.list = boardLayout(E.mode, E.hidden);
       E.list.forEach(function (c) { if (c.a && S.nat[c.i]) c.h = S.nat[c.i]; });
@@ -1205,12 +1216,15 @@
     refreshNow();
   }
   function boardCols() { return BOARD_COLS[S.edit.mode]; }
-  function boardSnap() { var E = S.edit; return { list: gCopy(E.list), hidden: E.hidden.slice(), smart: E.smart, compact: E.compact, cfg: E.cj, cr: E.crj, pages: JSON.stringify(E.pages), homeName: E.homeName }; }
+  function boardSnap() { var E = S.edit; return { page: S.page, list: gCopy(E.list), hidden: E.hidden.slice(), smart: E.smart, compact: E.compact, cfg: E.cj, cr: E.crj, pages: JSON.stringify(E.pages), home: JSON.stringify({ lg: E.home.lg, md: E.home.md }), homeName: E.homeName }; }
   function boardMark() { var E = S.edit; E.undo.push(boardSnap()); if (E.undo.length > 60) E.undo.shift(); E.redo = []; E.dirty = true; E.smart = false; }
   function boardStep(from, to) {
     var E = S.edit, st = from.pop(); if (!st) return;
     to.push(boardSnap());
-    var rebuild = st.hidden.join() !== E.hidden.join() || st.pages !== JSON.stringify(E.pages), cfg = st.cfg && st.cfg !== E.cj;
+    // a step can belong to another page: Undo goes back there, so you see what it did
+    var moved = st.page !== S.page, rebuild = moved || st.hidden.join() !== E.hidden.join() || st.pages !== JSON.stringify(E.pages), cfg = st.cfg && st.cfg !== E.cj, was = JSON.parse(st.home);
+    if (moved) { S.page = st.page; LS.set('page', st.page); E.view = null; }
+    E.home.lg = was.lg; E.home.md = was.md;
     E.pages = JSON.parse(st.pages); E.homeName = st.homeName; E.list = st.list; E.hidden = st.hidden; E.smart = st.smart; E.compact = st.compact; E.dirty = true;
     if (cfg) { E.D.cfg = JSON.parse(st.cfg); E.D.creds = JSON.parse(st.cr); E.cj = st.cfg; E.crj = st.cr; E.changed = true; boardPreview(); }
     else if (rebuild) boardRebuild(); else { R.grid = E.list; boardPaint(); }
@@ -1929,8 +1943,8 @@
       put(score(nm) >= 0 ? nm : c.name, sbItem(cIcon(c, p, 'aico'), [nm, 'Container · ' + c.state],
         function () { if (web) window.open(web, '_blank', 'noopener'); else inspect(c.name); },
         h('span', { class: 'sb-acts' }, web ? sbBtn('Open web UI', 'web', function () { window.open(web, '_blank', 'noopener'); }) : null,
-          c.state === 'running' ? sbBtn('Stop', 'stop', function () { dAct(c, 'stop'); }) : c.state === 'paused' ? null : sbBtn('Start', 'play', function () { dAct(c, 'start'); }),
-          c.state !== 'paused' ? sbBtn('Restart', 'restart', function () { dAct(c, 'restart'); }) : null,
+          !dCan() ? null : c.state === 'running' ? sbBtn('Stop', 'stop', function () { dAct(c, 'stop'); }) : c.state === 'paused' ? null : sbBtn('Start', 'play', function () { dAct(c, 'start'); }),
+          dCan() && c.state !== 'paused' ? sbBtn('Restart', 'restart', function () { dAct(c, 'restart'); }) : null,
           sbBtn('Logs', 'logs', function () { logs(c.name); }), sbBtn('Details', 'info', function () { inspect(c.name); }))));
     });
     ((y.vms && y.vms.vms) || []).forEach(function (v) {
@@ -1939,7 +1953,7 @@
       put(score(nm) >= 0 ? nm : v.name, sbItem(vIcon(v, p, 'aico'), [nm, 'VM · ' + v.state],
         function () { if (web) window.open(web, '_blank', 'noopener'); else sbJump('vms', v.name); },
         h('span', { class: 'sb-acts' }, web ? sbBtn(vConsole(web) ? 'Open console (VNC)' : 'Open Unraid\'s VMs page', 'screen', function () { vOpen(web); }) : null,
-          ['start', 'resume', 'stop', 'restart'].filter(function (o) { return (v.ops || []).indexOf(o) >= 0 && VMOPS[o]; }).map(function (o) { return sbBtn(VMOPS[o][0], VMOPS[o][1], function () { vAct(v, o); }); }))));
+          ['start', 'resume', 'stop', 'restart'].filter(function (o) { return vCan() && (v.ops || []).indexOf(o) >= 0 && VMOPS[o]; }).map(function (o) { return sbBtn(VMOPS[o][0], VMOPS[o][1], function () { vAct(v, o); }); }))));
     });
     return out.sort(function (a, c) { return a[0] - c[0] || a[1] - c[1]; }).slice(0, 8).map(function (x) { return x[2]; });
   }
@@ -2454,7 +2468,7 @@
     var pl = portLink('');
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
-      ['Check container updates', 'box', caps.docker_check ? checkUpdates : rereadUpdates, '', !!S.busy.dcheck], dk && dk.updates ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
+      ['Check container updates', 'box', caps.docker_check ? checkUpdates : rereadUpdates, '', !!S.busy.dcheck], dk && dk.updates && dCan() ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
       caps.os_update ? ['Unraid OS update', 'up', osDialog] : ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], TOUCH ? null : ['Keyboard shortcuts  ?', 'grid', keysHelp], TOUCH && !APP_MODE ? ['Add to home screen', 'download', phoneHelp] : null,
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
       window.UND_STANDALONE && S.boot.auth !== 'open' ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
@@ -2722,7 +2736,7 @@
     var b = h('button', { type: 'button', class: label ? 'updl' + (on ? '' : ' off') : 'cup' + (on ? '' : ' off'), title: t, 'aria-label': t, 'aria-haspopup': 'menu', onclick: function (e) {
       e.stopPropagation();
       var busy = !!S.busy['d:' + c.name] || c.job === 'updating';
-      menu(b, (on ? [['Update now', 'up', function () { updateMany([c.name]); }, 'upd', busy], 'hr'] : []).concat(p.no_update ? [] : updActions(c, p), [updIgnore(c, p)]));
+      menu(b, (on && dCan() ? [['Update now', 'up', function () { updateMany([c.name]); }, 'upd', busy], 'hr'] : []).concat(p.no_update ? [] : updActions(c, p), [updIgnore(c, p)]));
     } }, label || ic('up'));
     return b;
   }
@@ -2842,7 +2856,7 @@
       if (S.fd !== 'all' && list.length < d.containers.length) r.foot.appendChild(h('button', { type: 'button', class: 'allb', title: 'Show every container', onclick: function () { S.fd = 'all'; S.fdSet = true; shell(); } }, 'Show all ' + d.containers.length, ic('chev')));
       if (hiddenN || S.showHidden) r.foot.appendChild(btn(S.showHidden ? 'Hide hidden containers' : 'Show ' + hiddenN + ' hidden', function () { S.showHidden = !S.showHidden; r.fSig = null; if (R.vms) R.vms.sig = null; paintAll(); }, 'sm ghost', S.showHidden ? 'eyeoff' : 'eye'));
       [].forEach.call(r.filters.childNodes, function (b) { if (/^Updates/.test(b.textContent)) txt(b, 'Updates' + (dk.updates ? ' ' + dk.updates : '')); });
-      if (dk.updates) r.updAll.appendChild(btn('Update all (' + dk.updates + ')', function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up', 'Update every container that has an update'));
+      if (dk.updates && dCan()) r.updAll.appendChild(btn('Update all (' + dk.updates + ')', function () { updateMany(dockerStats(S.live).updList); }, 'sm pri', 'up', 'Update every container that has an update'));
     }
   }
   /* every container action sits behind one gear button; the web UI opens from the icon or the name */
@@ -2861,12 +2875,12 @@
       return [
         web ? ['Open web UI', 'web', function () { window.open(web, '_blank', 'noopener'); }] : null,
         web ? 'hr' : null,
-        c.state === 'paused' ? ['Resume', 'play', function () { dAct(c, 'unpause'); }, '', busy]
+        !dCan() ? READ_ONLY : c.state === 'paused' ? ['Resume', 'play', function () { dAct(c, 'unpause'); }, '', busy]
           : run || c.state === 'restarting' ? ['Stop', 'stop', function () { dAct(c, 'stop'); }, 'danger', busy]
           : ['Start', 'play', function () { dAct(c, 'start'); }, '', busy],
-        c.state !== 'paused' ? ['Restart', 'restart', function () { dAct(c, 'restart'); }, '', busy] : null,
-        run ? ['Pause', 'pause', function () { dAct(c, 'pause'); }, '', busy] : null,
-        [updOn(c) ? 'Update (new version available)' : 'Update (force)', 'up', function () { updateMany([c.name]); }, updOn(c) ? 'upd' : '', busy],
+        dCan() && c.state !== 'paused' ? ['Restart', 'restart', function () { dAct(c, 'restart'); }, '', busy] : null,
+        dCan() && run ? ['Pause', 'pause', function () { dAct(c, 'pause'); }, '', busy] : null,
+        dCan() ? [updOn(c) ? 'Update (new version available)' : 'Update (force)', 'up', function () { updateMany([c.name]); }, updOn(c) ? 'upd' : '', busy] : null,
         c.update === 'available' && S.L.docker.update_check !== false && !p.no_update ? updActions(c, p)[0] : null,
         'hr', ['Logs', 'logs', function () { logs(c.name); }], ['Details', 'info', function () { inspect(c.name); }], 'hr',
         [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('docker', c.name, { favorite: !p.favorite }); }],
@@ -2959,7 +2973,7 @@
       paintAll();
       api('docker_action', { name: c.name, op: op }, 130000).then(function (j) {
         delete S.busy[key];
-        if (j.error) toast(nm + ': ' + j.error, true); else toast(nm + ': ' + ({ start: 'started', stop: 'stopped', restart: 'restarted', pause: 'paused', unpause: 'resumed' }[op] || op + ' done'));
+        if (j.error) { toast(nm + ': ' + j.error, true); keyRefused('docker_write', j.error); } else toast(nm + ': ' + ({ start: 'started', stop: 'stopped', restart: 'restarted', pause: 'paused', unpause: 'resumed' }[op] || op + ' done'));
         if (S.paused) { S.paused = false; togglePause(); }
         refreshNow();
       });
@@ -3038,7 +3052,7 @@
           pre.textContent = out + '[' + nice + ']\n' + (k.out || ''); pre.scrollTop = pre.scrollHeight;
           if (k.state === 'running') { var l = (k.out || '').trim().split('\n').pop(); if (l) status.textContent = l; setTimeout(poll, 1500); return; }
           if (k.state === 'idle') return fail('UnDash has no record of this update (it may have restarted). Check the container in Unraid\'s Docker tab.');
-          out = pre.textContent + '\n'; result(n, !!k.ok, (k.out || '').trim().split('\n').pop());
+          out = pre.textContent + '\n'; result(n, !!k.ok, (k.out || '').trim().split('\n').pop()); if (!k.ok) keyRefused('docker_write', k.out);
         });
       }
       if (running.indexOf(n) >= 0) { poll(); return; }
@@ -3190,7 +3204,8 @@
     a.appendChild(gear(x.name, function () {
       var b = !!S.busy['v:' + x.name];
       return [web ? [vConsole(web) ? 'Open console (VNC)' : 'Open Unraid\'s VMs page (console)', 'screen', function () { vOpen(web); }] : null, web ? 'hr' : null]
-        .concat(x.ops.map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' || o === 'stop' ? 'danger' : '', b]; }))
+        .concat(vCan() ? [] : [READ_ONLY])
+        .concat((vCan() ? x.ops : []).map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' || o === 'stop' ? 'danger' : '', b]; }))
         .concat([x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
           [p.favorite ? 'Remove from favorites' : 'Add to favorites', 'star', function () { savePref('vms', x.name, { favorite: !p.favorite }); }],
           ['Change icon…', 'tag', function () { iconPicker(p.label || x.name, function (v) { savePref('vms', x.name, { icon: v }); }, p.icon || '-'); }],
@@ -3210,6 +3225,7 @@
       S.busy[key] = { start: 'starting', stop: 'shutting down', kill: 'stopping', restart: 'restarting', pause: 'pausing', resume: 'resuming', hibernate: 'hibernating' }[op];
       paintAll();
       api('vm_action', { name: x.name, op: op }, 100000).then(function (j) {
+        if (j.error) keyRefused('vm_write', j.error);
         delete S.busy[key];
         if (j.error) toast(nm + ': ' + j.error, true); else toast(nm + ': ' + (op === 'stop' ? 'shutdown requested' : VMOPS[op][0].toLowerCase() + ' done'));
         if (R.vms) R.vms.sig = null;

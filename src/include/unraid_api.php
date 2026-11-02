@@ -28,6 +28,43 @@ function und_api_conf() {
 /** Without an address and a key there is no Unraid to ask: no containers, VMs or array, so the page does not offer them. */
 function und_api_ready() { $c = und_api_conf(); return $c['url'] !== '' && $c['key'] !== ''; }
 
+/*
+ * Can this key change containers and VMs, or only read them? `me` says so when the key may read it; most keys made for UnDash
+ * may not, and nothing else tells. So the other way to find out is a real refusal: UnDash never tries an action just to see.
+ * After a refusal the buttons stay away for an hour, so a key that gets the permission later works again by itself.
+ */
+const UND_KEY_ME_EVERY = 600;
+const UND_KEY_REFUSED_FOR = 3600;
+function und_api_key_id() { return substr(hash('sha256', (string)und_api_conf()['key']), 0, 16); }
+function und_api_perms_tick($now = null) {
+  $now = $now ?? time(); $mark = und_tmp('key-perms.tick');
+  if (!und_api_ready() || $now - (int)@filemtime($mark) < UND_KEY_ME_EVERY) return;
+  @touch($mark, $now);
+  $r = und_gql('query { me { roles permissions { resource actions } } }');
+  $out = ['key' => und_api_key_id(), 'docker' => null, 'vms' => null];
+  if (!isset($r['error']) && isset($r['data']['me'])) {
+    $me = $r['data']['me']; $admin = in_array('ADMIN', (array)($me['roles'] ?? []), true);
+    foreach (['docker' => 'DOCKER', 'vms' => 'VMS'] as $k => $res) {
+      $out[$k] = $admin;
+      foreach ((array)($me['permissions'] ?? []) as $p) if (($p['resource'] ?? '') === $res && in_array('UPDATE_ANY', (array)($p['actions'] ?? []), true)) $out[$k] = true;
+    }
+  }
+  und_write_json(und_tmp('key-perms.json'), $out, true);
+}
+function und_api_refused($kind, $now = null) {
+  $f = und_tmp('key-refused.json'); $j = und_read_json($f, []);
+  if (($j['key'] ?? '') !== und_api_key_id()) $j = ['key' => und_api_key_id()];
+  $j[$kind] = $now ?? time();
+  und_write_json($f, $j, true);
+}
+function und_api_can($kind, $now = null) {
+  $id = und_api_key_id(); $now = $now ?? time();
+  $j = und_read_json(und_tmp('key-refused.json'), []);
+  if (($j['key'] ?? '') === $id && $now - (int)($j[$kind] ?? 0) < UND_KEY_REFUSED_FOR) return false;
+  $p = und_read_json(und_tmp('key-perms.json'), []);
+  return !(($p['key'] ?? '') === $id && ($p[$kind] ?? null) === false);
+}
+
 /** Run one GraphQL operation. Returns ['data' => ...] or ['error' => readable message, 'auth' => bool]. */
 function und_gql($query, array $vars = [], $timeout = 10) {
   $c = und_api_conf();
@@ -445,6 +482,7 @@ function und_api_docker_action($name, $op) {
   und_unlock($lock);
   @unlink(und_tmp('api-containers.json'));
   $ok = !isset($r['error']);
+  if (!empty($r['auth'])) und_api_refused('docker');
   und_history_add('docker', $name, $op, $ok, $ok ? '' : $r['error']);
   return $ok ? ['ok' => true] : ['error' => $r['error']];
 }
@@ -503,7 +541,7 @@ function und_api_vm_live() {
   $out = [];
   foreach ((array)($r['data']['vms']['domains'] ?? []) as $d) {
     $st = und_api_vm_state($d['state']);
-    $out[] = ['name' => (string)$d['name'], 'id' => (string)$d['id'], 'state' => $st, 'ops' => und_api_vm_ops($st), 'cpus' => null, 'memory' => null, 'autostart' => null, 'os' => '', 'icon' => '', 'vnc' => '', 'agent' => false];
+    $out[] = ['name' => (string)$d['name'], 'id' => (string)$d['id'], 'state' => $st, 'ops' => und_api_can('vms') ? und_api_vm_ops($st) : [], 'cpus' => null, 'memory' => null, 'autostart' => null, 'os' => '', 'icon' => '', 'vnc' => '', 'agent' => false];
   }
   usort($out, function ($a, $b) { return strcasecmp($a['name'], $b['name']); });
   return ['vms' => $out];
@@ -522,6 +560,7 @@ function und_api_vm_action($name, $op) {
   $r = und_gql('mutation ($id: PrefixedID!) { vm { ' . $map[$op] . '(id: $id) } }', ['id' => $vm['id']], 90);
   und_unlock($lock);
   @unlink(und_tmp('api-vms.json'));
+  if (!empty($r['auth'])) und_api_refused('vms');
   $ok = !isset($r['error']) && !empty($r['data']['vm'][$map[$op]]);
   $err = $ok ? '' : ($r['error'] ?? 'Unraid did not confirm the action.');
   und_history_add('vm', $name, $op, $ok, $err);
