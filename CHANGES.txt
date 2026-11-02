@@ -1,5 +1,6 @@
 ###beta
 - Split my cards puts Now playing and Requests on Media
+- Phone tabs and the pages the first-run setup makes now match: Home, Media and Apps. Containers and VMs sit on Apps instead of a separate Docker tab
 - Much less work for your apps: qBittorrent's whole torrent list is read every 30 seconds instead of on every refresh, Prowlarr's heavy totals every 30 minutes in the background, and Nginx Proxy Manager's hosts every minute
 - If UnDash restarts or the connection drops, cards keep showing their last data instead of emptying and shuffling the dashboard
 - Split my cards makes Media and Apps pages: Containers and VMs now go on Apps, with your app cards
