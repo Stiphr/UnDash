@@ -1569,7 +1569,7 @@
       more.appendChild(F('Show as', sIn(c.media, 'style', boardDirty, [['art', 'Posters'], ['text', 'Text only']])));
       boardZone(body, 'media');
     } else if (sid === 'docker' || sid === 'vms') {
-      if (sid === 'docker') body.appendChild(h('div', { class: 'bs-l' }, bsRow(ic('up'), 'Show updates', 'A mark on each container that has one', bsSwitch(c.docker.update_check !== false, 'Show container updates', function (on) { c.docker.update_check = on; boardDirty(); }))));
+      if (sid === 'docker') body.appendChild(h('div', { class: 'bs-l' }, bsRow(ic('up'), 'Show updates', 'Mark containers that have one', bsSwitch(c.docker.update_check !== false, 'Show container updates', function (on) { c.docker.update_check = on; boardDirty(); }))));
       body.appendChild(h('div', { class: 'bs-names' }, namesList(c, boardDirty, sid)));
       if (sid === 'docker') more.appendChild(dockerOpts(c, boardDirty, true));
     } else if (sid === 'arr' || sid === 'downloads' || sid === 'requests') {
@@ -4401,7 +4401,7 @@
           h('button', { type: 'button', class: 'ico-btn', title: 'Pick an icon for ' + it.name, 'aria-label': 'Pick an icon for ' + it.name, onclick: function () { iconPicker(p.label || it.name, function (v) { p.icon = v; put(); draw(); }); } },
             (dk ? cIcon : vIcon)(it, p, '')),
           h('span', { class: 't' }, h('span', { class: 'sdot ' + (it.state === 'running' ? 'ok' : 'na'), title: it.state || '' }), h('b', null, it.name)),
-          h('input', { type: 'text', value: p.label || '', placeholder: 'Display name', 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
+          h('input', { type: 'text', class: 'oname', value: p.label || '', maxlength: 60, placeholder: dirty === boardDirty ? it.name : 'Display name', title: 'Rename on the dashboard. The ' + (dk ? 'container' : 'VM') + ' itself stays ' + it.name, 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
           h('label', { class: 'switch ico-t', title: 'Favorite' }, h('input', { type: 'checkbox', checked: !!p.favorite, 'aria-label': 'Favorite ' + it.name, onchange: function (e) { p.favorite = e.target.checked; put(); } }), ic('star')),
           dk ? h('label', { class: 'switch ico-t', title: 'Show updates for this container' }, h('input', { type: 'checkbox', checked: !p.no_update, 'aria-label': 'Show updates for ' + it.name, onchange: function (e) { p.no_update = !e.target.checked; put(); } }), ic('up')) : null);
