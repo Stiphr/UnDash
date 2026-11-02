@@ -1,4 +1,5 @@
 ###beta
+- The browser tab icon follows your accent color. If you set your own logo, the tab uses that
 - Containers with an update now show it: a small badge on the icon in the grid, for every layout. Click it to update, skip this version or ignore updates for that container. Updates shows the count, and also lists what you skipped or ignored so you can undo it
 - Skip this version: the update comes back by itself when a newer version comes out. The Docker version checks skipped images with their registry every 6 hours. Images with no registry, like your own local builds, can be ignored instead
 - Turn update marks off in Settings or in edit mode: click the Containers card, Show updates
