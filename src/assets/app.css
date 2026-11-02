@@ -1534,3 +1534,5 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.und .bside .pick-list .oi input.oname:hover{border-color:var(--line-2)!important}
 .und.und .bside .pick-list .oi input.oname:focus{background:var(--field)!important;border-color:var(--accent)!important;outline:0}
 .und.und .bside .pick-list .oi input.oname:focus::placeholder{color:var(--faint)}
+/* every icon in the container and VM lists takes the same room, the UnDash logo and the plain box too */
+.und .ico-btn>*{width:21px;height:21px;flex:none;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box}.und .ico-btn>.logo{border-radius:5px}
