@@ -1,4 +1,5 @@
 ###beta
+- Arr Stack has a new look: a tile per app with its two main numbers and problem count, and one panel under them for the app you open, with every number, its problems and a link to the app. Every app opens now, Bazarr included, and opening one no longer pushes the others apart
 - The dashboard loads and refreshes much faster on a busy server: the Unraid API answers one request at a time, so one background reader now asks it and every open page shares that copy. System numbers are never more than 30 seconds old and container and VM states never more than 20, and an action in UnDash shows on the next refresh. Temperature alerts stay current with no page open, and the API gets far fewer requests
 - Settings are safe from a damaged file: if config.yaml is cut short or emptied, UnDash keeps the damaged copy, restores the newest backup and tells you, instead of showing an empty dashboard
 - Security: keys, passwords and cookies no longer follow a redirect to another server. Links to javascript: and data: addresses are removed, wherever they come from

@@ -577,29 +577,27 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und[data-density=compact] .mi.ml{padding:2px 6px}.und[data-density=expanded] .mi.ml{padding:6px}
 
 /* Arr Stack */
-.und .arr{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));grid-auto-rows:minmax(min-content,1fr);column-gap:14px;overflow:hidden}
-.und .aitem{min-width:0;container-type:inline-size}
-.und .aitem:has(.adet:not([hidden])){grid-column:1/-1}
-.und .aline{display:flex;align-items:center;gap:4px;padding:0 6px 0 0}
-.und button.arow{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:5px 8px;min-height:40px;cursor:default}
-.und .aline:has(.achev:not([hidden])) button.arow{cursor:pointer}
-.und .aline:has(.achev:not([hidden])) button.arow:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}.und button.arow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.und .arr{display:flex;flex-direction:column;gap:10px;min-width:0}
+.und .atiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,160px),1fr));gap:8px;align-content:start}
+.und button.atile{all:unset;box-sizing:border-box;min-width:0;display:flex;flex-direction:column;gap:10px;padding:11px 12px;background:color-mix(in srgb,var(--text) 5%,transparent);border:1px solid transparent;border-radius:var(--r2);cursor:pointer;transition:background-color .14s,border-color .14s}
+.und button.atile:hover{background:color-mix(in srgb,var(--text) 9%,transparent)}
+.und button.atile:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.und button.atile[aria-expanded=true]{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.und .atop{display:flex;align-items:center;gap:8px;min-width:0}.und .atop .an{flex:1 1 0;min-width:0}
+.und .abadge{flex:none;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;font-size:11px;font-weight:600;line-height:18px;text-align:center;font-variant-numeric:tabular-nums;color:var(--warn);background:color-mix(in srgb,var(--warn) 18%,transparent)}
+.und .abadge.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 18%,transparent)}.und .abadge[hidden]{display:none}
+.und .astats{display:flex;gap:12px;min-width:0;min-height:38px;align-items:flex-start}
+.und .astat{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:1px;font-size:11px;line-height:1.2;color:var(--muted)}
+.und .astat b{font-size:17px;font-weight:600;line-height:1.15;letter-spacing:-.01em;color:var(--title);font-variant-numeric:tabular-nums}
+.und .apane{display:flex;flex-direction:column;gap:10px;min-width:0;padding:10px 12px 12px;background:color-mix(in srgb,var(--text) 5%,transparent);border-radius:var(--r2)}.und .apane[hidden]{display:none}
+.und .aph{display:flex;align-items:center;gap:8px;min-width:0}.und .aph .an{flex:0 1 auto;min-width:0}.und .aph .btn svg{width:13px;height:13px}
+.und .apstats{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--muted)}.und .apstats b{font-size:13px;font-weight:600;color:var(--title);font-variant-numeric:tabular-nums}
 .und .aico{width:20px;height:20px;object-fit:contain;flex:none;border-radius:4px}
 .und .arr .aico{width:24px;height:24px;border-radius:6px}
 .und span.aico{display:flex;align-items:center;justify-content:center;color:var(--faint)}.und span.aico svg{width:14px;height:14px}
 .und .an{font-weight:600;color:var(--title);white-space:nowrap}
-.und .ahd{flex:none;max-width:65%;display:flex;align-items:center;gap:7px}.und .ahd .an{min-width:0;flex:0 1 auto}
-@container (max-width:340px){.und .asub .ell{display:none}}
-.und .asub{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;color:var(--muted)}
 .und .sdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--off)}
 .und .sdot.ok{background:var(--ok)}.und .sdot.warn{background:var(--warn)}.und .sdot.bad{background:var(--bad)}
-.und .ai{flex:1 1 0;min-width:0;display:flex;flex-wrap:wrap-reverse;justify-content:flex-end;gap:12px;height:20px;overflow:hidden}
-.und .ai .st{display:flex;align-items:baseline;gap:4px;min-width:0;height:20px;line-height:20px;font-size:11.5px;color:var(--muted);text-transform:lowercase;white-space:nowrap}
-.und .ai .st b,.und .amore b{color:var(--title);font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25}
-.und .amore{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.und .amore b{font-size:12.5px}
-.und .achev{flex:none;display:flex;color:var(--faint)}.und .achev[hidden]{visibility:hidden;display:flex}.und .achev svg{width:15px;height:15px;transform:rotate(-90deg);transition:transform .14s ease}
-.und button.arow[aria-expanded=true] .achev svg{transform:none}
-.und .adet{padding:0 12px 10px 42px;display:flex;flex-direction:column;gap:6px}
 .und .aiss{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
 .und .aiss:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .und .ais{display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:12.5px;min-width:0}
@@ -608,9 +606,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .ais.open .ais-t{white-space:normal;overflow-wrap:anywhere}
 .und .ais-t b{color:var(--text);font-weight:600}
 .und .ais-k{flex:none;font-size:11.5px;color:var(--warn)}.und .ais.bad .ais-k{color:var(--bad)}
-/* stretched to match the section beside it: the rows share the extra height */
-.und .sec.fill .arr>.aitem{flex:1 0 auto;display:flex;flex-direction:column;justify-content:center}.und .sec.fill .arr>.aitem>.aline{flex:1 0 auto}
-.und[data-density=compact] button.arow{padding:3px 8px;min-height:34px}.und[data-density=expanded] button.arow{padding:8px 10px;min-height:48px}
 
 /* download clients */
 .und .dls{display:flex;flex-direction:column;gap:var(--gap)}
@@ -664,8 +659,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 @media (max-width:640px){
   .und .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
   .und button.stat{min-height:76px;padding:9px 10px 10px}.und .stat .v{font-size:18px}
-  .und .ai{display:none}.und .an{min-width:0;flex:1}
-  .und .adet{padding-left:12px}
+  .und .an{min-width:0;flex:1}
 }
 
 /* ================= 2026.10.31: compact containers and apps ================= */
@@ -1026,7 +1020,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 
 /* section titles on a wallpaper: the card is the backdrop, so no chip behind them */
 .und.bui.has-bg .gc-c>.sec>.sec-h h2,.und.bui.has-bg .gc-c>.sec>.sec-h .tools>.muted,.und.bui.has-bg .gc-c>.sec>.sec-h .tools>span:not(:empty){background:none!important;padding:0!important;box-shadow:none!important;-webkit-backdrop-filter:none;backdrop-filter:none}
-.und.bui.translucent .arr,.und.bui.translucent .arr>.aitem,.und.bui.translucent .dls{background:transparent}
+.und.bui.translucent .arr,.und.bui.translucent .dls{background:transparent}
 
 /* animations: one speed for everything, set by Settings > Theme > Animations */
 .und.bui{--t1:.14s;--t2:.22s;--t3:.42s}
@@ -1178,8 +1172,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .gc-m .stat .bar{display:none}
 
 /* Arr Stack on a card */
-.und .aitem{border-bottom:1px solid var(--line)}
-.und.bui button.arow{border-radius:var(--r2)}
 
 /* alerts: a button in the header that says what is wrong, and a list under it */
 .und .bell{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:7px;flex:none;height:36px;min-width:36px;max-width:230px;padding:0 10px;margin-right:4px;border-radius:calc(var(--r2) + 1px);font-size:13px;font-weight:550;color:var(--muted);cursor:pointer;transition:background-color var(--t1,.14s) ease}
@@ -1235,7 +1227,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.bui .gc-c>.mw{padding:var(--cp) 6px}.und.bui .gc-c>.mw>.mh{padding:0 8px 8px}
 .und.bui .ac .ch{margin-bottom:12px}
 .und.bui .ac .ch a.btn.ic.ghost,.und.bui .gc-c>.sec>.sec-h a.btn.ic.ghost,.und.bui .dlh a.btn.ic.ghost,.und.bui .gc-c>.mw>.mh a.btn.ic.ghost{margin-right:-6px}
-.und.bui .gc-arr .sec-b{margin:0 -10px;padding:0 10px}.und.bui .arr{margin:0 -10px}.und.bui .aline{padding-right:4px}
+
 .und.bui .gc-docker .sec-b{margin:0 -8px;padding:0 8px}.und.bui .gc-docker .cgrid{margin:0 -8px}
 .und.bui .gc-c>.sec>.sec-b>:last-child{margin-bottom:0}
 .und.bui .switch input[type=checkbox]:checked::after{background:var(--accent-ink)}
@@ -1488,7 +1480,7 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
   .und.bui a.wl,.und.bui span.wl{min-height:36px}
   .und.bui .allb{min-height:36px}
 }
-@media (pointer:coarse){.und input[type=range]{height:32px}.und .sec-h h2 button{min-height:36px}.und .rq .rqt a,.und .rq.line a{display:inline-block;padding-block:7px}.und .drawer .dh .btn,.und .drawer .btn.ghost.sm{min-width:36px;min-height:36px}}
+@media (pointer:coarse){.und input[type=range]{height:32px}.und button.atile{padding:12px}.und .sec-h h2 button{min-height:36px}.und .rq .rqt a,.und .rq.line a{display:inline-block;padding-block:7px}.und .drawer .dh .btn,.und .drawer .btn.ghost.sm{min-width:36px;min-height:36px}}
 /* System tiles: one size, text on the same lines, and the graph in a band of its own under it */
 .und.bui .gc-m .stat,.und.bui .gc-m .stat:has(.upt){justify-content:flex-start;padding-bottom:calc(var(--cp) + 8px)}
 .und.bui .gc-m .stat .sp:not(:has(.upt)){height:24px;opacity:.75}
@@ -1523,3 +1515,4 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .oi.nr{display:flex;align-items:center;gap:10px}.und .oi.nr .crow{flex:1;min-width:0}.und .oi.nr>.btn{flex:none}
 .und .dfacts{margin-bottom:12px}.und .dfacts:empty{display:none}
 @media (max-width:700px){.und.bui .gc-c>.sec>.sec-h{flex-wrap:wrap!important}.und.bui .gc-c>.sec>.sec-h .tools{flex:1 1 100%;min-width:0;margin-left:0}.und .sec-h .tools>.muted{white-space:normal!important}}
+.und[data-density=compact] button.atile{padding:8px 10px;gap:7px}.und[data-density=expanded] button.atile{padding:14px}

@@ -3332,19 +3332,18 @@
     if (!r.rows.childNodes.length) r.rows.appendChild(h('div', { class: 'empty' }, 'No endpoint matches the filter.'));
   }
 
-  /* ---- Arr Stack: one compact row per app, details on demand ---- */
+  /* ---- Arr Stack: a tile per app, and one panel under them for the app you opened ---- */
   function zoneApps(zone) { var out = []; S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (s.zone === zone && !s.hidden) out.push(s); }); }); return out; }
   BUILD.arr = function (r) {
     var apps = zoneApps('arr');
-    r.list = h('div', { class: 'panel arr', role: 'list' }); r.rows = {};
-    if (!apps.length) r.list.appendChild(h('div', { class: 'empty' }, 'No Arr apps yet. Add Radarr, Sonarr, Prowlarr… in Settings > Apps & cards.'));
+    r.grid = h('div', { class: 'atiles' }); r.pane = h('div', { class: 'apane', id: 'arr-pane', role: 'region', 'aria-label': 'App details', hidden: true });
+    r.list = h('div', { class: 'arr' }, r.grid, r.pane); r.rows = {}; r.open = '';
+    if (!apps.length) r.grid.appendChild(h('div', { class: 'empty' }, 'No Arr apps yet. Add Radarr, Sonarr, Prowlarr… in Settings > Apps & cards.'));
     apps.forEach(function (s) {
-      var x = { s: s, dot: h('span', { class: 'sdot na', role: 'img', 'aria-label': 'checking' }), state: h('span', { class: 'ell' }, 'Checking…'), info: h('span', { class: 'ai' }), chev: h('span', { class: 'achev', hidden: true }, ic('chev')), det: h('div', { class: 'adet', hidden: true }) };
-      var tog = h('button', { type: 'button', class: 'arow', 'aria-expanded': 'false', onclick: function () { if (x.chev.hidden) return; x.det.hidden = !x.det.hidden; tog.setAttribute('aria-expanded', x.det.hidden ? 'false' : 'true'); if (R.cards) boardAutoSoon(); } },
-        img(iconUrl(s.icon), 'aico', 'tag'), h('span', { class: 'ahd' }, h('span', { class: 'an ell' }, s.name), h('span', { class: 'asub' }, x.dot, x.state)), x.info, x.chev);
-      x.tog = tog;
-      x.el = h('div', { class: 'aitem', role: 'listitem', 'data-name': s.name }, h('div', { class: 'aline' }, tog, s.href_resolved ? h('a', { class: 'btn ic sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name, 'aria-label': 'Open ' + s.name }, ic('open')) : null), x.det);
-      r.rows[s.id] = x; r.list.appendChild(x.el);
+      var x = { s: s, dot: h('span', { class: 'sdot na', role: 'img', 'aria-label': 'checking' }), badge: h('span', { class: 'abadge', hidden: true }), info: h('span', { class: 'astats' }, h('span', { class: 'muted sm' }, 'Checking…')) };
+      x.el = h('button', { type: 'button', class: 'atile', 'aria-expanded': 'false', 'aria-controls': 'arr-pane', 'data-name': s.name, onclick: function () { r.open = r.open === s.id ? '' : s.id; arrPane(); } },
+        h('span', { class: 'atop' }, img(iconUrl(s.icon), 'aico', 'tag'), h('span', { class: 'an ell' }, s.name), x.badge, x.dot), x.info);
+      r.rows[s.id] = x; r.grid.appendChild(x.el);
     });
     r.body.appendChild(r.list);
     txt(r.count, apps.length ? String(apps.length) : '');
@@ -3364,33 +3363,45 @@
     }
     for (var k = 0; k < 3; k++) next();
   }
+  function arrProblems(j) { return (j.health || []).length + (j.issues || []).length; }
+  function arrState(j) { return !j.online ? (j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline') : ''; }
   function paintArr(id, j) {
-    var x = R.arr && R.arr.rows[id]; if (!x) return;
-    var sig = JSON.stringify(j); if (x.sig === sig) return; x.sig = sig;
-    var issues = (j.health || []).length + (j.issues || []).length, bad = (j.health || []).concat(j.issues || []).some(function (z) { return z.level === 'bad'; });
-    var state = !j.online ? (j.unconfigured ? 'na' : 'bad') : issues ? (bad ? 'bad' : 'warn') : 'ok';
-    x.dot.className = 'sdot ' + state; x.dot.setAttribute('aria-label', !j.online ? (j.unconfigured ? 'not configured' : 'offline') : issues ? issues + ' issues' : 'online');
+    var r = R.arr, x = r && r.rows[id]; if (!x) return;
+    var sig = JSON.stringify(j); if (x.sig === sig) return; x.sig = sig; x.j = j;
+    var n = arrProblems(j), bad = (j.health || []).concat(j.issues || []).some(function (z) { return z.level === 'bad'; }), list = j.online ? j.blocks || [] : [];
+    var state = !j.online ? (j.unconfigured ? 'na' : 'bad') : n ? (bad ? 'bad' : 'warn') : 'ok';
+    x.dot.className = 'sdot ' + state; x.dot.hidden = !!n;
+    x.dot.setAttribute('aria-label', !j.online ? (j.unconfigured ? 'not configured' : 'offline') : 'online');
+    x.badge.hidden = !n; x.badge.className = 'abadge ' + (bad ? 'bad' : 'warn'); txt(x.badge, String(n)); x.badge.setAttribute('aria-label', n + (n === 1 ? ' issue' : ' issues'));
+    x.el.title = [x.s.name + (j.version ? ' v' + j.version : '')].concat(list.map(function (b) { return b.label + ': ' + fmt(b.value, b.fmt); })).join('\n');
     clear(x.info);
-    x.state.className = 'ell ' + (!j.online ? (j.unconfigured ? 'muted' : 't-bad') : issues ? (bad ? 't-bad' : 't-warn') : '');
-    txt(x.state, !j.online ? (j.preview ? 'Loads once you save' : j.unconfigured ? 'Not configured' : 'Offline') : issues ? issues + (issues === 1 ? ' issue' : ' issues') : '');
-    x.state.hidden = j.online && !issues;              // a healthy app only needs its green dot
-    var list = j.online ? j.blocks || [] : [];
-    // the row shows what fits: everything is here on hover, and under it when opened
-    x.tog.title = [x.s.name + (j.version ? ' v' + j.version : '')].concat(list.map(function (b) { return b.label + ': ' + fmt(b.value, b.fmt); })).join('\n');
-    list.slice(0, 2).forEach(function (b) { x.info.appendChild(h('span', { class: 'st', title: b.label + ': ' + fmt(b.value, b.fmt) }, h('b', null, blkVal(b)), h('span', { class: 'ell' }, b.label))); });
-    clear(x.det);
-    if (j.error && !j.preview) x.det.appendChild(h('div', { class: 'sm t-bad' }, j.error));
-    // the row shows two numbers: the rest of them and the problems open under it
-    if (list.length > 2) x.det.appendChild(h('div', { class: 'amore' }, list.slice(2).map(function (b) { return h('span', { class: 'st' }, h('b', null, blkVal(b)), ' ' + b.label.toLowerCase()); })));
-    if (issues) {
-      var box = h('div', { class: 'aiss', role: 'list', tabindex: '0', 'aria-label': 'Problems' });
-      var rows = (j.health || []).map(function (z) { return [z.level, z.tag || z.source, '', z.msg, 0, z.source ? z.source + ': ' + z.msg : z.msg]; })
-        .concat((j.issues || []).map(function (z) { return [z.level, z.tag, z.title, z.msg, z.count, z.title + ' · ' + z.msg + (z.releases && z.releases.length ? '\n\n' + z.releases.join('\n') + (z.count > z.releases.length ? '\n…' : '') : '')]; }));
-      rows.filter(function (z) { return z[0] === 'bad'; }).concat(rows.filter(function (z) { return z[0] !== 'bad'; })).forEach(function (z) { box.appendChild(arrIssue.apply(null, z)); });
-      x.det.appendChild(box);
+    if (arrState(j)) x.info.appendChild(h('span', { class: 'sm ' + (j.online || j.unconfigured || j.preview ? 'muted' : 't-bad') }, arrState(j)));
+    list.slice(0, 2).forEach(function (b) { x.info.appendChild(h('span', { class: 'astat' }, h('b', null, blkVal(b)), h('span', null, b.label))); });
+    if (r.open === id) arrPane();
+  }
+  /* the opened app: every number, its problems and the way to the app */
+  function arrPane() {
+    var r = R.arr; if (!r) return;
+    Object.keys(r.rows).forEach(function (id) { r.rows[id].el.setAttribute('aria-expanded', r.open === id ? 'true' : 'false'); });
+    var x = r.rows[r.open], p = r.pane;
+    clear(p); p.hidden = !x;
+    if (x) {
+      var j = x.j || {}, s = x.s, n = arrProblems(j), list = j.online ? j.blocks || [] : [];
+      p.appendChild(h('div', { class: 'aph' }, img(iconUrl(s.icon), 'aico', 'tag'), h('b', { class: 'an ell' }, s.name), j.version ? h('span', { class: 'muted xs num' }, 'v' + j.version) : null, h('span', { class: 'grow' }),
+        s.href_resolved ? h('a', { class: 'btn sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name }, 'Open', ic('open')) : null,
+        btn('', function () { r.open = ''; arrPane(); }, 'sm ghost', 'x', 'Close ' + s.name)));
+      if (list.length) p.appendChild(h('div', { class: 'apstats' }, list.map(function (b) { return h('span', { title: b.label + ': ' + fmt(b.value, b.fmt) }, h('b', null, blkVal(b)), ' ' + b.label.toLowerCase()); })));
+      if (j.error && !j.preview) p.appendChild(h('div', { class: 'sm t-bad' }, j.error));
+      else if (arrState(j)) p.appendChild(h('div', { class: 'muted sm' }, arrState(j)));
+      if (n) {
+        var box = h('div', { class: 'aiss', role: 'list', tabindex: '0', 'aria-label': 'Problems' });
+        var rows = (j.health || []).map(function (z) { return [z.level, z.tag || z.source, '', z.msg, 0, z.source ? z.source + ': ' + z.msg : z.msg]; })
+          .concat((j.issues || []).map(function (z) { return [z.level, z.tag, z.title, z.msg, z.count, z.title + ' · ' + z.msg + (z.releases && z.releases.length ? '\n\n' + z.releases.join('\n') + (z.count > z.releases.length ? '\n…' : '') : '')]; }));
+        rows.filter(function (z) { return z[0] === 'bad'; }).concat(rows.filter(function (z) { return z[0] !== 'bad'; })).forEach(function (z) { box.appendChild(arrIssue.apply(null, z)); });
+        p.appendChild(box);
+      } else if (j.online) p.appendChild(h('div', { class: 'muted sm' }, 'No problems found.'));
     }
-    x.chev.hidden = !x.det.childNodes.length;
-    if (x.chev.hidden) { x.det.hidden = true; x.tog.setAttribute('aria-expanded', 'false'); }
+    if (R.cards) boardAutoSoon();
   }
 
   /* a problem row: what is wrong (one line, click to show it whole), its kind, ×count */
