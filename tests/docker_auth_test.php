@@ -86,6 +86,22 @@ t('wrong current passwords are throttled', (function () { apicall('password_set'
   for ($i = 0; $i < 5; $i++) apicall('password_remove', ['current' => 'wrong', 'confirm' => 'yes']);
   return apicall('password_remove', ['current' => 'third long password', 'confirm' => 'yes'])['code'] === 429 && und_auth_kind() === 'file'; })());
 
+// the real Save, through the whole API: settings come back the way the page sends them
+$cfg = apicall('settings')['j']['config'];
+t('settings as the page sees them save unchanged', apicall('save', ['config' => json_encode($cfg), 'creds' => '{}'])['code'] === 200);
+$cfg['groups'][] = ['id' => 'abcd0001', 'name' => 'Test', 'columns' => 3, 'header' => true, 'section' => false, 'services' => [['id' => 'abcd1234', 'name' => 'Radarr', 'type' => 'radarr', 'url' => 'http://10.0.0.2:7878', 'href' => '', 'icon' => '', 'zone' => 'arr', 'options' => (object)[]]]];
+$r = apicall('save', ['config' => json_encode($cfg), 'creds' => json_encode(['abcd1234' => ['key' => 'first-key-value']])]);
+t('an app and its key save', $r['code'] === 200, json_encode($r['j']));
+$cfg = apicall('settings')['j']['config'];
+t('saving again with the key kept works', apicall('save', ['config' => json_encode($cfg), 'creds' => '{}'])['code'] === 200);
+foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$sv) if ($sv['id'] === 'abcd1234') $sv['url'] = 'http://198.51.100.1:7878';
+unset($g, $sv);
+$r = apicall('save', ['config' => json_encode($cfg), 'creds' => '{}']);
+t('a new address with the kept key is refused', $r['code'] === 400 && strpos((string)$r['j']['error'], 'Radarr') !== false, json_encode($r['j']));
+t('so is Test, which would send it there', apicall('test', ['id' => 'abcd1234', 'config' => json_encode($cfg), 'creds' => '{}'])['code'] === 400);
+t('and the card builder', apicall('probe', ['id' => 'abcd1234', 'config' => json_encode($cfg), 'creds' => '{}'])['code'] === 400);
+t('typing the key again moves it', apicall('save', ['config' => json_encode($cfg), 'creds' => json_encode(['abcd1234' => ['key' => 'second-key-value']])])['code'] === 200);
+
 proc_terminate($proc);
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";

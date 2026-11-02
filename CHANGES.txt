@@ -1,4 +1,6 @@
 ###beta
+- A saved key or password is only sent to the address it was saved for. Moving an app to a new address asks for it again, so nobody can point an app at their own server to read its key
+- Sign-in cookies are marked Secure behind an HTTPS reverse proxy set in UNDASH_TRUSTED_PROXIES, and more kinds of secret are hidden from logged addresses
 - Stronger protection against password guessing: each lockout lasts twice as long as the last, up to a day, guesses are checked one at a time, passwords are hashed more strongly, the commonest passwords are refused, and repeated wrong passwords raise an alert with the address. Restarting the container clears a lockout. Behind a reverse proxy, set UNDASH_TRUSTED_PROXIES so one visitor cannot lock out the others
 - The Network tile says Checking… instead of n/a while its first reading comes in
 - Rename containers and VMs on a phone: Settings, Dashboard, Containers or Virtual machines. The name field was hidden on small screens

@@ -16,7 +16,9 @@ A compact dashboard for Unraid. System health, alerts, media, Arr apps, download
 - **History charts**: click CPU, Memory, Network, Storage or Disk temps for the last hour, day, week or month. A reading is kept every minute.
 - **Media**: upcoming and recently added movies and episodes from Radarr and Sonarr.
 - **Arr Stack**, **Downloads** (qBittorrent, [qui](https://github.com/autobrr/qui), SABnzbd), **Now playing** (Plex, Emby, Jellyfin, Tautulli) and **Requests** (Overseerr / Jellyseerr, with approve and decline).
-- **Containers and VMs**: start, stop, restart, update and logs from one gear menu, with CPU and memory per container. Click an icon or name to open its web UI.
+- **Containers and VMs**: start, stop, restart, update and logs from one gear menu, with CPU and memory per container. Click an icon or name to open its web UI. A badge shows which containers have an update; update from there, skip that version or ignore that container.
+- **Your own layout**: move and resize every card in place, split the dashboard into pages, and let **Smart arrange** line everything up. Edit mode also has the theme, navbar and other Appearance settings right beside your cards.
+- **Privacy**: **Hide sensitive details** covers names and titles with clean bars, for screenshots or a shared screen. A read-only **guest link** shows family and friends what you choose.
 - **Endpoint health**: HTTP status and latency of every app and container web UI.
 - **Search**: a list under the search box with your apps, containers and VMs, a web search and movies and series to request in Seerr. You choose which in Settings; the dashboard itself is never filtered.
 - Ten themes with light and dark versions, frosted-glass wallpapers, custom CSS. Works on phones too, and goes on the home screen with its own icon (full screen on iPhone; on Android that needs HTTPS).
@@ -82,6 +84,8 @@ docker run -d --name UnDash --restart unless-stopped -p 9099:9099 \
 
 To update, use **Update** in the Docker tab. UnDash shows a badge next to its version when a new release is out.
 
+**Try the release candidate:** the `ghcr.io/stiphr/undash:beta` image is the next version, now 1.0.0rc. Run it as a second container with its own port and config folder, so your stable dashboard stays as it is.
+
 ### Plugin
 
 **Plugins > Install Plugin**, paste the URL below and press **Install** (Unraid 6.12 or later):
@@ -134,9 +138,9 @@ Apps in the **Apps** section sit in groups. Open **Apps > Groups and apps** to a
 Containers and VMs need no setup: UnDash lists everything it finds on the server through the Unraid API (Docker version) or Unraid itself (plugin). Choose which ones the dashboard shows:
 
 1. Go to **Settings > Apps & cards**.
-2. Open **Containers > Containers and view** (or **Virtual machines > VMs and view**).
+2. Open **Containers** (or **Virtual machines**).
 3. Under **Containers on the dashboard**, tick the ones to show. **Select all**, **Running only** and **None** act on everything the filter box lists, so you can type `arr` and press **Select all** to add every Arr container at once. New containers show until you untick them.
-4. Per container you can also set a **display name**, an **icon**, **favorite** (star, also shown in the **Favorites** section) and whether it is **checked for updates** (arrow).
+4. Per container you can also set a **display name**, an **icon**, **favorite** (star, also shown in the **Favorites** section) and whether it is **checked for updates** (arrow). A display name changes the dashboard only; the container keeps its real name. On a phone this list is the place to rename, because edit mode is for larger screens.
 5. Pick the **layout** (compact grid, table or cards), **sort order**, what each container shows (CPU, memory, uptime, image) and which ones show by default: running, all, or **Selected**.
 6. Press **Save**.
 
@@ -144,28 +148,45 @@ The list stays empty until UnDash can read the server. In the Docker version, ch
 
 On the dashboard, the gear on each container or VM has the controls: start, stop, restart, update, logs, **Show in "Selected"** and **Hide from the dashboard**. Click the icon or name to open its web UI.
 
-### Arrange the sections (widgets)
+**Updates:** a container with an update has a small badge on its icon, and the **Updates** filter lists them all. Click the badge to choose:
 
-The dashboard is made of sections: **System**, **Alerts**, **Favorites**, **Media**, **Arr Stack**, **Downloads**, **Now playing**, **Requests**, **Endpoint health**, **Containers**, **Virtual machines** and **Apps**. Each app you add is a widget card inside one of them.
+- **Update now**: pulls the new image and recreates the container, as Unraid's Docker tab does.
+- **Skip this version**: hides this update, and the badge comes back by itself when a newer version comes out. The Docker version checks skipped images with their registry every 6 hours. Images you built yourself have no registry to ask, so use Ignore for those.
+- **Ignore updates for this container**: no badge until you turn it back on.
 
-1. In **Settings > Apps & cards**, under **Sections**:
-   - tick a section to show it, untick to hide it;
-   - drag it to change the order;
-   - set it to **Full width** or **Half width** (two half-width sections sit side by side on wide screens).
-2. Press the button on the right of a section to open its options:
+To hide all update badges, turn off **Show updates** in the container options.
 
-   | Section | Options |
-   |---|---|
-   | System | which tiles to show (CPU, memory, storage, network, health, disks, UPS…) and their order |
-   | Media | which columns (upcoming and recent movies and episodes), items per column, days ahead, which Radarr and Sonarr, posters or text only |
-   | Arr Stack / Downloads | their apps; how many active downloads per client |
-   | Requests | posters or text only |
-   | Apps | columns, groups, group names, shortcut links |
-   | Containers / Virtual machines | see [Add containers and VMs](#add-containers-and-vms) |
+### Arrange the dashboard
 
-3. Press **Save**.
+Press the pencil at the top right to edit the dashboard in place. Nothing changes until you press **Save**, and **Undo** steps back through your changes. Edit mode needs a screen wider than a phone.
 
-App widgets refresh every 15 seconds and the system every 2 seconds; change both in **Settings > General**.
+- **Move and resize:** drag a card, or drag its edges. Click a card for its options: name, which page it is on, and what it shows.
+- **Add** brings back cards you removed and adds new apps. **Pages** adds and names pages. **Appearance** has the theme, accent colour, background, navbar, card style and size beside your cards.
+- **Arrange** has the tools that do the work for you:
+
+  | Tool | What it does |
+  |---|---|
+  | Smart arrange | lays out every card on the page and fits each one to its content, so nothing is cut off |
+  | Smart arrange apps | lines up only the app cards in even rows; the other cards stay where they are |
+  | Fit all to content | keeps the layout and fixes the heights |
+  | Presets | ready-made layouts for the page, or for one set of cards |
+  | Snap up | closes the gaps when you move a card |
+  | Reset the layout | starts the page over |
+
+- **Size an app:** click an app card and choose **Small**, **Medium**, **Large** or **Wide**. **Use for all apps** gives them all that size.
+
+What each card shows is set in **Settings > Apps & cards** as well. Open a card there for its options:
+
+| Card | Options |
+|---|---|
+| System | which tiles to show (CPU, memory, storage, network, health, disks, UPS…) and their order |
+| Media | which columns (upcoming and recent movies and episodes), items per column, days ahead, which Radarr and Sonarr, posters or text only |
+| Arr Stack / Downloads | their apps; how many active downloads per client |
+| Requests | posters or text only |
+| Apps | groups, group names, shortcut links |
+| Containers / Virtual machines | see [Add containers and VMs](#add-containers-and-vms) |
+
+App cards refresh every 15 seconds and the system every 2 seconds; change both in **Settings > General**.
 
 ### Setup wizard and presets
 
@@ -177,7 +198,7 @@ Presets come in two sizes. Whole dashboards: **Everything**, **Media server**, *
 
 ### Pages
 
-Edit dashboard > **Pages** adds and names pages, and **Split my cards** makes a first set from what you have. Click a card to send it to another page. Each page keeps its own layout. With one page there are no tabs; with more, press 1 to 9 to switch. On a phone your pages replace the bottom tabs.
+Edit dashboard > **Pages** adds and names pages, and **Split my cards** makes a first set from what you have: **Media** gets the media lists, Arr Stack, Downloads, Now playing and Requests, and **Apps** gets your app cards, Containers and VMs. Click a card to send it to another page. Each page keeps its own layout. With one page there are no tabs; with more, press 1 to 9 to switch. On a phone your pages replace the bottom tabs; with no pages the tabs are Home, Media and Apps.
 
 ### Without an Unraid API key
 
@@ -188,6 +209,10 @@ If you run [Glances](https://github.com/nicolargo/glances), put its address in *
 ### Pick a look
 
 **Settings > Appearance**: theme, light / dark / system mode, accent colour, spacing and wallpaper. The accent can follow the theme, be a colour of your own, or be taken from the wallpaper: UnDash reads a small copy of the picture in your browser and picks its main colour, toned so buttons and links stay readable. For the background choose the theme's gradient, a plain colour, a picture from an address, or **your own picture** (JPEG, PNG or WebP; it is scaled down in your browser and kept in the configuration folder, never sent anywhere). **Settings > Advanced > Custom CSS** for anything else.
+
+### The navbar
+
+**Settings > Appearance > Navbar**, or Appearance in edit mode: choose the search bar's width (Normal, Wide, Full width or Hidden) and which items to show: logo, dashboard name, Unraid version, UnDash version, clock, alerts and buttons. **Stay on top when scrolling** keeps the bar in view. The browser tab icon follows your accent colour, or uses your own logo if you set one.
 
 ### Start from the example
 
@@ -230,8 +255,11 @@ Anyone with the link can open it, so share it like a password. Set a dashboard p
 
 - Every action is a fixed, validated operation on a known container or VM; nothing from the browser is run as a command.
 - The Docker image runs unprivileged as uid 99, with no Docker socket: everything goes through the Unraid API with the key you scope.
-- Sessions are HttpOnly with CSRF protection and a strict Content-Security-Policy; wrong passwords are rate-limited.
-- Port 9099 is plain HTTP. Use it on your LAN, or put a reverse proxy with HTTPS in front.
+- Sessions are HttpOnly with CSRF protection and a strict Content-Security-Policy.
+- Password guessing is slowed down hard: 5 wrong tries lock an address out for 15 minutes, and each lockout after that lasts twice as long, up to a day. Repeated wrong passwords raise an alert with the address. The commonest passwords are refused. If you lock yourself out, restart the container.
+- Keys and passwords stay on the server, and a saved one is only sent to the address it was saved for. Moving an app to a new address asks for its key again.
+- Port 9099 is plain HTTP. Use it on your LAN, or put a reverse proxy with HTTPS in front. Behind a proxy, set `UNDASH_TRUSTED_PROXIES` to its address, so each visitor counts on their own for wrong passwords and sign-in cookies are marked Secure.
+- **Set a dashboard password.** Without one, anyone who can reach the port can use the dashboard and control your containers, and none of the sign-in protection above applies.
 - Certificates of the apps UnDash reads are not checked by default (LAN apps mostly use self-signed ones). Set `UNDASH_TLS_VERIFY=1` in the container settings to check them.
 - Numbers typed into Settings are checked before they can be saved; a value the server still has to bring inside its limits is named after saving, never changed in silence.
 

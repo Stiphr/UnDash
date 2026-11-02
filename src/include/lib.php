@@ -149,7 +149,7 @@ function und_redact($s, array $extra = []) {
   $s = (string)$s;
   foreach ($extra as $x) if (is_string($x) && strlen($x) >= 6) $s = str_replace($x, '[redacted]', $s);
   $s = preg_replace('#(https?://)[^/\s:@]+:[^/\s@]+@#i', '$1[redacted]@', $s);
-  $s = preg_replace('/([?&](?:apikey|api_key|X-Plex-Token|token|key)=)[^&\s"]+/i', '$1[redacted]', $s);
+  $s = preg_replace('/([?&](?:apikey|api_key|api-key|X-Plex-Token|token|access_token|key|password|passwd|pass|secret|auth)=)[^&\s"]+/i', '$1[redacted]', $s);
   return $s;
 }
 

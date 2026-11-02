@@ -19,7 +19,7 @@ function fail($m, $code = 400) { out(['error' => $m], $code); }
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') fail('POST only.', 405);
 $action = (string)($_POST['action'] ?? '');
 $P = function ($k, $d = '') { return isset($_POST[$k]) && is_string($_POST[$k]) ? $_POST[$k] : $d; };
-$J = function ($k) { $v = json_decode((string)($_POST[$k] ?? ''), true); return is_array($v) ? $v : null; };
+$J = function ($k) { $v = is_string($_POST[$k] ?? null) ? json_decode($_POST[$k], true) : null; return is_array($v) ? $v : null; };
 
 /** A background OS update check when the cached result is old: the page never waits for the update server. */
 function api_os_autocheck(array $cfg, array $os) {
@@ -219,6 +219,7 @@ switch ($action) {
     if (!$cfg || !isset($cfg['groups'])) fail('Nothing to save.');
     $old = und_load_config(); $env = und_env();
     $norm = und_creds_apply(und_normalize($cfg), $old, $J('creds') ?: [], $env);
+    if ($moved = und_creds_moved($norm, $old, $J('creds') ?: [], $env)) fail('Type the key or password for ' . $moved . ' again: a saved one is only sent to the address it was saved for.');
     if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
     if (!und_save_config($norm)) fail('Could not write the configuration directory. Check that ' . und_store_dir() . ' is writable.', 500);
     if (!und_env_write($env)) fail('Could not write the .env file in ' . und_store_dir() . '.', 500);
@@ -267,6 +268,7 @@ switch ($action) {
     if (!$cfg || !preg_match('/^[a-f0-9]{8}$/', $id)) fail('Nothing to test.');
     $env = und_env(); $old = und_load_config();
     $norm = und_creds_apply(und_normalize($cfg), $old, $J('creds') ?: [], $env);
+    if ($moved = und_creds_moved($norm, $old, $J('creds') ?: [], $env)) fail('Type the key or password for ' . $moved . ' again: a saved one is only sent to the address it was saved for.');
     if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
     $GLOBALS['UND_TEST_SECRETS'] = ['vars' => array_diff_key($env, array_flip(UND_ENV_RESERVED)), 'svc' => [], 'unraid' => []];
     out(und_fetch_service($norm, $id));
@@ -277,6 +279,7 @@ switch ($action) {
     if (!$cfg || !preg_match('/^[a-f0-9]{8}$/', $id)) fail('Nothing to read.');
     $env = und_env(); $old = und_load_config();
     $norm = und_creds_apply(und_normalize($cfg), $old, $J('creds') ?: [], $env);
+    if ($moved = und_creds_moved($norm, $old, $J('creds') ?: [], $env)) fail('Type the key or password for ' . $moved . ' again: a saved one is only sent to the address it was saved for.');
     if (isset($_POST['shared'])) $env = und_shared_apply($env, $old, $norm, $J('shared') ?: []);
     $GLOBALS['UND_TEST_SECRETS'] = ['vars' => array_diff_key($env, array_flip(UND_ENV_RESERVED)), 'svc' => [], 'unraid' => []];
     out(und_customapi_probe($norm, $id));
