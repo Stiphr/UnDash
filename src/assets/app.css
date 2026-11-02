@@ -1527,3 +1527,10 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .updl{appearance:none;background:none;border:0;padding:2px 0;font:inherit;font-size:12px;color:var(--accent-text);cursor:pointer;white-space:nowrap}
 .und .updl:hover{text-decoration:underline}.und .updl:focus-visible{outline:0;border-radius:4px;box-shadow:var(--focus)}
 .und .updl.off{color:var(--muted)}
+/* edit mode: the name in the list is the rename field: plain text until you point at it */
+.und .bside .pick-list .oi .t{flex:none;min-width:0}.und .bside .pick-list .oi .t b{display:none}
+.und.und .bside .pick-list .oi input.oname{display:block;flex:1 1 0;min-width:0;height:30px;min-height:30px;padding:0 6px;margin-left:-4px;background:transparent!important;border:1px solid transparent!important;border-radius:6px;box-shadow:none!important;font-size:14px;font-weight:600;color:var(--title);text-overflow:ellipsis}
+.und.und .bside .pick-list .oi input.oname::placeholder{color:var(--title);opacity:1}
+.und.und .bside .pick-list .oi input.oname:hover{border-color:var(--line-2)!important}
+.und.und .bside .pick-list .oi input.oname:focus{background:var(--field)!important;border-color:var(--accent)!important;outline:0}
+.und.und .bside .pick-list .oi input.oname:focus::placeholder{color:var(--faint)}
