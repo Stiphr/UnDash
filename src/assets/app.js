@@ -231,6 +231,7 @@
   var BG = /^(media|arr|dl|service|playing|requests|health|self_update|alert_history|history|storage|os_status)$/, BGQ = [], bgRun = 0;
   function bgNext() { while (bgRun < 4 && BGQ.length) { bgRun++; BGQ.shift()().then(function () { bgRun--; bgNext(); }); } }
   /* the server is out of reach (a restart, an update): cards keep their last answer, so they do not empty and shuffle the board, and come back as they were */
+  var LOADED = Date.now();
   var HELD = {};
   function heldAnswer(action, data, j) {
     var key = action + '|' + JSON.stringify(data || {});
@@ -2211,7 +2212,7 @@
     var st = a.size ? [a.size, a.free] : pools.length ? pools.reduce(function (acc, p) { return [acc[0] + p.size, acc[1] + p.free]; }, [0, 0]) : null;
     if (st) { var sp = 100 * (st[0] - st[1]) / st[0]; tile('storage', bytes(st[1]) + ' free', pct(sp) + ' of ' + bytes(st[0]) + (a.size ? ' · array' : ' · ' + plural(pools.length, 'pool')), sp, lvl(sp, 85, 95)); }
     else tile('storage', 'n/a', a.state === 'STARTED' ? 'No sizes reported' : 'Array ' + (a.state || 'unknown').toLowerCase(), null, 'na');
-    tile('network', s.net.rx === null ? 'n/a' : rate(s.net.rx) + ' ↓', s.net.tx === null ? (s.net.iface || '') : rate(s.net.tx) + ' ↑' + (s.net.iface ? ' · ' + s.net.iface : ''), null, s.net.rx === null ? 'na' : '');
+    tile('network', s.net.rx === null ? (Date.now() - LOADED < 60000 ? 'Checking…' : 'n/a') : rate(s.net.rx) + ' ↓', s.net.tx === null ? (s.net.iface || '') : rate(s.net.tx) + ' ↑' + (s.net.iface ? ' · ' + s.net.iface : ''), null, s.net.rx === null ? 'na' : '');
     var hl = a.state !== 'STARTED' ? 'warn' : a.bad || a.errors ? 'bad' : 'ok';
     tile('health', a.state !== 'STARTED' ? (a.state || 'unknown').toLowerCase() : a.bad ? a.bad + ' disk problem' + (a.bad > 1 ? 's' : '') : a.errors ? a.errors + ' errors' : 'Healthy',
       a.resync ? (a.resync_action || 'Parity check') + (a.resync_pct !== null ? ' ' + a.resync_pct + '%' : '') : [a.disks ? plural(a.disks, 'disk') : '', a.parity ? a.parity + ' parity' : '', pools.length ? plural(pools.length, 'pool') : ''].filter(Boolean).join(' · '), a.resync_pct, hl);

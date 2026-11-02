@@ -1,4 +1,5 @@
 ###beta
+- The Network tile says Checking… instead of n/a while its first reading comes in
 - Rename containers and VMs on a phone: Settings, Dashboard, Containers or Virtual machines. The name field was hidden on small screens
 - Smart arrange and resizing for apps: click an app card in edit mode to set its size, give every app that size, or line the apps up in even rows that fit their content. The other cards stay put. Smart arrange in the Arrange menu now also fits every card to its content, so nothing is cut off
 - Split my cards puts Now playing and Requests on Media
