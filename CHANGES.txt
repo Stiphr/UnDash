@@ -1,4 +1,7 @@
 ###beta
+- If UnDash restarts or the connection drops, cards keep showing their last data instead of emptying and shuffling the dashboard
+- Split my cards makes Media and Apps pages: Containers and VMs now go on Apps, with your app cards
+- Page tabs match the navbar and show the open page in your accent color. Undo in edit mode has a label
 - Edit mode has an Appearance button: theme, accent, background, navbar, card style, size and the rest, right beside your dashboard
 - Appearance has a Navbar section: search bar width, and separate switches for the logo, name, Unraid version, UnDash version, clock, alerts and buttons. The bar can also scroll away with the page
 - Hide sensitive details shows clean bars instead of a blur, and the text is really hidden. Hidden rows cannot be clicked until you show them again

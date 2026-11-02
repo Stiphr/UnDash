@@ -224,12 +224,20 @@
       var known = function (id) { return was.groups.some(function (g) { return g.services.some(function (x) { return x.id === id; }); }); };
       if (/^(dl|arr|service)$/.test(action) && data && data.id && !known(data.id)) return Promise.resolve({ error: 'Loads once you save.', preview: true, unconfigured: true, online: false });
     }
-    if (BG.test(action)) return new Promise(function (done) { BGQ.push(function () { return send(action, data, timeoutMs).then(done); }); bgNext(); });
+    if (BG.test(action)) return new Promise(function (done) { BGQ.push(function () { return send(action, data, timeoutMs).then(function (j) { done(heldAnswer(action, data, j)); }); }); bgNext(); });
     return send(action, data, timeoutMs);
   }
   /* a browser opens at most 6 connections to one server: app and media reads share 4 of them, so the live refresh and clicks never queue behind a slow app */
   var BG = /^(media|arr|dl|service|playing|requests|health|self_update|alert_history|history|storage|os_status)$/, BGQ = [], bgRun = 0;
   function bgNext() { while (bgRun < 4 && BGQ.length) { bgRun++; BGQ.shift()().then(function () { bgRun--; bgNext(); }); } }
+  /* the server is out of reach (a restart, an update): cards keep their last answer, so they do not empty and shuffle the board, and come back as they were */
+  var HELD = {};
+  function heldAnswer(action, data, j) {
+    var key = action + '|' + JSON.stringify(data || {});
+    if (j.lost) return HELD[key] || j;
+    if (!j.error) HELD[key] = j;
+    return j;
+  }
   /* UnDash was updated or restarted, so this page's session is gone: it loads again by itself, unless Settings has edits open */
   function staleSession() {
     var at = 0; try { at = +sessionStorage.getItem('undReload') || 0; } catch (e) { /* no storage: reload anyway */ }
@@ -263,7 +271,7 @@
       if (r.status === 401) return { error: 'Signed out. Reload the page to sign in again.', auth: true };
       if (r.status === 403) return r.clone().text().then(function (t) { return /CSRF/.test(t) ? (again ? Promise.resolve(false) : renewToken()).then(function (ok) { return ok ? send(action, data, timeoutMs, true) : staleSession(); }) : r.json().catch(function () { return { error: t || 'Refused (HTTP 403).' }; }); });
       return r.json().catch(function () { return { error: 'Unexpected answer from the server (HTTP ' + r.status + ').' }; }).then(function (j) { if (!r.ok && !j.error) j.error = 'Request failed (HTTP ' + r.status + ').'; return j; });
-    }).catch(function (e) { clearTimeout(to); return { error: e && e.name === 'AbortError' ? 'The server took too long to answer.' : 'Could not reach the server.', offline: true }; });
+    }).catch(function (e) { clearTimeout(to); return { error: e && e.name === 'AbortError' ? 'The server took too long to answer.' : 'Could not reach the server.', offline: true, lost: !(e && e.name === 'AbortError') }; });
   }
   function act(action, data, okMsg) { return api(action, data, 130000).then(function (j) { if (j.error) toast(j.error, true); else if (okMsg) toast(okMsg); return j; }); }
 
@@ -1250,13 +1258,13 @@
     E.list.forEach(function (c) { on[c.i] = 1; });
     cards.forEach(function (c) { if (!on[c.i] && !gone[c.i]) gPlace(E.list, { i: c.i, x: 0, y: 0, w: Math.min(c.w, boardCols()), h: c.h, a: true }, boardCols()); });
     if (E.compact) gCompact(E.list);
-    if (E.view && E.view !== 'add' && E.view !== 'pages' && E.view.indexOf('into:') && !have[E.view]) E.view = null;
+    if (E.view && E.view !== 'add' && E.view !== 'pages' && E.view !== 'look' && E.view.indexOf('into:') && !have[E.view]) E.view = null;
   }
   /* the small box: everything for the board, floating over it */
   function boardDock() {
     var E = S.edit;
     if (!E.dock) {
-      E.bUndo = btn('', function () { boardStep(E.undo, E.redo); }, 'sm ghost', 'undo', 'Undo (Ctrl+Z)');
+      E.bUndo = btn('Undo', function () { boardStep(E.undo, E.redo); }, 'sm ghost', 'undo', 'Undo (Ctrl+Z)');
       E.bRedo = btn('', function () { boardStep(E.redo, E.undo); }, 'sm ghost', 'redo', 'Redo (Ctrl+Shift+Z)');
       E.bAdd = btn('Add', function () { boardView(E.view === 'add' ? null : 'add'); }, 'sm ghost', 'plus', 'Add apps and cards');
       E.bPages = btn('Pages', function () { boardView(E.view === 'pages' ? null : 'pages'); }, 'sm ghost', 'grid', 'Add, rename and order pages');
@@ -1358,14 +1366,14 @@
         pageGo(p.id); boardView('pages');
         var f = E.side.querySelector('.bs-pg.on input'); if (f) { f.focus(); f.select(); }
       }, 'sm', 'plus') : null,
-      !list.length ? btn('Split my cards', pagesSplit, 'sm ghost', 'grid', 'Media, Apps and Containers each get a page') : null)));
+      !list.length ? btn('Split my cards', pagesSplit, 'sm ghost', 'grid', 'Media and Apps each get a page') : null)));
   }
-  /* a first set of pages from the kind of each card, the same split a phone uses */
+  /* a first set of pages from the kind of each card */
   function pagesSplit() {
     var E = S.edit, by = {}, list = pagesOf();
     boardMark();
-    boardShown().forEach(function (c) { var t = boardTab(c.s); if (t !== 'home') (by[t] = by[t] || []).push(c.i); });
-    BOARD_TABS.forEach(function (t) { if (by[t[0]]) list.push({ id: rid(), name: t[0] === 'docker' ? 'Containers' : t[1], cards: by[t[0]], lg: [], md: [] }); });
+    boardShown().forEach(function (c) { var t = { media: 'Media', arr: 'Media', downloads: 'Media', apps: 'Apps', docker: 'Apps', vms: 'Apps' }[c.s]; if (t) (by[t] = by[t] || []).push(c.i); });
+    ['Media', 'Apps'].forEach(function (n) { if (by[n]) list.push({ id: rid(), name: n, cards: by[n], lg: [], md: [] }); });
     if (!list.length) { toast('Your cards all belong on one page.'); return; }
     E.home.lg = []; E.home.md = []; E.smart = true;
     E.list = boardLayout(E.mode, E.hidden);
