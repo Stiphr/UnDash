@@ -83,7 +83,7 @@ Environment variables:
 | `UNDASH_PORT` | 9099 | the port inside the container (normally leave it and change the host port) |
 | `PHP_CLI_SERVER_WORKERS` | 12 | parallel requests |
 | `UNDASH_TLS_VERIFY` | | `1` checks the certificate of every https:// app address (off by default: LAN apps mostly use self-signed certificates) |
-| `UNDASH_TRUSTED_PROXIES` | | addresses of your reverse proxies (IPs or CIDR, comma separated). Set it when UnDash sits behind one: each visitor then counts on their own for wrong passwords, instead of all sharing the proxy's address |
+| `UNDASH_TRUSTED_PROXIES` | | addresses of your reverse proxies (IPs or CIDR, comma separated). Set it when UnDash sits behind one: each visitor then counts on their own for wrong passwords, instead of all sharing the proxy's address, and sign-in cookies are marked Secure when the proxy says the visit is HTTPS |
 | `UNDASH_ALLOWED_HOSTS` | | host names that may open a dashboard that has no password (see the template) |
 
 ## 3. First start

@@ -101,7 +101,7 @@ function und_guest_sess_new() {
   $sid = bin2hex(random_bytes(32));
   $s = ['exp' => time() + UND_SESS_TTL, 'csrf' => bin2hex(random_bytes(24)), 'how' => 'guest', 'at' => time(), 'link' => hash('sha256', und_guest_token())];
   und_write_json(und_sess_file($sid), $s, true);
-  setcookie(und_guest_cookie(), $sid, ['expires' => 0, 'path' => '/guest/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
+  setcookie(und_guest_cookie(), $sid, ['expires' => 0, 'path' => '/guest/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => und_https()]);
   return $s;
 }
 

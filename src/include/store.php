@@ -205,6 +205,30 @@ function und_creds_apply(array $cfg, array $old, array $creds, array &$env) {
   return $cfg;
 }
 
+/**
+ * A saved key goes only to the address it was saved for. Without this, anyone who can edit an app (or use a dashboard with no
+ * password) could point it at their own server, press Test and read the key there. Returns the name of the first app that
+ * would send a credential somewhere new; typing the value again is fine, and so is a brand new value.
+ */
+function und_creds_moved(array $cfg, array $old, array $creds, array $env) {
+  $host = function ($u) use ($env) { $p = parse_url(und_resolve((string)$u, array_change_key_case($env, CASE_UPPER))); return strtolower(($p['host'] ?? '') . ':' . ($p['port'] ?? '')); };
+  $refs = function ($s) {
+    $out = [];
+    foreach (array_keys(UND_CRED_FIELDS) as $f) if ($r = und_ref_name($s[$f] ?? '')) $out[$r] = $f;
+    $opt = (array)($s['options'] ?? []);        // an empty options set is an object once normalized
+    foreach ((array)($opt['headers'] ?? []) as $v) if (is_string($v) && $r = und_ref_name($v)) $out[$r] = '';
+    return $out;
+  };
+  $seen = [];
+  foreach ($old['groups'] ?? [] as $g) foreach ($g['services'] as $s) foreach ($refs($s) as $r => $f) $seen[$r][$host($s['url'] ?? '')] = 1;
+  foreach ($cfg['groups'] ?? [] as $g) foreach ($g['services'] as $s) foreach ($refs($s) as $r => $f) {
+    if (!isset($seen[$r]) || isset($seen[$r][$host($s['url'] ?? '')])) continue;
+    $in = $f !== '' ? ($creds[$s['id']][$f] ?? UND_KEEP) : UND_KEEP;
+    if ($in === UND_KEEP || und_ref_name($in)) return (string)$s['name'];
+  }
+  return null;
+}
+
 /* ---------- conversion from the old files ---------- */
 
 /** Older versions: config.json + secrets.json (+ custom.css, ignores.json). Converted once; the old files go to data/legacy/. */

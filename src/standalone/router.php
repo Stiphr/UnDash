@@ -37,7 +37,7 @@ function sa_unraid_base() { $h = und_req_host(); return $h === '' ? '' : 'http:/
 /** The login / setup page (Docker version). Plain HTML, no script, so the strict CSP still applies. */
 function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
   $pre = bin2hex(random_bytes(16));
-  setcookie(und_cookie('undash_pre'), $pre, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
+  setcookie(und_cookie('undash_pre'), $pre, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => und_https()]);
   $e = function ($x) { return htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8'); };
   header('Content-Type: text/html; charset=utf-8'); header('Cache-Control: no-store');
   echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UnDash · ', $e($title), '</title>',

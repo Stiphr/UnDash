@@ -1583,6 +1583,31 @@ for ($i = 0; $i < 6; $i++) und_login_failed('198.51.100.1');
 $g = und_login_seen(); t('wrong passwords are counted for the alert', $g['n'] === 6 && $g['ip'] === '198.51.100.1');
 foreach (glob(UND_TMP . '/login-*') ?: [] as $f) @unlink($f);
 
+echo "\n--- saved keys stay with their address\n";
+$svc = function ($id, $name, $url, $key) { return ['id' => $id, 'name' => $name, 'url' => $url, 'key' => $key, 'username' => '', 'password' => '', 'options' => []]; };
+$oldc = ['groups' => [['services' => [$svc('aaaaaaaa', 'Radarr', 'http://10.0.0.2:7878', '{{RADARR_API_KEY}}'), $svc('bbbbbbbb', 'Hooked', 'http://{{SERVER_IP}}:9000', '{{HOOK_KEY}}')]]]];
+$e = ['RADARR_API_KEY' => 'abc', 'HOOK_KEY' => 'def', 'SERVER_IP' => '10.0.0.3'];
+$mv = function ($id, $url, $key = null, $creds = []) use ($oldc, $svc, $e) { $c = $oldc; foreach ($c['groups'][0]['services'] as &$x) if ($x['id'] === $id) { $x['url'] = $url; if ($key !== null) $x['key'] = $key; } return und_creds_moved($c, $oldc, $creds, $e); };
+t('the same address is fine', $mv('aaaaaaaa', 'http://10.0.0.2:7878/base') === null);
+t('a saved key cannot follow a new address', $mv('aaaaaaaa', 'http://198.51.100.1:7878') === 'Radarr');
+t('a new port counts as a new address', $mv('aaaaaaaa', 'http://10.0.0.2:9999') === 'Radarr');
+t('typing the key again allows it', $mv('aaaaaaaa', 'http://198.51.100.1:7878', null, ['aaaaaaaa' => ['key' => 'typed-again']]) === null);
+t('a reference typed instead does not', $mv('aaaaaaaa', 'http://198.51.100.1:7878', null, ['aaaaaaaa' => ['key' => '{{RADARR_API_KEY}}']]) === 'Radarr');
+t('an address written with a shared value is the same address', $mv('bbbbbbbb', 'http://10.0.0.3:9000') === null);
+$c2 = $oldc; $c2['groups'][0]['services'][] = $svc('cccccccc', 'Mine', 'http://198.51.100.1', '{{RADARR_API_KEY}}');
+t('a new app cannot borrow another app\'s key', und_creds_moved($c2, $oldc, [], $e) === 'Mine');
+$c2 = $oldc; $c2['groups'][0]['services'][] = $svc('cccccccc', 'Mine', 'http://198.51.100.1', '{{BRAND_NEW}}');
+t('a new app with its own key is fine', und_creds_moved($c2, $oldc, [], $e) === null);
+$c2 = $oldc; $c2['groups'][0]['services'][0]['key'] = ''; $h = $svc('cccccccc', 'Hdr', 'http://198.51.100.1', ''); $h['options']['headers'] = ['X-Api-Key' => '{{RADARR_API_KEY}}']; $c2['groups'][0]['services'][] = $h;
+t('nor through a custom header', und_creds_moved($c2, $oldc, [], $e) === 'Hdr');
+t('more secrets are hidden in logged addresses', strpos(und_redact('http://x/a?password=hunter2&access_token=abc&q=ok'), 'hunter2') === false && strpos(und_redact('http://x/a?access_token=abcdef'), 'abcdef') === false && strpos(und_redact('http://x/a?q=ok'), 'q=ok') !== false);
+$_SERVER['REMOTE_ADDR'] = '172.18.0.5'; $_SERVER['HTTP_X_FORWARDED_PROTO'] = 'https'; unset($_SERVER['HTTPS']);
+t('X-Forwarded-Proto counts for nothing by default', !und_https());
+putenv('UNDASH_TRUSTED_PROXIES=172.18.0.0/16');
+t('from a trusted proxy cookies are Secure', und_https());
+$_SERVER['REMOTE_ADDR'] = '198.51.100.3'; t('not from anyone else', !und_https());
+putenv('UNDASH_TRUSTED_PROXIES'); unset($_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_X_FORWARDED_PROTO']);
+
 rmrf($SANDBOX);
 
 echo "\n$pass passed, $fail failed\n";

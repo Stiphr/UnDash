@@ -39,7 +39,7 @@ function und_sess_new($how) {
   $sid = bin2hex(random_bytes(32));
   $s = ['exp' => time() + UND_SESS_TTL, 'csrf' => bin2hex(random_bytes(24)), 'how' => $how, 'at' => time()];
   und_write_json(und_sess_file($sid), $s, true);
-  setcookie(und_cookie('undash_sid'), $sid, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
+  setcookie(und_cookie('undash_sid'), $sid, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => und_https()]);
   // old sessions are removed now and then
   if (random_int(1, 20) === 1) foreach (glob(und_sess_dir() . '/*.json') ?: [] as $f) if (filemtime($f) < time() - UND_SESS_TTL - 3600) @unlink($f);
   return $s;
@@ -253,10 +253,15 @@ function und_login_check($ip, $pw) {
   if ($lk) fclose($lk);
   return $ok ? 'ok' : 'wrong';
 }
+function und_proxies() { return array_filter(preg_split('/[\s,]+/', (string)(getenv('UNDASH_TRUSTED_PROXIES') ?: (und_env()['UNDASH_TRUSTED_PROXIES'] ?? '')))); }
+/** Cookies are marked Secure on HTTPS, which includes a trusted proxy that took the HTTPS for us. */
+function und_https() {
+  if (!empty($_SERVER['HTTPS'])) return true;
+  return strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https' && und_ip_in((string)($_SERVER['REMOTE_ADDR'] ?? ''), und_proxies());
+}
 /** The visitor's address. X-Forwarded-For can be typed by anyone, so it counts only from a proxy named in UNDASH_TRUSTED_PROXIES. */
 function und_client_ip() {
-  $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
-  $list = array_filter(preg_split('/[\s,]+/', (string)(getenv('UNDASH_TRUSTED_PROXIES') ?: (und_env()['UNDASH_TRUSTED_PROXIES'] ?? ''))));
+  $ip = (string)($_SERVER['REMOTE_ADDR'] ?? ''); $list = und_proxies();
   if (!$list || !und_ip_in($ip, $list)) return $ip;
   foreach (array_reverse(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''))) as $x) {
     $x = trim($x);
