@@ -1272,10 +1272,10 @@
       E.bPages = btn('Pages', function () { boardView(E.view === 'pages' ? null : 'pages'); }, 'sm ghost', 'grid', 'Add, rename and order pages');
       E.bLook = btn('Appearance', function () { boardView(E.view === 'look' ? null : 'look'); }, 'sm ghost', 'sun', 'Theme, colors, navbar and more');
       var more = btn('Arrange', function () {
-        menu(more, [['Smart arrange', 'grid', boardArrange], ['Fit all to content', 'fit', boardFitAll],
+        menu(more, [['Smart arrange', 'grid', boardArrange]].concat(boardAppCards().length ? [['Smart arrange apps', 'grid', function () { boardFlowApps(); }]] : [], [['Fit all to content', 'fit', boardFitAll],
           ['Presets…', 'list', boardPresets],
           [E.compact ? 'Snap up is on' : 'Snap up is off', E.compact ? 'check' : 'minus', function () { boardMark(); E.compact = !E.compact; if (E.compact) gCompact(E.list); boardPaint(); }], 'hr',
-          ['Reset the layout', 'restart', boardReset]]);
+          ['Reset the layout', 'restart', boardReset]]));
       }, 'sm ghost', 'grid', 'Arrange the cards');
       more.setAttribute('aria-haspopup', 'menu');
       var gap = function () { return h('span', { class: 'bd-sep', 'aria-hidden': 'true' }); };
@@ -1565,6 +1565,7 @@
         var to = c.groups.filter(function (x) { return x.id === e.target.value; })[0] || plainGroup(D);
         boardMove(s, g, to); boardView(to.section ? 'grp:' + to.id : i);
       } }, h('option', { value: '', selected: !g.section }, 'Its own card'), own.map(function (x) { return h('option', { value: x.id, selected: x === g }, x.name); })))));
+      if (card && !card.link) box.appendChild(boardAppLayout(i));
       if (pageSel) box.appendChild(pageSel);
       box.appendChild(h('div', { class: 'bs-b' }, h('div', { class: 'bs-l' }, bsRow(ic('gear'), 'Address and login', (D.types[s.type] || [''])[0].replace(/ \(.*\)$/, ''), ic('chev'), function () { editService(D, s, g, false, boardSide, boardDirty); }))));
       foot.appendChild(btn('Delete app…', function () { boardDeleteApp(s, g); }, 'sm ghost danger'));
@@ -1629,6 +1630,56 @@
     var E = S.edit, gone = {}; boardMark(); E.hidden.forEach(function (i) { gone[i] = 1; });
     E.list = boardSmart(boardCards().filter(function (c) { return !gone[c.i]; }), boardCols()); E.smart = true; E.compact = true;
     boardRemount();
+    boardFitRows(E.list); gCompact(E.list); boardPaint();
+  }
+  /* every card as tall as its content at its new width; cards of one section side by side stay level */
+  function boardFitRows(list) {
+    var rows = {};
+    list.forEach(function (c) { var x = R.cards[c.i], n = x && boardNatural(c.i); if (n) { var k = x.c.s + ':' + c.y; (rows[k] = rows[k] || []).push({ c: c, n: n }); } });
+    Object.keys(rows).forEach(function (k) {
+      var tall = Math.max.apply(null, rows[k].map(function (r) { return r.n; }));
+      rows[k].forEach(function (r) { r.c.h = tall; r.c.a = true; });
+    });
+  }
+  function boardAppCards() { return S.edit.list.filter(function (c) { return c.i.indexOf('app:') === 0 && R.cards[c.i] && !R.cards[c.i].c.link; }); }
+  function boardAppSize(i, w) {
+    var E = S.edit, c = boardItem(i); if (!c) return;
+    boardMark();
+    gMove(E.list, i, { x: c.x, y: c.y, w: w, h: c.h }, E.compact, boardCols()); boardPaint();
+    var n = boardNatural(i); if (n) { c.a = true; gMove(E.list, i, { x: c.x, y: c.y, w: c.w, h: n }, E.compact, boardCols()); }
+    boardPaint(); boardSide();
+  }
+  /* the app cards in reading order, keeping their sizes, as rows that end at both edges and fit their content. The other cards keep their places around them */
+  function boardFlowApps(w) {
+    var E = S.edit, cols = boardCols(), rows = [[]], used = 0, sum = function (r) { return r.reduce(function (t, c) { return t + c.w; }, 0); };
+    var apps = boardAppCards().sort(function (a, b) { return a.y - b.y || a.x - b.x; }); if (!apps.length) return;
+    boardMark();
+    var top = apps[0].y, y = top, n, mine = {};
+    apps.forEach(function (c) {
+      mine[c.i] = 1; if (w) c.w = Math.min(w, cols);
+      if (used + c.w > cols) { rows.push([]); used = 0; }
+      rows[rows.length - 1].push(c); used += c.w;
+    });
+    for (n = rows.length; n > 1 && rows[n - 1].length < rows[n - 2].length - 1 && sum(rows[n - 1]) + rows[n - 2][rows[n - 2].length - 1].w <= cols;) rows[n - 1].unshift(rows[n - 2].pop());   // never one app stretched across the board
+    rows.forEach(function (r) {
+      var extra = cols - sum(r), x = 0;
+      r.forEach(function (c, j) { c.w += Math.floor(extra / r.length) + (j < extra % r.length ? 1 : 0); c.x = x; c.y = top; x += c.w; });
+    });
+    boardPaint();                                        // the widths first: how tall a card needs to be depends on them
+    rows.forEach(function (r) {
+      var tall = Math.max.apply(null, r.map(function (c) { return boardNatural(c.i) || c.h; }));
+      r.forEach(function (c) { c.y = y; c.h = tall; c.a = true; });
+      y += tall;
+    });
+    E.list.forEach(function (c) { if (!mine[c.i] && c.y >= top) c.y += y - top; });
+    gCompact(E.list); boardPaint(); boardSide();
+  }
+  function boardAppLayout(i) {
+    var c = boardItem(i), sizes = boardCols() === 24 ? [3, 4, 6, 12] : [2, 3, 4, 6];
+    return h('div', { class: 'bs-b' }, F('Size', h('div', { class: 'seg', role: 'group', 'aria-label': 'Size' }, ['Small', 'Medium', 'Large', 'Wide'].map(function (t, j) {
+      return h('button', { type: 'button', class: c && c.w === sizes[j] ? 'on' : null, onclick: function () { boardAppSize(i, sizes[j]); } }, t);
+    }))), h('div', { class: 'bs-acts' }, btn('Use for all apps', function () { var x = boardItem(i); if (x) boardFlowApps(x.w); }, 'sm ghost', 'fit', 'Give every app card this size'),
+      btn('Smart arrange apps', function () { boardFlowApps(); }, 'sm ghost', 'grid', 'Line the app cards up in rows, sized to their content')));
   }
   function boardReset() {
     var E = S.edit; boardMark();
@@ -4434,7 +4485,7 @@
           h('button', { type: 'button', class: 'ico-btn', title: 'Pick an icon for ' + it.name, 'aria-label': 'Pick an icon for ' + it.name, onclick: function () { iconPicker(p.label || it.name, function (v) { p.icon = v; put(); draw(); }); } },
             (dk ? cIcon : vIcon)(it, p, '')),
           h('span', { class: 't' }, h('span', { class: 'sdot ' + (it.state === 'running' ? 'ok' : 'na'), title: it.state || '' }), h('b', null, it.name)),
-          h('input', { type: 'text', class: 'oname', value: p.label || '', maxlength: 60, placeholder: dirty === boardDirty ? it.name : 'Display name', title: 'Rename on the dashboard. The ' + (dk ? 'container' : 'VM') + ' itself stays ' + it.name, 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
+          h('input', { type: 'text', class: 'oname', value: p.label || '', maxlength: 60, placeholder: dirty === boardDirty || (window.matchMedia && matchMedia('(max-width:600px)').matches) ? it.name : 'Display name', title: 'Rename on the dashboard. The ' + (dk ? 'container' : 'VM') + ' itself stays ' + it.name, 'aria-label': 'Display name for ' + it.name, oninput: function (e) { p.label = e.target.value; put(); } }),
           h('input', { type: 'text', value: p.icon || '', placeholder: 'Icon', 'aria-label': 'Icon for ' + it.name, oninput: function (e) { p.icon = e.target.value; put(); } }),
           h('label', { class: 'switch ico-t', title: 'Favorite' }, h('input', { type: 'checkbox', checked: !!p.favorite, 'aria-label': 'Favorite ' + it.name, onchange: function (e) { p.favorite = e.target.checked; put(); } }), ic('star')),
           dk ? h('label', { class: 'switch ico-t', title: 'Show updates for this container' }, h('input', { type: 'checkbox', checked: !p.no_update, 'aria-label': 'Show updates for ' + it.name, onchange: function (e) { p.no_update = !e.target.checked; put(); } }), ic('up')) : null);
