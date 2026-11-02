@@ -964,7 +964,15 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 }
 
 /* privacy: titles, posters, streams, requests, torrents and the server name */
-.und.privacy .mlist>*,.und.privacy .pl,.und.privacy .rq,.und.privacy .dln>.ell,.und.privacy .ais,.und.privacy .und-name,.und.privacy .sbox .sb-i{filter:blur(7px);-webkit-user-select:none;user-select:none}
+.und.privacy{--hid:color-mix(in srgb,var(--text) 15%,transparent)}
+.und.privacy :is(.mlist>:not(.empty),.pl,.rq,.dln>.ell,.ais,.und-name,.sbox .sb-i){position:relative;color:transparent!important;pointer-events:none;-webkit-user-select:none;user-select:none}
+.und.privacy :is(.mlist>:not(.empty),.pl,.rq,.dln>.ell,.ais,.und-name,.sbox .sb-i)>*{visibility:hidden}
+.und.privacy :is(.mlist>:not(.empty),.pl,.rq,.dln>.ell,.ais,.und-name,.sbox .sb-i)::before{content:"";position:absolute;left:var(--hl,0);top:50%;width:var(--hw,56%);height:10px;margin-top:-5px;border-radius:5px;background:var(--hid);visibility:visible}
+.und.privacy :is(.mlist>:not(.empty),.pl,.rq)::before{margin-top:-12px}
+.und.privacy :is(.mlist>:not(.empty),.pl,.rq)::after{content:"";position:absolute;left:var(--hl,0);top:50%;width:calc(var(--hw,56%)*.6);height:8px;margin-top:4px;border-radius:4px;background:var(--hid);opacity:.7;visibility:visible}
+.und.privacy :is(.mlist>:nth-child(3n+2),.pl:nth-child(3n+2),.rq:nth-child(3n+2)){--hw:42%}.und.privacy :is(.mlist>:nth-child(3n),.pl:nth-child(3n),.rq:nth-child(3n)){--hw:50%}
+.und.privacy :is(.pl:not(.in),.rq){--hl:14px}
+.und.privacy .dln>.ell{flex:0 0 52%}.und.privacy .und-name{min-width:96px;--hw:100%}.und.privacy .ais{min-height:22px}
 .und .btn.priv.on{background:var(--accent-soft)!important;color:var(--accent-text)!important;border-color:var(--accent)!important}
 
 /* Now playing: a card per stream, side by side when several people watch */
@@ -1409,7 +1417,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 @media (max-width:700px){.und.bui .board.flow .gc-c>.sec>.sec-h h2{white-space:nowrap}}
 /* phones: the Settings pages are one scrolling row of pills, not a 230 px tall block */
 @media (max-width:700px){.und.bui .drawer .dt{flex-basis:auto;flex:none;flex-direction:row;overflow-x:auto}.und.bui .drawer .dt .dg{display:none}.und.bui .drawer .dt button{flex:none;white-space:nowrap}}
-.und.no-chips .und-sub .vchip:not(:has(.upd)){display:none}
 .und .brand img.logo,.und .brand .ph.logo,.und .sec-in-ic .logo{object-fit:contain}
 .und .sec-in-ic{display:inline-flex;flex:none}.und .sec-in-ic .logo{width:30px;height:30px;border-radius:7px}
 .und.rezoom .gc,.und.rezoom .gc *{transition:none!important}
@@ -1536,3 +1543,18 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und.und .bside .pick-list .oi input.oname:focus::placeholder{color:var(--faint)}
 /* every icon in the container and VM lists takes the same room, the UnDash logo and the plain box too */
 .und .ico-btn>*{width:21px;height:21px;flex:none;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box}.und .ico-btn>.logo{border-radius:5px}
+/* the navbar: what shows is chosen in Appearance, or in edit mode */
+.und.no-nav-logo .brand>.logo{display:none}.und.no-nav-name .brand .und-name{display:none}
+.und.no-nav-os .und-sub .v-os,.und.no-nav-app .und-sub .v-app{display:none}
+.und.no-nav-live .top .live{display:none}.und.no-nav-alerts .top .bell{display:none!important}.und.no-nav-server .top .srv{display:none}
+.und.no-nav-hide:not(.privacy) .top .priv{display:none}
+.und.bui.nav-float .top{position:relative}
+.und[data-nav-search=wide] .top .search{max-width:820px}.und[data-nav-search=full] .top .search{max-width:none}
+.und[data-nav-search=off] .top .search{visibility:hidden}
+@media (max-width:700px){.und[data-nav-search=off] .top .search{display:none}}
+.und .nav-sw{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 16px;margin-top:10px}
+/* edit mode: the Appearance settings fold into the side panel */
+.und .bside .bs-look{margin:0 16px;border-top:1px solid var(--line);padding:0;min-width:0}.und .bside .bs-look:last-child{margin-bottom:10px}
+.und .bside .bs-look>summary{min-height:42px;display:flex;align-items:center;font-weight:600;font-size:13.5px;color:var(--title);cursor:pointer}
+.und .bside .bs-look .set{margin:0 0 12px;padding:0;background:none;border:0;box-shadow:none;min-width:0}.und .bside .bs-look input[type=range]{min-width:0}.und .bside .bs-look .set>h3{display:none}
+.und .bside .bs-look .grid2{grid-template-columns:minmax(0,1fr)}.und .bside .bs-look .nav-sw{grid-template-columns:minmax(0,1fr)}

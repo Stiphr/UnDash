@@ -400,7 +400,7 @@ function und_look_limits() {
  */
 function und_presets_clean($list) {
   $out = []; $seen = [];
-  $look = ['theme', 'mode', 'accent', 'accent_mode', 'density', 'text_size', 'radius', 'translucent', 'gradient', 'icon_box', 'header_chips', 'zoom', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity', 'motion', 'blur', 'blur_target', 'brightness', 'safe_x', 'safe_y', 'sec_names', 'icon_mode'];
+  $look = ['theme', 'mode', 'accent', 'accent_mode', 'density', 'text_size', 'radius', 'translucent', 'gradient', 'icon_box', 'header_chips', 'zoom', 'glass_blur', 'glass_opacity', 'glass_saturation', 'glass_exposure', 'glass_contrast', 'wall_saturation', 'wall_contrast', 'wall_opacity', 'motion', 'blur', 'blur_target', 'brightness', 'safe_x', 'safe_y', 'sec_names', 'icon_mode', 'nav_logo', 'nav_name', 'nav_os', 'nav_app', 'nav_live', 'nav_alerts', 'nav_server', 'nav_hide', 'nav_sticky', 'nav_search'];
   $text = function ($v, $max) { return und_clip(trim(preg_replace('/[\x00-\x1f\x7f]+/', ' ', is_scalar($v) ? (string)$v : '')), $max); };
   foreach (array_slice(is_array($list) ? $list : [], 0, UND_PRESETS_MAX) as $p) {
     if (!is_array($p) || !preg_match('/^[a-f0-9]{8}$/', (string)($p['id'] ?? '')) || isset($seen[$p['id']])) continue;
@@ -445,7 +445,7 @@ function und_normalize(array $c) {
   $g['glances'] = preg_match('#^https?://[^\s"\'<>]+$#i', trim((string)$g['glances'])) ? und_clip(rtrim(trim((string)$g['glances']), '/'), 300) : '';    // the System tiles' source without an API key
 
   $a = (isset($c['appearance']) && is_array($c['appearance']) ? $c['appearance'] : []) + $d['appearance'];
-  $a = array_intersect_key($a, $d['appearance']);
+  $a = array_intersect_key($a, $d['appearance'] + array_flip(['nav_logo', 'nav_name', 'nav_os', 'nav_app', 'nav_live', 'nav_alerts', 'nav_server', 'nav_hide', 'nav_sticky', 'nav_search']));
   // the old "light" theme is the default palette in light mode
   if ($a['theme'] === 'light') { $a['theme'] = 'default'; if (!isset($c['appearance']['mode'])) $a['mode'] = 'light'; }
   $a['custom_themes'] = und_themes_clean($a['custom_themes'] ?? []);
@@ -463,6 +463,10 @@ function und_normalize(array $c) {
   $a['gradient'] = array_key_exists('gradient', $a) ? !empty($a['gradient']) : true;
   $a['icon_box'] = array_key_exists('icon_box', $a) ? !empty($a['icon_box']) : true;
   $a['header_chips'] = array_key_exists('header_chips', $a) ? !empty($a['header_chips']) : true;
+  // the navbar: the two versions were one switch before, so they start from what that switch said
+  foreach (['nav_logo', 'nav_name', 'nav_live', 'nav_alerts', 'nav_server', 'nav_hide', 'nav_sticky'] as $k) $a[$k] = array_key_exists($k, $a) ? !empty($a[$k]) : true;
+  foreach (['nav_os', 'nav_app'] as $k) $a[$k] = array_key_exists($k, $a) ? !empty($a[$k]) : $a['header_chips'];
+  $a['nav_search'] = in_array($a['nav_search'] ?? '', ['normal', 'wide', 'full', 'off'], true) ? $a['nav_search'] : 'normal';
   $a['zoom'] = in_array((int)($a['zoom'] ?? 0), [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200], true) ? (int)$a['zoom'] : 0;     // 0 = fit the screen
   foreach (und_look_limits() as $k => $r) $a[$k] = max($r[0], min($r[1], (int)($a[$k] ?? $r[2])));
   $a['motion'] = in_array($a['motion'] ?? '', ['full', 'fast', 'nointro', 'off'], true) ? $a['motion'] : 'full';

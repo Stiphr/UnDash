@@ -1,4 +1,7 @@
 ###beta
+- Edit mode has an Appearance button: theme, accent, background, navbar, card style, size and the rest, right beside your dashboard
+- Appearance has a Navbar section: search bar width, and separate switches for the logo, name, Unraid version, UnDash version, clock, alerts and buttons. The bar can also scroll away with the page
+- Hide sensitive details shows clean bars instead of a blur, and the text is really hidden. Hidden rows cannot be clicked until you show them again
 - Edit mode: rename containers and VMs right in the list. Click a name and type. It changes the name on the dashboard only, the container itself keeps its name
 - The browser tab icon follows your accent color. If you set your own logo, the tab uses that
 - Containers with an update now show it: a small badge on the icon in the grid, for every layout. Click it to update, skip this version or ignore updates for that container. Updates shows the count, and also lists what you skipped or ignored so you can undo it
