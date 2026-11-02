@@ -115,13 +115,14 @@ const UND_API_SLOW = [
       disks { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
       caches { name device status temp numErrors fsSize fsFree fsType color isSpinning type } }
   }'],
-  'containers' => [3, 20, 'query { docker { containers { id names image state status autoStart iconUrl webUiUrl isUpdateAvailable isRebuildReady ports { privatePort publicPort type } hostConfig { networkMode } } } }'],
-  'vms' => [3, 20, 'query { vms { domains { id name state } } }'],
+  'containers' => [3, 30, 'query { docker { containers { id names image state status autoStart iconUrl webUiUrl isUpdateAvailable isRebuildReady ports { privatePort publicPort type } hostConfig { networkMode } } } }'],
+  'vms' => [3, 30, 'query { vms { domains { id name state } } }'],
   'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname uptime kernel } versions { core { unraid } } } }'],
   'net'   => [5, 30, 'query { metrics { network { name rxSec txSec } } }'],
   'temp'  => [30, PHP_INT_MAX, 'query { metrics { temperature { sensors { type current { value } } } } }'],
 ];
-const UND_API_TEMP_IDLE = 60;       // with no page open the temperature is still read this often: the alert check needs it
+/* with no page open these are still kept this fresh, in seconds: the alert check reads them, and the next page opens at once. The network rates wait for a page. */
+const UND_API_IDLE = ['system' => 20, 'containers' => 20, 'vms' => 20, 'ident' => 600, 'temp' => 60];
 
 function und_api_poller_alive() { clearstatcache(); $b = @filemtime(und_tmp('apipoll.beat')); return $b && time() - $b < 30; }
 
@@ -136,10 +137,10 @@ function und_api_slow($name) {
 /** One round of the background poller: refreshes what is due. Errors are not stored, so the last good copy stays. */
 function und_api_poll_due($viewer = true) {
   foreach (UND_API_SLOW as $name => $x) {
-    if (!$viewer && $name !== 'temp') continue;
+    if (!$viewer && !isset(UND_API_IDLE[$name])) continue;
     $f = und_tmp('api-' . $name . '.json');
     $c = und_read_json($f, null);
-    if (is_array($c) && microtime(true) - (float)$c['t'] < ($viewer ? $x[0] : UND_API_TEMP_IDLE)) continue;
+    if (is_array($c) && microtime(true) - (float)$c['t'] < ($viewer ? $x[0] : UND_API_IDLE[$name])) continue;
     $r = und_gql($x[2]);
     if (!isset($r['error'])) und_write_json($f, ['t' => microtime(true), 'v' => $r]);
   }

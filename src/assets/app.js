@@ -3386,13 +3386,13 @@
     var x = r.rows[r.open], p = r.pane;
     clear(p); p.hidden = !x;
     if (x) {
-      var j = x.j || {}, s = x.s, n = arrProblems(j), list = j.online ? j.blocks || [] : [];
+      var j = x.j || {}, s = x.s, n = arrProblems(j), list = j.online ? j.blocks || [] : [], wait = !x.j;
       p.appendChild(h('div', { class: 'aph' }, img(iconUrl(s.icon), 'aico', 'tag'), h('b', { class: 'an ell' }, s.name), j.version ? h('span', { class: 'muted xs num' }, 'v' + j.version) : null, h('span', { class: 'grow' }),
         s.href_resolved ? h('a', { class: 'btn sm ghost', href: s.href_resolved, target: '_blank', rel: 'noopener', title: 'Open ' + s.name }, 'Open', ic('open')) : null,
         btn('', function () { r.open = ''; arrPane(); }, 'sm ghost', 'x', 'Close ' + s.name)));
       if (list.length) p.appendChild(h('div', { class: 'apstats' }, list.map(function (b) { return h('span', { title: b.label + ': ' + fmt(b.value, b.fmt) }, h('b', null, blkVal(b)), ' ' + b.label.toLowerCase()); })));
       if (j.error && !j.preview) p.appendChild(h('div', { class: 'sm t-bad' }, j.error));
-      else if (arrState(j)) p.appendChild(h('div', { class: 'muted sm' }, arrState(j)));
+      else if (wait || arrState(j)) p.appendChild(h('div', { class: 'muted sm' }, wait ? 'Checking…' : arrState(j)));
       if (n) {
         var box = h('div', { class: 'aiss', role: 'list', tabindex: '0', 'aria-label': 'Problems' });
         var rows = (j.health || []).map(function (z) { return [z.level, z.tag || z.source, '', z.msg, 0, z.source ? z.source + ': ' + z.msg : z.msg]; })
