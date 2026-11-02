@@ -414,7 +414,7 @@ function und_api_docker_live() {
       'job' => $job['state'] === 'running' ? 'updating' : ($job['state'] === 'done' && time() - (int)$job['at'] < 600 ? ($job['code'] === 0 ? 'updated' : 'update_failed') : '')];
   }
   usort($out, function ($a, $b) { return strcasecmp($a['name'], $b['name']); });
-  return ['containers' => $out, 'checking' => false, 'checked' => null, 'stats' => (bool)$stats];
+  return ['containers' => und_docker_skips($out), 'checking' => false, 'checked' => null, 'stats' => (bool)$stats];
 }
 
 function und_api_container_id($name) {

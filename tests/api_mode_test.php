@@ -20,6 +20,15 @@ function clear_cache_keep_none() { foreach (glob(UND_TMP . '/api-*.json') ?: [] 
 
 t('caps hide what the API cannot do', und_caps()['power'] === false && und_caps()['os_update'] === false && und_caps()['docker_stats'] === true && und_caps()['mode'] === 'api');
 t('settings live in /config (UNDASH_CONFIG)', und_store_dir() === UND_DIR);
+$da = 'sha256:' . str_repeat('a', 64); $db = 'sha256:' . str_repeat('b', 64);
+$cs = und_load_config(); $cs['docker']['items'] = ['s' => ['skip_update' => $da]]; und_save_config($cs, false);
+und_write_json(und_tmp('image-digests.json'), ['img/s' => ['d' => $da, 'at' => time()], 'img/n' => ['d' => $db, 'at' => time()]]);
+t('skip: same digest stays skipped', !empty(und_docker_skips([['name' => 's', 'image' => 'img/s', 'update' => 'available']])[0]['skip']));
+und_write_json(und_tmp('image-digests.json'), ['img/s' => ['d' => $db, 'at' => time()]]);
+t('skip: a new digest brings the update back', empty(und_docker_skips([['name' => 's', 'image' => 'img/s', 'update' => 'available']])[0]['skip']));
+und_write_json(und_tmp('image-digests.json'), []);
+t('skip: stands while the registry cannot be read', !empty(und_docker_skips([['name' => 's', 'image' => 'img/s', 'update' => 'available']])[0]['skip']));
+$cs['docker']['items'] = new stdClass(); und_save_config($cs, false); @unlink(und_tmp('image-digests.json'));
 t('the port is not changeable from the UI', isset(und_save_loc(['PORT' => '9100'])['error']));
 t('no API configured: clear error, no request', isset(und_gql('query { online }')['error']) && !$GLOBALS['SENT']);
 und_save_secrets(['vars' => [], 'svc' => [], 'unraid' => ['url' => 'http://tower.local', 'key' => 'SECRETKEY123']]);

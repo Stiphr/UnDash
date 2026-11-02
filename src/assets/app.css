@@ -684,8 +684,8 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und a.wl:hover{color:var(--accent-text)}.und a.wl:hover img{filter:brightness(1.15)}.und a.wl:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 .und .btn.gear{background:transparent!important;border-color:transparent!important;color:var(--muted)!important}.und .btn.gear:hover{background:var(--bar)!important;border-color:var(--line-2)!important;color:var(--title)!important}
 /* an update is waiting: the gear turns orange (whatever the theme's accent) */
-.und .btn.gear.has-upd{color:#f97316!important;background:rgba(249,115,22,.12)!important;border-color:rgba(249,115,22,.45)!important}.und .btn.gear.has-upd:hover{background:rgba(249,115,22,.22)!important;color:#fb923c!important}
-.und .menu button.upd{color:#f97316}.und .upd-t{color:#f97316}
+.und .btn.gear.has-upd{color:var(--accent-text)!important;background:var(--accent-soft)!important;border-color:color-mix(in srgb,var(--accent) 45%,transparent)!important}.und .btn.gear.has-upd:hover{background:rgba(249,115,22,.22)!important;color:#fb923c!important}
+.und .menu button.upd{color:var(--accent-text)}
 .und .ci.st-exited .cname,.und .ci.st-created .cname,.und .ci.st-dead .cname{color:var(--muted);font-weight:500}
 
 /* apps: compact cards in one grid */
@@ -1516,3 +1516,14 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .dfacts{margin-bottom:12px}.und .dfacts:empty{display:none}
 @media (max-width:700px){.und.bui .gc-c>.sec>.sec-h{flex-wrap:wrap!important}.und.bui .gc-c>.sec>.sec-h .tools{flex:1 1 100%;min-width:0;margin-left:0}.und .sec-h .tools>.muted{white-space:normal!important}}
 .und[data-density=compact] button.atile{padding:8px 10px;gap:7px}.und[data-density=expanded] button.atile{padding:14px}
+/* a container's update: a badge on the icon, like an app with something waiting */
+.und .ci{position:relative}
+.und .cup{position:absolute;left:29px;top:50%;margin-top:3px;width:17px;height:17px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;border:2px solid var(--panel);background:var(--accent-btn);color:var(--accent-ink);cursor:pointer;z-index:1}
+.und .cup svg{width:10px;height:10px;stroke-width:3}
+.und .cup::after{content:"";position:absolute;inset:-7px;border-radius:50%}
+.und .cup:hover{filter:brightness(1.12)}.und .cup:focus-visible{outline:0;box-shadow:var(--focus)}
+.und .cup.off{background:var(--panel-2);color:var(--muted)}
+.und .rowi .cup{position:relative;left:auto;top:auto;margin:0}
+.und .updl{appearance:none;background:none;border:0;padding:2px 0;font:inherit;font-size:12px;color:var(--accent-text);cursor:pointer;white-space:nowrap}
+.und .updl:hover{text-decoration:underline}.und .updl:focus-visible{outline:0;border-radius:4px;box-shadow:var(--focus)}
+.und .updl.off{color:var(--muted)}

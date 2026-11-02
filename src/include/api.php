@@ -121,6 +121,12 @@ switch ($action) {
   case 'docker_logs':    { $r = und_docker_logs($P('name'), (int)$P('lines', '300')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'docker_inspect': { $r = und_docker_inspect($P('name')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'docker_check':   out(und_docker_check());
+  case 'docker_skip': {
+    if (!und_valid_container($P('name'))) fail('Invalid name.');
+    $r = und_docker_skip($P('name'), $P('skip') === '1');
+    if (isset($r['error'])) fail($r['error'], 409);
+    out($r + ['layout' => und_layout_view(und_load_config())]);
+  }
   case 'docker_job': {
     $n = $P('name');
     if ($n === '') out(und_job(und_tmp('docker-check.log')));

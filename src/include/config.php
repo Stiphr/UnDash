@@ -515,7 +515,8 @@ function und_normalize(array $c) {
       $row = ['label' => und_clip(trim((string)($p['label'] ?? '')), 60), 'icon' => und_clip((string)($p['icon'] ?? ''), 300), 'description' => und_clip(trim((string)($p['description'] ?? '')), 200),
               'hidden' => !empty($p['hidden']), 'favorite' => !empty($p['favorite'])];
       if (!empty($p['no_update'])) $row['no_update'] = true;          // containers only: no update check for this one
-      if ($row['label'] === '' && $row['icon'] === '' && $row['description'] === '' && !$row['hidden'] && !$row['favorite'] && empty($row['no_update'])) continue;
+      if (preg_match('/^sha256:[a-f0-9]{64}$/', (string)($p['skip_update'] ?? ''))) $row['skip_update'] = $p['skip_update'];   // containers only: the version skipped
+      if ($row['label'] === '' && $row['icon'] === '' && $row['description'] === '' && !$row['hidden'] && !$row['favorite'] && empty($row['no_update']) && empty($row['skip_update'])) continue;
       $out[$name] = $row;
     }
     return $out ? $out : new stdClass();

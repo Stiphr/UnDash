@@ -67,6 +67,7 @@ function und_http_once($method, $url, array $o) {
     CURLOPT_USERAGENT => 'UnDash/' . UND_VERSION, CURLOPT_ENCODING => '',
     CURLOPT_HEADERFUNCTION => function ($c, $h) use (&$resp) { $p = explode(':', $h, 2); if (count($p) === 2) $resp[strtolower(trim($p[0]))][] = trim($p[1]); return strlen($h); },
   ]);
+  if ($method === 'HEAD') curl_setopt($ch, CURLOPT_NOBODY, true);     // or curl waits for a body that never comes
   if (isset($o['body'])) curl_setopt($ch, CURLOPT_POSTFIELDS, $o['body']);
   $max = (int)($o['max'] ?? UND_HTTP_MAX); curl_setopt($ch, CURLOPT_NOPROGRESS, false); curl_setopt($ch, CURLOPT_XFERINFOFUNCTION, function ($c, $total, $now) use ($max) { return $now > $max ? 1 : 0; });
   if (isset($o['basic'])) curl_setopt($ch, CURLOPT_USERPWD, $o['basic'][0] . ':' . $o['basic'][1]);

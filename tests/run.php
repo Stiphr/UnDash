@@ -1448,9 +1448,51 @@ foreach (['cut short' => "version: 3\ngeneral:\n  name: x\n", 'emptied' => '', '
   t("... and the damaged file is kept ($why)", count(glob($cf . '.damaged-*') ?: []) === 1);
 }
 @unlink($cf); @unlink(UND_DIR . '/config.yaml'); und_store_reset(); @unlink(und_tmp('config-recovered.json'));
-t('a file removed on purpose is not brought back', und_load_config()['groups'][0]['services'][0]['name'] !== 'Kept app' && !is_file($cf));
+t('a file removed on purpose is not brought back', (und_load_config()['groups'][0]['services'][0]['name'] ?? '') !== 'Kept app' && !is_file($cf));
 foreach (glob($cf . '.damaged-*') ?: [] as $x) @unlink($x);
 if ($good !== '') file_put_contents($cf, $good); und_store_reset();
+
+/* ---------------- skipping one version of a container ---------------- */
+group('update skip');
+reset_store();
+$r = und_image_ref('radarr'); t('a bare name is a Docker Hub library image', $r && $r['host'] === 'registry-1.docker.io' && $r['repo'] === 'library/radarr' && $r['tag'] === 'latest');
+$r = und_image_ref('binhex/arch-sabnzbd:5.0'); t('user image with a tag', $r && $r['repo'] === 'binhex/arch-sabnzbd' && $r['tag'] === '5.0');
+$r = und_image_ref('ghcr.io/stiphr/undash:beta'); t('another registry', $r && $r['host'] === 'ghcr.io' && $r['repo'] === 'stiphr/undash' && $r['tag'] === 'beta');
+$r = und_image_ref('reg.lan:5000/a/b'); t('a registry with a port', $r && $r['host'] === 'reg.lan:5000' && $r['repo'] === 'a/b');
+t('a pinned image has no version to follow', und_image_ref('nginx@sha256:' . str_repeat('a', 64)) === null);
+t('a bad name is refused', und_image_ref('../../etc:x y') === null && und_image_ref('') === null);
+$dA = 'sha256:' . str_repeat('a', 64); $dB = 'sha256:' . str_repeat('b', 64);
+$saved = $GLOBALS['UND_HTTP_MOCK'] ?? null; $GLOBALS['SEEN'] = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use ($dA) {
+  $GLOBALS['SEEN'][] = ['m' => $m, 'u' => $url, 'h' => $o['headers'] ?? []];
+  if (strpos($url, 'auth.example') !== false) return ['code' => 200, 'json' => ['token' => 'TOK'], 'body' => '', 'err' => ''];
+  if (($o['headers']['Authorization'] ?? '') === 'Bearer TOK') return ['code' => 200, 'json' => null, 'body' => '', 'err' => '', 'headers' => ['docker-content-digest' => [$dA]]];
+  return ['code' => 401, 'json' => null, 'body' => '', 'err' => '', 'headers' => ['www-authenticate' => ['Bearer realm="https://auth.example/token",service="reg"']]];
+};
+t('the digest comes from the anonymous token flow', und_registry_digest('binhex/x') === $dA);
+t('the manifest is read with HEAD', $GLOBALS['SEEN'][0]['m'] === 'HEAD' && $GLOBALS['SEEN'][2]['m'] === 'HEAD');
+t('the token asks to pull this repository only', strpos($GLOBALS['SEEN'][1]['u'], 'scope=repository%3Abinhex%2Fx%3Apull') !== false && strpos($GLOBALS['SEEN'][1]['u'], 'service=reg') !== false);
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) { return ['code' => 500, 'json' => null, 'body' => '', 'err' => '', 'headers' => []]; };
+t('a registry that will not answer gives no digest', und_registry_digest('binhex/x') === '');
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) { return ['code' => 200, 'json' => null, 'body' => '', 'err' => '', 'headers' => ['docker-content-digest' => ['nonsense']]]; };
+t('a malformed digest is not trusted', und_registry_digest('binhex/x') === '');
+if ($saved) $GLOBALS['UND_HTTP_MOCK'] = $saved; else unset($GLOBALS['UND_HTTP_MOCK']);
+$cfgK = und_load_config(); $cfgK['docker']['items'] = ['a' => ['skip_update' => $dA], 'b' => ['skip_update' => 'junk', 'favorite' => true], 'c' => ['no_update' => true]];
+und_save_config($cfgK, false);
+$kept = (array)und_load_config()['docker']['items'];
+t('a skip survives saving', ($kept['a']['skip_update'] ?? '') === $dA);
+t('a malformed skip is dropped', !isset($kept['b']['skip_update']) && !empty($kept['b']['favorite']));
+@mkdir(dirname(und_path(UND_UPDSTATUS)), 0777, true);
+file_put_contents(und_path(UND_UPDSTATUS), json_encode(['img/a:latest' => ['remote' => $dA, 'status' => 'false'], 'img/c:latest' => ['remote' => $dB, 'status' => 'false']]));
+$l = und_docker_skips([['name' => 'a', 'image' => 'img/a', 'update' => 'available'], ['name' => 'c', 'image' => 'img/c', 'update' => 'available'], ['name' => 'd', 'image' => 'img/a', 'update' => 'available']]);
+t('the skipped version is marked', !empty($l[0]['skip']));
+t('an ignored or other container is not', empty($l[1]['skip']) && empty($l[2]['skip']));
+file_put_contents(und_path(UND_UPDSTATUS), json_encode(['img/a:latest' => ['remote' => $dB, 'status' => 'false']]));
+$l = und_docker_skips([['name' => 'a', 'image' => 'img/a', 'update' => 'available']]);
+t('a newer version shows again', empty($l[0]['skip']));
+t('an image that is up to date is not marked', empty(und_docker_skips([['name' => 'a', 'image' => 'img/a', 'update' => 'current']])[0]['skip']));
+@unlink(und_path(UND_UPDSTATUS));
+reset_store();
 
 rmrf($SANDBOX);
 
