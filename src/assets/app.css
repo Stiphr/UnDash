@@ -1559,3 +1559,6 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .und .bside .bs-look>summary{min-height:42px;display:flex;align-items:center;font-weight:600;font-size:13.5px;color:var(--title);cursor:pointer}
 .und .bside .bs-look .set{margin:0 0 12px;padding:0;background:none;border:0;box-shadow:none;min-width:0}.und .bside .bs-look input[type=range]{min-width:0}.und .bside .bs-look .set>h3{display:none}
 .und .bside .bs-look .grid2{grid-template-columns:minmax(0,1fr)}.und .bside .bs-look .nav-sw{grid-template-columns:minmax(0,1fr)}
+/* the page tabs sit on the navbar's own glass, and the open one wears the accent */
+.und.und .top .pages{background:color-mix(in srgb,var(--text) 7%,transparent);border-radius:calc(var(--radius) + 2px)}
+.und.und .top .pages button.on{background:var(--accent-soft);color:var(--accent-text)}
