@@ -31,8 +31,6 @@ function sa_asset($file, $type) {
 
 function sa_deny($code, $msg) { http_response_code($code); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
 
-/** Where Unraid's web UI is: same host, its own port (80/443). nginx redirects http to https when Unraid requires it. */
-function sa_unraid_base() { $h = und_req_host(); return $h === '' ? '' : 'http://' . $h; }
 
 /** The login / setup page (Docker version). Plain HTML, no script, so the strict CSP still applies. */
 function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
@@ -92,7 +90,7 @@ if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
 }
 
 /* ---- without a password, only known host names (see und_host_allowed: DNS rebinding) ---- */
-if (und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true) && !und_host_allowed())
+if (in_array(und_auth_kind(), ['none', 'open'], true) && !und_host_allowed())
   sa_deny(421, "UnDash has no password yet, so it only answers at the server's IP address or name (http://<server IP>:<port>).\n"
     . "To use the name " . (und_req_host() ?: 'in the address bar') . ": set a password in Settings > Server connection, or add the name to UNDASH_ALLOWED_HOSTS in the container settings.");
 
@@ -130,7 +128,7 @@ if (strpos($uri, '/guest/') === 0) {
 
 /* ---- sign-in ---- */
 $sess = und_sess_get();
-if (!$sess && und_api_mode()) {
+if (!$sess) {
   $kind = und_auth_kind();
   if ($kind === 'none') {
     if ($uri !== '/setup') { if ($method === 'GET' && $uri === '/') { header('Location: /setup', true, 303); exit; } sa_deny(401, 'Not signed in.'); }
@@ -168,25 +166,9 @@ if (!$sess && und_api_mode()) {
   sa_deny(401, 'Not signed in.');
   }
 }
-if (!$sess && $method === 'GET' && isset($_GET['t'])) {
-  if (und_handoff_use((string)$_GET['t'])) { und_sess_new('handoff'); header('Location: /', true, 303); exit; }
-  sa_deny(403, 'That sign-in link expired. Open UnDash from Unraid again.');
-}
-if (!$sess && und_unraid_logged_in()) $sess = und_sess_new('unraid');
-if (!$sess) {
-  if ($method === 'GET' && ($uri === '/' || $uri === '/index.html')) {
-    $base = sa_unraid_base();
-    if ($base === '') sa_deny(400, 'Bad host name.');
-    // behind Unraid's login: it creates a one-time token and sends the browser back here
-    header('Location: ' . $base . '/plugins/undash/handoff.php', true, 303);
-    exit;
-  }
-  sa_deny(401, 'Not signed in. Open UnDash from Unraid first.');
-}
-
 /* ---- routes ---- */
 if ($sess && $method === 'GET' && ($uri === '/setup' || $uri === '/login')) { header('Location: /', true, 303); exit; }
-if ($uri === '/logout') { und_sess_end(); header('Location: ' . (und_api_mode() ? '/login' : sa_unraid_base() . '/'), true, 303); exit; }
+if ($uri === '/logout') { und_sess_end(); header('Location: /login', true, 303); exit; }
 
 if ($uri === '/api') {
   if ($method !== 'POST') sa_deny(405, 'POST only.');
@@ -208,7 +190,7 @@ if ($uri === '/assets/boot.js') {
   // page settings as a script file, so the page needs no inline script (the CSP forbids it)
   header('Content-Type: application/javascript; charset=utf-8');
   header('Cache-Control: no-store');
-  $unraid = und_api_mode() ? preg_replace('#/graphql$#', '', und_api_conf()['url']) : sa_unraid_base();
+  $unraid = preg_replace('#/graphql$#', '', und_api_conf()['url']);
   echo 'window.UND_API="/api";window.UND_CSRF=' . json_encode($sess['csrf']) . ';window.UND_UNRAID=' . json_encode($unraid) . ';window.UND_STANDALONE=true;';
   exit;
 }

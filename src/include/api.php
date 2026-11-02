@@ -21,14 +21,6 @@ $action = (string)($_POST['action'] ?? '');
 $P = function ($k, $d = '') { return isset($_POST[$k]) && is_string($_POST[$k]) ? $_POST[$k] : $d; };
 $J = function ($k) { $v = is_string($_POST[$k] ?? null) ? json_decode($_POST[$k], true) : null; return is_array($v) ? $v : null; };
 
-/** A background OS update check when the cached result is old: the page never waits for the update server. */
-function api_os_autocheck(array $cfg, array $os) {
-  $lock = und_tmp('os-check.lock');
-  if ($os['job'] === 'running' || time() - $os['checked'] <= $cfg['general']['os_check_hours'] * 3600) return;
-  if (is_file($lock) && time() - filemtime($lock) < 600) return;
-  @touch($lock);
-  und_spawn([PHP_BINARY ?: '/usr/bin/php', UND_ROOT . '/scripts/oscheck.php'], und_tmp('os-check.log'));
-}
 
 try {
 switch ($action) {
@@ -38,22 +30,22 @@ switch ($action) {
     $rec = und_read_json(und_tmp('config-recovered.json'), null); if ($rec) @unlink(und_tmp('config-recovered.json'));
     out(['recovered' => $rec, 'version' => UND_VERSION, 'layout' => und_layout_view($cfg), 'types' => und_types(), 'css' => $cfg['appearance']['css_enabled'] ? und_load_css() : '',
          'server' => und_server_identity(), 'wall' => und_wall_custom_view(),
-         'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => $loc['STANDALONE'] === 'yes' && !und_api_mode(), 'caps' => und_caps(),
-         'api' => und_api_mode() ? ['configured' => und_api_conf()['url'] !== '' && und_api_conf()['key'] !== ''] : null,
-         'auth' => und_api_mode() ? und_auth_kind() : 'unraid', 'setup' => und_setup_needed($cfg)]);
+         'standalone' => defined('UND_STANDALONE'), 'port' => (int)$loc['PORT'], 'port_enabled' => false, 'caps' => und_caps(),
+         'api' => ['configured' => und_api_ready()],
+         'auth' => und_auth_kind(), 'setup' => und_setup_needed($cfg)]);
   }
 
   /* one call per refresh: system metrics, containers and VMs (each part can be skipped when its section is hidden) */
   case 'live': {
     $cfg = und_load_config();
-    if (und_api_mode()) @touch(und_tmp('viewer'));     // keeps the background reads of unraid_api.php going while a page is open
+    @touch(und_tmp('viewer'));     // keeps the background reads of unraid_api.php going while a page is open
     $want = array_flip(explode(',', $P('parts', 'system,docker,vms')));
-    if (und_api_mode() && !und_api_ready()) {                 // nothing to ask without a key, and no reason to warn about it
+    if (!und_api_ready()) {                 // nothing to ask without a key, and no reason to warn about it
       unset($want['docker'], $want['vms'], $want['ups']);
       if (und_glances_url($cfg) === '') unset($want['system']);
     }
     $r = ['at' => time()];
-    if (isset($want['system'])) { $r['system'] = und_system($cfg); if (!und_api_mode() && isset($r['system']['os_update'])) api_os_autocheck($cfg, $r['system']['os_update']); }
+    if (isset($want['system'])) { $r['system'] = und_system($cfg); }
     if (isset($want['docker'])) $r['docker'] = und_docker_live();
     if (isset($want['vms'])) $r['vms'] = und_vm_live();
     if (isset($want['ups'])) $r['ups'] = und_ups($cfg['general']['ups_name'], $cfg['general']['ups_watts']);
@@ -69,7 +61,6 @@ switch ($action) {
     }
     // the rules in force now, by the server's clock, so every open tab hides the same alerts
     $r['ignores'] = array_map(function ($x) { return ['id' => $x['id'], 'kind' => $x['kind'], 'key' => $x['key'], 'until' => $x['until']]; }, und_ignores_active($r['at']));
-    $r['power'] = und_power_started();
     out($r);
   }
 
@@ -120,7 +111,6 @@ switch ($action) {
   case 'docker_action':  { $r = und_docker_action($P('name'), $P('op')); if (isset($r['error'])) fail($r['error'], 409); out($r); }
   case 'docker_logs':    { $r = und_docker_logs($P('name'), (int)$P('lines', '300')); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'docker_inspect': { $r = und_docker_inspect($P('name')); if (isset($r['error'])) fail($r['error']); out($r); }
-  case 'docker_check':   out(und_docker_check());
   case 'docker_skip': {
     if (!und_valid_container($P('name'))) fail('Invalid name.');
     $r = und_docker_skip($P('name'), $P('skip') === '1');
@@ -138,8 +128,6 @@ switch ($action) {
   case 'vm_action': { $r = und_vm_action($P('name'), $P('op')); if (isset($r['error'])) fail($r['error'], 409); out($r); }
 
   /* ---- server ---- */
-  case 'power_prepare': { $r = und_power_prepare($P('op')); if (isset($r['error'])) fail($r['error']); out($r); }
-  case 'power':         { $r = und_power($P('op'), $P('nonce'), $P('confirm')); if (isset($r['error'])) fail($r['error'], 409); out($r); }
   case 'history':       out(['history' => und_history()]);
   case 'self_update':   out(und_self_update());
   case 'alert_history': out(und_alert_history());
@@ -178,13 +166,12 @@ switch ($action) {
   case 'ignore_purge_expired': { $r = und_ignore_purge_expired(); if (isset($r['error'])) fail($r['error']); out($r); }
   case 'os_status':     out(und_os_cached() + ['log' => und_job(und_tmp('os-update.log'))]);
   case 'os_check':      out(und_os_check());
-  case 'os_update':     { $r = und_os_update(); if (isset($r['error'])) fail($r['error']); und_history_add('server', 'Unraid OS', 'update', true, 'install started'); out($r); }
   case 'storage': {
     $st = und_storage();
     if (!isset($st['error'])) {
       $size = 0; foreach ((array)($st['array'] ?: $st['pools']) as $d) $size += (float)($d['size'] ?? 0);
       $st['forecast'] = und_metrics_forecast(und_metrics_load()['coarse'], $size);
-      if (und_api_mode()) { $st['mover'] = und_api_mover(); $st['checks'] = und_read_json(und_tmp('api-facts.json'), [])['parity'] ?? null; }
+      { $st['mover'] = und_api_mover(); $st['checks'] = und_read_json(und_tmp('api-facts.json'), [])['parity'] ?? null; }
     }
     out($st);
   }
@@ -202,7 +189,7 @@ switch ($action) {
     out(['config' => $cfg, 'creds' => und_creds_view($cfg), 'shared' => und_shared_view($cfg), 'types' => und_types(), 'keep' => UND_KEEP, 'css' => und_load_css(),
          'defaults' => array_intersect_key(und_normalize(und_default_config()), ['general' => 1, 'appearance' => 1, 'media' => 1, 'downloads' => 1, 'requests' => 1, 'apps' => 1, 'docker' => 1, 'vms' => 1]),
          'wall' => und_wall_custom_view(), 'limits' => ['wallpaper_mb' => UND_WALL_MAX_BYTES / 1048576],
-         'loc' => $loc, 'store' => und_store_dir(), 'flash' => UND_DIR, 'metrics' => und_metric_ids(), 'sections' => und_section_ids(),
+         'loc' => $loc, 'store' => und_store_dir(), 'metrics' => und_metric_ids(), 'sections' => und_section_ids(),
          'zones' => array_map(function ($t) { return und_zone(['type' => $t]); }, array_combine(array_keys(und_types()), array_keys(und_types())))]);
   }
   /* the dashboard as it would look with unsaved settings: nothing is written, credentials are not involved */
@@ -290,7 +277,7 @@ switch ($action) {
   /* ---- Unraid API connection (Docker version) ---- */
   case 'unraid_conf': {
     $c = und_api_conf();
-    out(['url' => $c['url'], 'key_set' => $c['key'] !== '', 'from_env' => $c['from_env'], 'mode' => UND_MODE]);
+    out(['url' => $c['url'], 'key_set' => $c['key'] !== '', 'from_env' => $c['from_env'], 'mode' => 'api']);
   }
   case 'unraid_save': {
     $url = trim($P('url')); $key = $P('key');
@@ -322,9 +309,8 @@ switch ($action) {
   }
 
   /* ---- the dashboard password (Docker version) ---- */
-  case 'auth_status': out(['kind' => und_api_mode() ? und_auth_kind() : 'unraid']);
+  case 'auth_status': out(['kind' => und_auth_kind()]);
   case 'password_set': case 'password_remove': {
-    if (!und_api_mode()) fail('The plugin signs in with your Unraid login.');
     $kind = und_auth_kind();
     if ($kind === 'env') fail('The password comes from UNDASH_PASSWORD in the container settings; change it there.');
     if ($kind === 'file') {
@@ -339,17 +325,10 @@ switch ($action) {
     und_history_add('server', 'Dashboard password', $action === 'password_remove' ? 'removed' : ($kind === 'file' ? 'changed' : 'set'), true);
     out(['ok' => true, 'kind' => und_auth_kind()]);
   }
-  case 'loc_save': {
-    $r = und_save_loc(['CONFIG_DIR' => $P('dir'), 'PORT' => $P('port'), 'BIND' => $P('bind'), 'STANDALONE' => $P('standalone') === 'yes' ? 'yes' : 'no']);
-    if (isset($r['error'])) fail($r['error']);
-    // the standalone listener picks up a new port or address when it is restarted
-    und_spawn([UND_ROOT . '/scripts/rc.undash', 'restart'], und_tmp('rc.log'));
-    out($r + ['store' => und_store_dir()]);
-  }
 
   /* ---- import / export / backups ---- */
   case 'export': {
-    if ($P('kind') === 'env' && und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true)) fail('Set a dashboard password first (Settings > Server connection): without one, anyone on your network could download every key.', 403);
+    if ($P('kind') === 'env' && in_array(und_auth_kind(), ['none', 'open'], true)) fail('Set a dashboard password first (Settings > Server connection): without one, anyone on your network could download every key.', 403);
     out(und_export($P('kind') === 'env' ? 'env' : 'config'));
   }
   case 'import_check':  { $r = und_import_parse($P('file')); if (isset($r['error'])) fail($r['error']); out(['summary' => $r['summary']]); }

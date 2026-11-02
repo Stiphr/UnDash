@@ -5,7 +5,7 @@ $SB = sys_get_temp_dir() . '/undash-da-' . getmypid();
 foreach (["$SB/flash", "$SB/tmp", "$SB/php", "$SB/fs/var/local/emhttp"] as $d) @mkdir($d, 0777, true);
 $port = 9800 + getmypid() % 150;
 $proc = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/router_harness.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, null,
-  ['UND_SANDBOX' => $SB, 'UNDASH_MODE' => 'api', 'HOST_HOSTNAME' => 'nas', 'UNDASH_ALLOWED_HOSTS' => 'dash.example.com, *.home.example.net', 'PATH' => getenv('PATH')]);
+  ['UND_SANDBOX' => $SB, 'HOST_HOSTNAME' => 'nas', 'UNDASH_ALLOWED_HOSTS' => 'dash.example.com, *.home.example.net', 'PATH' => getenv('PATH')]);
 usleep(600000);
 $pass = 0; $fail = 0;
 function t($n, $c, $d = '') { global $pass, $fail; if ($c) $pass++; else { $fail++; echo "FAIL $n" . ($d !== '' ? " -- $d" : '') . "\n"; } }
@@ -30,7 +30,6 @@ function pre($html) { return preg_match('/name="pre" value="([a-f0-9]+)"/', $htm
 function csrf() { $r = req('GET', '/assets/boot.js'); return preg_match('/UND_CSRF="([a-f0-9]+)"/', $r['body'], $m) ? $m[1] : ''; }
 function apicall($action, $data = []) { $c = csrf(); $r = req('POST', '/api', ['action' => $action, 'csrf_token' => $c] + $data, ["X-CSRF-Token: $c"]); return ['code' => $r['code'], 'j' => json_decode($r['body'], true)]; }
 define('UND_DIR', "$SB/flash"); define('UND_TMP', "$SB/tmp"); define('UND_ROOT', dirname(__DIR__) . '/src');
-putenv('UNDASH_MODE=api');
 require UND_ROOT . '/include/lib.php'; require UND_ROOT . '/include/auth.php';
 und_setup_code_ensure();
 $code = trim(file_get_contents(und_setup_file()));

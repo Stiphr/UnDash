@@ -110,7 +110,7 @@ function und_api_test() {
 /** What the last update check found (Unraid's release service, from the server menu). */
 function und_api_os_seen($cur) {
   $c = und_read_json(und_tmp('api-os.json'), []); $v = (string)($c['latest'] ?? '');
-  return ['installed' => $cur, 'latest' => $v, 'checked' => (int)($c['checked'] ?? 0), 'error' => '', 'available' => $v !== '' && $cur !== '' && version_compare($v, $cur, '>'), 'staged' => '', 'job' => 'idle'];
+  return ['installed' => $cur, 'latest' => $v, 'checked' => (int)($c['checked'] ?? 0), 'error' => '', 'available' => $v !== '' && $cur !== '' && version_compare($v, $cur, '>'), 'job' => 'idle'];
 }
 
 function und_api_cached($name, $ttl, $fn) {

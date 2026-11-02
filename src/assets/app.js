@@ -3,7 +3,7 @@
    One live request per refresh (never two at once); widgets of other apps refresh on their own, slower loop. */
 (function () {
   'use strict';
-  var API = window.UND_API || '/plugins/undash/include/api.php';
+  var API = window.UND_API;
   var UNRAID = window.UND_UNRAID || '';           // set on the standalone port: where Unraid's own web UI is
   var GUEST = !!window.UND_GUEST, BASE = window.UND_BASE || '';     // the guest link runs this same page, read-only, under /guest/
   var root = document.getElementById('und');
@@ -261,8 +261,7 @@
   }
   /* a token that stopped matching: fetch the current one, so the page carries on as it is. Only a new UnDash version needs a reload */
   function renewToken() {
-    if (!window.UND_STANDALONE) return Promise.resolve(false);
-    if (S.tokP) return S.tokP;
+        if (S.tokP) return S.tokP;
     S.tokP = fetch(BASE + '/csrf', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
       S.tokP = null;
       if (!j || !j.csrf) return false;
@@ -445,7 +444,7 @@
   function themeAccent(a) { var t = THEMES[a.theme] || THEMES.default; return (t[lookMode(a)] || t.dark).accent; }
   /* the wallpaper in use: today's photo, the picture uploaded in Settings (served by UnDash itself), or an address */
   function wallUrl(a) {
-    var w = (S.boot && S.boot.wall) || {}, at = API.indexOf('/plugins/') === 0 ? '/plugins/undash/wall.php' : BASE + '/wallpaper';
+    var w = (S.boot && S.boot.wall) || {}, at = BASE + '/wallpaper';
     if (a.background === 'custom') return w.set ? at + '?v=' + w.v : '';
     if (a.background === 'local') return w.local ? at + '?local=1&v=' + w.local : '';
     return a.background || '';
@@ -564,7 +563,7 @@
     set('--accent-soft', 'rgba(' + c.join(',') + ',' + (light ? 0.12 : 0.16) + ')');
     // link text must stay readable on the panel colour: darken on light, lighten on dark
     set('--accent-text', light ? (L1 > 0.25 ? mix(c, [0, 0, 0], 0.35) : acc) : (L1 < 0.2 ? mix(c, [255, 255, 255], 0.35) : mix(c, [255, 255, 255], 0.12)));
-    if (window.UND_STANDALONE) document.body.style.background = p.bg;
+    document.body.style.background = p.bg;
     var wall = wallUrl(a);
     root.classList.toggle('has-bg', !!wall);
     // wallpaper blur: the whole picture, or only what shows through the (then see-through) cards
@@ -573,7 +572,6 @@
     var glass = !!wall && a.blur_target === 'cards';
     root.classList.toggle('glass', glass);
     set('--glass-blur', (glass ? a.blur : 0) + 'px');
-    root.classList.toggle('full', S.full && !window.UND_STANDALONE);
     var bg = null;
     for (var i = 0; i < root.children.length; i++) if (root.children[i].classList.contains('und-bg')) bg = root.children[i];
     if (wall) {
@@ -627,7 +625,7 @@
     R.bell = boardOn() ? h('button', { type: 'button', class: 'bell', hidden: true, 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: alertPop }, ic('bell'), R.bellT = h('span', { class: 'bt' })) : null;
     var acts = h('div', { class: 'acts' }, R.bell, R.live,
       GUEST || noKey() ? null : R.srvBtn = btn('', function (e) { serverMenu(e.currentTarget); }, 'srv', 'server', 'Server actions'),
-      window.UND_STANDALONE ? null : btn('', toggleFull, 'focus' + (S.full ? ' on' : ''), 'full', S.full ? 'Exit focus mode' : 'Focus mode (hide Unraid\'s menu)'),
+      null,
       R.priv = btn('', togglePrivacy, 'priv', 'eye', 'Hide titles, posters, torrents and the server name'),
       boardOn() && !GUEST ? btn('', boardEdit, 'bedit', 'edit', 'Edit dashboard') : null,
       GUEST ? null : btn('', openSettings, '', 'gear', 'Settings'));
@@ -656,7 +654,7 @@
     if (!R.sections.childNodes.length) R.sections.appendChild(h('div', { class: 'sec card empty' }, GUEST ? 'Nothing is shared here yet.' : 'Every section is hidden. Turn some on in Settings > Apps & cards.'));
     if (R.bell) R.bell.hidden = !R.alerts;
     if (R.bell && R.alerts && R.health) R.alerts.tools.insertBefore(btn('Endpoints', function () { alertClose(); endpointsDialog(); }, 'ghost sm', 'web', 'Every address UnDash checks, and how it answered'), R.alerts.tools.firstChild);
-    if (board && (window.UND_STANDALONE || S.full) && !root.querySelector('.edgef')) root.appendChild(h('div', { class: 'edgef', 'aria-hidden': 'true' }));
+    if (board && !root.querySelector('.edgef')) root.appendChild(h('div', { class: 'edgef', 'aria-hidden': 'true' }));
     if (board) boardMount(); else packHalves();
     paintPages();
     paintAll(); paintLive(); paintIdent();
@@ -668,7 +666,7 @@
     root.classList.toggle('privacy', on);
     if (!R.priv) return;
     R.priv.classList.toggle('on', on); R.priv.setAttribute('aria-pressed', on ? 'true' : 'false');
-    if (window.UND_STANDALONE && S.L) document.title = on ? 'UnDash' : brandName();
+    if (S.L) document.title = on ? 'UnDash' : brandName();
     var t = on ? 'Show sensitive details' : 'Hide titles, posters, torrents and the server name';
     R.priv.title = t; R.priv.setAttribute('aria-label', t);
     clear(R.priv).appendChild(ic(on ? 'eyeoff' : 'eye'));
@@ -688,7 +686,7 @@
   function paintIdent() {
     if (!R.sub) return;
     txt(R.brandName, brandName());
-    if (window.UND_STANDALONE) document.title = LS.get('privacy', false) ? 'UnDash' : brandName();
+    document.title = LS.get('privacy', false) ? 'UnDash' : brandName();
     var y = S.live || {}, s = y.system && !y.system.error ? y.system : null, b = S.boot.server || {};
     var name = (s && s.name) || b.name || '', ip = (s && s.ip) || b.ip || '', os = (s && s.os) || b.os || '', ou = (s && s.os_update) || {};
     if (GUEST) { clear(R.sub).appendChild(h('span', { class: 'vchip' }, 'Guest view')); return; }
@@ -698,11 +696,11 @@
     clear(R.sub);
     R.brandName.title = ip && ip !== name ? name + ' · ' + ip : name;
     if (os) {
-      var osUp = ou.staged ? ['restart for ' + ou.staged, 'Unraid ' + ou.staged + ' is installed; it becomes active after a restart'] : ou.available ? [ou.latest + ' available', 'Unraid ' + ou.latest + ' is available'] : null;
-      R.sub.appendChild(h('span', { class: 'vchip v-os' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { if (S.boot.caps.os_update) osDialog(); else window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
+      var osUp = ou.available ? [ou.latest + ' available', 'Unraid ' + ou.latest + ' is available'] : null;
+      R.sub.appendChild(h('span', { class: 'vchip v-os' }, 'Unraid ' + os, osUp ? h('button', { type: 'button', class: 'upd', title: osUp[1], onclick: function () { window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); } }, ic('up'), osUp[0]) : null));
     }
     R.sub.appendChild(h('span', { class: 'vchip v-app' }, 'UnDash ' + S.boot.version, me.newer ? h('a', { class: 'upd', href: me.url, target: '_blank', rel: 'noopener',
-      title: 'UnDash ' + me.latest + ' is available. ' + (S.boot.caps.mode === 'api' ? 'Update the UnDash container in Unraid\'s Docker tab.' : 'Update it under Plugins in Unraid.') }, ic('up'), me.latest + ' available') : null));
+      title: 'UnDash ' + me.latest + ' is available. ' + ('Update the UnDash container in Unraid\'s Docker tab.') }, ic('up'), me.latest + ' available') : null));
   }
 
   /* ---- the card board: every card can be moved and resized in Edit dashboard. The sections are built as always and their parts
@@ -776,10 +774,10 @@
   function boardCards() { return boardAll().filter(function (c) { return pageOf(c.i) === (S.page || ''); }); }
   /* every card that exists now, on any page, in the classic order */
   function boardAll() {
-    var out = [], d = S.L.dashboard, api = S.boot.caps.mode === 'api';
+    var out = [], d = S.L.dashboard;
     d.sections.forEach(function (sec) {
       if (!sec.visible || sec.id === 'alerts' || sec.id === 'health') return;     // alerts live in the header, and a dead endpoint is an alert
-      if (sec.id === 'overview') d.metrics.forEach(function (m) { if (m.visible && MET[m.id] && !((m.id === 'load' || m.id === 'path') && api)) out.push({ i: 'm:' + m.id, t: MET[m.id][0], s: 'overview', w: 3, h: 5, minw: 2, minh: 3 }); });
+      if (sec.id === 'overview') d.metrics.forEach(function (m) { if (m.visible && MET[m.id] && m.id !== 'load' && m.id !== 'path') out.push({ i: 'm:' + m.id, t: MET[m.id][0], s: 'overview', w: 3, h: 5, minw: 2, minh: 3 }); });
       else if (sec.id === 'media') { var vis = {}; S.L.media.widgets.forEach(function (w) { vis[w.id] = w.visible; }); MEDIA_ORDER.forEach(function (id) { if (vis[id] !== false) out.push({ i: 'media:' + id, t: mediaName(id), s: 'media', w: 6, h: 18, minw: 3, minh: 6 }); }); }
       else if (sec.id === 'apps') S.L.groups.forEach(function (g) { if (!g.section) g.services.forEach(function (x) {
         if (x.zone !== 'apps' || x.hidden || (x.type === 'link' && !S.L.apps.links)) return;
@@ -1449,7 +1447,7 @@
   function bsSwitch(on, label, fn) { return h('label', { class: 'switch cw', title: label }, h('input', { type: 'checkbox', checked: on, 'aria-label': label, onchange: function (e) { fn(e.target.checked); } })); }
   /* what is not on the board now */
   function boardSpare() {
-    var E = S.edit, c = E.D.cfg, out = [], api2 = S.boot.caps.mode === 'api', all = {};
+    var E = S.edit, c = E.D.cfg, out = [], all = {};
     boardAll().forEach(function (x) { all[x.i] = x; });
     Object.keys(all).forEach(function (i) { var at = pageOf(i); if (at !== (S.page || '') && E.hidden.indexOf(i) < 0) { var pg = pageAt(at); out.push({ t: all[i].t, w: 'On ' + (pg ? pg.name : homeName()), icon: ic(SEC_ICON[all[i].s] || 'grid'), add: function () { boardToPage(i, S.page); } }); } });
     E.hidden.forEach(function (i) { if (all[i]) out.push({ t: all[i].t, w: all[i].grp || i === all[i].s ? 'Section' : all[i].s === 'apps' ? 'App' : (secT(all[i].s) || 'Card'), icon: ic(SEC_ICON[all[i].s] || 'grid'), add: function () { boardUnhide(i); } }); });
@@ -1458,7 +1456,7 @@
       shows[s.id] = s.visible;
       if (!s.visible && s.id !== 'alerts' && s.id !== 'health' && secOk(s.id)) out.push({ t: s.title || TITLES[s.id], w: 'Section', icon: ic(SEC_ICON[s.id] || 'grid'), add: on(s) });
     });
-    if (shows.overview) c.dashboard.metrics.forEach(function (m) { if (!m.visible && MET[m.id] && tileOk(m.id) && !((m.id === 'load' || m.id === 'path') && api2)) out.push({ t: MET[m.id][0], w: 'System tile', icon: ic('server'), add: on(m) }); });
+    if (shows.overview) c.dashboard.metrics.forEach(function (m) { if (!m.visible && MET[m.id] && tileOk(m.id) && m.id !== 'load' && m.id !== 'path') out.push({ t: MET[m.id][0], w: 'System tile', icon: ic('server'), add: on(m) }); });
     if (shows.media) c.media.widgets.forEach(function (w) { if (!w.visible) out.push({ t: w.title || MEDIA[w.id][0], w: 'Media list', icon: ic('play'), add: on(w) }); });
     if (shows.apps) c.groups.forEach(function (g) { g.services.forEach(function (s) {
       if (s.hidden && appZone(E.D, s) === 'apps') out.push({ t: s.name, w: 'App', icon: img(iconUrl(s.icon), '', 'web'), add: function () { s.hidden = false; boardDirty(); boardSide(); } });
@@ -2032,7 +2030,6 @@
   }
   document.addEventListener('mousedown', function (e) { if (R.sbox && !R.sbox.hidden && !R.sbox.contains(e.target) && e.target !== R.search) searchClose(); });
 
-  function toggleFull() { S.full = !S.full; LS.set('full', S.full); shell(); }
 
   var TITLES = { overview: 'System', playing: 'Now playing', requests: 'Requests', health: 'Endpoint health', alerts: 'Alerts', favorites: 'Favorites', media: 'Media', arr: 'Arr Stack', downloads: 'Downloads', docker: 'Containers', vms: 'Virtual machines', apps: 'Apps' };
   /* a section's name: your own when it has one */
@@ -2073,7 +2070,7 @@
     return base;
   }
   function tick() {
-    if (S.paused || S.inflight || S.power) return;
+    if (S.paused || S.inflight) return;
     if (document.hidden && S.L.general.background_poll === 'pause') { S.waitVisible = true; return; }
     S.inflight = true;
     api('live', { parts: parts() }, 20000).then(function (r) {
@@ -2085,7 +2082,6 @@
         if (R.alerts) paintAlerts(S.live || {});
       } else {
         S.fails = 0; S.conn = 'ok'; S.lastOk = Date.now(); S.live = r; resumeUpdates(); paintIdent();
-        if (r.power && !S.power) powerOverlay(r.power);
         paintAll();
       }
       paintLive();
@@ -2154,7 +2150,7 @@
     r.bar = h('div', { class: 'stats', role: 'list' }); r.tiles = {};
     S.L.dashboard.metrics.forEach(function (m) {
       if (!m.visible || !MET[m.id]) return;
-      if ((m.id === 'load' || m.id === 'path') && S.boot.caps.mode === 'api') return;     // not offered by the Unraid API
+      if (m.id === 'load' || m.id === 'path') return;     // not offered by the Unraid API
       var t = { id: m.id, v: h('span', { class: 'v' }, '–'), s: h('span', { class: 's' }), m: h('i'), sp: h('span', { class: 'sp', 'aria-hidden': 'true' }) };
       t.el = h('button', { type: 'button', class: 'stat', role: 'listitem', 'aria-expanded': 'false', onclick: function () { toggleDetail(m.id); } },
         t.sp, h('span', { class: 'k' }, ic(MET[m.id][1]), MET[m.id][0]), t.v, t.s, h('span', { class: 'bar', 'aria-hidden': 'true' }, t.m));
@@ -2439,9 +2435,7 @@
     api('storage').then(function (j) { S.storageBusy = false; S.storage = j; if (R.overview) { R.overview.detailSig = null; paintDetail(S.live || {}); } });
   }
   function portLink(cls) {
-    if (window.UND_STANDALONE) return UNRAID ? h('a', { class: 'btn ' + cls, href: UNRAID + '/Dashboard', target: '_blank', rel: 'noopener' }, ic('web'), 'Open Unraid') : null;
-    if (!S.boot.port_enabled) return null;
-    return h('a', { class: 'btn ' + cls, href: '/plugins/undash/handoff.php', target: '_blank', rel: 'noopener', title: 'UnDash on its own page (port ' + S.boot.port + '), without Unraid\'s menu' }, ic('web'), 'Open on port ' + S.boot.port);
+    return UNRAID ? h('a', { class: 'btn ' + cls, href: UNRAID + '/Dashboard', target: '_blank', rel: 'noopener' }, ic('web'), 'Open Unraid') : null;
   }
   /* the Docker version: Unraid's release service says what the latest OS is; installing stays in Unraid */
   function checkOs() {
@@ -2468,11 +2462,10 @@
     var pl = portLink('');
     menu(from, [
       ['Refresh now', 'restart', refreshNow, '', S.paused], [S.paused ? 'Resume live refresh' : 'Pause live refresh', S.paused ? 'play' : 'pause', togglePause], 'hr',
-      ['Check container updates', 'box', caps.docker_check ? checkUpdates : rereadUpdates, '', !!S.busy.dcheck], dk && dk.updates && dCan() ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
-      caps.os_update ? ['Unraid OS update', 'up', osDialog] : ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], TOUCH ? null : ['Keyboard shortcuts  ?', 'grid', keysHelp], TOUCH && !APP_MODE ? ['Add to home screen', 'download', phoneHelp] : null,
+      ['Check container updates', 'box', rereadUpdates, '', !!S.busy.dcheck], dk && dk.updates && dCan() ? ['Update ' + dk.updates + ' container' + (dk.updates > 1 ? 's' : ''), 'up', function () { updateMany(dk.updList); }] : null,
+      ['Check Unraid update', 'up', checkOs], ['Recent operations', 'history', historyDialog], TOUCH ? null : ['Keyboard shortcuts  ?', 'grid', keysHelp], TOUCH && !APP_MODE ? ['Add to home screen', 'download', phoneHelp] : null,
       pl ? ['hr'][0] : null, pl ? [pl.textContent, 'web', function () { window.open(pl.href, '_blank', 'noopener'); }] : null,
-      window.UND_STANDALONE && S.boot.auth !== 'open' ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null,
-      caps.power ? 'hr' : null, caps.power ? ['Restart server…', 'restart', function () { powerDialog('reboot'); }, 'danger'] : null, caps.power ? ['Shut down server…', 'power', function () { powerDialog('shutdown'); }, 'danger'] : null]);
+      S.boot.auth !== 'open' ? ['Sign out', 'x', function () { location.href = '/logout'; }] : null]);
   }
 
   /* ---- alerts ---- */
@@ -2533,8 +2526,7 @@
   /* the alerts come from the server (include/alerts.php); only the connection ones are the browser's own */
   var ALERT_ACT = {
     settings: function () { return ['Settings', function () { openSettings('config'); }]; },
-    restart: function () { return ['Restart…', function () { powerDialog('reboot'); }]; },
-    os: function () { return ['Details', osDialog]; },
+    os: function () { return ['Open', function () { window.open((UNRAID || '') + '/Tools/Update', '_blank', 'noopener'); }]; },
     logs: function (res) { return ['Logs', function () { logs(res); }]; }
   };
   function alertList(y) {
@@ -2981,20 +2973,6 @@
     if (op === 'stop' || op === 'restart') confirmBox((op === 'stop' ? 'Stop ' : 'Restart ') + nm + '?', op === 'stop' ? 'The container stops; its service is unavailable until it is started again.' : 'The container is stopped and started again; its service is briefly unavailable.', op === 'stop' ? 'Stop' : 'Restart', op === 'stop').then(function (y) { if (y) run(); });
     else run();
   }
-  function checkUpdates() {
-    if (S.busy.dcheck) return;
-    S.busy.dcheck = true; paintAll();
-    act('docker_check', {}, 'Checking every container for updates…').then(function (j) {
-      if (j.error) { delete S.busy.dcheck; paintAll(); return; }
-      var n = 0;
-      (function poll() {
-        api('docker_job', {}).then(function (k) {
-          if ((k.state === 'running' || k.error) && ++n < 200) { setTimeout(poll, 3000); return; }
-          delete S.busy.dcheck; toast('Container update check finished'); refreshNow();
-        });
-      })();
-    });
-  }
   /* updates run one at a time, each through Unraid's update_container */
   var updBar = null;
   function updateMany(names) {
@@ -3132,7 +3110,7 @@
     r.tools.appendChild(h('div', { class: 'seg', role: 'group', 'aria-label': 'Layout' },
       h('button', { type: 'button', class: V.layout === 'list' ? 'on' : '', title: 'List', 'aria-label': 'List layout', 'aria-pressed': V.layout === 'list' ? 'true' : 'false', onclick: function () { setLayout('vms', 'list'); } }, ic('list')),
       h('button', { type: 'button', class: V.layout === 'cards' ? 'on' : '', title: 'Cards', 'aria-label': 'Card layout', 'aria-pressed': V.layout === 'cards' ? 'true' : 'false', onclick: function () { setLayout('vms', 'cards'); } }, ic('grid'))));
-    r.list = V.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel compact' + (S.boot.caps.vm_details ? '' : ' slim') }, h('div', { class: 'rowh c', 'aria-hidden': 'true' }, h('span', null, 'Virtual machine'), h('span', null, 'Status'), h('span', { class: 'c-cpu' }, 'vCPUs'), h('span', { class: 'c-mem' }, 'Memory'), h('span', { class: 'c-upd' }, S.boot.caps.vm_details ? 'Guest agent' : ''), h('span', null, '')));
+    r.list = V.layout === 'cards' ? h('div', { class: 'tiles', role: 'list' }) : h('div', { class: 'panel compact' + ' slim' }, h('div', { class: 'rowh c', 'aria-hidden': 'true' }, h('span', null, 'Virtual machine'), h('span', null, 'Status'), h('span', { class: 'c-cpu' }, 'vCPUs'), h('span', { class: 'c-mem' }, 'Memory'), h('span', { class: 'c-upd' }, S.boot.caps.vm_details ? 'Guest agent' : ''), h('span', null, '')));
     r.rows = V.layout === 'cards' ? r.list : h('div', { role: 'list' });
     if (V.layout !== 'cards') r.list.appendChild(r.rows);
     r.body.appendChild(r.list);
@@ -3160,7 +3138,7 @@
       if (S.L.vms.layout === 'cards') r.rows.appendChild(h('div', { class: 'tile' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'chips' }, vStateBadge(x.state, b), x.autostart ? h('span', { class: 'badge plain' }, 'autostart') : null), h('div', { class: 'stats' }, h('span', null, res), h('span', null, x.agent ? 'guest agent' : 'no guest agent')), a));
       else r.rows.appendChild(h('div', { class: 'rowi c' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'c-st' }, vStateBadge(x.state, b)),
         h('span', { class: 'c-cpu num' }, x.cpus ? String(x.cpus) : ''), h('span', { class: 'c-mem num muted' }, x.memory ? bytes(x.memory) : ''),
-        h('div', { class: 'c-upd' }, !S.boot.caps.vm_details ? null : x.agent ? h('span', { class: 'badge ok', title: 'Hibernate is available' }, 'agent') : h('span', { class: 'badge plain', title: 'No QEMU guest agent channel: hibernate is not available' }, 'no agent')), a));
+        h('div', { class: 'c-upd' }), a));
     });
     if (hidden || S.showHidden) r.rows.appendChild(h('div', { class: 'more' }, btn(S.showHidden ? 'Hide hidden VMs' : 'Show ' + hidden + ' hidden', function () { S.showHidden = !S.showHidden; if (R.docker) R.docker.fSig = null; r.sig = null; paintAll(); }, 'sm ghost', 'eye')));
     if (focus) { var f = r.rows.querySelector('[aria-label="' + focus.replace(/"/g, '') + '"]'); if (f && !f.disabled) f.focus(); }
@@ -3178,20 +3156,20 @@
   function vTip(x, web, other) {
     if (web) return vConsole(web) ? 'Open the console of ' + x.name + ' (VNC)' : 'Open Unraid\'s VMs page to reach the console of ' + x.name;
     if (x.state !== 'running') return x.name + ' is ' + (x.state || 'stopped') + ': start it from its menu to open the console';
-    return other + (S.boot.caps.mode === 'api' ? ' · the console opens from Unraid\'s VMs page' : ' · this VM has no VNC console');
+    return other + (' · the console opens from Unraid\'s VMs page');
   }
   /* The Unraid API gives no VNC port. Unraid hands out websocket ports from 5700, so a lone running VM has that one; with several
      there is no telling which is which, and Unraid's VMs page is the safe place to go. */
   function vPath(x) {
-    if (x.vnc || S.boot.caps.mode !== 'api') return x.vnc;
+    if (x.vnc) return x.vnc;
     var run = (((S.live || {}).vms || {}).vms || []).filter(function (v) { return v.state === 'running'; });
     return run.length === 1 ? '/wsproxy/5700/' : '';
   }
   function vWeb(x) {
     if (x.state !== 'running') return '';
     var path = vPath(x), host = location.hostname;
-    if (S.boot.caps.mode === 'api' && !UNRAID) return '';
-    if (!path) return S.boot.caps.mode === 'api' ? UNRAID + '/VMs' : '';
+    if (!UNRAID) return '';
+    if (!path) return UNRAID + '/VMs';
     try { if (UNRAID) host = new URL(UNRAID).hostname; } catch (e) { /* keep this page's host */ }
     return UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(host) + '&port=&path=' + encodeURIComponent(path);
   }
@@ -3685,7 +3663,7 @@
   }
   /* app widgets: at most 4 requests at a time; the next round starts only after the last answer */
   function pollServices() {
-    if (S.svcRun || !R.apps || S.power || (document.hidden && S.L.general.background_poll !== 'normal')) return;
+    if (S.svcRun || !R.apps || (document.hidden && S.L.general.background_poll !== 'normal')) return;
     var list = [];
     S.L.groups.forEach(function (g) { g.services.forEach(function (s) { if (s.zone === 'apps' && !NATIVE[s.type] && !s.hidden) list.push(s); }); });
     if (!list.length) return;
@@ -3753,40 +3731,6 @@
     if (r.bars) cb.appendChild(h('div', { class: 'bars' }, r.bars.map(function (x) { var p = x.size ? 100 * x.used / x.size : 0; return h('div', null, h('div', { class: 'bt' }, h('span', null, x.title, x.sub ? h('span', { class: 'muted' }, ' · ' + x.sub) : null), h('span', null, bytes(x.size - x.used) + ' free')), h('div', { class: 'meter' }, h('i', { class: meterCls(p), style: { width: p.toFixed(1) + '%' } }))); })));
   }
 
-  /* ================= server: OS update, history, power ================= */
-  function osDialog() {
-    var box = h('div', null, h('div', { class: 'progress' }, h('i')));
-    var m = modal('Unraid OS', box, [btn('Close', function () { m.close(); })]);
-    var t = null;
-    function load() {
-      api('os_status').then(function (o) {
-        if (!box.parentNode) return;
-        clear(box);
-        if (o.error && !o.installed) { box.appendChild(h('div', { class: 'banner bad' }, o.error)); return; }
-        var running = o.job === 'running';
-        box.appendChild(h('div', { class: 'kv2' }, h('span', null, 'Installed'), h('span', null, o.installed || '-'), h('span', null, 'Latest'), h('span', null, o.latest || (o.error ? '-' : 'not checked yet')), h('span', null, 'Last check'), h('span', null, o.checked ? rel(o.checked) : 'never')));
-        if (o.error) box.appendChild(h('div', { class: 'banner bad', style: { 'margin-top': '10px' } }, 'The update check failed: ' + o.error));
-        if (o.staged) box.appendChild(h('div', { class: 'banner ok', style: { 'margin-top': '10px' } }, 'Unraid ' + o.staged + ' is installed on the flash drive and becomes active after a restart. Tools > Update OS > Restore in Unraid returns to ' + o.installed + ' if needed.'));
-        else if (o.available && !running) box.appendChild(h('div', { class: 'banner info', style: { 'margin-top': '10px' } }, 'Unraid ' + o.latest + ' is available. Read the release notes and make a flash backup first. The update is installed on the flash drive and becomes active after a restart.'));
-        var row = h('div', { class: 'ftr', style: { 'margin-top': '12px' } },
-          btn('Check now', function (e) { e.currentTarget.disabled = true; act('os_check', {}).then(function () { load(); refreshNow(); }); }, 'sm', 'restart'),
-          o.available && !o.staged ? btn(running ? 'Installing…' : 'Install ' + o.latest, function () {
-            confirmBox('Install Unraid ' + o.latest + '?', 'Unraid\'s own updater (the one Tools > Update OS uses) downloads and installs the release on the flash drive. Nothing changes until you restart the server.', 'Install').then(function (y) { if (y) act('os_update', {}, 'Unraid update started').then(load); });
-          }, 'sm pri', 'up') : null,
-          o.staged ? btn('Restart server…', function () { m.close(); powerDialog('reboot'); }, 'sm', 'restart') : null,
-          h('a', { class: 'btn sm', href: UNRAID + '/Tools/Update', target: '_blank', rel: 'noopener' }, 'Release notes in Unraid'));
-        if (running) [].forEach.call(row.querySelectorAll('button'), function (b) { b.disabled = true; });
-        box.appendChild(row);
-        if (o.log && o.log.state !== 'idle') {
-          box.appendChild(h('h4', { class: 'muted sm', style: { margin: '14px 0 6px' } }, o.log.state === 'running' ? 'Installing…' : 'Last install output (exit code ' + o.log.code + ')'));
-          var pre = h('pre', { class: 'log wrap', style: { 'max-height': '300px', 'min-height': '0' } }, o.log.out || '…'); box.appendChild(pre); setTimeout(function () { pre.scrollTop = pre.scrollHeight; }, 0);
-          if (running) t = setTimeout(load, 2500);
-        }
-      });
-    }
-    m.onclose = function () { clearTimeout(t); };
-    load();
-  }
   function historyDialog() {
     var box = h('div', { class: 'hist' }, h('div', { class: 'progress' }, h('i')));
     var m = modal('Recent operations', box, [btn('Close', function () { m.close(); })]);
@@ -3798,56 +3742,6 @@
         box.appendChild(h('div', { class: 'hi' }, h('span', { class: 'badge ' + (x.ok ? 'ok' : 'bad') }, x.ok ? 'ok' : 'failed'), h('b', null, x.target), h('span', null, x.op), h('span', { class: 'muted sm grow' }, x.msg), h('span', { class: 'muted sm nowrap', title: new Date(x.at * 1000).toLocaleString() }, rel(x.at))));
       });
     });
-  }
-  /* server restart / shutdown: the server issues a one-time confirmation, the user types the server's name, then the command runs */
-  function powerDialog(op) {
-    if (S.power || S.powerOpen) return;
-    S.powerOpen = true;
-    var word = op === 'reboot' ? 'Restart' : 'Shut down';
-    var box = h('div', null, h('div', { class: 'progress' }, h('i')));
-    var go = btn(word + ' server', null, 'danger solid', op === 'reboot' ? 'restart' : 'power');
-    go.disabled = true;
-    var m = modal(word + ' the whole server?', box, [btn('Cancel', function () { m.close(); }), go]);
-    m.onclose = function () { S.powerOpen = false; };
-    api('power_prepare', { op: op }).then(function (j) {
-      clear(box);
-      if (j.error) { box.appendChild(h('div', { class: 'banner bad' }, j.error)); return; }
-      var inp = h('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: j.name, id: 'und-pw',
-        oninput: function () { go.disabled = inp.value.trim().toLowerCase() !== j.name.toLowerCase(); }, onkeydown: function (e) { if (e.key === 'Enter' && !go.disabled) go.click(); } });
-      box.appendChild(h('p', null, op === 'reboot'
-        ? 'This restarts the entire Unraid server ' + j.name + ', not just UnDash. The array is stopped cleanly, every container, VM and share goes offline, and this dashboard is unavailable until the server is back (usually a few minutes).'
-        : 'This powers off the entire Unraid server ' + j.name + ', not just UnDash. The array is stopped cleanly and every container, VM and share goes offline. It stays off until someone turns it on again.'));
-      j.warnings.forEach(function (w) { box.appendChild(h('div', { class: 'banner' }, w)); });
-      box.appendChild(h('div', { class: 'fld' }, h('label', { for: 'und-pw' }, 'Type ', h('b', null, j.name), ' to confirm'), inp));
-      setTimeout(function () { inp.focus(); }, 0);
-      go.onclick = function () {
-        go.disabled = true; inp.disabled = true; clear(go).appendChild(document.createTextNode('Sending…'));
-        api('power', { op: op, nonce: j.nonce, confirm: inp.value.trim() }).then(function (k) {
-          m.close();
-          if (k.error) { toast(k.error, true); return; }
-          powerOverlay(op);
-        });
-      };
-    });
-  }
-  function powerOverlay(op) {
-    if (S.power) return;
-    S.power = op; clearTimeout(S.timer); clearTimeout(S.svcTimer); closeMenu(true);
-    var st = h('p', { class: 'sm', style: { opacity: '.8' } }, 'The command was accepted. Waiting for the server to go offline…');
-    root.appendChild(h('div', { class: 'overlay', role: 'alertdialog', 'aria-live': 'assertive', 'aria-label': 'Server power' }, h('div', { class: 'box' },
-      h('h2', null, (op === 'reboot' ? 'Restarting ' : 'Shutting down ') + S.boot.server.name),
-      h('p', null, op === 'reboot' ? 'This page reconnects by itself when the server is back.' : 'You can close this page.'), st)));
-    var down = false, t0 = Date.now();
-    (function poll() {
-      api('live', { parts: 'system' }, 5000).then(function (r) {
-        if (r.error) {
-          if (!down) { down = true; st.textContent = op === 'reboot' ? 'Offline. Waiting for it to come back…' : 'The server is off.'; }
-          if (op === 'shutdown') return;
-        } else if (down && !r.power) { st.textContent = 'Back online. Reloading…'; setTimeout(function () { location.reload(); }, 1500); return; }
-        if (Date.now() - t0 > 900000) { st.textContent = 'This is taking longer than expected. Check the server.'; return; }
-        setTimeout(poll, 3000);
-      });
-    })();
   }
 
   /* ================= settings drawer ================= */
@@ -3872,7 +3766,7 @@
     media: 'Upcoming and recently added movies and episodes', arr: 'Radarr, Sonarr, Prowlarr… status and issues', downloads: 'qBittorrent and SABnzbd activity',
     docker: 'Every container, found automatically', vms: 'Every VM, found automatically', apps: 'Plex, Immich, AdGuard, links and other apps' };
   var MET_DESC = { cpu: 'Usage and temperature', memory: 'RAM used and available', storage: 'Array (or pools) capacity', network: 'Download and upload speed', health: 'Array state, disk problems, parity checks',
-    disks: 'Hottest disk', uptime: 'Time since boot', ups: 'UPS battery', cores: 'Busiest core', swap: 'Swap usage', load: 'Load average (plugin only)', path: 'Free space of one path (plugin only)',
+    disks: 'Hottest disk', uptime: 'Time since boot', ups: 'UPS battery', cores: 'Busiest core', swap: 'Swap usage', load: 'Load average', path: 'Free space of one path',
     docker: 'Running containers', vms: 'Running VMs' };
   var MEDIA_DESC = { upcoming_movies: 'Radarr calendar', upcoming_episodes: 'Sonarr calendar', recent_movies: 'Radarr imports', recent_episodes: 'Sonarr imports' };
 
@@ -4207,7 +4101,7 @@
     system: ['General', 'clock', tabSystem, 'general'],
     ignored: ['Alerts', 'mute', tabIgnored, null, true],
     guest: ['Guest link', 'eye', tabGuest, null, true],
-    config: ['Server connection', 'server', function (b, D) { if (S.boot.caps.mode === 'api') { unraidConn(b); glancesConn(b); dashPass(b); } else locPort(b, D); }, null, true],
+    config: ['Server connection', 'server', function (b) { unraidConn(b); glancesConn(b); dashPass(b); }, null, true],
     backup: ['Backup & restore', 'download', configCommon, null, true],
     about: ['About', 'info', tabAbout, null, true]
   };
@@ -4229,7 +4123,7 @@
   }
   /* The first page of Settings: what most people came for, then how the server is doing. Everything here also has its own page */
   function tabHome(b, D, dirty) {
-    var c = D.cfg, a = c.appearance, bt = S.boot, api2 = bt.caps.mode === 'api', sv = bt.server || {}, me = S.self || {};
+    var c = D.cfg, a = c.appearance, bt = S.boot, sv = bt.server || {}, me = S.self || {};
     var look = function () { dirty(); applyLook(a); applyCss(a.css_enabled ? D.css : ''); };
     var to = function (tab) { return function () { D.tab = tab; D.sub = null; D.paintTabs(); D.render(); }; };
     var row = function (icon, title, sub, go, warn) {
@@ -4240,7 +4134,7 @@
     var dens = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Density' });
     var paintDens = function () { clear(dens); [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['expanded', 'Expanded']].forEach(function (x) { dens.appendChild(h('button', { type: 'button', role: 'radio', class: a.density === x[0] ? 'on' : '', 'aria-checked': a.density === x[0] ? 'true' : 'false', onclick: function () { a.density = x[0]; dirty(); applyLook(a); paintDens(); } }, x[1])); }); };
     paintDens();
-    if (api2 && bt.auth === 'open') b.appendChild(h('div', { class: 'banner warn' }, 'No password is set: anyone who can open this address can control your server. ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); to('config')(); } }, 'Set one')));
+    if (bt.auth === 'open') b.appendChild(h('div', { class: 'banner warn' }, 'No password is set: anyone who can open this address can control your server. ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); to('config')(); } }, 'Set one')));
     b.appendChild(set('Look', null, F('Mode', L.seg), L.grid, F('Density', dens),
       h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!a.translucent, onchange: function (e) { a.translucent = e.target.checked; dirty(); applyLook(a); } }), 'See-through glass cards')));
     b.appendChild(h('section', { class: 'set' }, h('h3', null, 'Dashboard'), h('div', { class: 'cardl' }, h('div', { class: 'olist' },
@@ -4250,7 +4144,7 @@
       row('check', 'Setup wizard', 'Answer a few questions to set it all up again', function () { D.leave(function () { if (!S.drawer) wizardStart(true); }); }).el)),
       h('div', { class: 'grid2' }, F('Refresh every (seconds)', tIn(c.general, 'refresh', dirty, '2', 'number', { min: 1, max: 300 })), F('Dashboard name', tIn(c.general, 'title', dirty, String(sv.name || 'Your server').toUpperCase())))));
     var conn = row('server', 'Connection', noKey() ? (bt.caps.glances ? 'No API key: system numbers from Glances. Containers and VMs are hidden' : 'No API key: containers, VMs and system tiles are hidden') : api2 ? 'Connected to ' + (sv.name || 'your server') + (sv.os ? ' · Unraid ' + sv.os : '') : 'Running as a plugin on ' + (sv.name || 'your server'), to('config'));
-    var pass = api2 ? row('eye', 'Dashboard password', bt.auth === 'env' ? 'Set in the container settings' : bt.auth === 'file' ? 'On' : 'Off', to('config'), bt.auth === 'open') : null;
+    var pass = row('eye', 'Dashboard password', bt.auth === 'env' ? 'Set in the container settings' : bt.auth === 'file' ? 'On' : 'Off', to('config'), bt.auth === 'open');
     var alerts = row('bell', 'Phone alerts', 'Checking…', to('ignored')), guest = row('web', 'Guest link', 'Checking…', to('guest')), back = row('download', 'Backups', 'Checking…', to('backup'));
     var ver = row('info', 'UnDash ' + bt.version, me.newer ? me.latest + ' is available' : 'About, diagnostics and shortcuts', to('about'));
     b.appendChild(h('section', { class: 'set' }, h('h3', null, 'Your server'), h('div', { class: 'cardl' }, h('div', { class: 'olist' }, conn.el, pass ? pass.el : null, alerts.el, guest.el, back.el, ver.el))));
@@ -4262,7 +4156,7 @@
   function tabGuest(b) {
     var box = h('div', null, h('div', { class: 'progress' }, h('i')));
     b.appendChild(set('Guest link', 'A private address for family or friends. It shows part of your dashboard and cannot change anything.', box));
-    var base = window.UND_STANDALONE ? location.origin : S.boot.port_enabled ? location.protocol + '//' + location.hostname + ':' + S.boot.port : '';
+    var base = location.origin;
     var CHOICES = [['overview', 'System', 'CPU, memory, storage, network, uptime'], ['media', 'Media', 'Upcoming and recently added'], ['playing', 'Now playing', 'What is playing and who is watching'], ['apps', 'Apps', 'The apps ticked below']];
     function paint(v) {
       clear(box);
@@ -4303,14 +4197,14 @@
   }
   /* About: what is running, where its files are, and the tools for a closer look */
   function tabAbout(b, D) {
-    var bt = S.boot, me = S.self || {}, api = bt.caps.mode === 'api', sv = bt.server || {};
+    var bt = S.boot, me = S.self || {}, sv = bt.server || {};
     var row = function (k, v) { return v ? [h('span', null, k), h('span', null, v)] : null; };
     b.appendChild(set('UnDash', null, h('div', { class: 'kv2' },
       row('Version', 'UnDash ' + bt.version + (me.newer ? ' · ' + me.latest + ' is available' : me.latest ? ' · up to date' : '')),
-      row('Running as', api ? 'Docker container, reading the server through the Unraid API' : 'Unraid plugin'),
+      row('Running as', 'Docker container, reading the server through the Unraid API'),
       row('Server', (sv.name || '') + (sv.os ? ' · Unraid ' + sv.os : '')),
-      row('Settings folder', D.store || ''), api ? null : row('Flash copy', D.flash || ''),
-      row('Sign-in', bt.auth === 'unraid' ? 'Your Unraid login' : bt.auth === 'env' ? 'Password from the container settings (UNDASH_PASSWORD)' : bt.auth === 'file' ? 'Password set in Settings' : 'No password: anyone who reaches this address is signed in')),
+      row('Settings folder', D.store || ''),
+      row('Sign-in', bt.auth === 'env' ? 'Password from the container settings (UNDASH_PASSWORD)' : bt.auth === 'file' ? 'Password set in Settings' : 'No password: anyone who reaches this address is signed in')),
       h('div', { class: 'inl', style: { 'margin-top': '12px' } },
         h('a', { class: 'btn sm', href: 'https://github.com/Stiphr/UnDash', target: '_blank', rel: 'noopener' }, ic('web'), 'GitHub'),
         h('a', { class: 'btn sm', href: 'https://github.com/Stiphr/UnDash/issues', target: '_blank', rel: 'noopener' }, ic('info'), 'Report a problem'),
@@ -4319,7 +4213,7 @@
       h('div', { class: 'inl' }, btn('Action history', historyDialog, 'sm', 'history', 'Every start, stop, update and other action UnDash ran'),
         btn('Alert history', alertHistory, 'sm', 'bell', 'When each problem started and ended'),
         btn('Check configuration', function () { D.go({ tab: 'backup', label: 'Check configuration' }); }, 'sm', 'check', 'Looks for apps without an address, unknown values and removed sources'),
-        api ? btn('Test the Unraid connection', function () { D.go({ tab: 'config', label: 'Unraid connection' }); }, 'sm', 'server') : null,
+        btn('Test the Unraid connection', function () { D.go({ tab: 'config', label: 'Unraid connection' }); }, 'sm', 'server'),
         btn('Keyboard shortcuts', keysHelp, 'sm', 'list'))));
   }
   /* older page names (links in messages) open Apps & cards with that part unfolded */
@@ -4509,7 +4403,7 @@
         list.appendChild(row);
       });
       if (!list.childNodes.length) list.appendChild(h('div', { class: 'empty' }, items.length ? 'Nothing matches.'
-        : ((dk ? y.docker : y.vms) || {}).error || ('No ' + what + ' found yet.' + (S.boot.caps.mode === 'api' ? ' They are listed here once the Unraid API is connected (Settings > Server connection).' : ''))));
+        : ((dk ? y.docker : y.vms) || {}).error || ('No ' + what + ' found yet.' + (' They are listed here once the Unraid API is connected (Settings > Server connection).'))));
     }
     draw();
     return h('div', null,
@@ -4826,12 +4720,12 @@
       }
       if (kind === 'local') {
         var note = h('div', { class: 'wall-st', role: 'status' }, S.wallNote || '');
-        var pathIn = tIn(a, 'wall_path', function () { dirty(); }, S.boot.caps.mode === 'api' ? '/mnt/user/appdata/undash/wallpaper.jpg' : '/mnt/user/pictures/wallpaper.jpg');
+        var pathIn = tIn(a, 'wall_path', function () { dirty(); }, '/mnt/user/appdata/undash/wallpaper.jpg');
         var chk = btn('Check', function () { api('wallpaper_check', { path: a.wall_path }).then(function (j) {
           S.wallNote = j.error ? j.error : 'Found: ' + bytes(j.size) + '.' + (a.background === 'local' && (S.boot.wall || {}).local !== j.v ? ' Save to use it.' : ''); txt(note, S.wallNote); note.classList.toggle('t-bad', !!j.error);
         }); }, 'sm', 'check', 'Look for this picture on the server');
         wallBox.appendChild(F('Picture path', h('div', { class: 'zoomf' }, h('div', { class: 'sec-in' }, pathIn, chk), note),
-          S.boot.caps.mode === 'api' ? 'A JPEG, PNG or WebP on the server, up to 30 MB. The Docker version reads its own appdata folder, so put the picture there. Another folder works once it is mapped to /wallpapers in the container\'s settings.' : 'A JPEG, PNG or WebP under /mnt on the server, up to 30 MB.'));
+          'A JPEG, PNG or WebP on the server, up to 30 MB. The Docker version reads its own appdata folder, so put the picture there. Another folder works once it is mapped to /wallpapers in the container\'s settings.'));
       }
       if (kind === 'upload') {
         var st = h('div', { class: 'wall-st', role: 'status' }, S.wallNote || '');
@@ -5723,9 +5617,9 @@
   function wizard(D, again) {
     var c = D.cfg, W = S.wiz = { step: 0, preset: again ? '' : 'all', parts: {}, pages: false, apps: null, found: [], vary: {} }, box = h('div', { class: 'wz' }), foot = h('div', { class: 'wz-f' }), m;
     PRESETS.all[2].forEach(function (p) { W.parts[p] = true; });
-    var apiMode = S.boot.caps.mode === 'api', steps = [stepHello];
-    if (apiMode && !(S.boot.api && S.boot.api.configured)) steps.push(stepConnect);
-    if (apiMode && S.boot.auth === 'open') steps.push(stepPass);
+    var steps = [stepHello];
+    if (!(S.boot.api && S.boot.api.configured)) steps.push(stepConnect);
+    if (S.boot.auth === 'open') steps.push(stepPass);
     steps.push(stepPreset, stepApps, stepLook, stepDone);
     function head(t, sub) { box.appendChild(h('h2', { class: 'wz-t' }, t)); if (sub) box.appendChild(h('p', { class: 'muted wz-s' }, sub)); }
     function stepHello() {
@@ -5892,7 +5786,7 @@
   /* Docker version: the dashboard's own password (it can be skipped at setup and added here later) */
   function dashPass(b) {
     var box = h('div', null, h('div', { class: 'progress' }, h('i')));
-    b.appendChild(set('Dashboard password', 'The Docker version has its own password (the plugin uses your Unraid login).', box));
+    b.appendChild(set('Dashboard password', 'Protects this dashboard. It is separate from your Unraid login.', box));
     function paint(kind) {
       clear(box);
       S.boot.auth = kind;
@@ -5964,24 +5858,6 @@
           res.appendChild(h('div', { class: 'banner ok' }, v.url ? 'Glances ' + j.version + ' answered, with ' + plural(j.pools, 'disk') + '.' : 'Glances is off.'));
         });
       }, '', 'check')), res));
-  }
-  function locPort(b, D) {
-    var L = Object.assign({}, D.loc);
-    var dir = h('input', { type: 'text', value: L.CONFIG_DIR, oninput: function (e) { L.CONFIG_DIR = e.target.value; } });
-    var port = h('input', { type: 'number', min: 1024, max: 65535, value: L.PORT, oninput: function (e) { L.PORT = e.target.value; } });
-    var bind = h('input', { type: 'text', value: L.BIND, oninput: function (e) { L.BIND = e.target.value; } });
-    var on = h('input', { type: 'checkbox', checked: L.STANDALONE === 'yes', onchange: function (e) { L.STANDALONE = e.target.checked ? 'yes' : 'no'; } });
-    var usingFlash = D.store !== String(L.CONFIG_DIR).replace(/\/$/, '');
-    b.appendChild(set('Location and port', 'Settings are saved in the configuration directory and mirrored to the flash drive, so UnDash keeps working while the array is stopped.',
-      usingFlash ? h('div', { class: 'banner' }, 'The configuration directory is not available right now (is the array started?). Settings are read from and saved to ' + D.flash + ' until it is.') : h('div', { class: 'banner ok' }, 'Using ' + D.store + ' (mirrored to ' + D.flash + ').'),
-      h('div', { class: 'grid2' },
-        F('Configuration directory', dir, 'Default /mnt/user/appdata/undash. Existing files are copied in the first time; nothing is overwritten.'),
-        F('Standalone port', port, 'Default 9099: UnDash on its own page at http://SERVER:PORT, for browsers signed in to Unraid.'),
-        F('Listen address', bind, '0.0.0.0 = every interface, or one address such as your LAN IP.')),
-      h('label', { class: 'switch' }, on, 'Serve UnDash on the standalone port'),
-      h('div', { style: { 'margin-top': '8px' } }, btn('Apply location and port', function () {
-        act('loc_save', { dir: L.CONFIG_DIR, port: L.PORT, bind: L.BIND, standalone: L.STANDALONE }, 'Saved. The standalone port restarts.').then(function (j) { if (!j.error) { D.loc = j.loc; D.store = j.store; S.boot.port = +j.loc.PORT; S.boot.port_enabled = j.loc.STANDALONE === 'yes'; D.render(); } });
-      }, 'pri'))));
   }
   function configCommon(b, D) {
     var dl = function (kind) {
@@ -6141,7 +6017,6 @@
   window.addEventListener('beforeunload', function (e) { if ((S.drawer && S.drawer.dirty) || (S.edit && S.edit.changed)) { e.preventDefault(); e.returnValue = ''; } });
 
   /* ---------- start ---------- */
-  S.full = LS.get('full', false);
   S.paused = LS.get('paused', false);
   api('boot').then(function (j) {
     if (j.recovered) toast('Your settings file was damaged, so UnDash restored the newest backup. The damaged file is kept as ' + j.recovered.kept + '.', true);

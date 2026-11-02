@@ -16,6 +16,7 @@ $GLOBALS['CMDS'] = [];
 $GLOBALS['UND_EXEC_MOCK'] = function ($argv) { $GLOBALS['CMDS'][] = $argv; return isset($GLOBALS['MOCK']) ? call_user_func($GLOBALS['MOCK'], $argv) : ['code' => 1, 'err' => 'not mocked']; };
 $GLOBALS['SPAWNED'] = [];
 $GLOBALS['UND_SPAWN_MOCK'] = function ($argv, $log) { $GLOBALS['SPAWNED'][] = $argv; };
+putenv('UNRAID_API_URL=http://tower.test'); putenv('UNRAID_API_KEY=test-key');
 require UND_ROOT . '/include/lib.php';
 require UND_ROOT . '/include/auth.php';
 
@@ -112,25 +113,16 @@ reset_store();
 file_put_contents(UND_DIR . '/config.json', json_encode($v1));
 file_put_contents(UND_DIR . '/secrets.json', json_encode(['vars' => ['A' => '1'], 'svc' => []]));
 $dir = und_store_dir();
-t('configured appdata directory is used when its parent exists', $dir === "$SANDBOX/fs/mnt/user/appdata/undash", $dir);
-t('existing flash settings are copied into it', is_file("$dir/config.json") && is_file("$dir/secrets.json"));
+t('settings live in the config folder', $dir === UND_DIR, $dir);
 file_put_contents("$dir/config.json", json_encode(['groups' => [], 'general' => ['title' => 'appdata copy']]));
-und_migrate_into($dir);
-t('migration never overwrites an existing file', json_decode(file_get_contents("$dir/config.json"), true)['general']['title'] === 'appdata copy');
 $cfg = und_load_config();
-t('the old files become config.yaml and .env on first use', $cfg['general']['title'] === 'appdata copy' && is_file("$dir/config.yaml") && is_file("$dir/.env") && !is_file("$dir/config.json") && is_file("$dir/data/legacy/config.json"));
+t('the old files become config.yaml and .env on first use', $cfg['general']['title'] === 'appdata copy' && is_file("$dir/config.yaml") && is_file("$dir/.env"));
 t('.env is private', (fileperms("$dir/.env") & 0777) === 0600);
 t('variables nothing refers to are dropped', !isset(und_env()['A']));
 $cfg['general']['title'] = 'Saved';
 t('save works', und_save_config($cfg));
 t('save writes config.yaml in the configuration directory', strpos(file_get_contents("$dir/config.yaml"), 'title: Saved') !== false);
-t('save mirrors to the flash drive', strpos(file_get_contents(UND_DIR . '/config.yaml'), 'title: Saved') !== false);
 t('a backup was taken before saving', count(und_backups()) >= 1);
-t('invalid configuration directory refused', isset(und_save_loc(['CONFIG_DIR' => '/etc/undash'])['error']) && isset(und_save_loc(['CONFIG_DIR' => '/mnt/user/../../etc'])['error']));
-t('invalid port refused', isset(und_save_loc(['PORT' => '80'])['error']) && isset(und_save_loc(['PORT' => '70000'])['error']));
-t('valid port saved', !isset(und_save_loc(['PORT' => '9100'])['error']) && und_loc()['PORT'] === '9100');
-und_save_loc(['PORT' => '9099']);
-t('broken undash.cfg falls back to defaults', (function () { file_put_contents(UND_DIR . '/undash.cfg', "garbage\x00\nPORT=abc\n"); $l = und_loc(); und_save_loc(['PORT' => '9099', 'CONFIG_DIR' => '/mnt/user/appdata/undash', 'BIND' => '0.0.0.0', 'STANDALONE' => 'yes']); return $l['PORT'] === '9099' && $l['CONFIG_DIR'] === '/mnt/user/appdata/undash'; })());
 
 group('backups');
 $cfg = und_load_config(); $cfg['general']['title'] = 'Before';
@@ -357,100 +349,13 @@ t('names the example uses get an empty entry to fill in', und_env() === ['TAUTUL
 
 /* ---------------- Docker ---------------- */
 group('docker');
-$GLOBALS['MOCK'] = function ($argv) {
-  if ($argv[1] === 'ps') return ['out' => "1111|plex|running|Up 2 hours (healthy)|plexinc/pms\n2222|radarr|exited|Exited (0) 1 hour ago|lscr.io/radarr\n"];
-  if (in_array($argv[1], ['start', 'stop', 'restart', 'pause', 'unpause'], true)) return ['out' => $argv[2]];
-  if ($argv[1] === 'inspect') return ['out' => '[]'];
-  return ['code' => 1];
-};
 t('invalid container name refused', isset(und_docker_action('../x', 'stop')['error']) && isset(und_docker_action('a;rm -rf /', 'stop')['error']));
-t('unknown action refused', isset(und_docker_action('plex', 'exec')['error']));
-t('unknown container refused', isset(und_docker_action('nope', 'stop')['error']));
-t('action that does not fit the state refused', isset(und_docker_action('radarr', 'stop')['error']) && isset(und_docker_action('plex', 'start')['error']));
-$GLOBALS['CMDS'] = [];
-t('valid action runs', isset(und_docker_action('plex', 'restart')['ok']));
-t('it runs docker restart <name> without a shell', end($GLOBALS['CMDS']) === [und_docker_bin(), 'restart', 'plex']);
-$lock = und_lock('docker:plex');
-t('a second action on the same container is refused while one runs', isset(und_docker_action('plex', 'restart')['error']));
-und_unlock($lock);
-$GLOBALS['SPAWNED'] = [];
-t('update goes through Unraid update_container', isset(und_docker_action('radarr', 'update')['ok']) && $GLOBALS['SPAWNED'][0] === [UND_DM . '/scripts/update_container', 'radarr']);
 t('logs refuse odd names', isset(und_docker_logs('-f --since', 10)['error']));
-t('history records actions', count(und_history()) >= 2 && und_history()[0]['target'] === 'radarr');
-$u = und_docker_update_state(['img:latest' => ['status' => 'undef']], 'img');
-t('an unchecked image is "unknown", never "current"', $u === 'unknown' && und_docker_update_state([], 'x') === 'unknown' && und_docker_update_state(['x:latest' => ['status' => 'true']], 'x') === 'current');
-t('health is parsed from docker ps', und_docker_ps()['ps']['plex']['health'] === 'healthy');
-$GLOBALS['MOCK'] = function ($argv) { return $argv[1] === 'inspect' ? ['out' => json_encode([['Id' => 'abc', 'Config' => ['Image' => 'x', 'Env' => ['A=1']], 'State' => ['Status' => 'running', 'Error' => ''], 'HostConfig' => []]])] : ['code' => 1]; };
-$ins = und_docker_inspect('plex');
-t('container details do not look like an error (regression)', !isset($ins['error']) && $ins['state_error'] === '' && $ins['env'] === ['A']);
-
-/* ---------------- VMs ---------------- */
 group('vms');
-$GLOBALS['MOCK'] = function ($argv) {
-  if ($argv[1] === 'list') return ['out' => " Id   Name         State\n----------------------------\n 2    Windows 10   running\n -    Home Assistant   shut off\n 3    Paused VM    paused\n"];
-  if ($argv[1] === 'dominfo') return ['out' => "CPU(s): 4\nMax memory: 8388608 KiB\nAutostart: enable\n"];
-  if ($argv[1] === 'dumpxml') return ['out' => $argv[2] === 'Windows 10' ? '<x><channel><target name="org.qemu.guest_agent.0"/></channel></x>' : '<x/>'];
-  return ['out' => ''];
-};
-$st = und_vm_states();
-t('virsh list with spaces in names is parsed', $st === ['Windows 10' => 'running', 'Home Assistant' => 'shut off', 'Paused VM' => 'paused'], json_encode($st));
-t('running VM offers shutdown, force stop, restart, pause, hibernate with agent', und_vm_valid_ops('running', true) === ['stop', 'kill', 'restart', 'pause', 'hibernate']);
-t('no hibernate without the guest agent', !in_array('hibernate', und_vm_valid_ops('running', false), true));
-t('stopped VM can only start', und_vm_valid_ops('shut off', false) === ['start']);
-t('invalid op for the state refused', isset(und_vm_action('Home Assistant', 'stop')['error']) && isset(und_vm_action('Windows 10', 'start')['error']));
-t('unknown VM refused', isset(und_vm_action('Nope', 'start')['error']));
-$GLOBALS['CMDS'] = [];
-t('graceful shutdown uses virsh shutdown', isset(und_vm_action('Windows 10', 'stop')['ok']) && end($GLOBALS['CMDS']) === [und_virsh(), 'shutdown', 'Windows 10']);
-@unlink(und_tmp('vminfo.json'));
-t('hibernate uses dompmsuspend disk', isset(und_vm_action('Windows 10', 'hibernate')['ok']) && end($GLOBALS['CMDS']) === [und_virsh(), 'dompmsuspend', 'Windows 10', 'disk']);
-t('paused VM resumes with virsh resume', isset(und_vm_action('Paused VM', 'resume')['ok']) && end($GLOBALS['CMDS']) === [und_virsh(), 'resume', 'Paused VM']);
-
-/* ---------------- server power ---------------- */
-group('power');
-$GLOBALS['MOCK'] = function ($argv) { return $argv[1] === 'list' ? ['out' => " Id Name State\n---\n"] : ['code' => 0]; };
-$GLOBALS['SPAWNED'] = []; @unlink(und_tmp('power-started'));
-t('unknown power op refused', isset(und_power_prepare('halt')['error']));
-$p = und_power_prepare('reboot');
-t('prepare returns a nonce and the server name', strlen($p['nonce']) === 32 && $p['name'] === 'Tower');
-t('wrong nonce refused', isset(und_power('reboot', 'x', 'Tower')['error']) && !$GLOBALS['SPAWNED']);
-$p = und_power_prepare('reboot');
-t('wrong server name refused', isset(und_power('reboot', $p['nonce'], 'Other')['error']) && !$GLOBALS['SPAWNED']);
-t('a nonce is single use', isset(und_power('reboot', $p['nonce'], 'Tower')['error']));
-$p = und_power_prepare('reboot');
-t('nonce is bound to the operation', isset(und_power('shutdown', $p['nonce'], 'Tower')['error']));
-$p = und_power_prepare('shutdown');
-$nf = und_read_json(und_tmp('power-nonce.json'), []); $nf['exp'] = time() - 1; und_write_json(und_tmp('power-nonce.json'), $nf);
-t('expired nonce refused', isset(und_power('shutdown', $p['nonce'], 'Tower')['error']) && !$GLOBALS['SPAWNED']);
-$p = und_power_prepare('reboot');
-t('correct confirmation accepted', isset(und_power('reboot', $p['nonce'], 'tower')['ok']));
-t('it runs Unraid\'s own reboot command after a short delay', $GLOBALS['SPAWNED'][0] === ['/bin/bash', '-c', 'sleep 3; exec /sbin/reboot -n']);
-$p = und_power_prepare('reboot');
-t('a second power request is refused', isset(und_power('reboot', $p['nonce'], 'Tower')['error']) && count($GLOBALS['SPAWNED']) === 1);
-@unlink(und_tmp('power-started'));
-$p = und_power_prepare('shutdown'); und_power('shutdown', $p['nonce'], 'Tower');
-t('shutdown uses poweroff -n', end($GLOBALS['SPAWNED']) === ['/bin/bash', '-c', 'sleep 3; exec /sbin/poweroff -n']);
-@unlink(und_tmp('power-started'));
+t('invalid VM name refused', isset(und_vm_action('../x', 'stop')['error']));
 
 /* ---------------- standalone sign-in ---------------- */
 group('auth');
-$t1 = und_handoff_create();
-t('handoff token works once', und_handoff_use($t1) === true && und_handoff_use($t1) === false);
-t('malformed handoff token refused', und_handoff_use('../../x') === false);
-$t2 = und_handoff_create(); foreach (glob(und_tmp('handoff') . '/*') as $f) file_put_contents($f, (string)(time() - 1));
-t('expired handoff token refused', und_handoff_use($t2) === false);
-$GLOBALS['UND_PHPSESS_DIR'] = "$SANDBOX/php"; @mkdir("$SANDBOX/php");
-$_SERVER['HTTP_HOST'] = 'tower.local:9099';
-$sid = 'abcdefghijklmnopqrstuvwx12';
-$_COOKIE = ['unraid_' . md5('tower.local') => $sid];
-t('no Unraid session file, not logged in', und_unraid_logged_in() === false);
-file_put_contents("$SANDBOX/php/sess_$sid", 'locale|s:0:"";');
-t('session without unraid_login, not logged in', und_unraid_logged_in() === false);
-file_put_contents("$SANDBOX/php/sess_$sid", 'unraid_user|s:4:"root";unraid_login|i:' . time() . ';');
-t('valid Unraid session accepted', und_unraid_logged_in() === true);
-$_COOKIE = ['unraid_' . md5('other.local') => $sid];
-t('cookie for another host name ignored', und_unraid_logged_in() === false);
-$_COOKIE = ['unraid_' . md5('tower.local') => '../../etc/passwd'];
-t('path-like session id refused', und_unraid_logged_in() === false);
 $_SERVER['HTTP_HOST'] = 'evil.com/x';
 t('odd host header refused', und_req_host() === '');
 
@@ -460,7 +365,7 @@ reset_store();
 t('no rules to start with', und_ignores() === [] && und_ignores_active() === []);
 $a = und_ignore_add('instance', 'disk.hot', 'disk3', 3600, 'disk3 is at 52°C.', 'warn');
 t('instance rule added', !empty($a['ok']) && $a['rule']['key'] === 'disk.hot:disk3' && $a['rule']['until'] > time() + 3500);
-t('rule written to config.yaml in the config dir and the flash mirror', strpos((string)@file_get_contents(UND_DIR . '/config.yaml'), 'disk.hot') !== false && strpos((string)@file_get_contents(und_store_dir() . '/config.yaml'), 'disk.hot') !== false);
+t('rule written to config.yaml', strpos((string)@file_get_contents(UND_DIR . '/config.yaml'), 'disk.hot') !== false && strpos((string)@file_get_contents(und_store_dir() . '/config.yaml'), 'disk.hot') !== false);
 $p = und_ignore_add('type', 'docker.exited', 'ignored-anyway', 'permanent', 'Container stopped', 'warn');
 t('type rule is permanent and has no resource', $p['rule']['until'] === null && $p['rule']['resource'] === '' && $p['rule']['key'] === 'docker.exited');
 t('both rules active', count(und_ignores_active()) === 2);
@@ -571,30 +476,6 @@ t('a link of its own wins', $lv[3]['href_resolved'] === 'https://radarr.example.
 
 group('webui');
 reset_store();
-$GLOBALS['MOCK'] = function ($argv) {
-  if ($argv[1] !== 'inspect') return ['code' => 1];
-  $c = function ($n, $net, $ip, $ports, $label) { return ['Name' => '/' . $n, 'Config' => ['Labels' => ['net.unraid.docker.webui' => $label]], 'HostConfig' => ['NetworkMode' => $net, 'PortBindings' => $ports],
-    'NetworkSettings' => ['Networks' => [$net => ['IPAddress' => $ip]]], 'State' => []]; };
-  return ['out' => json_encode([
-    $c('lidarr', 'r1ze', '172.18.0.4', ['8686/tcp' => [['HostPort' => '8687']]], 'http://[IP]:[PORT:8687]'),
-    $c('dashbrr', 'r1ze', '172.18.0.18', ['8080/tcp' => [['HostPort' => '5456']]], 'http://[IP]:[PORT:8080]/'),
-    $c('adguard', 'br0', '192.168.50.10', [], 'http://[IP]:[PORT:3000]/'),
-    $c('radarr', 'bridge', '172.17.0.5', ['7878/tcp' => [['HostPort' => '7979']]], 'http://[IP]:[PORT:7878]/')])];
-};
-file_put_contents("$SANDBOX/fs/var/local/emhttp/network.ini", "[eth0]\nIPADDR:0=\"192.168.50.50\"\n");
-$det = und_docker_details(['lidarr' => ['id' => 'a1', 'state' => 'running'], 'dashbrr' => ['id' => 'a2', 'state' => 'running'], 'adguard' => ['id' => 'a3', 'state' => 'running'], 'radarr' => ['id' => 'a4', 'state' => 'running']], true);
-$sip = und_server_ip();
-t('user-defined bridge with published ports: server address and the port as written', $det['lidarr']['webui'] === "http://$sip:8687", $det['lidarr']['webui']);
-t('user-defined bridge: [PORT:container port] becomes the host port', $det['dashbrr']['webui'] === "http://$sip:5456/", $det['dashbrr']['webui']);
-t('br0 / macvlan without published ports: the container\'s own LAN address', $det['adguard']['webui'] === 'http://192.168.50.10:3000/', $det['adguard']['webui']);
-t('default bridge: server address and host port', $det['radarr']['webui'] === "http://$sip:7979/", $det['radarr']['webui']);
-$GLOBALS['MOCK2'] = $GLOBALS['MOCK'];
-$GLOBALS['MOCK'] = function ($argv) {
-  if ($argv[1] !== 'inspect') return ['code' => 1];
-  return ['out' => json_encode([['Name' => '/radarr', 'Config' => ['Image' => 'lscr.io/linuxserver/radarr', 'Labels' => ['org.opencontainers.image.source' => 'https://github.com/linuxserver/docker-radarr']], 'HostConfig' => [], 'State' => []]])];
-};
-t('the image\'s source label is kept with the container', und_docker_details(['radarr' => ['id' => 'a4', 'state' => 'running']], true)['radarr']['source'] === 'https://github.com/linuxserver/docker-radarr');
-$GLOBALS['MOCK'] = $GLOBALS['MOCK2'];
 t('GitHub repositories from source addresses', und_github_repo_of('https://github.com/linuxserver/docker-radarr') === 'linuxserver/docker-radarr' && und_github_repo_of('git@github.com:immich-app/immich.git') === 'immich-app/immich'
   && und_github_repo_of('https://github.com/autobrr/qui/tree/main') === 'autobrr/qui' && und_github_repo_of('https://gitlab.com/a/b') === '' && und_github_repo_of('https://github.com/a/..') === '');
 unset($GLOBALS['MOCK']);
@@ -743,9 +624,6 @@ t('the check is cached (one request)', count($GLOBALS['SEEN']) === 1);
 unset($GLOBALS['UND_HTTP_MOCK']);
 @unlink(und_tmp('self-update.json'));
 
-// the built plugin must be well-formed XML, or Unraid cannot install it (not present inside the Docker build)
-$plg = dirname(__DIR__) . '/undash.plg';
-if (is_file($plg)) { libxml_use_internal_errors(true); $x = simplexml_load_file($plg); t('undash.plg is well-formed XML with a version', $x !== false && (string)$x['version'] !== '', implode('; ', array_map(function ($e) { return trim($e->message) . ' line ' . $e->line; }, libxml_get_errors()))); }
 
 /* ---------------- Homepage import still works ---------------- */
 group('homepage');
@@ -767,15 +645,6 @@ proc_close($fake);
 t('a NUT UPS is read over TCP', is_array($u) && $u['charge'] === 87.0 && $u['load'] === 12.0 && $u['runtime'] === 1800 && $u['status'] === 'On battery, Discharging' && $u['model'] === 'Back-UPS', json_encode($u));
 t('no NUT daemon means no UPS', und_nut_tcp('127.0.0.1:' . $port, 'ups') === null);
 t('odd UPS names are refused', und_nut_tcp('127.0.0.1', "ups\nFSD") === null);
-$apcOut = "STATUS   : ONLINE\nBCHARGE  : 100.0 Percent\nLOADPCT  : 24.0 Percent\nTIMELEFT : 52.0 Minutes\nMODEL    : Back-UPS XS 1000M\n";
-$GLOBALS['MOCK'] = function ($argv) use (&$apcOut) { return basename($argv[0]) === 'apcaccess' ? ['code' => 0, 'out' => $apcOut, 'err' => ''] : ['code' => 1, 'out' => '', 'err' => 'no']; };
-$u = und_ups('ups');
-t('without a rated power there are no watts', $u['load'] === 24.0 && $u['watts'] === null && $u['nominal'] === null);
-$apcOut .= "NOMPOWER : 600 Watts\n";
-$u = und_ups('ups');
-t('apcupsd NOMPOWER gives the power draw', $u['nominal'] === 600 && $u['watts'] === 144);
-t('the rated power from Settings wins', und_ups('ups', 900)['watts'] === 216 && und_ups('ups', 900)['nominal'] === 900);
-unset($GLOBALS['MOCK']);
 $nv = und_nut_vars(['battery.charge' => '90', 'ups.load' => '20', 'ups.realpower' => '151.6', 'ups.realpower.nominal' => '900']);
 t('NUT reports measured watts and its rating', $nv['watts'] === 151.6 && $nv['nominal'] === 900);
 
@@ -1433,9 +1302,6 @@ foreach (['javascript:alert(1)', ' JavaScript:x', "java\tscript:x", 'data:text/h
 }
 $m = und_normalize(['groups' => [['name' => 'g', 'services' => [['type' => 'link', 'name' => 'n', 'href' => '{{HOST}}/app'], ['type' => 'link', 'name' => 'm', 'href' => 'https://x.lan/a?b=1']]]]]);
 t('ordinary links stay', $m['groups'][0]['services'][0]['href'] === '{{HOST}}/app' && $m['groups'][0]['services'][1]['href'] === 'https://x.lan/a?b=1');
-$pf = und_tmp('power-started'); file_put_contents($pf, 'reboot');
-t('a power action under way shows', und_power_started() === 'reboot');
-touch($pf, time() - 1000); t('one that never finished stops blocking', und_power_started() === '' && !is_file($pf));
 und_store_reset();
 $cf = und_file('config.yaml'); $good = (string)@file_get_contents($cf);
 $svc = ['id' => 'abcd9999', 'type' => 'link', 'name' => 'Kept app', 'href' => 'http://k'];
@@ -1482,16 +1348,15 @@ und_save_config($cfgK, false);
 $kept = (array)und_load_config()['docker']['items'];
 t('a skip survives saving', ($kept['a']['skip_update'] ?? '') === $dA);
 t('a malformed skip is dropped', !isset($kept['b']['skip_update']) && !empty($kept['b']['favorite']));
-@mkdir(dirname(und_path(UND_UPDSTATUS)), 0777, true);
-file_put_contents(und_path(UND_UPDSTATUS), json_encode(['img/a:latest' => ['remote' => $dA, 'status' => 'false'], 'img/c:latest' => ['remote' => $dB, 'status' => 'false']]));
+und_write_json(und_tmp('image-digests.json'), ['img/a' => ['d' => $dA, 'at' => time()], 'img/c' => ['d' => $dB, 'at' => time()]]);
 $l = und_docker_skips([['name' => 'a', 'image' => 'img/a', 'update' => 'available'], ['name' => 'c', 'image' => 'img/c', 'update' => 'available'], ['name' => 'd', 'image' => 'img/a', 'update' => 'available']]);
 t('the skipped version is marked', !empty($l[0]['skip']));
 t('an ignored or other container is not', empty($l[1]['skip']) && empty($l[2]['skip']));
-file_put_contents(und_path(UND_UPDSTATUS), json_encode(['img/a:latest' => ['remote' => $dB, 'status' => 'false']]));
+und_write_json(und_tmp('image-digests.json'), ['img/a' => ['d' => $dB, 'at' => time()]]);
 $l = und_docker_skips([['name' => 'a', 'image' => 'img/a', 'update' => 'available']]);
 t('a newer version shows again', empty($l[0]['skip']));
 t('an image that is up to date is not marked', empty(und_docker_skips([['name' => 'a', 'image' => 'img/a', 'update' => 'current']])[0]['skip']));
-@unlink(und_path(UND_UPDSTATUS));
+@unlink(und_tmp('image-digests.json'));
 reset_store();
 
 /* ---------------- less work for slow apps ---------------- */

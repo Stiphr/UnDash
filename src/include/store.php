@@ -1,12 +1,12 @@
 <?php
 /*
- * UnDash - where settings live. Two files in the configuration folder (mirrored to the flash drive):
+ * UnDash - where settings live. Two files in the configuration folder:
  *
  *   config.yaml  everything you set up: layout, apps, theme, ignored alerts, custom CSS, the Unraid API address.
  *                It never holds a secret: an app's key, user name or password is a reference such as {{RADARR_API_KEY}}.
  *   .env         the values behind those references, plus the Unraid API key and the Docker version's password hash.
  *
- * Alert history and backups are data, not settings: they go in data/ (not mirrored).
+ * Alert history and backups are data, not settings: they go in data/.
  * Older versions kept config.json, secrets.json, custom.css and ignores.json; they are converted on first use (see
  * und_store_migrate) and moved to data/legacy/.
  */
