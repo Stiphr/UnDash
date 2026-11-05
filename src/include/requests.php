@@ -11,13 +11,22 @@ function und_seerr_sources(array $cfg) {
   return $list;
 }
 
-/** Title, year and poster of a movie or show, cached for a day. */
+/** Title, year and poster of a movie or show, cached for a day. One that Seerr cannot look up (it answers HTTP 500 for a title TMDB no longer
+ *  has) keeps the rest of the list: it shows by its TMDB number and is asked about again in an hour. A refused key still fails the list. */
 function und_seerr_media(array $s, $type, $tmdb) {
   $f = und_tmp('seerr-media.json');
   $cache = und_read_json($f, []);
   $k = $s['id'] . ':' . $type . ':' . $tmdb;
   if (isset($cache[$k]) && time() - (int)$cache[$k]['at'] < 86400) return $cache[$k];
-  $m = und_get(und_u($s['url'], '/api/v1/' . ($type === 'tv' ? 'tv' : 'movie') . '/' . (int)$tmdb), und_arr_h($s) + ['timeout' => 10]);
+  try {
+    $m = und_get(und_u($s['url'], '/api/v1/' . ($type === 'tv' ? 'tv' : 'movie') . '/' . (int)$tmdb), und_arr_h($s) + ['timeout' => 10]);
+  } catch (Throwable $e) {
+    if (strpos($e->getMessage(), 'Not authorised') === 0) throw $e;
+    $row = ['title' => 'Unknown ' . ($type === 'tv' ? 'show' : 'movie') . ' (TMDB ' . (int)$tmdb . ')', 'year' => 0, 'poster' => '', 'at' => time() - 86400 + 3600];
+    $cache[$k] = $row;
+    und_write_json($f, $cache);
+    return $row;
+  }
   $date = (string)($m['releaseDate'] ?? $m['firstAirDate'] ?? '');
   $row = ['title' => (string)($m['title'] ?? $m['name'] ?? ('TMDB ' . $tmdb)), 'year' => $date !== '' ? (int)substr($date, 0, 4) : 0,
           'poster' => !empty($m['posterPath']) && preg_match('#^/[A-Za-z0-9_.-]+$#', $m['posterPath']) ? 'https://image.tmdb.org/t/p/w92' . $m['posterPath'] : '', 'at' => time()];
