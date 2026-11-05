@@ -1,4 +1,5 @@
 ###beta
+- A VM's icon and name open its console (VNC). The Unraid API does not give the console's address, so the first click asks for it once: paste it from Unraid's VM Console window. The old guess of the address is gone, because it could open the wrong VM
 - Bulk edit in Settings, Apps & cards: change the IP, port and API key of many apps in one table, or replace an address everywhere it is used
 - TrueNAS support: choose TrueNAS in Settings > Server connection (TrueNAS 25.04 or newer, HTTPS only). Shows pools, disks, apps, VMs, CPU, memory, network and TrueNAS's own alerts, and starts, stops, restarts and updates apps and VMs. Not yet tested on a real TrueNAS server
 - UnDash is now Docker only: the Unraid plugin is gone, with the features only it had (server restart and shutdown, Unraid OS install, VM hibernate and console details). Your old settings can still be imported through /import

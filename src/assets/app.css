@@ -1574,3 +1574,4 @@ body.und-page .und,body.und-page .und[data-mode],body.und-page .und[data-theme],
 .bulk-h{font-size:11px;color:var(--faint);margin-top:10px;padding-bottom:0}
 .bulk-r.need{background:var(--warn-soft)}
 @media (max-width:600px){.bulk-find{grid-template-columns:1fr}.bulk-h{display:none}.bulk-r{grid-template-columns:minmax(0,1fr) 84px;padding:8px 2px}.bulk-r>span:first-child,.bulk-r>:last-child{grid-column:1/-1}}
+.und ol.steps,.modal ol.steps{margin:4px 0 0;padding-left:20px;display:grid;gap:4px}

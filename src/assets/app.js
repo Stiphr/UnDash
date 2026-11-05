@@ -3134,8 +3134,8 @@
       var p = pref('vms', x.name), b = busy[x.name];
       var a = vActions(x, p), vw = vWeb(x), vt = vTip(x, vw, x.os || x.name);
       if (R.cards) { r.rows.appendChild(vCell(x, p, a, vw, vt, b)); return; }
-      var who = S.L.vms.layout === 'cards' ? h('div', { class: 'who c-who' }, vA(vw, vt, vIcon(x, p, '')), h('div', { class: 'ell' }, h('div', { class: 'nm' }, vA(vw, vt, h('span', { class: 'ell' }, p.label || x.name)), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')))
-        : h('div', { class: 'who c-who' }, vA(vw, vt, vIcon(x, p, '')), vA(vw, vt, h('span', { class: 'nm ell' }, p.label || x.name, p.favorite ? ic('star', true) : null)));
+      var who = S.L.vms.layout === 'cards' ? h('div', { class: 'who c-who' }, vA(x, vw, vt, vIcon(x, p, '')), h('div', { class: 'ell' }, h('div', { class: 'nm' }, vA(x, vw, vt, h('span', { class: 'ell' }, p.label || x.name)), p.favorite ? ic('star', true) : null), h('div', { class: 'im ell' }, p.description || x.os || '')))
+        : h('div', { class: 'who c-who' }, vA(x, vw, vt, vIcon(x, p, '')), vA(x, vw, vt, h('span', { class: 'nm ell' }, p.label || x.name, p.favorite ? ic('star', true) : null)));
       var res = x.cpus ? x.cpus + ' vCPU · ' + bytes(x.memory) : '';
       if (S.L.vms.layout === 'cards') r.rows.appendChild(h('div', { class: 'tile' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'chips' }, vStateBadge(x.state, b), x.autostart ? h('span', { class: 'badge plain' }, 'autostart') : null), h('div', { class: 'stats' }, h('span', null, res), h('span', null, x.agent ? 'guest agent' : 'no guest agent')), a));
       else r.rows.appendChild(h('div', { class: 'rowi c' + (b ? ' busy' : ''), role: 'listitem' }, who, h('div', { class: 'c-st' }, vStateBadge(x.state, b)),
@@ -3149,41 +3149,59 @@
   /* a VM on the board: a row like a container's. Its icon and name open the console */
   function vCell(x, p, a, vw, vt, b) {
     var on = x.state === 'running', st = vStateBadge(x.state, b);
-    if (vw) a.insertBefore(btn('', function () { vOpen(vw); }, 'sm ghost', 'screen', vt), a.firstChild);
-    return h('div', { class: 'ci st-' + (on ? 'running' : 'exited') + (b ? ' busy' : ''), role: 'listitem', 'data-name': x.name }, vA(vw, vt, vIcon(x, p, 'cico')),
-      h('div', { class: 'cn' }, h('span', { class: 'cname ell' }, h('span', { class: 'sdot ' + (on ? 'ok' : 'na'), 'aria-hidden': 'true' }), vA(vw, vt, p.label || x.name), p.favorite ? ic('star', true) : null),
+    if (vw) a.insertBefore(btn('', function () { vGo(x); }, 'sm ghost', 'screen', vt), a.firstChild);
+    return h('div', { class: 'ci st-' + (on ? 'running' : 'exited') + (b ? ' busy' : ''), role: 'listitem', 'data-name': x.name }, vA(x, vw, vt, vIcon(x, p, 'cico')),
+      h('div', { class: 'cn' }, h('span', { class: 'cname ell' }, h('span', { class: 'sdot ' + (on ? 'ok' : 'na'), 'aria-hidden': 'true' }), vA(x, vw, vt, p.label || x.name), p.favorite ? ic('star', true) : null),
         h('span', { class: 'cs' }, h('span', null, st.textContent), x.cpus ? h('span', null, x.cpus + ' vCPU') : null, x.memory ? h('span', null, bytes(x.memory)) : null)), a);
   }
   /* what clicking a VM's icon or name does, said in its tooltip */
   function vTip(x, web, other) {
-    if (web) return vConsole(web) ? 'Open the console of ' + x.name + ' (VNC)' : 'Open Unraid\'s VMs page to reach the console of ' + x.name;
+    if (web) return vConsole(web) || /^https?:/.test(pref('vms', x.name).console || '') ? 'Open the console of ' + x.name : isTn() ? 'Open TrueNAS\'s VMs page to reach the console of ' + x.name : 'Set up the console of ' + x.name;
     if (x.state !== 'running') return x.name + ' is ' + (x.state || 'stopped') + ': start it from its menu to open the console';
-    return other + (' · the console opens from Unraid\'s VMs page');
+    return other;
   }
-  /* The Unraid API gives no VNC port. Unraid hands out websocket ports from 5700, so a lone running VM has that one; with several
-     there is no telling which is which, and Unraid's VMs page is the safe place to go. */
-  function vPath(x) {
-    if (x.vnc) return x.vnc;
-    var run = (((S.live || {}).vms || {}).vms || []).filter(function (v) { return v.state === 'running'; });
-    return run.length === 1 ? '/wsproxy/5700/' : '';
-  }
+  /* The Unraid API gives no VNC port, and Unraid hands one out when a VM starts. So the console address is pasted once from Unraid
+     (consoleSetup) and kept with the VM; nothing is guessed, because a guess opens another VM's console. */
   function vWeb(x) {
-    if (x.state !== 'running') return '';
-    var path = vPath(x), host = location.hostname;
-    if (!UNRAID) return '';
-    if (!path) return UNRAID + (isTn() ? '/ui/vm' : '/VMs');
-    try { if (UNRAID) host = new URL(UNRAID).hostname; } catch (e) { /* keep this page's host */ }
-    return UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(host) + '&port=&path=' + encodeURIComponent(path);
+    if (x.state !== 'running' || !UNRAID) return '';
+    var c = pref('vms', x.name).console || '', host = location.hostname;
+    if (/^https?:/.test(c)) return c;
+    if (!c) return UNRAID + (isTn() ? '/ui/vm' : '/VMs');
+    try { host = new URL(UNRAID).hostname; } catch (e) { /* keep this page's host */ }
+    return UNRAID + '/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&resize=scale&host=' + encodeURIComponent(host) + '&port=&path=' + c;      // /wsproxy/N/, checked by the server, as Unraid writes it
   }
   function vConsole(url) { return url.indexOf('vnc.html') >= 0; }
   /* the console gets a window of its own */
   function vOpen(url) { if (vConsole(url)) window.open(url, '_blank', 'popup,width=1280,height=800,noopener'); else window.open(url, '_blank', 'noopener'); }
-  function vA(url, title, kids) { var a = webA(url, title, kids); if (url) a.onclick = function (e) { e.preventDefault(); vOpen(url); }; return a; }
+  function vGo(x) {
+    var u = vWeb(x);
+    if (!u) return;
+    if (!isTn() && !pref('vms', x.name).console) consoleSetup(x); else vOpen(u);
+  }
+  function vA(x, url, title, kids) { var a = webA(url, title, kids); if (url) a.onclick = function (e) { e.preventDefault(); vGo(x); }; return a; }
+  /* asks for the console address once; it is kept with the VM */
+  function consoleSetup(x) {
+    var v = { url: pref('vms', x.name).console || '' }, err = h('div', { role: 'alert' });
+    var field = h('input', { type: 'url', value: v.url, placeholder: 'http://' + (function () { try { return new URL(UNRAID).host; } catch (e) { return 'tower'; } })() + '/plugins/dynamix.vm.manager/vnc.html?…', autocomplete: 'off', 'aria-label': 'Console address', oninput: function (e) { v.url = e.target.value.trim(); } });
+    var save = function () {
+      clear(err);
+      if (v.url && !/^https?:\/\/\S+$/i.test(v.url) && !/^\/?wsproxy\/\d+\/?$/.test(v.url)) { err.appendChild(h('div', { class: 'banner bad' }, 'That is not a console address. Copy the whole address from the console\'s browser window.')); return; }
+      savePref('vms', x.name, { console: v.url }).then(function () { m.close(); if (v.url && pref('vms', x.name).console) vOpen(vWeb(x)); });
+    };
+    var m = modal('Console of ' + (pref('vms', x.name).label || x.name), h('div', null,
+      h('p', null, 'Unraid does not tell UnDash where a VM\'s console is, so it needs the address once:'),
+      h('ol', { class: 'steps sm' }, h('li', null, 'Open Unraid\'s VMs page, click ' + x.name + '\'s icon and choose VM Console (VNC).'), h('li', null, 'Copy the address from the console window\'s address bar.'), h('li', null, 'Paste it below and press Save.')),
+      h('div', { class: 'inl', style: { margin: '6px 0 12px' } }, btn('Open Unraid\'s VMs page', function () { window.open(UNRAID + '/VMs', '_blank', 'noopener'); }, 'sm', 'web')),
+      F('Console address', field, 'From then on, the VM\'s icon and name open its console. Unraid may give the VM another console port after it restarts; if the console does not connect, paste the new address here.'), err),
+      [btn('Cancel', function () { m.close(); }), v.url ? btn('Forget', function () { v.url = ''; savePref('vms', x.name, { console: '' }).then(function () { m.close(); }); }) : null, btn('Save', save, 'pri')]);
+    setTimeout(function () { field.focus(); }, 50);
+  }
   function vActions(x, p) {
     var a = h('div', { class: 'acts c-acts' }), web = vWeb(x);
     a.appendChild(gear(x.name, function () {
       var b = !!S.busy['v:' + x.name];
-      return [web ? [vConsole(web) ? 'Open console (VNC)' : 'Open Unraid\'s VMs page (console)', 'screen', function () { vOpen(web); }] : null, web ? 'hr' : null]
+      var set = !!p.console;
+      return [web ? [isTn() ? 'Open TrueNAS\'s VMs page (console)' : set ? 'Open console (VNC)' : 'Set up console (VNC)…', 'screen', function () { vGo(x); }] : null, web && set && !isTn() ? ['Console address…', 'edit', function () { consoleSetup(x); }] : null, web ? 'hr' : null]
         .concat(vCan() ? [] : [READ_ONLY])
         .concat((vCan() ? x.ops : []).map(function (o) { return [VMOPS[o][0] + (o === 'kill' || o === 'hibernate' || o === 'restart' ? '…' : ''), VMOPS[o][1], function () { vAct(x, o); }, o === 'kill' || o === 'stop' ? 'danger' : '', b]; }))
         .concat([vCan() && x.state === 'running' && !x.agent ? ['Hibernate (needs the QEMU guest agent)', 'moon', function () {}, '', true] : null, 'hr',
