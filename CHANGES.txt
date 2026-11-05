@@ -1,4 +1,5 @@
 ###beta
+- Requests: a title Seerr cannot look up (it answers HTTP 500 for one TMDB no longer has) no longer empties the whole list. It shows as Unknown movie with its TMDB number
 - A VM's icon and name open its console (VNC). The Unraid API does not give the console's address, so the first click asks for it once: paste it from Unraid's VM Console window. The old guess of the address is gone, because it could open the wrong VM
 - Bulk edit in Settings, Apps & cards: change the IP, port and API key of many apps in one table, or replace an address everywhere it is used
 - TrueNAS support: choose TrueNAS in Settings > Server connection (TrueNAS 25.04 or newer, HTTPS only). Shows pools, disks, apps, VMs, CPU, memory, network and TrueNAS's own alerts, and starts, stops, restarts and updates apps and VMs. Not yet tested on a real TrueNAS server
