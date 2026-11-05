@@ -1473,6 +1473,15 @@ t('from a trusted proxy cookies are Secure', und_https());
 $_SERVER['REMOTE_ADDR'] = '198.51.100.3'; t('not from anyone else', !und_https());
 putenv('UNDASH_TRUSTED_PROXIES'); unset($_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_X_FORWARDED_PROTO']);
 
+group('vm console');
+t('the address from Unraid\'s console window keeps only its port path', und_vm_console('http://192.168.50.50/plugins/dynamix.vm.manager/vnc.html?v=1746576860&resize=scale&autoconnect=true&host=192.168.50.50&port=&path=/wsproxy/5701/') === '/wsproxy/5701/');
+t('an encoded path too', und_vm_console('http://tower/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&path=%2Fwsproxy%2F5702%2F') === '/wsproxy/5702/');
+t('a bare path', und_vm_console('wsproxy/5703') === '/wsproxy/5703/');
+t('another console address is kept whole', und_vm_console('https://nas.example/console?id=3') === 'https://nas.example/console?id=3');
+t('no scripts, no odd ports, no junk', und_vm_console('javascript:alert(1)') === '' && und_vm_console('/wsproxy/99999/') === '' && und_vm_console('http://x/vnc.html?path=/etc/passwd') === '' && und_vm_console("http://a b") === '');
+$n = und_normalize(['vms' => ['items' => ['Automation' => ['console' => 'http://t/vnc.html?path=/wsproxy/5701/'], 'Bad' => ['console' => 'javascript:x']], 'docker' => ['items' => []]]]);
+t('a VM with only a console address keeps it; a bad one is dropped', ($n['vms']['items']['Automation']['console'] ?? '') === '/wsproxy/5701/' && !isset($n['vms']['items']['Bad']), json_encode($n['vms']['items']));
+
 rmrf($SANDBOX);
 
 echo "\n$pass passed, $fail failed\n";

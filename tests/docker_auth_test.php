@@ -101,6 +101,15 @@ t('so is Test, which would send it there', apicall('test', ['id' => 'abcd1234', 
 t('and the card builder', apicall('probe', ['id' => 'abcd1234', 'config' => json_encode($cfg), 'creds' => '{}'])['code'] === 400);
 t('typing the key again moves it', apicall('save', ['config' => json_encode($cfg), 'creds' => json_encode(['abcd1234' => ['key' => 'second-key-value']])])['code'] === 200);
 
+/* ---- a VM's console address ---- */
+$u = apicall('prefs', ['kind' => 'vms', 'key' => 'Automation', 'value' => json_encode(['console' => 'http://192.168.50.50/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&host=192.168.50.50&port=&path=/wsproxy/5701/'])]);
+t('a pasted console address is saved as its path', ($u['j']['layout']['vms']['items']['Automation']['console'] ?? '') === '/wsproxy/5701/', json_encode($u['j']['layout']['vms']['items'] ?? $u));
+$u = apicall('prefs', ['kind' => 'vms', 'key' => 'Automation', 'value' => json_encode(['console' => 'javascript:alert(1)'])]);
+t('anything else is refused', $u['code'] !== 200 && strpos((string)($u['j']['error'] ?? ''), 'console address') !== false);
+$u = apicall('prefs', ['kind' => 'docker', 'key' => 'plex', 'value' => json_encode(['console' => '/wsproxy/5701/'])]);
+t('containers have no console address', !isset($u['j']['layout']['docker']['items']['plex']['console']));
+$u = apicall('prefs', ['kind' => 'vms', 'key' => 'Automation', 'value' => json_encode(['console' => ''])]);
+t('it can be forgotten', !isset($u['j']['layout']['vms']['items']['Automation']));
 /* ---- connecting a TrueNAS server through Settings ---- */
 $u = apicall('unraid_save', ['url' => 'http://nas.test', 'key' => 'tn-secret-key', 'type' => 'truenas', 'user' => 'dash']);
 t('a TrueNAS address without https is refused', $u['code'] !== 200 && strpos((string)($u['j']['error'] ?? ''), 'https://') !== false, json_encode($u));

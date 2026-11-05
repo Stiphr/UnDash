@@ -224,7 +224,8 @@ switch ($action) {
       // the same names the server accepts for an action: nothing else can become a key in config.yaml
       if ($kind === 'docker' ? !und_valid_container($key) : !und_valid_vm($key)) fail('Invalid name.');
       $items = (array)$cfg[$kind]['items'];
-      $items[$key] = array_merge((array)($items[$key] ?? []), array_intersect_key($val, ['label' => 1, 'icon' => 1, 'description' => 1, 'hidden' => 1, 'favorite' => 1, 'no_update' => 1]));
+      $items[$key] = array_merge((array)($items[$key] ?? []), array_intersect_key($val, ['label' => 1, 'icon' => 1, 'description' => 1, 'hidden' => 1, 'favorite' => 1, 'no_update' => 1] + ($kind === 'vms' ? ['console' => 1] : [])));
+      if ($kind === 'vms' && isset($val['console']) && trim((string)$val['console']) !== '' && und_vm_console($val['console']) === '') fail('That is not a console address. Copy the whole address from the console\'s browser window.');
       $cfg[$kind]['items'] = $items;
     } elseif ($kind === 'section') {
       foreach ($cfg['dashboard']['sections'] as &$s) if ($s['id'] === $key) $s = array_merge($s, array_intersect_key($val, ['collapsed' => 1, 'visible' => 1, 'width' => 1]));

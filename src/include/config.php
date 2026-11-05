@@ -445,9 +445,10 @@ function und_normalize(array $c) {
       if (!is_array($p) || !is_string($name) || $name === '' || strlen($name) > 200 || preg_match('/[\x00-\x1f]/', $name)) continue;
       $row = ['label' => und_clip(trim((string)($p['label'] ?? '')), 60), 'icon' => und_clip((string)($p['icon'] ?? ''), 300), 'description' => und_clip(trim((string)($p['description'] ?? '')), 200),
               'hidden' => !empty($p['hidden']), 'favorite' => !empty($p['favorite'])];
+      if (($c = und_vm_console($p['console'] ?? '')) !== '') $row['console'] = $c;   // VMs only: where the console opens
       if (!empty($p['no_update'])) $row['no_update'] = true;          // containers only: no update check for this one
       if (preg_match('/^sha256:[a-f0-9]{64}$/', (string)($p['skip_update'] ?? ''))) $row['skip_update'] = $p['skip_update'];   // containers only: the version skipped
-      if ($row['label'] === '' && $row['icon'] === '' && $row['description'] === '' && !$row['hidden'] && !$row['favorite'] && empty($row['no_update']) && empty($row['skip_update'])) continue;
+      if ($row['label'] === '' && $row['icon'] === '' && $row['description'] === '' && !$row['hidden'] && !$row['favorite'] && empty($row['no_update']) && empty($row['skip_update']) && empty($row['console'])) continue;
       $out[$name] = $row;
     }
     return $out ? $out : new stdClass();
@@ -667,6 +668,15 @@ function und_zone(array $s) {
 }
 
 /** The layout sent to the browser: hrefs resolved (they are links the user clicks anyway), nothing secret. */
+/* A VM's console, as pasted from Unraid: the noVNC page's websocket path (kept as /wsproxy/N/, so it follows the server's address) or a
+ * whole http(s) address. The Unraid API gives no VNC port, so this is the only way UnDash can know it. '' when it is neither. */
+function und_vm_console($v) {
+  $v = trim((string)$v);
+  if (preg_match('#[?&]path=([^&\s]+)#', $v, $m)) $v = rawurldecode($m[1]);
+  if (preg_match('#^/?wsproxy/(\d{1,5})/?$#', $v, $m) && (int)$m[1] > 0 && (int)$m[1] < 65536) return '/wsproxy/' . (int)$m[1] . '/';
+  return preg_match('#^https?://[^\s"\'<>]+$#i', $v) && strlen($v) <= 600 ? $v : '';
+}
+
 function und_layout_view(array $cfg) {
   unset($cfg['presets']);          // Settings has its own copy; the page and guests have no use for them
   // without a key these have nothing behind them. Only this view changes: the saved layout comes back with the key
