@@ -1,4 +1,5 @@
-###beta
+###1.0.0
+- Polish: icon buttons in the top bar and on cards show a focus ring when you move with the keyboard, alerts and messages use a tinted border instead of a thick stripe, selected text and the text cursor use your accent colour, and the Memory tile reads "34.5 / 62.5 GiB free" so it fits on a phone
 - Requests: a title Seerr cannot look up (it answers HTTP 500 for one TMDB no longer has) no longer empties the whole list. It shows as Unknown movie with its TMDB number
 - A VM's icon and name open its console (VNC). The Unraid API does not give the console's address, so the first click asks for it once: paste it from Unraid's VM Console window. The old guess of the address is gone, because it could open the wrong VM
 - Bulk edit in Settings, Apps & cards: change the IP, port and API key of many apps in one table, or replace an address everywhere it is used

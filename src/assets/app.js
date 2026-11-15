@@ -2220,7 +2220,9 @@
     var a = s.array || {}, pools = (a.pools || []).filter(function (p) { return p.size > 0; }), dk = dockerStats(y), vm = vmStats(y);
     var c = s.cpu.pct;
     tile('cpu', pct(c), [s.cpu.temp !== null && s.cpu.temp !== undefined ? Math.round(s.cpu.temp) + '°C' : '', s.cpu.threads ? s.cpu.threads + ' threads' : ''].filter(Boolean).join(' · '), c, s.cpu.temp >= 85 ? 'bad' : s.cpu.temp >= 75 ? 'warn' : lvl(c, 85, 97));
-    tile('memory', pct(s.mem.pct), bytes(s.mem.free) + ' free of ' + bytes(s.mem.total), s.mem.pct, lvl(s.mem.pct, 85, 95));
+    var mf = bytes(s.mem.free), mt = bytes(s.mem.total), mu = mt.split(' ')[1];
+    // "34.5 / 62.5 GiB free": the same facts, short enough for a phone tile
+    tile('memory', pct(s.mem.pct), (mu && mf.split(' ')[1] === mu ? mf.split(' ')[0] + ' / ' + mt : mf + ' / ' + mt) + ' free', s.mem.pct, lvl(s.mem.pct, 85, 95));
     var st = a.size ? [a.size, a.free] : pools.length ? pools.reduce(function (acc, p) { return [acc[0] + p.size, acc[1] + p.free]; }, [0, 0]) : null;
     if (st) { var sp = 100 * (st[0] - st[1]) / st[0]; tile('storage', bytes(st[1]) + ' free', pct(sp) + ' of ' + bytes(st[0]) + (a.size ? ' · array' : ' · ' + plural(pools.length, 'pool')), sp, lvl(sp, 85, 95)); }
     else tile('storage', 'n/a', a.state === 'STARTED' ? 'No sizes reported' : 'Array ' + (a.state || 'unknown').toLowerCase(), null, 'na');
