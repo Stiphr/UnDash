@@ -9,13 +9,13 @@
  * of a category (kind "type", key "<category>"). until is a Unix time, or null for "permanently".
  */
 
-/** The alert categories the dashboard raises and lets you ignore. Connection and sign-in alerts are never ignorable. */
+/** The alert categories the dashboard raises and lets you ignore. Connection and sign-in alerts are never ignorable, nor is someone guessing the password. */
 function und_alert_categories() {
   return ['docker.unhealthy' => 'Container unhealthy', 'docker.restarting' => 'Container restarting', 'docker.exited' => 'Container stopped with an error',
           'docker.update_failed' => 'Container update failed', 'array.state' => 'Array not started', 'array.resync' => 'Parity operation running',
-          'disk.bad' => 'Disk disabled or missing', 'disk.errors' => 'Disk read/write errors', 'disk.hot' => 'Disk temperature', 'disk.smart' => 'Disk failed SMART (Scrutiny)',
+          'disk.bad' => 'Disk disabled or missing', 'disk.errors' => 'Disk read/write errors', 'disk.hot' => 'Disk temperature', 'disk.smart_lost' => 'Disk SMART status', 'array.parity_errors' => 'Parity check errors', 'array.parity_old' => 'Parity check overdue', 'disk.smart' => 'Disk failed SMART (Scrutiny)',
           'os.staged' => 'Unraid update waiting for restart', 'os.available' => 'Unraid update available', 'os.check_failed' => 'Unraid update check failed',
-          'api.error' => 'Unraid API problem', 'auth.open' => 'No dashboard password'];
+          'api.error' => 'Unraid API problem', 'auth.open' => 'No dashboard password', 'health.down' => 'Endpoint not answering'];
 }
 
 const UND_IGNORE_MAX = 500;

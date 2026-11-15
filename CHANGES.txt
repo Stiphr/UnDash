@@ -1,3 +1,150 @@
+###1.0.0
+- Polish: icon buttons in the top bar and on cards show a focus ring when you move with the keyboard, alerts and messages use a tinted border instead of a thick stripe, selected text and the text cursor use your accent colour, and the Memory tile reads "34.5 / 62.5 GiB free" so it fits on a phone
+- Requests: a title Seerr cannot look up (it answers HTTP 500 for one TMDB no longer has) no longer empties the whole list. It shows as Unknown movie with its TMDB number
+- A VM's icon and name open its console (VNC). The Unraid API does not give the console's address, so the first click asks for it once: paste it from Unraid's VM Console window. The old guess of the address is gone, because it could open the wrong VM
+- Bulk edit in Settings, Apps & cards: change the IP, port and API key of many apps in one table, or replace an address everywhere it is used
+- TrueNAS support: choose TrueNAS in Settings > Server connection (TrueNAS 25.04 or newer, HTTPS only). Shows pools, disks, apps, VMs, CPU, memory, network and TrueNAS's own alerts, and starts, stops, restarts and updates apps and VMs. Not yet tested on a real TrueNAS server
+- UnDash is now Docker only: the Unraid plugin is gone, with the features only it had (server restart and shutdown, Unraid OS install, VM hibernate and console details). Your old settings can still be imported through /import
+- Undo works across pages in edit mode: switching pages keeps your steps, and undoing one goes back to the page it was on
+- A read-only API key no longer shows controls it cannot use. UnDash asks Unraid when the key allows that, and otherwise hides them after the first refusal, for an hour
+- A saved key or password is only sent to the address it was saved for. Moving an app to a new address asks for it again, so nobody can point an app at their own server to read its key
+- Sign-in cookies are marked Secure behind an HTTPS reverse proxy set in UNDASH_TRUSTED_PROXIES, and more kinds of secret are hidden from logged addresses
+- Stronger protection against password guessing: each lockout lasts twice as long as the last, up to a day, guesses are checked one at a time, passwords are hashed more strongly, the commonest passwords are refused, and repeated wrong passwords raise an alert with the address. Restarting the container clears a lockout. Behind a reverse proxy, set UNDASH_TRUSTED_PROXIES so one visitor cannot lock out the others
+- The Network tile says Checking… instead of n/a while its first reading comes in
+- Rename containers and VMs on a phone: Settings, Dashboard, Containers or Virtual machines. The name field was hidden on small screens
+- Smart arrange and resizing for apps: click an app card in edit mode to set its size, give every app that size, or line the apps up in even rows that fit their content. The other cards stay put. Smart arrange in the Arrange menu now also fits every card to its content, so nothing is cut off
+- Split my cards puts Now playing and Requests on Media
+- Phone tabs and the pages the first-run setup makes now match: Home, Media and Apps. Containers and VMs sit on Apps instead of a separate Docker tab
+- Much less work for your apps: qBittorrent's whole torrent list is read every 30 seconds instead of on every refresh, Prowlarr's heavy totals every 30 minutes in the background, and Nginx Proxy Manager's hosts every minute
+- If UnDash restarts or the connection drops, cards keep showing their last data instead of emptying and shuffling the dashboard
+- Split my cards makes Media and Apps pages: Containers and VMs now go on Apps, with your app cards
+- Page tabs match the navbar and show the open page in your accent color. Undo in edit mode has a label
+- Edit mode has an Appearance button: theme, accent, background, navbar, card style, size and the rest, right beside your dashboard
+- Appearance has a Navbar section: search bar width, and separate switches for the logo, name, Unraid version, UnDash version, clock, alerts and buttons. The bar can also scroll away with the page
+- Hide sensitive details shows clean bars instead of a blur, and the text is really hidden. Hidden rows cannot be clicked until you show them again
+- Edit mode: rename containers and VMs right in the list. Click a name and type. It changes the name on the dashboard only, the container itself keeps its name
+- The browser tab icon follows your accent color. If you set your own logo, the tab uses that
+- Containers with an update now show it: a small badge on the icon in the grid, for every layout. Click it to update, skip this version or ignore updates for that container. Updates shows the count, and also lists what you skipped or ignored so you can undo it
+- Skip this version: the update comes back by itself when a newer version comes out. The Docker version checks skipped images with their registry every 6 hours. Images with no registry, like your own local builds, can be ignored instead
+- Turn update marks off in Settings or in edit mode: click the Containers card, Show updates
+- Arr Stack has a new look: a tile per app with its two main numbers and problem count, and one panel under them for the app you open, with every number, its problems and a link to the app. Every app opens now, Bazarr included, and opening one no longer pushes the others apart
+- The dashboard loads and refreshes much faster on a busy server: the Unraid API answers one request at a time, so one background reader now asks it and every open page shares that copy. Numbers on the page are never more than 30 seconds old, a page opened after a quiet spell appears at once, and an action in UnDash shows on the next refresh. Temperature alerts stay current with no page open, and the API gets far fewer requests
+- Settings are safe from a damaged file: if config.yaml is cut short or emptied, UnDash keeps the damaged copy, restores the newest backup and tells you, instead of showing an empty dashboard
+- Security: keys, passwords and cookies no longer follow a redirect to another server. Links to javascript: and data: addresses are removed, wherever they come from
+- A failed restart or shutdown no longer blocks those buttons for good. Answers from apps are limited to 64 MB, and PHP may use 256 MB, so a very large library gives a clear error
+- Radarr, Sonarr, Lidarr and Readarr cards no longer download the whole library on every refresh
+- Array health only lists what you have: no more "0 disks · 0 parity" on a server with pools alone. Cards with four numbers show them in one row or two by two, never three and one
+- Larger touch targets on phones
+- 38 new app presets: Deluge, Transmission, NZBGet, Navidrome, Audiobookshelf, Kavita, Komga, RomM, Jellystat, Tube Archivist, Ombi, Frigate, Nextcloud, Paperless-ngx, File Browser, Syncthing, Karakeep, Mealie, Miniflux, FreshRSS, Gitea / Forgejo, Gotify, changedetection.io, Technitium DNS, Traefik, Caddy, Headscale, UniFi, Healthchecks, Gatus, Beszel, Netdata, Prometheus, Grafana, Glances on another machine, Portainer, What's Up Docker and Minecraft servers. Your containers of these types are offered in Add app, and a Homepage import keeps them
+- Edit mode: click a media list to rename it and set how many items it shows. Media lists show 5 items on a new dashboard
+- Edit mode: the card toolbar is a small glass bar in the corner that follows your theme and accent, with Remove in it, and it no longer covers the card's title
+- The uptime tile uses your accent color
+- Without an Unraid API key the Docker version hides what cannot work: containers, VMs, array details and the server menu. They come back with the key, and your layout is kept
+- Settings > Server connection lists what an API key adds while none is set
+- Glances: with no API key, its address (Settings > Server connection, or the setup wizard) brings back CPU, memory, storage, network and uptime, with history charts. It needs no key
+- Scaling now starts at 100% on a new dashboard instead of Auto
+- Side margin goes up to 480 px, four times as far, and never takes more than a quarter of the window
+- Arr Stack takes far less room: one slim line per app, as many columns as the card has room for, numbers that fit on the line and the rest on hover or when opened. A problem opens across the whole card
+- Fixed: "1 disks" and "1 pools" on the tiles, and the Now playing summary running past its card on a phone
+- Settings opens on Quick settings: mode, theme, density, Edit dashboard, Presets, Setup wizard, and how the server is doing (connection, password, phone alerts, guest link, last backup)
+- Settings > Presets: save your dashboard as a preset, with or without its look, then use, update, rename or delete it. Export one or all as a file and import them; files hold no apps, addresses or keys, and an app is matched by type on the other server
+- Settings > Presets also holds the ready-made dashboards, the choices for each set, and the Setup wizard
+- Settings pages reordered, most used first. General: name and icon, search, refresh, then disk and UPS. Appearance: Layout & size split into Size and density, Details and Margins. Backup & restore: backups first with Back up now, Start over last
+- The footer says when a page applies its changes at once
+- Fixed: on a slow server a card that loaded late could stay short, cutting off its list
+- Cards no longer leave holes: a medium window folds the layout into whole rows, and with snapping on any layout that would leave a hole or overlap does the same
+- Fixed: "Automatic" in the wizard's look step saved dark mode; it is now System and sets the right mode
+- Fixed: changing a found app's address in the wizard could list that app twice
+- Fixed: nine or more tiles in a preset ran off the right edge
+- Fixed: leaving the theme editor with Esc or a click outside left the unfinished theme in place
+- Fixed: a stray click outside the setup wizard threw your answers away
+- Fixed: Edit dashboard and Setup wizard did nothing with unsaved Settings; they now ask first
+- Fixed: focusing the Settings search jumped the page to the top, and an open card page stayed open after visiting another page
+- Fixed: saving ntfy with the token box empty deleted the saved token
+- Security: guests no longer receive a LAN or server-path address for the wallpaper, logo or app icons
+- Security: importing a .env file can no longer set the dashboard password or the guest link
+- Security: a config.yaml export removes passkeys and tokens from RSS feed addresses
+- Restore all defaults keeps your saved presets; importing a file without presets keeps them too
+- Setup wizard: a new dashboard walks you through its name, the Unraid connection, a password, what to show, your apps and a look. Run it again from Settings > Apps & cards; your apps and keys stay
+- Presets: whole dashboards (Everything, Media server, Server monitor, Essentials) and choices for each set, such as System tiles (All, Essentials, Performance, Storage) or Containers (Grid, List, Cards), in the wizard and in Edit dashboard > Arrange > Presets
+- Pages: split the dashboard into pages, each with its own cards and layout. Edit dashboard > Pages adds and names them, Split my cards makes a first set, tabs appear only with more than one page, and keys 1 to 9 switch pages
+- RSS card: the newest stories from up to 10 RSS or Atom feeds, read at most every 15 minutes
+- Guest link: a private read-only address for family (Settings > Guest link) with its own session. You choose what it shows: System, Media, Now playing and each app. It never shows containers, VMs, downloads, requests, alerts, addresses or Settings
+- Custom API builder: read a JSON address, click the values or list you want, and see the card before you add it
+- Beta builds carry a version such as 0.9.8be
+- On servers with parity disks, array details show the last parity check and the last finished one, with an alert when none has finished for 100 days or the last one found errors
+- Storage details forecast when the array fills up, from 30 days of history
+- Disk list has a SMART column, with an alert when a healthy disk stops reporting OK
+- Mover status, when the API key has read access to Vars
+- Now playing says whether a transcode runs on hardware or software
+- Push alerts to Discord, Telegram, ntfy and Gotify (Settings > Alerts)
+- History charts for CPU, memory, network, storage and disk temperature, kept for 30 days
+- CPU and memory per container in the Docker version
+- UnDash goes on a phone's home screen with its own icon
+- Accent colour from the wallpaper: Settings > Appearance > Accent colour can follow the theme, take its colour from the wallpaper, or use a colour of your own (presets or a picker). The wallpaper's colour is worked out in your browser from a small copy of the picture, never sent anywhere, and toned so buttons, links and selected items stay readable in light and dark mode. A colour you pick always wins.
+- Your own wallpaper: Settings > Appearance > Background offers the theme's gradient, a plain colour, a picture from an address, or a picture you upload (JPEG, PNG or WebP). Large photos are scaled down in your browser before they are sent; the picture is checked on the server, kept in the configuration folder and served only to signed-in browsers.
+- Settings: pages are grouped into Dashboard, Preferences, Server and Advanced, with a new About page (version, how UnDash runs, where its files are, action and alert history, diagnostics). Appearance and General have a Restore defaults button for that page alone; "Reset to defaults" is now "Restore all defaults" and asks first.
+- Settings check numbers as you type: a value outside its range is marked and explained, and Save waits until it is fixed. A number the server still has to bring inside its limits is named after saving instead of being changed in silence.
+- Fixed: an import or restore that could not be written reported success; it now reports the error. Custom CSS that could not be written is reported too.
+- Fixed: the "Settings saved" message vanished as soon as the dashboard was drawn again.
+- Security: container and VM preference names are checked like action targets; UNDASH_TLS_VERIFY=1 turns on certificate checks for the apps UnDash reads.
+- Prowlarr: "Fail grabs" and "Fail queries" are "Failed grabs" and "Failed queries".
+- Removed the styles of the Fluent theme, which had already become Golden Gate.
+- App cards centre their numbers in the room under the header, whatever the card's height.
+- Columns of cards end level by sharing the difference over all the cards in the shorter column, instead of one card at the end taking it all.
+- System tiles: all the same size, with text on the same lines and the graph in its own band under the text.
+- UI pass: Settings no longer says Unsaved changes when a saved link wallpaper is simply opened. Tablets keep the full server name and tile values. Phones get larger tap targets and no keyboard hints. Now playing and app cards lose an inner box and an empty gap.
+- Your own sections: Add > New section makes a card with a name you choose, holding the apps and shortcuts you pick. Apps moved in leave their own cards, and taking one out or deleting the section puts them back.
+- Edit dashboard: Edit layout's long bar is now a small floating box (Add, undo, redo, Arrange, Cancel, Save). Click a card to edit it in a panel beside it: rename a section, add and delete its apps, tick which containers, VMs, System tiles and Media lists show, and change an app's name, icon, address or login. Add lists removed cards, hidden sections and containers found on the server. It all shows at once, undo covers it, and nothing is saved until Save.
+- Card board: the dashboard is a grid of cards. Every System tile, Media list, app and section is its own card. Edit layout (the pencil) moves them by dragging, resizes them by their edges, and swaps a card with the one it lands on while others make way. Undo and redo, Snap up on or off, Fit to content per card or for all, remove and add cards, Reset, and nothing is saved until Save.
+- Keyboard: arrow keys move the focused card, Shift + arrows resize it, Delete removes it, Ctrl+Z undoes.
+- Desktop and tablet keep separate layouts; a phone shows the cards in order at their natural height. A new app appears by itself, and a card with nothing to show (no alerts) closes its gap.
+- Smart arrange lays the cards out in the classic dashboard's order, from your section order and widths, and keeps doing so as apps and alerts come and go. Moving a card by hand switches it off until you press it again.
+- New design for the board: near-black page, large rounded cards, one type scale. Cards are as tall as their content by default and grow into any empty space beside or below them, numbers scale with their card, and all text follows the screen size (Settings > Appearance > Text size adjusts it).
+- Settings > Appearance > Corner radius sets how round the cards and buttons are, from square to 28 px. The default is 8 px.
+- Settings search finds any option as you type, with suggestions and your recent picks, and takes you to it. Settings and dialogs match the board: a panel in the middle of the screen, clearer navigation, roomier forms and toggle switches. On a phone Settings is full screen.
+- Privacy button at the top right: blurs movie and series names and posters, what is playing, requests, torrent names and the server name, until you turn it off. It is remembered in this browser.
+- Now playing is the one place for streams: app cards show stats instead of repeating them, and Tautulli's card has streams, direct, transcoding and bandwidth. Several streams sit side by side, each with who is watching, and the header counts the people.
+- Icon selector: browse every selfh.st and Dashboard Icons icon without searching, filter by source, choose colour, light or dark, and load more as you scroll. Open it from a container's or VM's menu, or an app's icon in Edit dashboard.
+- Alerts left the board: a button in the header names the problem in its colour, and opens the list with Ignore and History. With nothing wrong it is a quiet bell.
+- Five new themes in the spirit of qui's: Autobrr, The Kyle, Napster, Nightwalker and Swizzin, with their own palettes for the glass cards. Mono is rebuilt in clean greys with a soft light from above.
+- Fixed: with two UnDash open on one server (live and beta), each signed the other out, which showed "UnDash restarted" and reloaded the page. Each port now has its own session, and a page whose token goes stale renews it and carries on without reloading.
+- The header shows your server's name by default. Settings > General > Display sets your own name and icon.
+- The server menu can check for an Unraid update in the Docker version too, and shows what Unraid last found for containers. The server name left the header's chips.
+- Changing the zoom no longer shakes the page: it applies when you let go of the slider.
+- Fixed: Wallpaper from a link showed no box to type in, and an address with brackets was dropped. The link is now checked as you type.
+- Fixed: a card made smaller than its content cut it off. It now scrolls, with no sideways bar.
+- Every card has the same inner margin on all four sides.
+- Settings > Appearance > Layout & size can hide the server name and versions in the header. Menus stay inside the window at any zoom.
+- Settings > Appearance > Zoom level: Auto fits the dashboard to the screen and window, or pick 50 to 200%. Smart margins keep the same gap at the top and sides as the window changes.
+- Virtual machines look like the Containers list. Clicking a VM's icon or name opens its console in its own window; in the Docker version that works when one VM is running, and with several it opens Unraid's VMs page.
+- Settings > Apps & cards is rebuilt: all your apps first, with what needs setting up at the top; simple rows with a switch for each card, and a page of its own for its options. Technical options are under Advanced.
+- App stats run in one line across the card, so the cards are shorter. Show all sits beside the Containers count.
+- Every theme has its own gradient background, with a switch under Settings > Appearance > Background.
+- Nothing is boxed inside a card any more: Now playing, Requests, Downloads and app stats sit on the card, split by thin lines.
+- New Arr Stack: numbers in aligned columns, status under the name, and a row opens only when there is more to see, with the worst problems first.
+- Uptime shows the last 30 days as ticks, lit for each day the server has been up.
+- System tiles show their graph only. The classic layout's bar no longer comes back over a graph either.
+- Endpoint health no longer has a card or phone tab. An address that stops answering shows in Alerts, and Endpoints there lists them all.
+- Containers are a small, plain list: no box around each one, and the gear appears when you point at it. Show all is a simple link.
+- Found on your server has a Refresh button, and lists other running containers with a web page: one click adds a shortcut.
+- Icons sit in rounded boxes, the same shape for every app, so dark logos show on dark themes. Settings > Appearance > Icon boxes turns this off.
+- Emby, autobrr, ArchiSteamFarm, Twitch Drops Miner and PostgreSQL have their own one-colour icons that follow the theme.
+- An app's or container's own SVG icon takes the theme's text colour. Selfh.st icons keep their colours.
+- First load shows a moving line and placeholders instead of Waiting for data.
+- Scrolling fades the page out under the header: a soft blur with the Translucent Effect, a colour fade without it.
+- Wallpaper: Settings > Appearance > Background takes a picture from a link, a local path on the server, or an upload.
+- Translucent Effect (Settings > Appearance): glass cards that blur and tint what is behind them, for dark and light themes. Its blur, opacity and saturation are adjustable, and the wallpaper gets saturation, contrast and opacity beside blur and brightness, all with safe limits. Without a wallpaper the page gets a soft colour wash for the glass to show.
+- Smooth animations: cards arrive in turn, and Settings, dialogs, menus, toasts and tabs move gently. Settings > Appearance > Animations sets Full, Fast, Skip the opening or Off, any click or key skips the opening, and the system's reduced motion setting is respected.
+- Header redesigned as one floating bar, also on wallpapers and with the Translucent Effect.
+- Golden Gate look: system fonts, soft depth, a sunset wash for the glass, Mac style controls, and Settings as a window with grouped rows. The Translucent Effect is on by default.
+- Six distinct themes: Golden Gate, Midnight, Mono, Kanagawa, Catppuccin and Nord. Zinc Blue, Kanagawa Dragon, Tokyo Night and Fluent move to the closest one.
+- Make your own themes with a colour editor and optional CSS, and import or export them as files, with the current look. Custom CSS can be imported and exported as a .css file too.
+- Separate Cards and Background controls: blur, opacity, exposure, saturation and contrast for each. Link cards are larger.
+- Open buttons: a quiet arrow instead of a labelled button, and a Media card's title opens its app.
+- Phones get a floating tab bar (Home, Media, Apps, Docker, Health) instead of one long page, larger touch targets and a compact header.
+- Settings > Appearance > Card board turns it off and brings back the classic sections, unchanged.
+
 ###0.9.7
 - Docker version: the background network reads stopped running all the time. The once-a-minute alert check counted as an open page, so they never paused when no dashboard was open.
 - Docker version: a UPS the Unraid API cannot read (NUT, or a key without UPS access) is asked for once every 10 minutes instead of every 5 seconds, which filled Unraid's API log with errors. Test connection shows this as optional instead of in red.

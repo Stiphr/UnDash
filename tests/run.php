@@ -16,6 +16,7 @@ $GLOBALS['CMDS'] = [];
 $GLOBALS['UND_EXEC_MOCK'] = function ($argv) { $GLOBALS['CMDS'][] = $argv; return isset($GLOBALS['MOCK']) ? call_user_func($GLOBALS['MOCK'], $argv) : ['code' => 1, 'err' => 'not mocked']; };
 $GLOBALS['SPAWNED'] = [];
 $GLOBALS['UND_SPAWN_MOCK'] = function ($argv, $log) { $GLOBALS['SPAWNED'][] = $argv; };
+putenv('UNRAID_API_URL=http://tower.test'); putenv('UNRAID_API_KEY=test-key');
 require UND_ROOT . '/include/lib.php';
 require UND_ROOT . '/include/auth.php';
 
@@ -43,7 +44,16 @@ t('container update checks are on by default', $dn['update_check'] === true && u
 t('a container can skip the update check', ($dn['items']['plex']['no_update'] ?? null) === true && !isset(((array)$dn['items'])['sonarr']));
 t('unknown themes fall back to default', und_normalize(['groups' => [], 'appearance' => ['theme' => 'midnight']])['appearance']['theme'] === 'default');
 t('the new themes are accepted', und_normalize(['groups' => [], 'appearance' => ['theme' => 'catppuccin', 'mode' => 'system']])['appearance'] ['theme'] === 'catppuccin'
-  && und_normalize(['groups' => [], 'appearance' => ['theme' => 'fluent']])['appearance']['theme'] === 'fluent');
+  && und_normalize(['groups' => [], 'appearance' => ['theme' => 'nord']])['appearance']['theme'] === 'nord');
+t('themes that were removed become the closest one', und_normalize(['groups' => [], 'appearance' => ['theme' => 'tokyo']])['appearance']['theme'] === 'nord' && und_normalize(['groups' => [], 'appearance' => ['theme' => 'zinc']])['appearance']['theme'] === 'minimal'
+  && und_normalize(['groups' => [], 'appearance' => ['theme' => 'dragon']])['appearance']['theme'] === 'wave' && und_normalize(['groups' => [], 'appearance' => ['theme' => 'fluent']])['appearance']['theme'] === 'default');
+$ct = und_normalize(['groups' => [], 'appearance' => ['theme' => 'c-abcd1234', 'custom_themes' => [
+  ['id' => 'c-abcd1234', 'name' => ' Sunset ', 'mode' => 'light', 'colors' => ['bg' => '#FFEEDD', 'accent' => 'red;}body{display:none'], 'look' => ['radius' => 99, 'translucent' => 1, 'evil' => 1], 'css' => '@import url(http://x); .card{color:red}'],
+  ['id' => '../../etc', 'name' => 'x'], 'junk']]])['appearance'];
+$ctt = $ct['custom_themes'];
+t('a custom theme is kept and can be selected', count($ctt) === 1 && $ct['theme'] === 'c-abcd1234' && $ctt[0]['name'] === 'Sunset' && $ctt[0]['mode'] === 'light', json_encode($ct));
+t('a custom theme keeps only clean colours, limits and CSS', $ctt[0]['colors']['bg'] === '#ffeedd' && $ctt[0]['colors']['accent'] === '#e8622c' && $ctt[0]['look']['radius'] === 28 && !isset($ctt[0]['look']['evil']) && strpos($ctt[0]['css'], 'url(') === false && strpos($ctt[0]['css'], '.card') !== false, json_encode($ctt));
+t('a deleted custom theme falls back to the default', und_normalize(['groups' => [], 'appearance' => ['theme' => 'c-00000000']])['appearance']['theme'] === 'default');
 t('mode is dark, light or system', und_normalize(['groups' => [], 'appearance' => ['mode' => 'neon']])['appearance']['mode'] === 'dark'
   && und_normalize(['groups' => [], 'appearance' => ['mode' => 'system']])['appearance']['mode'] === 'system');
 $la = und_normalize(['groups' => [], 'appearance' => ['theme' => 'light', 'accent' => '#123456']])['appearance'];
@@ -54,6 +64,7 @@ t('accent must be a hex colour or empty (theme accent)', und_normalize(['groups'
 t('refresh is clamped', und_normalize(['groups' => [], 'general' => ['refresh' => 0]])['general']['refresh'] === 1 && und_normalize(['groups' => [], 'general' => ['refresh' => 99999]])['general']['refresh'] === 300);
 t('disk path cannot leave /mnt', und_normalize(['groups' => [], 'general' => ['disk_path' => '/mnt/../etc']])['general']['disk_path'] === '/mnt/user');
 t('unknown keys are dropped', !isset(und_normalize(['groups' => [], 'general' => ['evil' => 1]])['general']['evil']));
+t('a wallpaper address may contain brackets', und_normalize(['groups' => [], 'appearance' => ['background' => 'https://x.org/a_(1).jpg']])['appearance']['background'] === 'https://x.org/a_(1).jpg');
 t('wallpaper cannot break out of url()', und_normalize(['groups' => [], 'appearance' => ['background' => 'x") ; background:url(http://e']])['appearance']['background'] === '');
 $n = und_normalize(['groups' => [], 'dashboard' => ['sections' => [['id' => 'docker', 'visible' => false], ['id' => 'nope'], ['id' => 'docker']]]]);
 t('sections keep order, drop unknown and duplicates, append missing', $n['dashboard']['sections'][0]['id'] === 'docker' && !$n['dashboard']['sections'][0]['visible'] && count($n['dashboard']['sections']) === count(und_section_ids()));
@@ -102,25 +113,16 @@ reset_store();
 file_put_contents(UND_DIR . '/config.json', json_encode($v1));
 file_put_contents(UND_DIR . '/secrets.json', json_encode(['vars' => ['A' => '1'], 'svc' => []]));
 $dir = und_store_dir();
-t('configured appdata directory is used when its parent exists', $dir === "$SANDBOX/fs/mnt/user/appdata/undash", $dir);
-t('existing flash settings are copied into it', is_file("$dir/config.json") && is_file("$dir/secrets.json"));
+t('settings live in the config folder', $dir === UND_DIR, $dir);
 file_put_contents("$dir/config.json", json_encode(['groups' => [], 'general' => ['title' => 'appdata copy']]));
-und_migrate_into($dir);
-t('migration never overwrites an existing file', json_decode(file_get_contents("$dir/config.json"), true)['general']['title'] === 'appdata copy');
 $cfg = und_load_config();
-t('the old files become config.yaml and .env on first use', $cfg['general']['title'] === 'appdata copy' && is_file("$dir/config.yaml") && is_file("$dir/.env") && !is_file("$dir/config.json") && is_file("$dir/data/legacy/config.json"));
+t('the old files become config.yaml and .env on first use', $cfg['general']['title'] === 'appdata copy' && is_file("$dir/config.yaml") && is_file("$dir/.env"));
 t('.env is private', (fileperms("$dir/.env") & 0777) === 0600);
 t('variables nothing refers to are dropped', !isset(und_env()['A']));
 $cfg['general']['title'] = 'Saved';
 t('save works', und_save_config($cfg));
 t('save writes config.yaml in the configuration directory', strpos(file_get_contents("$dir/config.yaml"), 'title: Saved') !== false);
-t('save mirrors to the flash drive', strpos(file_get_contents(UND_DIR . '/config.yaml'), 'title: Saved') !== false);
 t('a backup was taken before saving', count(und_backups()) >= 1);
-t('invalid configuration directory refused', isset(und_save_loc(['CONFIG_DIR' => '/etc/undash'])['error']) && isset(und_save_loc(['CONFIG_DIR' => '/mnt/user/../../etc'])['error']));
-t('invalid port refused', isset(und_save_loc(['PORT' => '80'])['error']) && isset(und_save_loc(['PORT' => '70000'])['error']));
-t('valid port saved', !isset(und_save_loc(['PORT' => '9100'])['error']) && und_loc()['PORT'] === '9100');
-und_save_loc(['PORT' => '9099']);
-t('broken undash.cfg falls back to defaults', (function () { file_put_contents(UND_DIR . '/undash.cfg', "garbage\x00\nPORT=abc\n"); $l = und_loc(); und_save_loc(['PORT' => '9099', 'CONFIG_DIR' => '/mnt/user/appdata/undash', 'BIND' => '0.0.0.0', 'STANDALONE' => 'yes']); return $l['PORT'] === '9099' && $l['CONFIG_DIR'] === '/mnt/user/appdata/undash'; })());
 
 group('backups');
 $cfg = und_load_config(); $cfg['general']['title'] = 'Before';
@@ -320,7 +322,7 @@ t('deeply nested JSON refused', isset(und_import_parse(str_repeat('[', 200) . st
 $p = und_import_parse(json_encode(['undash_export' => 1, 'schema' => 2, 'kind' => 'redacted', 'config' => ['groups' => [['name' => 'G', 'services' => [['type' => 'radarr', 'name' => 'R'], ['type' => 'rm -rf', 'name' => 'X']]]]]]));
 t('unknown app types skipped and counted', $p['summary']['widgets'] === 1 && $p['summary']['skipped'] === 1);
 // config.yaml: replaces the layout, keeps .env
-$y = str_replace('title: UnDash', 'title: Imported', und_export('config')['text']);
+$y = preg_replace('/^(\s*)title:.*$/m', '$1title: Imported', und_export('config')['text'], 1);
 $r = und_import_apply($y);
 t('a config.yaml import is applied', isset($r['ok']) && und_load_config()['general']['title'] === 'Imported');
 t('... and keeps every stored secret', und_service_full(und_load_config(), 'abcdef02')['key'] === 'SVCSECRET' && und_env()['TOKEN_VAR'] === 'VARSECRET1');
@@ -347,100 +349,13 @@ t('names the example uses get an empty entry to fill in', und_env() === ['TAUTUL
 
 /* ---------------- Docker ---------------- */
 group('docker');
-$GLOBALS['MOCK'] = function ($argv) {
-  if ($argv[1] === 'ps') return ['out' => "1111|plex|running|Up 2 hours (healthy)|plexinc/pms\n2222|radarr|exited|Exited (0) 1 hour ago|lscr.io/radarr\n"];
-  if (in_array($argv[1], ['start', 'stop', 'restart', 'pause', 'unpause'], true)) return ['out' => $argv[2]];
-  if ($argv[1] === 'inspect') return ['out' => '[]'];
-  return ['code' => 1];
-};
 t('invalid container name refused', isset(und_docker_action('../x', 'stop')['error']) && isset(und_docker_action('a;rm -rf /', 'stop')['error']));
-t('unknown action refused', isset(und_docker_action('plex', 'exec')['error']));
-t('unknown container refused', isset(und_docker_action('nope', 'stop')['error']));
-t('action that does not fit the state refused', isset(und_docker_action('radarr', 'stop')['error']) && isset(und_docker_action('plex', 'start')['error']));
-$GLOBALS['CMDS'] = [];
-t('valid action runs', isset(und_docker_action('plex', 'restart')['ok']));
-t('it runs docker restart <name> without a shell', end($GLOBALS['CMDS']) === [und_docker_bin(), 'restart', 'plex']);
-$lock = und_lock('docker:plex');
-t('a second action on the same container is refused while one runs', isset(und_docker_action('plex', 'restart')['error']));
-und_unlock($lock);
-$GLOBALS['SPAWNED'] = [];
-t('update goes through Unraid update_container', isset(und_docker_action('radarr', 'update')['ok']) && $GLOBALS['SPAWNED'][0] === [UND_DM . '/scripts/update_container', 'radarr']);
 t('logs refuse odd names', isset(und_docker_logs('-f --since', 10)['error']));
-t('history records actions', count(und_history()) >= 2 && und_history()[0]['target'] === 'radarr');
-$u = und_docker_update_state(['img:latest' => ['status' => 'undef']], 'img');
-t('an unchecked image is "unknown", never "current"', $u === 'unknown' && und_docker_update_state([], 'x') === 'unknown' && und_docker_update_state(['x:latest' => ['status' => 'true']], 'x') === 'current');
-t('health is parsed from docker ps', und_docker_ps()['ps']['plex']['health'] === 'healthy');
-$GLOBALS['MOCK'] = function ($argv) { return $argv[1] === 'inspect' ? ['out' => json_encode([['Id' => 'abc', 'Config' => ['Image' => 'x', 'Env' => ['A=1']], 'State' => ['Status' => 'running', 'Error' => ''], 'HostConfig' => []]])] : ['code' => 1]; };
-$ins = und_docker_inspect('plex');
-t('container details do not look like an error (regression)', !isset($ins['error']) && $ins['state_error'] === '' && $ins['env'] === ['A']);
-
-/* ---------------- VMs ---------------- */
 group('vms');
-$GLOBALS['MOCK'] = function ($argv) {
-  if ($argv[1] === 'list') return ['out' => " Id   Name         State\n----------------------------\n 2    Windows 10   running\n -    Home Assistant   shut off\n 3    Paused VM    paused\n"];
-  if ($argv[1] === 'dominfo') return ['out' => "CPU(s): 4\nMax memory: 8388608 KiB\nAutostart: enable\n"];
-  if ($argv[1] === 'dumpxml') return ['out' => $argv[2] === 'Windows 10' ? '<x><channel><target name="org.qemu.guest_agent.0"/></channel></x>' : '<x/>'];
-  return ['out' => ''];
-};
-$st = und_vm_states();
-t('virsh list with spaces in names is parsed', $st === ['Windows 10' => 'running', 'Home Assistant' => 'shut off', 'Paused VM' => 'paused'], json_encode($st));
-t('running VM offers shutdown, force stop, restart, pause, hibernate with agent', und_vm_valid_ops('running', true) === ['stop', 'kill', 'restart', 'pause', 'hibernate']);
-t('no hibernate without the guest agent', !in_array('hibernate', und_vm_valid_ops('running', false), true));
-t('stopped VM can only start', und_vm_valid_ops('shut off', false) === ['start']);
-t('invalid op for the state refused', isset(und_vm_action('Home Assistant', 'stop')['error']) && isset(und_vm_action('Windows 10', 'start')['error']));
-t('unknown VM refused', isset(und_vm_action('Nope', 'start')['error']));
-$GLOBALS['CMDS'] = [];
-t('graceful shutdown uses virsh shutdown', isset(und_vm_action('Windows 10', 'stop')['ok']) && end($GLOBALS['CMDS']) === [und_virsh(), 'shutdown', 'Windows 10']);
-@unlink(und_tmp('vminfo.json'));
-t('hibernate uses dompmsuspend disk', isset(und_vm_action('Windows 10', 'hibernate')['ok']) && end($GLOBALS['CMDS']) === [und_virsh(), 'dompmsuspend', 'Windows 10', 'disk']);
-t('paused VM resumes with virsh resume', isset(und_vm_action('Paused VM', 'resume')['ok']) && end($GLOBALS['CMDS']) === [und_virsh(), 'resume', 'Paused VM']);
-
-/* ---------------- server power ---------------- */
-group('power');
-$GLOBALS['MOCK'] = function ($argv) { return $argv[1] === 'list' ? ['out' => " Id Name State\n---\n"] : ['code' => 0]; };
-$GLOBALS['SPAWNED'] = []; @unlink(und_tmp('power-started'));
-t('unknown power op refused', isset(und_power_prepare('halt')['error']));
-$p = und_power_prepare('reboot');
-t('prepare returns a nonce and the server name', strlen($p['nonce']) === 32 && $p['name'] === 'Tower');
-t('wrong nonce refused', isset(und_power('reboot', 'x', 'Tower')['error']) && !$GLOBALS['SPAWNED']);
-$p = und_power_prepare('reboot');
-t('wrong server name refused', isset(und_power('reboot', $p['nonce'], 'Other')['error']) && !$GLOBALS['SPAWNED']);
-t('a nonce is single use', isset(und_power('reboot', $p['nonce'], 'Tower')['error']));
-$p = und_power_prepare('reboot');
-t('nonce is bound to the operation', isset(und_power('shutdown', $p['nonce'], 'Tower')['error']));
-$p = und_power_prepare('shutdown');
-$nf = und_read_json(und_tmp('power-nonce.json'), []); $nf['exp'] = time() - 1; und_write_json(und_tmp('power-nonce.json'), $nf);
-t('expired nonce refused', isset(und_power('shutdown', $p['nonce'], 'Tower')['error']) && !$GLOBALS['SPAWNED']);
-$p = und_power_prepare('reboot');
-t('correct confirmation accepted', isset(und_power('reboot', $p['nonce'], 'tower')['ok']));
-t('it runs Unraid\'s own reboot command after a short delay', $GLOBALS['SPAWNED'][0] === ['/bin/bash', '-c', 'sleep 3; exec /sbin/reboot -n']);
-$p = und_power_prepare('reboot');
-t('a second power request is refused', isset(und_power('reboot', $p['nonce'], 'Tower')['error']) && count($GLOBALS['SPAWNED']) === 1);
-@unlink(und_tmp('power-started'));
-$p = und_power_prepare('shutdown'); und_power('shutdown', $p['nonce'], 'Tower');
-t('shutdown uses poweroff -n', end($GLOBALS['SPAWNED']) === ['/bin/bash', '-c', 'sleep 3; exec /sbin/poweroff -n']);
-@unlink(und_tmp('power-started'));
+t('invalid VM name refused', isset(und_vm_action('../x', 'stop')['error']));
 
 /* ---------------- standalone sign-in ---------------- */
 group('auth');
-$t1 = und_handoff_create();
-t('handoff token works once', und_handoff_use($t1) === true && und_handoff_use($t1) === false);
-t('malformed handoff token refused', und_handoff_use('../../x') === false);
-$t2 = und_handoff_create(); foreach (glob(und_tmp('handoff') . '/*') as $f) file_put_contents($f, (string)(time() - 1));
-t('expired handoff token refused', und_handoff_use($t2) === false);
-$GLOBALS['UND_PHPSESS_DIR'] = "$SANDBOX/php"; @mkdir("$SANDBOX/php");
-$_SERVER['HTTP_HOST'] = 'tower.local:9099';
-$sid = 'abcdefghijklmnopqrstuvwx12';
-$_COOKIE = ['unraid_' . md5('tower.local') => $sid];
-t('no Unraid session file, not logged in', und_unraid_logged_in() === false);
-file_put_contents("$SANDBOX/php/sess_$sid", 'locale|s:0:"";');
-t('session without unraid_login, not logged in', und_unraid_logged_in() === false);
-file_put_contents("$SANDBOX/php/sess_$sid", 'unraid_user|s:4:"root";unraid_login|i:' . time() . ';');
-t('valid Unraid session accepted', und_unraid_logged_in() === true);
-$_COOKIE = ['unraid_' . md5('other.local') => $sid];
-t('cookie for another host name ignored', und_unraid_logged_in() === false);
-$_COOKIE = ['unraid_' . md5('tower.local') => '../../etc/passwd'];
-t('path-like session id refused', und_unraid_logged_in() === false);
 $_SERVER['HTTP_HOST'] = 'evil.com/x';
 t('odd host header refused', und_req_host() === '');
 
@@ -450,7 +365,7 @@ reset_store();
 t('no rules to start with', und_ignores() === [] && und_ignores_active() === []);
 $a = und_ignore_add('instance', 'disk.hot', 'disk3', 3600, 'disk3 is at 52°C.', 'warn');
 t('instance rule added', !empty($a['ok']) && $a['rule']['key'] === 'disk.hot:disk3' && $a['rule']['until'] > time() + 3500);
-t('rule written to config.yaml in the config dir and the flash mirror', strpos((string)@file_get_contents(UND_DIR . '/config.yaml'), 'disk.hot') !== false && strpos((string)@file_get_contents(und_store_dir() . '/config.yaml'), 'disk.hot') !== false);
+t('rule written to config.yaml', strpos((string)@file_get_contents(UND_DIR . '/config.yaml'), 'disk.hot') !== false && strpos((string)@file_get_contents(und_store_dir() . '/config.yaml'), 'disk.hot') !== false);
 $p = und_ignore_add('type', 'docker.exited', 'ignored-anyway', 'permanent', 'Container stopped', 'warn');
 t('type rule is permanent and has no resource', $p['rule']['until'] === null && $p['rule']['resource'] === '' && $p['rule']['key'] === 'docker.exited');
 t('both rules active', count(und_ignores_active()) === 2);
@@ -517,7 +432,7 @@ t('each disk and container problem is its own alert', $keys === ['disk.bad:disk2
 t('labels are used in messages, ids stay container names', $al[4]['msg'] === 'Plex Media is unhealthy.' && $al[4]['act'] === 'logs');
 t('hidden containers and manual stops raise nothing', !in_array('docker.unhealthy:secret-thing', $keys, true) && !in_array('docker.exited:manual', $keys, true));
 $ae = und_alerts($cfgA, ['error' => 'API key rejected', 'auth' => true], null);
-t('an API problem is one alert with a Settings button', count($ae) === 1 && $ae[0]['cat'] === 'api.error' && $ae[0]['act'] === 'settings' && strpos($ae[0]['msg'], 'Settings > Connection') !== false);
+t('an API problem is one alert with a Settings button', count($ae) === 1 && $ae[0]['cat'] === 'api.error' && $ae[0]['act'] === 'settings' && strpos($ae[0]['msg'], 'Settings > Server connection') !== false);
 t('every alert category can be ignored', !array_diff(array_column($al, 'cat'), array_keys(und_alert_categories())));
 // history
 $t0 = 1800000000;
@@ -561,30 +476,6 @@ t('a link of its own wins', $lv[3]['href_resolved'] === 'https://radarr.example.
 
 group('webui');
 reset_store();
-$GLOBALS['MOCK'] = function ($argv) {
-  if ($argv[1] !== 'inspect') return ['code' => 1];
-  $c = function ($n, $net, $ip, $ports, $label) { return ['Name' => '/' . $n, 'Config' => ['Labels' => ['net.unraid.docker.webui' => $label]], 'HostConfig' => ['NetworkMode' => $net, 'PortBindings' => $ports],
-    'NetworkSettings' => ['Networks' => [$net => ['IPAddress' => $ip]]], 'State' => []]; };
-  return ['out' => json_encode([
-    $c('lidarr', 'myserver', '172.18.0.4', ['8686/tcp' => [['HostPort' => '8687']]], 'http://[IP]:[PORT:8687]'),
-    $c('dashbrr', 'myserver', '172.18.0.18', ['8080/tcp' => [['HostPort' => '5456']]], 'http://[IP]:[PORT:8080]/'),
-    $c('adguard', 'br0', '192.168.88.10', [], 'http://[IP]:[PORT:3000]/'),
-    $c('radarr', 'bridge', '172.17.0.5', ['7878/tcp' => [['HostPort' => '7979']]], 'http://[IP]:[PORT:7878]/')])];
-};
-file_put_contents("$SANDBOX/fs/var/local/emhttp/network.ini", "[eth0]\nIPADDR:0=\"192.168.88.50\"\n");
-$det = und_docker_details(['lidarr' => ['id' => 'a1', 'state' => 'running'], 'dashbrr' => ['id' => 'a2', 'state' => 'running'], 'adguard' => ['id' => 'a3', 'state' => 'running'], 'radarr' => ['id' => 'a4', 'state' => 'running']], true);
-$sip = und_server_ip();
-t('user-defined bridge with published ports: server address and the port as written', $det['lidarr']['webui'] === "http://$sip:8687", $det['lidarr']['webui']);
-t('user-defined bridge: [PORT:container port] becomes the host port', $det['dashbrr']['webui'] === "http://$sip:5456/", $det['dashbrr']['webui']);
-t('br0 / macvlan without published ports: the container\'s own LAN address', $det['adguard']['webui'] === 'http://192.168.88.10:3000/', $det['adguard']['webui']);
-t('default bridge: server address and host port', $det['radarr']['webui'] === "http://$sip:7979/", $det['radarr']['webui']);
-$GLOBALS['MOCK2'] = $GLOBALS['MOCK'];
-$GLOBALS['MOCK'] = function ($argv) {
-  if ($argv[1] !== 'inspect') return ['code' => 1];
-  return ['out' => json_encode([['Name' => '/radarr', 'Config' => ['Image' => 'lscr.io/linuxserver/radarr', 'Labels' => ['org.opencontainers.image.source' => 'https://github.com/linuxserver/docker-radarr']], 'HostConfig' => [], 'State' => []]])];
-};
-t('the image\'s source label is kept with the container', und_docker_details(['radarr' => ['id' => 'a4', 'state' => 'running']], true)['radarr']['source'] === 'https://github.com/linuxserver/docker-radarr');
-$GLOBALS['MOCK'] = $GLOBALS['MOCK2'];
 t('GitHub repositories from source addresses', und_github_repo_of('https://github.com/linuxserver/docker-radarr') === 'linuxserver/docker-radarr' && und_github_repo_of('git@github.com:immich-app/immich.git') === 'immich-app/immich'
   && und_github_repo_of('https://github.com/autobrr/qui/tree/main') === 'autobrr/qui' && und_github_repo_of('https://gitlab.com/a/b') === '' && und_github_repo_of('https://github.com/a/..') === '');
 unset($GLOBALS['MOCK']);
@@ -625,6 +516,22 @@ $hi = und_arr_health_item('warn', 'IndexerLongTermStatusCheck', 'Indexers unavai
 $hc = und_arr_health_item('warn', 'SomethingNewCheck', 'Caution: be careful');
 t('Arr health checks get a short tag', $hi['tag'] === 'Indexer' && und_arr_health_item('warn', 'RemovedSeriesCheck', 'x')['tag'] === 'Series removed' && $hc['tag'] === 'Caution' && $hc['msg'] === 'be careful' && und_arr_health_item('warn', 'SomethingNewCheck', 'x')['tag'] === 'Something New');
 t('no media server means a hint, not an error', !empty(und_playing(und_normalize(['groups' => []]))['unconfigured']));
+$rq = und_requests($cfgS);
+$keep = $GLOBALS['UND_HTTP_MOCK'];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $u, $o) use ($keep) {
+  $p = parse_url($u, PHP_URL_PATH);
+  if ($p === '/api/v1/movie/77') return ['code' => 500, 'json' => ['message' => 'Unable to retrieve movie.'], 'body' => '{}', 'err' => '', 'headers' => []];
+  return $keep($m, $u, $o);
+};
+@unlink(und_tmp('api-requests.json')); @unlink(und_tmp('seerr-media.json'));
+$rq2 = und_requests($cfgS);
+t('a title Seerr cannot look up keeps the rest of the list', empty($rq2['apps'][0]['error']) && count($rq2['items']) === 2 && $rq2['items'][0]['title'] === 'Unknown movie (TMDB 77)' && $rq2['items'][1]['title'] === 'Dark', json_encode([$rq2['apps'], array_column($rq2['items'], 'title')]));
+$c = und_read_json(und_tmp('seerr-media.json'), []);
+t('and it is asked about again in an hour, not every refresh', time() - (int)$c['a0000004:movie:77']['at'] > 80000);
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $u, $o) use ($keep) { return parse_url($u, PHP_URL_PATH) === '/api/v1/movie/77' ? ['code' => 401, 'json' => null, 'body' => '', 'err' => '', 'headers' => []] : $keep($m, $u, $o); };
+@unlink(und_tmp('api-requests.json')); @unlink(und_tmp('seerr-media.json'));
+t('a refused key still shows as an error', strpos((string)und_requests($cfgS)['apps'][0]['error'], 'Not authorised') === 0);
+$GLOBALS['UND_HTTP_MOCK'] = $keep; @unlink(und_tmp('api-requests.json')); @unlink(und_tmp('seerr-media.json'));
 $rq = und_requests($cfgS);
 t('pending requests first, titles looked up', $rq['pending'] === 1 && $rq['items'][0]['title'] === 'Memento' && $rq['items'][0]['status'] === 'pending' && $rq['items'][1]['status'] === 'available' && $rq['items'][1]['seasons'] === [1]);
 t('poster paths that are not plain file names are dropped', $rq['items'][0]['poster'] === 'https://image.tmdb.org/t/p/w92/m.jpg' && $rq['items'][1]['poster'] === '');
@@ -711,7 +618,7 @@ t('requests style defaults to posters', und_normalize(['groups' => []])['request
 t('section names shown by default and can be hidden', und_normalize(['groups' => []])['appearance']['sec_names'] === true && und_normalize(['groups' => [], 'appearance' => ['sec_names' => false]])['appearance']['sec_names'] === false);
 t('icon mode defaults to color and is checked', und_normalize(['groups' => []])['appearance']['icon_mode'] === 'color' && und_normalize(['groups' => [], 'appearance' => ['icon_mode' => 'auto']])['appearance']['icon_mode'] === 'auto' && und_normalize(['groups' => [], 'appearance' => ['icon_mode' => 'x']])['appearance']['icon_mode'] === 'color');
 t('visibility kept', $m['widgets'][3]['visible'] === false && $m['widgets'][0]['visible'] === true);
-t('default count is 15', und_load_config()['media']['widgets'][2]['count'] === 15);
+t('default count is 5', und_load_config()['media']['widgets'][2]['count'] === 5);
 $ap = und_normalize(['groups' => [], 'appearance' => ['brightness' => 0, 'blur_target' => 'cards']])['appearance'];
 t('wallpaper brightness goes down to 0 and the blur can sit behind the cards only', $ap['brightness'] === 0 && $ap['blur_target'] === 'cards'
   && und_normalize(['groups' => [], 'appearance' => ['brightness' => 150, 'blur_target' => 'everything']])['appearance']['brightness'] === 100
@@ -733,9 +640,6 @@ t('the check is cached (one request)', count($GLOBALS['SEEN']) === 1);
 unset($GLOBALS['UND_HTTP_MOCK']);
 @unlink(und_tmp('self-update.json'));
 
-// the built plugin must be well-formed XML, or Unraid cannot install it (not present inside the Docker build)
-$plg = dirname(__DIR__) . '/undash.plg';
-if (is_file($plg)) { libxml_use_internal_errors(true); $x = simplexml_load_file($plg); t('undash.plg is well-formed XML with a version', $x !== false && (string)$x['version'] !== '', implode('; ', array_map(function ($e) { return trim($e->message) . ' line ' . $e->line; }, libxml_get_errors()))); }
 
 /* ---------------- Homepage import still works ---------------- */
 group('homepage');
@@ -757,15 +661,6 @@ proc_close($fake);
 t('a NUT UPS is read over TCP', is_array($u) && $u['charge'] === 87.0 && $u['load'] === 12.0 && $u['runtime'] === 1800 && $u['status'] === 'On battery, Discharging' && $u['model'] === 'Back-UPS', json_encode($u));
 t('no NUT daemon means no UPS', und_nut_tcp('127.0.0.1:' . $port, 'ups') === null);
 t('odd UPS names are refused', und_nut_tcp('127.0.0.1', "ups\nFSD") === null);
-$apcOut = "STATUS   : ONLINE\nBCHARGE  : 100.0 Percent\nLOADPCT  : 24.0 Percent\nTIMELEFT : 52.0 Minutes\nMODEL    : Back-UPS XS 1000M\n";
-$GLOBALS['MOCK'] = function ($argv) use (&$apcOut) { return basename($argv[0]) === 'apcaccess' ? ['code' => 0, 'out' => $apcOut, 'err' => ''] : ['code' => 1, 'out' => '', 'err' => 'no']; };
-$u = und_ups('ups');
-t('without a rated power there are no watts', $u['load'] === 24.0 && $u['watts'] === null && $u['nominal'] === null);
-$apcOut .= "NOMPOWER : 600 Watts\n";
-$u = und_ups('ups');
-t('apcupsd NOMPOWER gives the power draw', $u['nominal'] === 600 && $u['watts'] === 144);
-t('the rated power from Settings wins', und_ups('ups', 900)['watts'] === 216 && und_ups('ups', 900)['nominal'] === 900);
-unset($GLOBALS['MOCK']);
 $nv = und_nut_vars(['battery.charge' => '90', 'ups.load' => '20', 'ups.realpower' => '151.6', 'ups.realpower.nominal' => '900']);
 t('NUT reports measured watts and its rating', $nv['watts'] === 151.6 && $nv['nominal'] === 900);
 
@@ -949,6 +844,10 @@ und_icon_search('jelly');
 t('the lists are downloaded once, then kept', $GLOBALS['ICON_GETS'] === $n && $n === 2);
 t('icon names that exist are reported with their forms', (array)und_icon_slugs(['plex', 'plexamp', 'nothere', '../x'])['icons'] === ['plex' => 'svg,light,png', 'plexamp' => 'png'] && $GLOBALS['ICON_GETS'] === $n);
 t('an empty search returns nothing without downloading', und_icon_search('  <> ')['icons'] === []);
+$all = und_icon_search('', 2, 0, '', '', true);
+t('browsing lists every icon, a page at a time', count($all['icons']) === 2 && $all['total'] > 2 && $all['more'] === true && und_icon_search('', 2, 2, '', '', true)['icons'] !== $all['icons'], json_encode($all));
+t('the source filter keeps one list', !array_filter(und_icon_search('', 50, 0, 'selfhst', '', true)['icons'], function ($x) { return $x['s'] !== 'selfh.st'; }));
+t('a version lists only icons that have it, under its own name', array_column(und_icon_search('plex', 50, 0, '', 'light')['icons'], 'v') === ['sh-plex-light']);
 t('the number of results is capped', count(und_icon_search('p', 2)['icons']) === 2 && und_icon_search('p', 2)['more'] === true);
 reset_store();
 $GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) { return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'Could not resolve host', 'headers' => []]; };
@@ -957,6 +856,36 @@ t('no internet gives a readable error', strpos($err, 'could not be downloaded') 
 $err2 = ''; try { und_icon_search('plex'); } catch (Exception $e) { $err2 = $e->getMessage(); }
 t('a failed download is not retried at once', strpos($err2, 'Try again in a few minutes') !== false, $err2);
 unset($GLOBALS['UND_HTTP_MOCK']);
+
+group('card board');
+$b = und_board_clean(['on' => false, 'compact' => 0, 'hidden' => ['alerts', 'bad id!', 'app:a1b2c3d4'], 'lg' => [['i' => 'm:cpu', 'x' => 30, 'y' => -2, 'w' => 99, 'h' => 0], ['i' => 'm:cpu', 'x' => 1], ['i' => '<script>', 'x' => 1], 'junk']]);
+t('the board keeps only ids and numbers, inside the grid', $b['on'] === false && $b['compact'] === false && $b['lg'] === [['i' => 'm:cpu', 'x' => 0, 'y' => 0, 'w' => 24, 'h' => 1, 'a' => false]] && $b['hidden'] === ['alerts', 'app:a1b2c3d4'], json_encode($b));
+t('the board is on by default', und_board_clean(null)['on'] === true && und_default_config()['dashboard']['board']['lg'] === []);
+$c = und_default_config(); $c['dashboard']['board']['lg'] = [['i' => 'arr', 'x' => 2, 'y' => 3, 'w' => 6, 'h' => 9]];
+$st = function ($t) { return und_normalize(['dashboard' => ['sections' => [['id' => 'docker', 'title' => $t]]]])['dashboard']['sections'][0]['title']; };
+t('a section keeps your name for it, empty by default', und_default_config()['dashboard']['sections'][0]['title'] === '' && $st('  My stack ') === 'My stack');
+t('a section name loses line breaks, is cut to 40 characters and cannot be a list', $st("a\nb") === 'a b' && mb_strlen($st(str_repeat('x', 90)), 'UTF-8') === 40 && $st(['x']) === '');
+$gs = und_normalize(['groups' => [['name' => 'Network', 'section' => true], ['name' => 'Other']]])['groups'];
+t('a group can be a section of its own, and is not one by default', $gs[0]['section'] === true && $gs[1]['section'] === false);
+t('the card of your own section survives on the board', und_board_clean(['lg' => [['i' => 'grp:0a1b2c3d', 'x' => 0, 'y' => 0, 'w' => 6, 'h' => 6]], 'hidden' => ['grp:0a1b2c3d']])['hidden'] === ['grp:0a1b2c3d'] && und_board_clean(['lg' => [['i' => 'grp:0a1b2c3d', 'w' => 6, 'h' => 6]]])['lg'][0]['i'] === 'grp:0a1b2c3d');
+t('a saved board survives loading the settings', und_normalize($c)['dashboard']['board']['lg'][0]['x'] === 2);
+
+$c = und_default_config(); $c['appearance']['radius'] = 500;
+t('the corner radius stays inside its limits', und_normalize($c)['appearance']['radius'] === 28 && und_default_config()['appearance']['radius'] === 8);
+t('zoom starts at 100%, and only the offered steps are kept', und_default_config()['appearance']['zoom'] === 100 && und_normalize(['appearance' => ['zoom' => 125]])['appearance']['zoom'] === 125 && und_normalize(['appearance' => ['zoom' => 999]])['appearance']['zoom'] === 0);
+t('server details in the header show by default and can be hidden', und_default_config()['appearance']['header_chips'] === true && und_normalize(['appearance' => ['header_chips' => false]])['appearance']['header_chips'] === false);
+t('the dashboard name defaults to empty (the server name), the old default counts as empty, and your own is kept', und_default_config()['general']['title'] === '' && und_normalize(['general' => ['title' => 'UnDash']])['general']['title'] === '' && und_normalize(['general' => ['title' => 'MYSERVER']])['general']['title'] === 'MYSERVER');
+t('the dashboard icon keeps icon names and addresses, and refuses anything else', und_normalize(['general' => ['logo' => 'sh-plex']])['general']['logo'] === 'sh-plex' && und_normalize(['general' => ['logo' => 'https://x.lan/a.png']])['general']['logo'] === 'https://x.lan/a.png' && und_normalize(['general' => ['logo' => 'javascript:alert(1)']])['general']['logo'] === '' && und_normalize(['general' => ['logo' => 'https://x/"><b']])['general']['logo'] === '');
+t('icon boxes are on by default and can be turned off', und_default_config()['appearance']['icon_box'] === true && und_normalize(['appearance' => ['icon_box' => false]])['appearance']['icon_box'] === false && und_normalize([])['appearance']['icon_box'] === true);
+t('the gradient background is on by default and can be turned off', und_default_config()['appearance']['gradient'] === true && und_normalize(['appearance' => ['gradient' => false]])['appearance']['gradient'] === false && und_normalize([])['appearance']['gradient'] === true);
+t('the Translucent Effect is on by default and can be turned off', und_default_config()['appearance']['translucent'] === true && und_normalize(['appearance' => ['translucent' => false]] + und_default_config())['appearance']['translucent'] === false);
+$m = und_default_config(); $m['appearance']['motion'] = 'warp';
+t('an unknown animation setting falls back to full', und_normalize($m)['appearance']['motion'] === 'full');
+$m = und_default_config(); $m['appearance']['glass_opacity'] = 0; $m['appearance']['wall_saturation'] = 900; $m['appearance']['glass_blur'] = -5;
+$ma = und_normalize($m)['appearance'];
+t('the glass and wallpaper controls stay inside their limits', $ma['glass_opacity'] === 10 && $ma['wall_saturation'] === 200 && $ma['glass_blur'] === 0 && $ma['wall_contrast'] === 100, json_encode($ma));
+$c['appearance']['radius'] = -9;
+t('a negative corner radius becomes square', und_normalize($c)['appearance']['radius'] === 0);
 
 group('background jobs');
 $mock = $GLOBALS['UND_SPAWN_MOCK']; unset($GLOBALS['UND_SPAWN_MOCK']);
@@ -978,6 +907,598 @@ t('a job whose process died ends as failed', $j['state'] === 'done' && $j['code'
 t('a job that never started ends as failed', und_job($log)['state'] === 'done');
 $GLOBALS['UND_SPAWN_MOCK'] = $mock;
 
+group('accent and wallpaper');
+t('the accent follows the theme by default', und_default_config()['appearance']['accent_mode'] === 'theme' && und_normalize([])['appearance']['accent_mode'] === 'theme');
+t('a saved accent colour from before accent modes counts as a custom one', und_normalize(['appearance' => ['accent' => '#123456']])['appearance']['accent_mode'] === 'custom');
+t('the accent can follow the wallpaper', und_normalize(['appearance' => ['accent_mode' => 'auto']])['appearance']['accent_mode'] === 'auto');
+t('custom without a colour falls back to the theme; unknown modes too', und_normalize(['appearance' => ['accent_mode' => 'custom', 'accent' => '']])['appearance']['accent_mode'] === 'theme' && und_normalize(['appearance' => ['accent_mode' => 'rainbow']])['appearance']['accent_mode'] === 'theme');
+t('the uploaded picture is a valid background, other words are not', und_normalize(['appearance' => ['background' => 'custom']])['appearance']['background'] === 'custom' && und_normalize(['appearance' => ['background' => 'mine']])['appearance']['background'] === '');
+$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAFklEQVR42mNk+M9Qz0AEYBxVSF+FAAhKDveksOjmAAAAAElFTkSuQmCC');
+t('a PNG is recognised by its bytes, a text file is not', und_wall_type($png) === 'png' && und_wall_type("\xFF\xD8\xFF\xE0") === 'jpg' && und_wall_type('RIFF1234WEBPVP8 ') === 'webp' && und_wall_type('<svg onload=alert(1)>') === null);
+t('a text file is refused as a wallpaper', isset(und_wall_upload(base64_encode(str_repeat('<svg>', 40)))['error']));
+t('an empty upload is refused', isset(und_wall_upload('')['error']));
+t('a picture larger than the limit is refused', isset(und_wall_upload(base64_encode(str_repeat('x', UND_WALL_MAX_BYTES + 1)))['error']));
+$up = und_wall_upload('data:image/png;base64,' . base64_encode($png));
+t('a real PNG is stored under its own type with its size', !empty($up['ok']) && $up['width'] === 16 && is_file(und_wall_custom_dir() . '/custom.png') && (fileperms(und_wall_custom_dir() . '/custom.png') & 0777) === 0600, json_encode($up));
+t('the browser learns that a picture exists, not where it is', und_wall_custom_view()['set'] === true && !isset(und_wall_custom_view()['file']));
+t('removing the picture leaves nothing behind', !empty(und_wall_remove()['ok']) && und_wall_custom() === null && und_wall_custom_view()['set'] === false);
+t('numbers brought back inside their limits are reported', und_clamped(['general' => ['refresh' => 9999, 'title' => 'x'], 'appearance' => ['radius' => 99]], und_normalize(['general' => ['refresh' => 9999], 'appearance' => ['radius' => 99]])) === ['general.refresh' => [9999, 300], 'appearance.radius' => [99, 28]]);
+t('nothing is reported when every number is inside its limits', und_clamped(['general' => ['refresh' => 5]], und_normalize(['general' => ['refresh' => 5]])) === []);
+t('TLS checks are off unless asked for', und_tls_verify() === false);
+
+/* ---------------- history charts ---------------- */
+group('metrics');
+$h = ['fine' => [], 'coarse' => [], 'saved' => 0];
+$sys = ['cpu' => ['pct' => 12.34, 'temp' => 40.2], 'mem' => ['pct' => 55.55], 'net' => ['rx' => 100.4, 'tx' => null], 'array' => ['size' => 1000, 'free' => 250, 'pools' => []]];
+$r0 = und_metrics_row($sys, [['temp' => 31], ['temp' => null], ['temp' => 44]], 1000);
+t('a reading holds each value, and null for what was not reported', $r0 === [1000, 12.3, 55.6, 40.0, 44, 100.0, null, 75.0], json_encode($r0));
+$t0 = 1800000000 - 1800000000 % 900;
+for ($i = 0; $i < 16; $i++) $h = und_metrics_add($h, [$t0 + $i * 60, (float)$i, 50.0, null, null, null, null, null]);
+t('one reading a minute is kept', count($h['fine']) === 16);
+t('a finished 15 minutes becomes one average', count($h['coarse']) === 1 && $h['coarse'][0][0] === $t0 && $h['coarse'][0][1] === 7.0 && $h['coarse'][0][3] === null, json_encode($h['coarse']));
+$n = count($h['fine']); $h = und_metrics_add($h, [$t0 + 15 * 60 + 5, 1.0, 1.0, null, null, null, null, null]);
+t('a second check right after a restart is not a reading', count($h['fine']) === $n);
+$h = und_metrics_add($h, [$t0 + 40 * 86400, 1.0, 1.0, null, null, null, null, null]);
+t('old readings drop off', count($h['fine']) === 1 && $h['coarse'] === []);
+und_write_json(und_tmp('metrics.json'), ['fine' => [[1000, 5, 5, null, null, null, null, null], [90000, 6, 6, null, null, null, null, null]], 'coarse' => [], 'saved' => 0]);
+$m = und_metrics_range('1h', 90100);
+t('a range returns its own rows, with the time step', count($m['rows']) === 1 && $m['step'] === 60 && $m['fields'][0] === 'cpu');
+t('an unknown range is the default one', und_metrics_range('evil', 90100)['from'] === 90100 - 86400);
+@unlink(und_tmp('metrics.json'));
+
+/* ---------------- push alerts ---------------- */
+group('notify');
+@unlink(und_notify_file());
+$sent = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use (&$sent) { $sent[] = [$url, $o]; return ['code' => 200, 'body' => '', 'json' => null, 'err' => '', 'headers' => []]; };
+$conf = ['ntfy' => ['url' => 'https://ntfy.example/topic', 'token' => '']];
+$prefs = ['min' => 'warn', 'resolved' => true];
+$hot = ['lv' => 'warn', 'msg' => 'disk1 is at 55°C.', 'cat' => 'disk.hot', 'res' => 'disk1', 'act' => ''];
+und_notify_run([$hot], ['system'], $conf, $prefs, [], 'Tower', 10000);
+t('a problem is not sent at its first sighting', !$sent);
+und_notify_run([$hot], ['system'], $conf, $prefs, [], 'Tower', 10060);
+t('it is sent when it is still there a minute later', count($sent) === 1 && $sent[0][1]['body'] === 'disk1 is at 55°C.' && $sent[0][1]['headers']['Title'] === 'Tower: problem', json_encode($sent));
+und_notify_run([$hot], ['system'], $conf, $prefs, [], 'Tower', 10120);
+t('and only once', count($sent) === 1);
+und_notify_run([], [], $conf, $prefs, [], 'Tower', 10180);
+t('a check that could not read the server ends nothing', count($sent) === 1);
+und_notify_run([], ['system'], $conf, $prefs, [], 'Tower', 10240);
+t('the end of a problem is sent', count($sent) === 2 && $sent[1][1]['headers']['Title'] === 'Tower: problem ended' && $sent[1][1]['headers']['Priority'] === 'default');
+und_notify_run([$hot], ['system'], $conf, $prefs, [], 'Tower', 10300);
+und_notify_run([$hot], ['system'], $conf, $prefs, [], 'Tower', 10360);
+und_notify_run([], ['system'], $conf, $prefs, [], 'Tower', 10420);
+t('a flapping problem stays quiet, and its silent end sends nothing', count($sent) === 2, json_encode(count($sent)));
+@unlink(und_notify_file()); $sent = [];
+$info = ['lv' => 'info', 'msg' => 'update', 'cat' => 'os.available', 'res' => '7.4', 'act' => ''];
+und_notify_run([$info, $hot], ['system'], $conf, $prefs, [['key' => 'disk.hot', 'kind' => 'type']], 'Tower', 20000);
+und_notify_run([$info, $hot], ['system'], $conf, $prefs, [['key' => 'disk.hot', 'kind' => 'type']], 'Tower', 20060);
+t('ignored alerts and those below the chosen level are not sent', !$sent);
+@unlink(und_notify_file());
+$many = []; for ($i = 0; $i < 13; $i++) $many[] = ['lv' => 'bad', 'msg' => "m$i", 'cat' => 'disk.bad', 'res' => "d$i", 'act' => ''];
+und_notify_run($many, ['system'], $conf, $prefs, [], 'Tower', 30000); und_notify_run($many, ['system'], $conf, $prefs, [], 'Tower', 30060);
+t('a bad minute is one message', count($sent) === 1 && strpos($sent[0][1]['body'], '…and 3 more.') !== false && $sent[0][1]['headers']['Title'] === 'Tower: 13 problems' && $sent[0][1]['headers']['Priority'] === 'high');
+@unlink(und_notify_file()); $sent = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use (&$sent) { $sent[] = $url; return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'Could not connect to ' . $url, 'headers' => []]; };
+$secret = ['telegram' => ['token' => '123456:SECRETSECRETSECRETSECRET', 'chat' => '42']];
+und_notify_run([$hot], ['system'], $secret, $prefs, [], 'Tower', 40000); $r = und_notify_run([$hot], ['system'], $secret, $prefs, [], 'Tower', 40060);
+t('a failed send names the channel and hides the token', strpos($r['error'], 'Telegram') === 0 && strpos($r['error'], 'SECRET') === false && strpos(json_encode(und_read_json(und_notify_file(), [])), 'SECRET') === false, $r['error']);
+und_notify_run([$hot], ['system'], $secret, $prefs, [], 'Tower', 40120);
+t('and is tried again', count($sent) === 2);
+unset($GLOBALS['UND_HTTP_MOCK']); @unlink(und_notify_file());
+$rq = und_notify_request('discord', ['url' => 'https://discord.com/api/webhooks/1/x'], 'T', 'm', true);
+t('Discord and Telegram always check the certificate', !empty($rq[1]['verify']) && !empty(und_notify_request('telegram', ['token' => 'a', 'chat' => '1'], 'T', 'm', true)[1]['verify']));
+$rq = und_notify_request('gotify', ['url' => 'http://g.lan/', 'token' => 'K'], 'T', 'm', true);
+t('Gotify gets its key in a header', $rq[0] === 'http://g.lan/message' && $rq[1]['headers']['X-Gotify-Key'] === 'K' && strpos($rq[0], 'K') === false);
+t('a wrong Discord address is refused', isset(und_notify_set('discord', ['url' => 'https://evil.example/x'])['error']));
+t('a good one is stored in .env only', isset(und_notify_set('discord', ['url' => 'https://discord.com/api/webhooks/123/abc-DEF'])['ok']) && und_env()['NOTIFY_DISCORD_URL'] === 'https://discord.com/api/webhooks/123/abc-DEF' && strpos(json_encode(und_doc()), 'webhooks') === false);
+$v = und_notify_view();
+t('the page sees that it is on, never the address', $v['channels'][0]['on'] === true && strpos(json_encode($v), 'webhooks') === false);
+t('saving with the secret left empty keeps it', isset(und_notify_set('discord', ['url' => ''])['ok']) && isset(und_notify_conf()['discord']));
+t('a channel is not a shared value', !in_array('NOTIFY_DISCORD_URL', und_shared_names(und_env(), und_load_config()), true));
+und_save_secrets(['vars' => ['OTHER' => '1']]);
+t('saving Settings leaves it alone', isset(und_notify_conf()['discord']));
+t('a backup of the keys carries it', strpos(und_export('env')['text'], 'NOTIFY_DISCORD_URL') !== false);
+t('removing it clears it', isset(und_notify_off('discord')['ok']) && !isset(und_env()['NOTIFY_DISCORD_URL']) && !und_notify_conf());
+t('the level is stored', isset(und_notify_save_prefs('bad', false)['ok']) && und_notify_prefs() === ['min' => 'bad', 'resolved' => false]);
+und_doc_write(['notify' => null]);
+t('the default is warnings and critical, with endings', und_notify_prefs() === ['min' => 'warn', 'resolved' => true]);
+
+
+/* ---------------- batch 2: forecast, parity alerts, transcodes ---------------- */
+group('storage facts');
+$t0 = 1800000000; $col = array_search('used', UND_METRIC_FIELDS) + 1;
+$mk = function ($days, $per) use ($t0, $col) { $o = []; for ($i = $days * 4; $i >= 0; $i--) { $r = array_fill(0, count(UND_METRIC_FIELDS) + 1, null); $r[0] = $t0 - $i * 21600; $r[$col] = 50 - $i / 4 * $per; $o[] = $r; } return $o; };
+$f = und_metrics_forecast($mk(1, 0.1), 1000, $t0);
+t('a forecast waits for three days of history', $f === ['ready' => false, 'wait' => 2], json_encode($f));
+$f = und_metrics_forecast($mk(10, 1.0), 1000000, $t0);
+t('a steady 1% a day from half full is 50 days', $f['rising'] === true && $f['days'] === 50 && $f['per_day'] === 10000, json_encode($f));
+t('storage that stays level is not filling up', und_metrics_forecast($mk(10, 0.0), 1000, $t0) === ['ready' => true, 'rising' => false]);
+t('storage that shrinks is not filling up', und_metrics_forecast($mk(10, -1.0), 1000, $t0)['rising'] === false);
+t('history older than 30 days is left out', und_metrics_forecast($mk(40, 1.0), 1000000, $t0 + 86400 * 40)['ready'] === false);
+$now = time(); $sy = function ($a) { return ['array' => $a + ['state' => 'STARTED', 'parity' => 1]]; };
+$cats = function ($sys) { return array_map(function ($x) { return $x['cat']; }, und_alerts(und_normalize([]), $sys, null)); };
+t('a server with no finished check is told so', in_array('array.parity_old', $cats($sy(['parity_checks' => ['last' => null, 'ok_at' => 0]])), true));
+t('a recent finished check is quiet', !array_intersect(['array.parity_old', 'array.parity_errors'], $cats($sy(['parity_checks' => ['last' => ['status' => 'COMPLETED', 'errors' => 0, 'at' => $now - 86400], 'ok_at' => $now - 86400]]))));
+t('an old one is overdue', in_array('array.parity_old', $cats($sy(['parity_checks' => ['last' => ['status' => 'COMPLETED', 'errors' => 0, 'at' => $now - 200 * 86400], 'ok_at' => $now - 200 * 86400]])), true));
+t('errors in the last check are named', in_array('array.parity_errors', $cats($sy(['parity_checks' => ['last' => ['status' => 'COMPLETED', 'errors' => 3, 'at' => $now], 'ok_at' => $now]])), true));
+t('nothing is said while a check runs', !in_array('array.parity_old', $cats($sy(['resync' => 1, 'resync_action' => '', 'parity_checks' => ['last' => null, 'ok_at' => 0]])), true));
+t('a server without parity disks needs no check', !in_array('array.parity_old', $cats(['array' => ['state' => 'STARTED', 'parity' => 0, 'parity_checks' => ['last' => null, 'ok_at' => 0]]]), true));
+t('a read that failed says nothing', !in_array('array.parity_old', $cats($sy([])), true));
+t('a disk that stopped reporting SMART is named', in_array('disk.smart_lost', $cats($sy(['smart_lost' => ['disk1']])), true));
+t('every new alert can be ignored', isset(und_alert_categories()['disk.smart_lost'], und_alert_categories()['array.parity_old'], und_alert_categories()['array.parity_errors']));
+$tc = ['SessionKey' => 'a', 'NowPlayingItem' => ['Name' => 'X'], 'PlayState' => ['PlayMethod' => 'Transcode']];
+t('Emby says when a transcode is on hardware', und_streams_emby([$tc + ['TranscodingInfo' => ['VideoEncoderIsHardware' => true]]])[0]['hw'] === true);
+t('or software', und_streams_emby([$tc + ['TranscodingInfo' => ['VideoEncoderIsHardware' => false, 'VideoDecoderIsHardware' => false]]])[0]['hw'] === false);
+t('Jellyfin names its method', und_streams_emby([$tc + ['TranscodingInfo' => ['HardwareAccelerationType' => 'qsv']]])[0]['hw'] === true && und_streams_emby([$tc + ['TranscodingInfo' => ['HardwareAccelerationType' => 'none']]])[0]['hw'] === false);
+t('a server that does not say is left unsaid', und_streams_emby([$tc + ['TranscodingInfo' => ['Bitrate' => 1]]])[0]['hw'] === null && und_streams_emby([$tc])[0]['hw'] === null);
+$pl = function ($ts) { return und_streams_plex(['MediaContainer' => ['Metadata' => [['title' => 'X', 'TranscodeSession' => $ts]]]])[0]['hw']; };
+t('Plex too', $pl(['videoDecision' => 'transcode', 'transcodeHwEncoding' => 'vaapi']) === true && $pl(['videoDecision' => 'transcode']) === false && und_streams_plex(['MediaContainer' => ['Metadata' => [['title' => 'X']]]])[0]['hw'] === null);
+
+/* ---- pages ---- */
+$bc = und_board_clean(['home' => ' Main ', 'pages' => [['id' => 'aaaaaaaa', 'name' => ' Media ', 'cards' => ['media:recent_movies', 'docker', 'bad id!'], 'lg' => [['i' => 'docker', 'x' => 0, 'y' => 0, 'w' => 99, 'h' => 5]]], ['id' => 'aaaaaaaa', 'name' => 'Twin'], ['id' => 'bbbbbbbb', 'name' => '', 'cards' => ['docker', 'vms']], 'junk']]);
+t('a page keeps its name, cards and layout', $bc['home'] === 'Main' && $bc['pages'][0]['name'] === 'Media' && $bc['pages'][0]['cards'] === ['media:recent_movies', 'docker'] && $bc['pages'][0]['lg'][0]['w'] === 24, json_encode($bc));
+t('a second page with the same id is dropped', count($bc['pages']) === 2 && $bc['pages'][1]['id'] === 'bbbbbbbb');
+t('a card stays on the first page that lists it', $bc['pages'][1]['cards'] === ['vms'] && $bc['pages'][1]['name'] === 'Page');
+t('a page id that is not ours is replaced', preg_match('/^[a-f0-9]{8}$/', und_board_clean(['pages' => [['id' => '../x', 'name' => 'A']]])['pages'][0]['id']) === 1);
+t('at most 12 pages', count(und_board_clean(['pages' => array_map(function ($i) { return ['name' => "p$i"]; }, range(1, 20))])['pages']) === 12);
+t('an old board has no extra pages', und_board_clean(['lg' => []])['pages'] === [] && und_board_clean([])['home'] === '');
+
+/* ---- RSS ---- */
+$rss2 = '<?xml version="1.0"?><rss version="2.0"><channel><title>Blog &amp; News</title><item><title><![CDATA[One <b>bold</b> &amp; true]]></title><link>https://a.example/1</link><pubDate>Mon, 02 Nov 2026 10:00:00 GMT</pubDate></item><item><title>Two</title><link>javascript:alert(1)</link></item><item><title></title><link>https://a.example/3</link></item></channel></rss>';
+$f = und_rss_parse($rss2);
+t('RSS 2.0 is read, and markup in a title is removed', $f['name'] === 'Blog & News' && $f['items'][0]['title'] === 'One bold & true' && $f['items'][0]['href'] === 'https://a.example/1' && $f['items'][0]['ts'] === 1793613600, json_encode($f));
+t('a link that is not a web address is dropped', $f['items'][1]['href'] === '');
+t('a story without a title is skipped', count($f['items']) === 2);
+$f = und_rss_parse('<feed xmlns="http://www.w3.org/2005/Atom"><title>Rel</title><entry><title>v1.2</title><link rel="enclosure" href="https://a.example/f.zip"/><link rel="alternate" href="https://a.example/v1.2"/><updated>2026-11-01T00:00:00Z</updated></entry></feed>');
+t('Atom is read, and its page link wins', $f['name'] === 'Rel' && $f['items'][0]['title'] === 'v1.2' && $f['items'][0]['href'] === 'https://a.example/v1.2' && $f['items'][0]['ts'] === strtotime('2026-11-01T00:00:00Z'), json_encode($f));
+$f = und_rss_parse('<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><title>Old</title></channel><item><title>A</title><link>https://a.example/a</link><dc:date>2026-10-01T00:00:00Z</dc:date></item></rdf:RDF>');
+t('RSS 1.0 is read, with its dc:date', $f['name'] === 'Old' && $f['items'][0]['ts'] === strtotime('2026-10-01T00:00:00Z'), json_encode($f));
+$thrown = function (callable $fn) { try { $fn(); return ''; } catch (Exception $e) { return $e->getMessage(); } };
+t('an HTML page is not a feed', strpos($thrown(function () { und_rss_parse('<html><body>hi</body></html>'); }), 'not a feed') !== false);
+t('neither is plain text', strpos($thrown(function () { und_rss_parse('{"a":1}'); }), 'not a feed') !== false);
+$xxe = '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]><rss version="2.0"><channel><title>x</title><item><title>a&x;b</title></item></channel></rss>';
+$r = ''; try { $r = json_encode(und_rss_parse($xxe)); } catch (Exception $e) { $r = ''; }
+t('a feed cannot read files of the server', strpos($r, 'root:') === false, $r);
+$calls = []; $GLOBALS['UND_HTTP_MOCK'] = function ($m, $u, $o) use (&$calls, $rss2) { $calls[] = $u; if (strpos($u, 'bad') !== false) return ['code' => 500, 'body' => '', 'json' => null, 'err' => '', 'headers' => []]; return ['code' => 200, 'body' => $rss2, 'json' => null, 'err' => '', 'headers' => []]; };
+$r = und_w_rss(['options' => ['feeds' => "Mine | https://a.example/feed\nhttps://bad.example/feed", 'limit' => 1]]);
+t('one feed failing leaves the others', count($r['list']) === 1 && $r['list'][0]['title'] === 'One bold & true' && $r['list'][0]['sub'] === 'Mine', json_encode($r));
+$n = count($calls); und_w_rss(['options' => ['feeds' => 'Mine | https://a.example/feed']]);
+t('a feed is not read again within 15 minutes', count($calls) === $n, json_encode($calls));
+t('no feed listed is a clear message', strpos($thrown(function () { und_w_rss(['options' => []]); }), 'Add the address') !== false);
+t('an address that is not one is refused', strpos($thrown(function () { und_w_rss(['options' => ['feeds' => 'file:///etc/passwd']]); }), 'Not a web address') !== false);
+unset($GLOBALS['UND_HTTP_MOCK']);
+
+/* ---- custom API card builder ---- */
+$tr = und_json_tree(['data' => ['users' => 4, 'ok' => true, 'name' => str_repeat('x', 90), 'none' => null], 'items' => [['id' => 1, 'user' => ['name' => 'a']], ['id' => 2]], 'empty' => []]);
+$by = []; foreach ($tr as $x) $by[$x['p']] = $x;
+t('every value is listed by its path', $by['data.users']['t'] === 'num' && $by['data.users']['v'] === '4' && $by['data.ok']['v'] === 'yes' && $by['data.none']['t'] === 'null');
+t('long values are cut short', strlen($by['data.name']['v']) <= 70);
+t('a list is one row, with the fields of its first item', $by['items']['t'] === 'list' && $by['items']['n'] === 2 && array_column($by['items']['f'], 'p') === ['id', 'user.name'], json_encode($by['items']));
+t('an empty list is listed too', $by['empty']['n'] === 0);
+t('an answer that is itself a list works', und_json_tree([['a' => 1]])[0]['p'] === '' && und_json_tree([['a' => 1]])[0]['n'] === 1);
+t('a huge answer is cut off', count(und_json_tree(array_fill_keys(array_map(function ($i) { return "k$i"; }, range(1, 1000)), 1))) === 300);
+$pc = und_normalize(['groups' => [['id' => 'abcdef01', 'name' => 'G', 'services' => [['id' => 'abcdef02', 'type' => 'customapi', 'name' => 'C', 'url' => 'http://x.example/a', 'options' => ['headers' => ['X-Api-Key' => '{{KEY}}']]], ['id' => 'abcdef03', 'type' => 'radarr', 'url' => 'http://r']]]]]);
+$GLOBALS['UND_TEST_SECRETS'] = ['vars' => ['C_API_KEY' => 'sekret123456'], 'svc' => ['abcdef02' => ['key' => 'sekret123456']], 'unraid' => []];
+$seen = []; $GLOBALS['UND_HTTP_MOCK'] = function ($m, $u, $o) use (&$seen) { $seen = $o['headers'] ?? []; return ['code' => 200, 'body' => '{"token":"sekret123456-x","n":1}', 'json' => ['token' => 'sekret123456-x', 'n' => 1], 'err' => '', 'headers' => []]; };
+$r = und_customapi_probe($pc, 'abcdef02');
+t('the card builder sends the key to the app', ($seen['X-Api-Key'] ?? '') === 'sekret123456');
+t('and never shows it, even if the app echoes it', strpos(json_encode($r), 'sekret123456') === false, json_encode($r));
+t('it only reads custom API apps', isset(und_customapi_probe($pc, 'abcdef03')['error']));
+unset($GLOBALS['UND_HTTP_MOCK'], $GLOBALS['UND_TEST_SECRETS']);
+
+/* ---- setup wizard ---- */
+reset_store();
+$sc = und_normalize([]);
+$sc['groups'] = [['id' => 'cccc0001', 'name' => 'G', 'columns' => 4, 'header' => true, 'section' => false, 'services' => []]];
+t('a new dashboard with no apps asks for setup', und_setup_needed($sc) === true);
+$sc2 = $sc; $sc2['groups'][0]['services'] = [['id' => 'cccc0002', 'type' => 'plex']];
+t('a dashboard that has apps is left alone', und_setup_needed($sc2) === false);
+t('finishing or skipping stops it asking', und_doc_write(['setup' => ['done' => true]]) && und_setup_needed($sc) === false);
+und_save_config(und_normalize([]), false);
+t('saving settings does not bring it back', !empty(und_doc()['setup']['done']));
+reset_store();
+
+/* ---- guest view ---- */
+t('the guest token is not a value apps can use', in_array('UNDASH_GUEST_TOKEN', UND_ENV_RESERVED, true));
+$gc = und_normalize(['general' => ['disk_path' => '/mnt/secret', 'ups_name' => 'myups'], 'appearance' => ['wall_path' => '/mnt/user/private/w.jpg'],
+  'groups' => [['id' => 'aaaa0001', 'name' => 'G', 'services' => [
+    ['id' => 'aaaa0002', 'type' => 'immich', 'name' => 'Photos', 'url' => 'http://10.0.0.5:2283', 'key' => '{{IMMICH_API_KEY}}'],
+    ['id' => 'aaaa0003', 'type' => 'gluetun', 'name' => 'VPN', 'url' => 'http://10.0.0.6:8000'],
+    ['id' => 'aaaa0004', 'type' => 'radarr', 'name' => 'Radarr', 'url' => 'http://10.0.0.7:7878'],
+    ['id' => 'aaaa0005', 'type' => 'customapi', 'name' => 'C', 'url' => 'http://x/a?token=abc', 'options' => ['headers' => ['A' => 'b']]]]]]]);
+$gp = ['sections' => ['overview' => true, 'media' => true, 'playing' => false, 'apps' => true], 'apps' => ['aaaa0002', 'aaaa0004']];
+$gl = und_guest_layout($gc, $gp); $gj = json_encode($gl);
+t('guests get only the apps ticked for them', array_column($gl['groups'][0]['services'], 'id') === ['aaaa0002']);
+t('an app of another section stays out, ticked or not', strpos($gj, 'Radarr') === false);
+t('no address, key, option or path reaches a guest', !preg_match('/10\.0\.0\.[67]|\{\{|IMMICH_API_KEY|token=abc|\/mnt\/secret|private\/w\.jpg|myups/', $gj), $gj);
+t('a section turned off is off', array_values(array_filter($gl['dashboard']['sections'], function ($s) { return $s['id'] === 'playing'; }))[0]['visible'] === false);
+$vis = array_column(array_filter($gl['dashboard']['sections'], function ($s) { return $s['visible']; }), 'id');
+t('containers, VMs, downloads, requests and alerts are never shown', !array_intersect($vis, ['docker', 'vms', 'downloads', 'requests', 'arr', 'alerts', 'health', 'favorites']), json_encode($vis));
+$mv = array_column(array_filter($gl['dashboard']['metrics'], function ($m) { return $m['visible']; }), 'id');
+t('the Containers and VMs tiles are off', !array_intersect($mv, ['docker', 'vms', 'path', 'load']), json_encode($mv));
+t('search is off', $gl['general']['show_search'] === false && $gl['general']['search_in'] === []);
+$gs = und_guest_system(['name' => 'Tower', 'ip' => '10.0.0.2', 'os' => '7.3', 'os_update' => ['available' => true], 'now' => 5, 'uptime' => 9, 'hist' => [], 'cpu' => ['pct' => 3, 'temp' => 40, 'threads' => 8, 'cores' => [1], 'model' => 'x'], 'mem' => ['pct' => 1, 'total' => 2],
+  'net' => ['rx' => 1, 'tx' => 2, 'iface' => 'eth0'], 'disk' => ['path' => '/mnt/x'], 'array' => ['state' => 'STARTED', 'size' => 1, 'free' => 1, 'pools' => [['name' => 'cache', 'size' => 1, 'free' => 1, 'temp' => 30, 'device' => 'sdb']], '_rows' => ['x'], 'parity_checks' => ['y']]]);
+t('a guest gets the numbers, not the address, version, disks or updates', !preg_match('/10\.0\.0\.2|os_update|eth0|mnt|cache|sdb|_rows|parity_checks/', json_encode($gs)) && $gs['cpu']['pct'] === 3 && $gs['array']['pools'][0]['temp'] === 30, json_encode($gs));
+t('a server error says nothing more', und_guest_system(['error' => 'cannot reach http://10.0.0.2/graphql']) === ['error' => 'The server is not answering.']);
+$st = und_guest_streams([['title' => 'A', 'user' => 'U', 'device' => 'Living room', 'location' => 'wan', 'bandwidth' => 9, 'app' => 'Plex', 'icon' => 'x']]);
+t('a stream keeps what is playing, not where from', $st === [['title' => 'A', 'user' => 'U']], json_encode($st));
+$g2 = $gp; 
+t('an app not ticked cannot be read by its id', isset(und_guest_service($gc, $g2, 'aaaa0003')['error']));
+$GLOBALS['UND_HTTP_MOCK'] = function () { return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'connect to 10.0.0.5 failed', 'headers' => []]; };
+t('an app error does not name its address', und_guest_service($gc, $gp, 'aaaa0002') === ['error' => 'Not available right now.'], json_encode(und_guest_service($gc, $gp, 'aaaa0002')));
+unset($GLOBALS['UND_HTTP_MOCK']);
+foreach (['http://192.168.88.50:8096/', 'http://10.0.0.1', 'https://[fd00::1]/', 'http://tower/', 'http://tower.local/', 'https://plex.lan', 'http://localhost:1', 'https://a:b@public.example.com/', 'javascript:alert(1)', ''] as $u)
+  t("a guest does not get the link $u", und_guest_href($u) === '');
+t('a public address stays', und_guest_href('https://plex.example.com/web') === 'https://plex.example.com/web' && und_guest_href('https://1.1.1.1/') === 'https://1.1.1.1/');
+$gc2 = und_normalize(['groups' => [['id' => 'bbbb0001', 'name' => 'G', 'services' => [
+  ['id' => 'bbbb0002', 'type' => 'immich', 'name' => 'Photos', 'url' => 'http://192.168.1.5:2283'], ['id' => 'bbbb0003', 'type' => 'link', 'name' => 'Router', 'href' => 'http://192.168.1.1'], ['id' => 'bbbb0004', 'type' => 'link', 'name' => 'Site', 'href' => 'https://example.com']]]]]);
+$gl2 = und_guest_layout($gc2, ['sections' => $gp['sections'], 'apps' => ['bbbb0002', 'bbbb0003', 'bbbb0004']]);
+t('an app card keeps its numbers but loses a LAN link', $gl2['groups'][0]['services'][0]['href_resolved'] === '' && strpos(json_encode($gl2), '192.168') === false, json_encode($gl2['groups']));
+t('a LAN shortcut is not shown, a public one is', array_column($gl2['groups'][0]['services'], 'name') === ['Photos', 'Site']);
+t('and is not offered in Settings', array_column(und_guest_apps($gc2), 'name') === ['Photos', 'Site']);
+foreach (['settings', 'save', 'docker_action', 'vm_action', 'power', 'prefs', 'export', 'storage', 'metrics', 'probe', 'test', 'guest_get', 'notify_get', 'alert_history', 'docker_logs', 'unraid_conf', ''] as $a)
+  t("a guest cannot call $a", und_guest_api($a, []) === ['error' => 'Not available in the guest view.'], json_encode(und_guest_api($a, [])));
+
+/* ---- saved presets ---- */
+$pc = und_presets_clean([
+  ['id' => 'aaaa1111', 'name' => " Mine\x01 ", 'desc' => 'x', 'at' => 5, 'board' => ['lg' => [['i' => 'arr', 'x' => 0, 'y' => 0, 'w' => 24, 'h' => 9], ['i' => 'bad id!', 'x' => 0]], 'pages' => [['id' => 'bbbb2222', 'name' => 'P', 'cards' => ['docker'], 'lg' => [], 'md' => []]]],
+   'sections' => [['id' => 'arr', 'visible' => true, 'width' => 'full', 'title' => 'T', 'url' => 'http://10.0.0.9']], 'metrics' => [['id' => 'cpu', 'visible' => false]], 'media' => ['style' => 'text', 'radarr' => 'aaaaaaaa'], 'docker' => ['layout' => 'cards', 'items' => ['x' => ['label' => 'y']], 'selected' => ['a']],
+   'look' => ['theme' => 'c-ab12cd34', 'radius' => 999, 'custom_themes' => [['id' => 'c-11111111']], 'wall_path' => '/mnt/x', 'background' => 'http://10.0.0.9/w.jpg'], 'groups' => [['id' => 'cccc3333']], 'key' => 'SECRET'],
+  ['id' => 'aaaa1111', 'name' => 'twin'], ['id' => 'not-an-id', 'name' => 'x'], 'junk']);
+t('a preset with a bad or repeated id is dropped', count($pc) === 1, json_encode(array_column($pc, 'name')));
+t('its name is cleaned', $pc[0]['name'] === 'Mine', $pc[0]['name']);
+t('it holds no address, key, app or picture', !preg_match('/10\.0\.0\.9|SECRET|cccc3333|\/mnt\/x|custom_themes|"label"|"selected"|radarr/', json_encode($pc)), json_encode($pc));
+t('its layout is checked like the real one', array_column($pc[0]['board']['lg'], 'i') === ['arr'] && $pc[0]['board']['pages'][0]['cards'] === ['docker']);
+t('its numbers stay in range and your own theme is kept', $pc[0]['look']['radius'] === 28 && $pc[0]['look']['theme'] === 'c-ab12cd34');
+t('a preset without a look has none', !isset(und_presets_clean([['id' => 'aaaa1111', 'name' => 'n']])[0]['look']));
+$many = []; for ($i = 0; $i < 30; $i++) $many[] = ['id' => sprintf('%08x', $i), 'name' => "p$i"];
+t('at most 20 are kept', count(und_presets_clean($many)) === UND_PRESETS_MAX);
+$pcfg = und_load_config(); $pcfg['presets'] = $pc; und_save_config($pcfg, false);
+t('presets survive config.yaml', und_load_config()['presets'] === und_presets_clean($pc), json_encode(und_load_config()['presets']));
+t('the page and guests do not get them', !isset(und_layout_view(und_load_config())['presets']) && !isset(und_guest_layout(und_load_config(), und_guest_prefs())['presets']));
+$noP = und_export('config')['text'];
+t('a settings file keeps presets', strpos($noP, 'presets:') !== false);
+t('a file without presets leaves yours', isset(und_import_apply(preg_replace('/^presets:.*?(?=^[a-z_]+:)/ms', '', $noP))['ok']) && count(und_load_config()['presets']) === 1);
+$pcfg = und_load_config(); $pcfg['presets'] = []; und_save_config($pcfg, false);
+t('no presets, no key in the file', !isset(und_doc()['presets']));
+
+/* ---- other fixes ---- */
+$ei = und_import_parse("RADARR_API_KEY=abc\nUNDASH_PASSWORD_HASH=x\nUNDASH_AUTH=open\nUNDASH_GUEST_TOKEN=y\n");
+t('a .env file cannot set the password or the guest link', array_keys($ei['env']) === ['RADARR_API_KEY'] && $ei['summary']['values'] === 1, json_encode($ei['env']));
+$fc = und_load_config(); $fc['groups'][] = ['id' => 'dddd0001', 'name' => 'F', 'services' => [['id' => 'dddd0002', 'type' => 'rss', 'name' => 'R', 'options' => ['feeds' => "Mine | https://t.example/rss?passkey=abc123\nhttps://ok.example/a.xml"]]]];
+und_save_config($fc, false);
+$fx = und_export('config')['text'];
+t('a private feed loses its passkey in an export', strpos($fx, 'abc123') === false && strpos($fx, 'ok.example') !== false);
+und_notify_set('ntfy', ['url' => 'https://ntfy.sh/topic', 'token' => 'tk_keep']);
+t('saving with the optional token left empty keeps it', isset(und_notify_set('ntfy', ['url' => 'https://ntfy.sh/topic', 'token' => ''])['ok']) && und_env()['NOTIFY_NTFY_TOKEN'] === 'tk_keep');
+und_notify_off('ntfy');
+foreach (['http://192.168.1.2/a.png', '/boot/x.png'] as $u) t("a guest does not get the picture $u", und_guest_pic($u) === '');
+t('a public picture and an icon name stay', und_guest_pic('https://a.example/x.png') === 'https://a.example/x.png' && und_guest_pic('sh-plex') === 'sh-plex');
+$gv = und_load_config(); $gv['appearance']['background'] = 'http://192.168.1.2/w.jpg'; $gv['general']['logo'] = 'http://10.0.0.8/l.png';
+$gvj = json_encode(und_guest_layout($gv, und_guest_prefs())['appearance']) . json_encode(und_guest_layout($gv, und_guest_prefs())['general']);
+t('a LAN wallpaper or logo stays away from guests', !preg_match('/192\.168|10\.0\.0\.8/', $gvj), $gvj);
+
+/* ---- Glances, no API key ---- */
+t('Glances uptime reads days and hours', und_glances_uptime('5 days, 10:56:00') === 471360 && und_glances_uptime('1 day, 0:00:10') === 86410 && und_glances_uptime('3:00:00') === 10800 && und_glances_uptime('x') === 0);
+t('the CPU temperature is the package, not a disk', und_glances_temp([['label' => 'Composite', 'value' => 80], ['label' => 'Core 0', 'value' => 50], ['label' => 'Package id 0', 'value' => 55]]) === 55.0);
+t('without a package the hottest core', und_glances_temp([['label' => 'Core 0', 'value' => 50], ['label' => 'Core 1', 'value' => 60], ['label' => 'acpitz 0', 'value' => 99]]) === 60.0);
+$gfs = [['device_name' => '/dev/loop2', 'fs_type' => 'btrfs', 'mnt_point' => '/', 'size' => 1e11, 'free' => 1], ['device_name' => '/dev/loop0', 'fs_type' => 'squashfs', 'mnt_point' => '/rootfs/usr', 'size' => 3e10, 'free' => 0],
+  ['device_name' => 'cache', 'fs_type' => 'zfs', 'mnt_point' => '/rootfs/mnt/cache', 'size' => 1e12, 'free' => 5e11], ['device_name' => 'cache/appdata', 'fs_type' => 'zfs', 'mnt_point' => '/rootfs/mnt/cache/appdata', 'size' => 1e12, 'free' => 5e11],
+  ['device_name' => 'shfs', 'fs_type' => 'fuse.shfs', 'mnt_point' => '/rootfs/mnt/user', 'size' => 9e12, 'free' => 1], ['device_name' => 'data', 'fs_type' => 'zfs', 'mnt_point' => '/rootfs/mnt/data', 'size' => 2e12, 'free' => 1e12]];
+t('storage counts each pool once and skips the user share', array_column(und_glances_pools($gfs), 'name') === ['cache', 'data'], json_encode(und_glances_pools($gfs)));
+$zp = und_glances_pools([['device_name' => 'tank', 'fs_type' => 'zfs', 'mnt_point' => '/rootfs/mnt/tank', 'size' => 1000, 'free' => 990], ['device_name' => 'tank/media', 'fs_type' => 'zfs', 'mnt_point' => '/rootfs/mnt/tank/media', 'size' => 1500, 'free' => 990]]);
+t('a ZFS pool counts what its datasets hold', $zp[0]['size'] === 1510.0 && $zp[0]['free'] === 990.0 && !isset($zp[0]['_dev']), json_encode($zp));
+t('with nothing under /mnt, the largest real disk', array_column(und_glances_pools(array_slice($gfs, 0, 2)), 'name') === [basename('/') ?: '/'], json_encode(und_glances_pools(array_slice($gfs, 0, 2))));
+t('the main interface wins, loopback does not count', und_glances_net([['interface_name' => 'lo', 'bytes_recv_rate_per_sec' => 9], ['interface_name' => 'eth0', 'bytes_recv_rate_per_sec' => 1, 'bytes_sent_rate_per_sec' => 2], ['interface_name' => 'br0', 'bytes_recv_rate_per_sec' => 3, 'bytes_sent_rate_per_sec' => 4]]) === ['rx' => 3.0, 'tx' => 4.0, 'iface' => 'br0']);
+t('Glances 3 rates come from the counters', und_glances_net([['interface_name' => 'eth0', 'rx' => 100, 'tx' => 50, 'time_since_update' => 2]])['rx'] === 50.0);
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $u) {
+  $j = strpos($u, '/api/4/') !== false ? null : (strpos($u, 'quicklook') ? ['cpu' => 12.34, 'cpu_name' => 'X', 'percpu' => [['total' => 10], ['total' => 20]]] : (strpos($u, '/mem') && !strpos($u, 'swap') ? ['total' => 100, 'used' => 40, 'available' => 60, 'percent' => 40] : (strpos($u, 'uptime') ? '2:00:00' : [])));
+  return ['code' => $j === null ? 404 : 200, 'body' => '', 'json' => $j, 'err' => '', 'headers' => []]; };
+$gr = und_glances_read('http://10.0.0.9:61208');
+t('an older Glances answers on version 3', $gr['version'] === '3' && $gr['pct'] === 12.3 && $gr['cores'] === [10.0, 20.0] && $gr['mem']['used'] === 40.0 && $gr['uptime'] === 7200, json_encode($gr));
+$GLOBALS['UND_HTTP_MOCK'] = function () { return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'refused', 'headers' => []]; };
+foreach (glob(und_tmp('glances-fs-*.json')) ?: [] as $f) @unlink($f);
+t('a dead address says so', isset(und_glances_read('http://10.0.0.9:61208')['error']));
+unset($GLOBALS['UND_HTTP_MOCK']);
+t('no address is no alert', und_alerts(und_load_config(), ['error' => 'x', 'none' => true], null) === []);
+t('the Glances address must be an address', und_normalize(['general' => ['glances' => 'javascript:alert(1)']])['general']['glances'] === '' && und_normalize(['general' => ['glances' => 'http://1.2.3.4:61208/']])['general']['glances'] === 'http://1.2.3.4:61208');
+t('a new dashboard starts at 100%', und_default_config()['appearance']['zoom'] === 100);
+t('Auto stays what you chose', und_normalize(['appearance' => ['zoom' => 0]])['appearance']['zoom'] === 0);
+t('the side margin goes to 480, the top stays at 200', und_normalize(['appearance' => ['safe_x' => 999, 'safe_y' => 999]])['appearance']['safe_x'] === 480 && und_normalize(['appearance' => ['safe_x' => 999, 'safe_y' => 999]])['appearance']['safe_y'] === 200);
+
+/* ---------- more app presets ---------- */
+$ok = function ($j, $h = []) { return ['code' => 200, 'body' => is_string($j) ? $j : json_encode($j), 'json' => is_string($j) ? null : $j, 'err' => '', 'headers' => $h]; };
+$sv = function ($type, $x = []) { return $x + ['id' => 'abcd0001', 'type' => $type, 'name' => $type, 'url' => 'http://app', 'key' => 'k', 'username' => 'u', 'password' => 'p', 'fields' => [], 'options' => []]; };
+$vals = function ($r) { $o = []; foreach ($r['blocks'] as $b) $o[$b['key']] = $b['value']; return $o; };
+$calls = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use ($ok, &$calls) {
+  $calls[] = [$m, $url, $o];
+  $p = parse_url($url, PHP_URL_PATH);
+  $body = json_decode((string)($o['body'] ?? ''), true);
+  switch ($p) {
+    case '/json': return ($body['method'] ?? '') === 'auth.login' ? $ok(['result' => true], ['set-cookie' => ['_session_id=abc; Path=/']]) : (($o['cookie'] ?? '') === '_session_id=abc' ? $ok(['result' => ['torrents' => ['a' => ['progress' => 100], 'b' => ['progress' => 40.5]], 'stats' => ['download_rate' => 10, 'upload_rate' => 20]]]) : $ok(['result' => null]));
+    case '/transmission/rpc': return empty($o['headers']['X-Transmission-Session-Id']) ? ['code' => 409, 'body' => '', 'json' => null, 'err' => '', 'headers' => ['x-transmission-session-id' => ['sid']]] : $ok(['arguments' => ['torrents' => [['percentDone' => 1, 'rateDownload' => 0, 'rateUpload' => 7], ['percentDone' => .5, 'rateDownload' => 5, 'rateUpload' => 1]]]]);
+    case '/rest/getScanStatus.view': return $ok(['subsonic-response' => ['status' => 'ok', 'scanStatus' => ['count' => 900, 'folderCount' => 30]]]);
+    case '/rest/getNowPlaying.view': return $ok(['subsonic-response' => ['status' => 'ok', 'nowPlaying' => ['entry' => [['title' => 'Song', 'artist' => 'Band', 'username' => 'sam', 'duration' => 200]]]]]);
+    case '/api/libraries': return $ok(['libraries' => [['id' => 'l1', 'mediaType' => 'book'], ['id' => 'l2', 'mediaType' => 'podcast']]]);
+    case '/api/libraries/l1/stats': return $ok(['totalItems' => 4, 'totalDuration' => 100, 'totalSize' => 1000]);
+    case '/api/libraries/l2/stats': return $ok(['totalItems' => 2, 'totalDuration' => 50, 'totalSize' => 500]);
+    case '/api/Plugin/authenticate': return $ok(['token' => 'tok']);
+    case '/api/Stats/server/stats': return ($o['headers']['Authorization'] ?? '') === 'Bearer tok' ? $ok(['seriesCount' => 3, 'volumeCount' => 4, 'totalFiles' => 5, 'totalSize' => 6]) : ['code' => 401, 'body' => '', 'json' => null, 'err' => '', 'headers' => []];
+    case '/ocs/v2.php/apps/serverinfo/api/v1/info': return $ok(['ocs' => ['data' => ['nextcloud' => ['system' => ['freespace' => 99], 'storage' => ['num_users' => 2, 'num_files' => 7]], 'activeUsers' => ['last24hours' => 1]]]]);
+    case '/api/v1/repos/issues/search': return $ok([], ['x-total-count' => [strpos($url, 'type=pulls') ? '2' : '9']]);
+    case '/api/v1/repos/search': return $ok(['data' => []], ['x-total-count' => ['12']]);
+    case '/api/v1/notifications/new': return $ok(['new' => 4]);
+    case '/api/v1/watch': return $ok(['a' => ['title' => 'Old', 'last_changed' => 5, 'last_viewed' => 9], 'b' => ['title' => '', 'url' => 'http://x', 'last_changed' => 9, 'last_viewed' => 1, 'last_error' => 'boom']]);
+    case '/api/dashboard/stats/get': return $ok(['status' => 'ok', 'response' => ['stats' => ['totalQueries' => 200, 'totalBlocked' => 50, 'totalClients' => 3]]]);
+    case '/api/v3/checks/': return $ok(['checks' => [['status' => 'up', 'name' => 'a'], ['status' => 'down', 'name' => 'nas'], ['status' => 'grace', 'name' => 'c']]]);
+    case '/api/v1/endpoints/statuses': return $ok([['name' => 'web', 'results' => [['success' => false], ['success' => true]]], ['name' => 'db', 'group' => 'core', 'results' => [['success' => false]]], ['name' => 'new', 'results' => []]]);
+    case '/api/collections/_superusers/auth-with-password': return ['code' => 404, 'body' => '', 'json' => null, 'err' => '', 'headers' => []];
+    case '/api/collections/users/auth-with-password': return $ok(['token' => 'pb']);
+    case '/api/collections/systems/records': return $ok(['items' => [['status' => 'up', 'name' => 'a'], ['status' => 'down', 'name' => 'b']]]);
+    case '/api/v1/targets': return $ok(['data' => ['activeTargets' => [['health' => 'up'], ['health' => 'down', 'labels' => ['job' => 'node', 'instance' => 'x:9100']], ['health' => 'unknown']]]]);
+    case '/api/endpoints': return $ok([['Id' => 1, 'Type' => 1, 'Status' => 1], ['Id' => 2, 'Type' => 5, 'Status' => 1], ['Id' => 3, 'Type' => 2, 'Status' => 2]]);
+    case '/api/endpoints/1/docker/containers/json': return $ok([['State' => 'running'], ['State' => 'exited']]);
+    case '/api/containers': return $ok([['name' => 'a', 'updateAvailable' => true], ['name' => 'b', 'updateAvailable' => false]]);
+    case '/api/auth/login': return ['code' => 404, 'body' => '', 'json' => null, 'err' => '', 'headers' => []];
+    case '/api/login': return $ok(['meta' => ['rc' => 'ok']], ['set-cookie' => ['unifises=abc; Path=/', 'csrf_token=d; Path=/']]);
+    case '/api/s/default/stat/health': return ($o['cookie'] ?? '') === 'unifises=abc; csrf_token=d' ? $ok(['data' => [['subsystem' => 'wan', 'status' => 'ok'], ['subsystem' => 'wlan', 'num_user' => 4, 'num_guest' => 1, 'num_adopted' => 2], ['subsystem' => 'lan', 'num_user' => 3, 'num_adopted' => 1]]]) : $ok([]);
+    case '/api/greader.php/accounts/ClientLogin': return $ok("SID=x\nLSID=null\nAuth=tok\n");
+    case '/api/greader.php/reader/api/0/unread-count': return $ok(['unreadcounts' => [['id' => 'feed/1', 'count' => 1], ['id' => 'user/-/state/com.google/reading-list', 'count' => 8]]]);
+    case '/api/greader.php/reader/api/0/subscription/list': return $ok(['subscriptions' => [[], []]]);
+    case '/api/login/': return $ok('x');
+  }
+  return null;
+};
+$v = $vals(und_w_deluge($sv('deluge')));
+t('Deluge counts by progress, with its login cookie', $v === ['leech' => 1, 'download' => 10.0, 'seed' => 1, 'upload' => 20.0]);
+$v = $vals(und_w_transmission($sv('transmission')));
+t('Transmission retries with its session id', $v['leech'] === 1 && $v['seed'] === 1 && $v['upload'] === 8.0);
+$r = und_w_navidrome($sv('navidrome')); $sent = end($calls)[1];
+t('Navidrome sends a salted hash, never the password', !preg_match('/[?&]p=/', $sent) && preg_match('/[?&]s=([a-f0-9]+)/', $sent, $m) && strpos($sent, 't=' . md5('p' . $m[1])) !== false);
+t('Navidrome shows who is playing', $vals($r)['songs'] === 900 && $r['streams'][0]['sub'] === 'Band' && $r['streams'][0]['user'] === 'sam');
+$v = $vals(und_w_audiobookshelf($sv('audiobookshelf')));
+t('Audiobookshelf adds up its libraries by kind', $v['books'] === 4 && $v['podcasts'] === 2 && $v['duration'] == 150);
+t('Kavita trades the key for a token', $vals(und_w_kavita($sv('kavita')))['seriesCount'] === 3);
+t('Nextcloud reads its server info', $vals(und_w_nextcloud($sv('nextcloud')))['free'] === 99.0);
+$v = $vals(und_w_gitea($sv('gitea')));
+t('Gitea reads totals from the header', $v === ['notifications' => 4, 'issues' => 9, 'pulls' => 2, 'repos' => 12]);
+$r = und_w_changedetection($sv('changedetection'));
+t('changedetection counts only unseen changes', $vals($r) === ['total' => 2, 'changed' => 1, 'errors' => 1] && $r['list'][0]['title'] === 'http://x');
+t('Technitium works out the blocked share', $vals(und_w_technitium($sv('technitium')))['blocked_percent'] == 25);
+$r = und_w_healthchecks($sv('healthchecks'));
+t('Healthchecks names what is down', $vals($r)['late'] === 1 && $r['list'][0]['title'] === 'nas');
+$r = und_w_gatus($sv('gatus'));
+t('Gatus goes by the latest result', $vals($r) === ['up' => 1, 'down' => 1] && $r['list'][0]['title'] === 'core / db');
+t('Beszel falls back to the older login', $vals(und_w_beszel($sv('beszel'))) === ['up' => 1, 'down' => 1, 'paused' => 0]);
+$r = und_w_prometheus($sv('prometheus'));
+t('Prometheus counts targets', $vals($r) === ['up' => 1, 'down' => 1, 'total' => 3] && $r['list'][0]['title'] === 'node x:9100');
+t('Portainer reads only Docker environments that are up', $vals(und_w_portainer($sv('portainer'))) === ['running' => 1, 'stopped' => 1, 'total' => 2]);
+t('What\'s Up Docker counts updates', $vals(und_w_wud($sv('wud'))) === ['monitored' => 2, 'updates' => 1]);
+$v = $vals(und_w_unifi($sv('unifi', ['key' => ''])));
+t('UniFi falls back to a classic controller', $v === ['wan' => 'ok', 'users' => 7, 'guests' => 1, 'devices' => 3]);
+t('FreshRSS takes the unread total, not a feed', $vals(und_w_freshrss($sv('freshrss'))) === ['unread' => 8, 'subscriptions' => 2]);
+unset($GLOBALS['UND_HTTP_MOCK']);
+$vi = function ($n) { $o = ''; do { $b = $n & 0x7f; $n >>= 7; $o .= chr($n ? $b | 0x80 : $b); } while ($n); return $o; };
+$js = json_encode(['version' => ['name' => '1.21'], 'players' => ['online' => 2, 'max' => 20], 'description' => str_repeat('x', 300)]);
+$pl = "\0" . $vi(strlen($js)) . $js;
+$j = (function () use ($vi, $pl) { $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, 0); fwrite($pair[1], $vi(strlen($pl)) . $pl); $r = und_mc_status($pair[0], 'host', 25565); fread($pair[1], 300); return $r; })();
+t('Minecraft status reads players and version, past a two-byte length', $j['players']['online'] === 2 && $j['version']['name'] === '1.21');
+foreach (array_keys(und_types()) as $x) if (!in_array($x, ['system_info', 'cpu', 'memory', 'link'], true) && !function_exists('und_w_' . $x)) t("widget for $x exists", false);
+t('every app type has a reader', true);
+$m = und_normalize(['groups' => [], 'media' => ['widgets' => [['id' => 'recent_movies', 'title' => '  New films  ', 'count' => 3]]]])['media']['widgets'];
+t('a media list keeps its name', $m[2]['title'] === 'New films' && $m[2]['count'] === 3 && $m[0]['title'] === '');
+t('a new media list shows 5', $m[0]['count'] === 5);
+$c = und_hp_convert("- G:\n    - N:\n        widget:\n          type: paperlessngx\n          url: http://p\n          key: abc\n");
+t('Homepage import keeps the new app types', $c['config']['groups'][0]['services'][0]['type'] === 'paperless');
+
+/* ---------- audit fixes ---------- */
+$seen = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use (&$seen) {
+  $seen[] = [$m, $url, $o];
+  $to = ['http://a.lan:8/x' => 'http://evil.example/y', 'http://b.lan/x' => 'https://b.lan/x', 'http://c.lan/p/q' => 'r', 'http://d.lan/' => 'ftp://d.lan/', 'http://e.lan/' => 'http://e.lan/'][$url] ?? null;
+  if ($to) return ['code' => 302, 'body' => '', 'json' => null, 'err' => '', 'headers' => ['location' => [$to]]];
+  return ['code' => 200, 'body' => '{}', 'json' => [], 'err' => '', 'headers' => []];
+};
+$sec = ['headers' => ['X-Api-Key' => 'SECRET', 'Authorization' => 'Bearer s', 'Accept' => 'a/b'], 'basic' => ['u', 'p'], 'cookie' => 'SID=1', 'body' => 'x'];
+und_http('POST', 'http://a.lan:8/x', $sec); $last = end($seen);
+t('a redirect to another server carries no key, login or cookie', $last[1] === 'http://evil.example/y' && $last[0] === 'GET' && !isset($last[2]['basic']) && !isset($last[2]['cookie']) && !isset($last[2]['body']) && array_keys($last[2]['headers']) === ['Accept']);
+$seen = []; und_http('GET', 'http://b.lan/x', $sec); $last = end($seen);
+t('http to https on the same app keeps them', $last[1] === 'https://b.lan/x' && $last[2]['headers']['X-Api-Key'] === 'SECRET' && $last[2]['basic'] === ['u', 'p']);
+$seen = []; und_http('GET', 'http://c.lan/p/q'); t('a relative redirect is followed', end($seen)[1] === 'http://c.lan/p/r');
+$seen = []; und_http('GET', 'http://d.lan/'); t('a redirect to anything but the web is not', count($seen) === 1);
+$r = und_http('GET', 'http://e.lan/'); t('a redirect loop ends with an error', $r['err'] === 'Too many redirects.');
+t('https never drops to http with a key', !und_http_same('https://a.lan/', 'http://a.lan/'));
+t('another port is another app', !und_http_same('http://a.lan:8/', 'http://a.lan:9/'));
+unset($GLOBALS['UND_HTTP_MOCK']);
+foreach (['javascript:alert(1)', ' JavaScript:x', "java\tscript:x", 'data:text/html,x', 'vbscript:x'] as $bad) {
+  $m = und_normalize(['groups' => [['name' => 'g', 'services' => [['type' => 'link', 'name' => 'n', 'href' => $bad]]]]]);
+  t('an unsafe link is dropped: ' . addcslashes($bad, "\t"), $m['groups'][0]['services'][0]['href'] === '');
+}
+$m = und_normalize(['groups' => [['name' => 'g', 'services' => [['type' => 'link', 'name' => 'n', 'href' => '{{HOST}}/app'], ['type' => 'link', 'name' => 'm', 'href' => 'https://x.lan/a?b=1']]]]]);
+t('ordinary links stay', $m['groups'][0]['services'][0]['href'] === '{{HOST}}/app' && $m['groups'][0]['services'][1]['href'] === 'https://x.lan/a?b=1');
+und_store_reset();
+$cf = und_file('config.yaml'); $good = (string)@file_get_contents($cf);
+$svc = ['id' => 'abcd9999', 'type' => 'link', 'name' => 'Kept app', 'href' => 'http://k'];
+und_save_config(['groups' => [['name' => 'Mine', 'services' => [$svc]]]] + und_default_config()); und_backup('audit test');
+foreach (['cut short' => "version: 3\ngeneral:\n  name: x\n", 'emptied' => '', 'not YAML' => "\0\1 garbage"] as $why => $bad) {
+  @unlink(und_tmp('config-recovered.json')); foreach (glob($cf . '.damaged-*') ?: [] as $x) @unlink($x);
+  file_put_contents($cf, $bad); und_store_reset();
+  $c = und_load_config();
+  t("a damaged config.yaml comes back from the backup ($why)", ($c['groups'][0]['services'][0]['name'] ?? '') === 'Kept app' && !empty(und_read_json(und_tmp('config-recovered.json'), null)['kept']));
+  t("... and the damaged file is kept ($why)", count(glob($cf . '.damaged-*') ?: []) === 1);
+}
+@unlink($cf); @unlink(UND_DIR . '/config.yaml'); und_store_reset(); @unlink(und_tmp('config-recovered.json'));
+t('a file removed on purpose is not brought back', (und_load_config()['groups'][0]['services'][0]['name'] ?? '') !== 'Kept app' && !is_file($cf));
+foreach (glob($cf . '.damaged-*') ?: [] as $x) @unlink($x);
+if ($good !== '') file_put_contents($cf, $good); und_store_reset();
+
+/* ---------------- skipping one version of a container ---------------- */
+group('update skip');
+reset_store();
+$r = und_image_ref('radarr'); t('a bare name is a Docker Hub library image', $r && $r['host'] === 'registry-1.docker.io' && $r['repo'] === 'library/radarr' && $r['tag'] === 'latest');
+$r = und_image_ref('binhex/arch-sabnzbd:5.0'); t('user image with a tag', $r && $r['repo'] === 'binhex/arch-sabnzbd' && $r['tag'] === '5.0');
+$r = und_image_ref('ghcr.io/stiphr/undash:beta'); t('another registry', $r && $r['host'] === 'ghcr.io' && $r['repo'] === 'stiphr/undash' && $r['tag'] === 'beta');
+$r = und_image_ref('reg.lan:5000/a/b'); t('a registry with a port', $r && $r['host'] === 'reg.lan:5000' && $r['repo'] === 'a/b');
+t('a pinned image has no version to follow', und_image_ref('nginx@sha256:' . str_repeat('a', 64)) === null);
+t('a bad name is refused', und_image_ref('../../etc:x y') === null && und_image_ref('') === null);
+$dA = 'sha256:' . str_repeat('a', 64); $dB = 'sha256:' . str_repeat('b', 64);
+$saved = $GLOBALS['UND_HTTP_MOCK'] ?? null; $GLOBALS['SEEN'] = [];
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use ($dA) {
+  $GLOBALS['SEEN'][] = ['m' => $m, 'u' => $url, 'h' => $o['headers'] ?? []];
+  if (strpos($url, 'auth.example') !== false) return ['code' => 200, 'json' => ['token' => 'TOK'], 'body' => '', 'err' => ''];
+  if (($o['headers']['Authorization'] ?? '') === 'Bearer TOK') return ['code' => 200, 'json' => null, 'body' => '', 'err' => '', 'headers' => ['docker-content-digest' => [$dA]]];
+  return ['code' => 401, 'json' => null, 'body' => '', 'err' => '', 'headers' => ['www-authenticate' => ['Bearer realm="https://auth.example/token",service="reg"']]];
+};
+t('the digest comes from the anonymous token flow', und_registry_digest('binhex/x') === $dA);
+t('the manifest is read with HEAD', $GLOBALS['SEEN'][0]['m'] === 'HEAD' && $GLOBALS['SEEN'][2]['m'] === 'HEAD');
+t('the token asks to pull this repository only', strpos($GLOBALS['SEEN'][1]['u'], 'scope=repository%3Abinhex%2Fx%3Apull') !== false && strpos($GLOBALS['SEEN'][1]['u'], 'service=reg') !== false);
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) { return ['code' => 500, 'json' => null, 'body' => '', 'err' => '', 'headers' => []]; };
+t('a registry that will not answer gives no digest', und_registry_digest('binhex/x') === '');
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) { return ['code' => 200, 'json' => null, 'body' => '', 'err' => '', 'headers' => ['docker-content-digest' => ['nonsense']]]; };
+t('a malformed digest is not trusted', und_registry_digest('binhex/x') === '');
+if ($saved) $GLOBALS['UND_HTTP_MOCK'] = $saved; else unset($GLOBALS['UND_HTTP_MOCK']);
+$cfgK = und_load_config(); $cfgK['docker']['items'] = ['a' => ['skip_update' => $dA], 'b' => ['skip_update' => 'junk', 'favorite' => true], 'c' => ['no_update' => true]];
+und_save_config($cfgK, false);
+$kept = (array)und_load_config()['docker']['items'];
+t('a skip survives saving', ($kept['a']['skip_update'] ?? '') === $dA);
+t('a malformed skip is dropped', !isset($kept['b']['skip_update']) && !empty($kept['b']['favorite']));
+und_write_json(und_tmp('image-digests.json'), ['img/a' => ['d' => $dA, 'at' => time()], 'img/c' => ['d' => $dB, 'at' => time()]]);
+$l = und_docker_skips([['name' => 'a', 'image' => 'img/a', 'update' => 'available'], ['name' => 'c', 'image' => 'img/c', 'update' => 'available'], ['name' => 'd', 'image' => 'img/a', 'update' => 'available']]);
+t('the skipped version is marked', !empty($l[0]['skip']));
+t('an ignored or other container is not', empty($l[1]['skip']) && empty($l[2]['skip']));
+und_write_json(und_tmp('image-digests.json'), ['img/a' => ['d' => $dB, 'at' => time()]]);
+$l = und_docker_skips([['name' => 'a', 'image' => 'img/a', 'update' => 'available']]);
+t('a newer version shows again', empty($l[0]['skip']));
+t('an image that is up to date is not marked', empty(und_docker_skips([['name' => 'a', 'image' => 'img/a', 'update' => 'current']])[0]['skip']));
+@unlink(und_tmp('image-digests.json'));
+reset_store();
+
+/* ---------------- less work for slow apps ---------------- */
+group('slow apps');
+reset_store();
+$mkS = function ($id, $type, $name) { return ['id' => $id, 'type' => $type, 'name' => $name, 'url' => 'http://app.lan:1', 'href' => '', 'key' => 'k', 'username' => 'u', 'password' => 'p']; };
+$cfgQ = und_normalize(['groups' => [['id' => 'aaaaaaaa', 'name' => 'Dl', 'services' => [$mkS('b0000001', 'qbittorrent', 'Qb'), $mkS('b0000002', 'prowlarr', 'Pr')]]]]);
+$saved = $GLOBALS['UND_HTTP_MOCK'] ?? null; $GLOBALS['SEEN'] = []; $GLOBALS['QA'] = 0.5;
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) {
+  $GLOBALS['SEEN'][] = $url;
+  $j = function ($v) { return ['code' => 200, 'json' => $v, 'body' => json_encode($v), 'err' => '', 'headers' => []]; };
+  if (strpos($url, '/auth/login') !== false) return ['code' => 200, 'json' => null, 'body' => 'Ok.', 'err' => '', 'headers' => ['set-cookie' => ['SID=x; path=/']]];
+  if (strpos($url, '/transfer/info') !== false) return $j(['dl_info_speed' => 1, 'up_info_speed' => 2, 'connection_status' => 'connected']);
+  if (strpos($url, 'filter=active') !== false) return $j([['hash' => 'a', 'name' => 'Moving', 'state' => 'downloading', 'progress' => $GLOBALS['QA'], 'dlspeed' => 9, 'eta' => 5, 'size' => 1, 'magnet_uri' => 'long']]);
+  if (strpos($url, '/torrents/info') !== false) return $j([['hash' => 'a', 'name' => 'Moving', 'state' => 'downloading', 'progress' => 0.1, 'dlspeed' => 1, 'eta' => 5, 'size' => 1, 'tracker' => 'http://secret/announce'], ['hash' => 'b', 'name' => 'Done', 'state' => 'stalledUP', 'progress' => 1, 'dlspeed' => 0, 'eta' => 0, 'size' => 1]]);
+  if (strpos($url, 'indexerstats') !== false) return $j(['indexers' => [['numberOfGrabs' => 7, 'numberOfQueries' => 8]]]);
+  return null;
+};
+$full = function () { return count(array_filter($GLOBALS['SEEN'], function ($u) { return strpos($u, '/torrents/info') !== false && strpos($u, 'filter=') === false; })); };
+$a = und_dl_status($cfgQ, 'b0000001');
+t('the card counts come from the whole list', $a['counts']['downloading'] === 1 && $a['counts']['seeding'] === 1 && $a['counts']['completed'] === 1);
+t('a moving torrent is the fresh one', ($a['items'][0]['progress'] ?? 0) == 50.0, json_encode($a['items']));
+@unlink(und_tmp('api-dl-b0000001.json')); $GLOBALS['QA'] = 0.75;
+$a = und_dl_status($cfgQ, 'b0000001');
+t('the second refresh reads the active ones only', $full() === 1 && ($a['items'][0]['progress'] ?? 0) == 75.0, $full() . ' ' . json_encode($a['items']));
+t('the kept list holds only what the card needs', strpos((string)file_get_contents(und_tmp('api-qbit-list-b0000001.json')), 'secret') === false);
+$GLOBALS['SPAWNED'] = []; $GLOBALS['UND_SPAWN_MOCK'] = function ($argv, $log) { $GLOBALS['SPAWNED'][] = $argv; };
+$pr = ['id' => 'b0000002', 'url' => 'http://app.lan:1', 'key' => 'k', 'username' => '', 'password' => '', 'fields' => []];
+$r = und_w_prowlarr($pr);
+t('first Prowlarr read waits for the numbers', $r['blocks'][0]['value'] == 7 && !$GLOBALS['SPAWNED'], json_encode($r['blocks'][0]));
+$GLOBALS['SEEN'] = []; und_w_prowlarr($pr);
+t('a fresh copy asks nothing', !$GLOBALS['SEEN'] && !$GLOBALS['SPAWNED']);
+$pf = und_tmp('api-prowlarr-' . md5($pr['url'] . $pr['key']) . '.json'); $oldC = und_read_json($pf, null); $oldC['t'] = microtime(true) - 7200; und_write_json($pf, $oldC);
+$r = und_w_prowlarr($pr);
+t('an old copy answers at once and refreshes behind', $r['blocks'][0]['value'] == 7 && !$GLOBALS['SEEN'] && count($GLOBALS['SPAWNED']) === 1);
+und_w_prowlarr($pr);
+t('the refresh starts only once', count($GLOBALS['SPAWNED']) === 1);
+$GLOBALS['UND_FRESH'] = true; und_w_prowlarr($pr); unset($GLOBALS['UND_FRESH']);
+t('the refresh itself asks Prowlarr', count($GLOBALS['SEEN']) === 1);
+if ($saved) $GLOBALS['UND_HTTP_MOCK'] = $saved; else unset($GLOBALS['UND_HTTP_MOCK']);
+reset_store();
+
+/* ---------------- navbar ---------------- */
+group('navbar');
+$n = und_normalize(['appearance' => []])['appearance'];
+t('the navbar shows everything by default', $n['nav_logo'] && $n['nav_name'] && $n['nav_os'] && $n['nav_app'] && $n['nav_live'] && $n['nav_alerts'] && $n['nav_server'] && $n['nav_hide'] && $n['nav_sticky'] && $n['nav_search'] === 'normal');
+$n = und_normalize(['appearance' => ['header_chips' => false]])['appearance'];
+t('the old versions switch carries over to both', !$n['nav_os'] && !$n['nav_app']);
+$n = und_normalize(['appearance' => ['header_chips' => false, 'nav_os' => true, 'nav_app' => false]])['appearance'];
+t('each version has its own switch', $n['nav_os'] && !$n['nav_app']);
+t('an unknown search width is refused', und_normalize(['appearance' => ['nav_search' => 'huge']])['appearance']['nav_search'] === 'normal');
+t('a search width is kept', und_normalize(['appearance' => ['nav_search' => 'wide']])['appearance']['nav_search'] === 'wide');
+
+echo "\n--- password guessing\n";
+require_once dirname(__DIR__) . '/src/include/auth.php';
+foreach (glob(UND_TMP . '/login-*') ?: [] as $f) @unlink($f);
+$ip = '203.0.113.7';
+for ($i = 0; $i < 4; $i++) und_login_failed($ip);
+t('4 wrong passwords do not lock', !und_login_throttled($ip));
+und_login_failed($ip);
+$w = und_login_wait($ip); t('the 5th locks for 15 minutes', $w > 890 && $w <= 900, (string)$w);
+t('the message says how long, and the way back in', strpos(und_login_msg($ip), '15 minutes') !== false && strpos(und_login_msg($ip), 'restart') !== false);
+t('another address is free', !und_login_throttled('203.0.113.8'));
+$nxt = function ($ip) { $f = und_login_file($ip); $s = und_read_json($f, []); $s['until'] = time() - 1; und_write_json($f, $s, true); for ($i = 0; $i < 5; $i++) und_login_failed($ip); return und_login_wait($ip); };
+$w = $nxt($ip); t('the next lockout lasts twice as long', $w > 1790 && $w <= 1800, (string)$w);
+$w = $nxt($ip); t('and the next twice that', $w > 3590 && $w <= 3600, (string)$w);
+foreach (range(1, 8) as $i) $w = $nxt($ip);
+t('a lockout never passes a day', $w > 86300 && $w <= 86400, (string)$w);
+$s = und_read_json(und_login_file($ip), []); $s['at'] = time() - UND_LOGIN_FORGET - 1; $s['until'] = 0; und_write_json(und_login_file($ip), $s, true);
+t('a quiet week starts over', (int)und_login_read(und_login_file($ip))['locks'] === 0);
+foreach (glob(UND_TMP . '/login-*') ?: [] as $f) @unlink($f);
+t('one IPv6 /64 is one address', und_login_key('2001:db8:1:2::5') === und_login_key('2001:db8:1:2:ffff::9') && und_login_key('2001:db8:1:2::5') !== und_login_key('2001:db8:1:3::5'));
+t('an IPv4 address in IPv6 form counts as itself', und_login_key('::ffff:10.0.0.4') === und_login_key('10.0.0.4'));
+$_SERVER['REMOTE_ADDR'] = '172.18.0.5'; $_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.9';
+putenv('UNDASH_TRUSTED_PROXIES');
+t('X-Forwarded-For counts for nothing by default', und_client_ip() === '172.18.0.5');
+putenv('UNDASH_TRUSTED_PROXIES=172.18.0.0/16, 10.1.1.1');
+t('from a trusted proxy it gives the visitor', und_client_ip() === '198.51.100.9');
+$_SERVER['HTTP_X_FORWARDED_FOR'] = '1.2.3.4, 198.51.100.9, 10.1.1.1';
+t('a forged entry on the left is ignored', und_client_ip() === '198.51.100.9');
+$_SERVER['HTTP_X_FORWARDED_FOR'] = 'junk';
+t('a bad header falls back to the proxy', und_client_ip() === '172.18.0.5');
+$_SERVER['REMOTE_ADDR'] = '198.51.100.20'; $_SERVER['HTTP_X_FORWARDED_FOR'] = '1.2.3.4';
+t('a visitor who is not a proxy cannot claim another address', und_client_ip() === '198.51.100.20');
+putenv('UNDASH_TRUSTED_PROXIES'); unset($_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
+foreach (['password123', 'Password1234', 'P@ssw0rd2024', 'qwertyuiop', '1234567890', 'aaaaaaaaaaaa', 'unraid12345', 'admin123456'] as $p) t('refused: ' . $p, und_password_weak($p));
+foreach (['correct horse battery', 'a long password', 'tram-lamp-river-9'] as $p) t('allowed: ' . $p, !und_password_weak($p));
+for ($i = 0; $i < 6; $i++) und_login_failed('198.51.100.1');
+$g = und_login_seen(); t('wrong passwords are counted for the alert', $g['n'] === 6 && $g['ip'] === '198.51.100.1');
+foreach (glob(UND_TMP . '/login-*') ?: [] as $f) @unlink($f);
+
+echo "\n--- saved keys stay with their address\n";
+$svc = function ($id, $name, $url, $key) { return ['id' => $id, 'name' => $name, 'url' => $url, 'key' => $key, 'username' => '', 'password' => '', 'options' => []]; };
+$oldc = ['groups' => [['services' => [$svc('aaaaaaaa', 'Radarr', 'http://10.0.0.2:7878', '{{RADARR_API_KEY}}'), $svc('bbbbbbbb', 'Hooked', 'http://{{SERVER_IP}}:9000', '{{HOOK_KEY}}')]]]];
+$e = ['RADARR_API_KEY' => 'abc', 'HOOK_KEY' => 'def', 'SERVER_IP' => '10.0.0.3'];
+$mv = function ($id, $url, $key = null, $creds = []) use ($oldc, $svc, $e) { $c = $oldc; foreach ($c['groups'][0]['services'] as &$x) if ($x['id'] === $id) { $x['url'] = $url; if ($key !== null) $x['key'] = $key; } return und_creds_moved($c, $oldc, $creds, $e); };
+t('the same address is fine', $mv('aaaaaaaa', 'http://10.0.0.2:7878/base') === null);
+t('a saved key cannot follow a new address', $mv('aaaaaaaa', 'http://198.51.100.1:7878') === 'Radarr');
+t('a new port counts as a new address', $mv('aaaaaaaa', 'http://10.0.0.2:9999') === 'Radarr');
+t('typing the key again allows it', $mv('aaaaaaaa', 'http://198.51.100.1:7878', null, ['aaaaaaaa' => ['key' => 'typed-again']]) === null);
+t('a reference typed instead does not', $mv('aaaaaaaa', 'http://198.51.100.1:7878', null, ['aaaaaaaa' => ['key' => '{{RADARR_API_KEY}}']]) === 'Radarr');
+t('an address written with a shared value is the same address', $mv('bbbbbbbb', 'http://10.0.0.3:9000') === null);
+$c2 = $oldc; $c2['groups'][0]['services'][] = $svc('cccccccc', 'Mine', 'http://198.51.100.1', '{{RADARR_API_KEY}}');
+t('a new app cannot borrow another app\'s key', und_creds_moved($c2, $oldc, [], $e) === 'Mine');
+$c2 = $oldc; $c2['groups'][0]['services'][] = $svc('cccccccc', 'Mine', 'http://198.51.100.1', '{{BRAND_NEW}}');
+t('a new app with its own key is fine', und_creds_moved($c2, $oldc, [], $e) === null);
+$c2 = $oldc; $c2['groups'][0]['services'][0]['key'] = ''; $h = $svc('cccccccc', 'Hdr', 'http://198.51.100.1', ''); $h['options']['headers'] = ['X-Api-Key' => '{{RADARR_API_KEY}}']; $c2['groups'][0]['services'][] = $h;
+t('nor through a custom header', und_creds_moved($c2, $oldc, [], $e) === 'Hdr');
+t('more secrets are hidden in logged addresses', strpos(und_redact('http://x/a?password=hunter2&access_token=abc&q=ok'), 'hunter2') === false && strpos(und_redact('http://x/a?access_token=abcdef'), 'abcdef') === false && strpos(und_redact('http://x/a?q=ok'), 'q=ok') !== false);
+$_SERVER['REMOTE_ADDR'] = '172.18.0.5'; $_SERVER['HTTP_X_FORWARDED_PROTO'] = 'https'; unset($_SERVER['HTTPS']);
+t('X-Forwarded-Proto counts for nothing by default', !und_https());
+putenv('UNDASH_TRUSTED_PROXIES=172.18.0.0/16');
+t('from a trusted proxy cookies are Secure', und_https());
+$_SERVER['REMOTE_ADDR'] = '198.51.100.3'; t('not from anyone else', !und_https());
+putenv('UNDASH_TRUSTED_PROXIES'); unset($_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_X_FORWARDED_PROTO']);
+
+group('vm console');
+t('the address from Unraid\'s console window keeps only its port path', und_vm_console('http://192.168.88.50/plugins/dynamix.vm.manager/vnc.html?v=1746576860&resize=scale&autoconnect=true&host=192.168.88.50&port=&path=/wsproxy/5701/') === '/wsproxy/5701/');
+t('an encoded path too', und_vm_console('http://tower/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&path=%2Fwsproxy%2F5702%2F') === '/wsproxy/5702/');
+t('a bare path', und_vm_console('wsproxy/5703') === '/wsproxy/5703/');
+t('another console address is kept whole', und_vm_console('https://nas.example/console?id=3') === 'https://nas.example/console?id=3');
+t('no scripts, no odd ports, no junk', und_vm_console('javascript:alert(1)') === '' && und_vm_console('/wsproxy/99999/') === '' && und_vm_console('http://x/vnc.html?path=/etc/passwd') === '' && und_vm_console("http://a b") === '');
+$n = und_normalize(['vms' => ['items' => ['Automation' => ['console' => 'http://t/vnc.html?path=/wsproxy/5701/'], 'Bad' => ['console' => 'javascript:x']], 'docker' => ['items' => []]]]);
+t('a VM with only a console address keeps it; a bad one is dropped', ($n['vms']['items']['Automation']['console'] ?? '') === '/wsproxy/5701/' && !isset($n['vms']['items']['Bad']), json_encode($n['vms']['items']));
+
 rmrf($SANDBOX);
+
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

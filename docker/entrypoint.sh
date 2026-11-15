@@ -10,6 +10,9 @@ if ! touch /config/.write-test 2>/dev/null; then
 fi
 rm -f /config/.write-test
 
+# wrong-password counts start over: restarting is the owner's way back in after a lockout
+rm -f /tmp/undash/login-*.json
+
 # copies plugin settings on the very first start (if mounted), creates the setup code, prints what to do next
 php -d auto_prepend_file= /usr/local/bin/firstrun.php
 
@@ -17,8 +20,10 @@ php -d auto_prepend_file= /usr/local/bin/firstrun.php
 ( while true; do php -d auto_prepend_file= -d display_errors=0 -d log_errors=1 -d error_log=/dev/stderr /app/scripts/alertcheck.php; sleep 60; done ) &
 # the Unraid API's slow reads (network rates, primary interface), refreshed while a dashboard is open
 ( while true; do php -d auto_prepend_file= -d display_errors=0 -d log_errors=1 -d error_log=/dev/stderr /app/scripts/apipoll.php; sleep 5; done ) &
+# per-container CPU and memory, read every few seconds while a dashboard is open
+( while true; do php -d auto_prepend_file= -d display_errors=0 -d log_errors=1 -d error_log=/dev/stderr /app/scripts/statpoll.php; sleep 5; done ) &
 
 echo "UnDash listening on port $PORT (inside the container)"
 # PHP's built-in server prints every connection; only errors and UnDash's own messages are kept
-php -d auto_prepend_file= -d expose_php=0 -d display_errors=0 -d log_errors=1 -d error_log=/dev/stderr \
+php -d auto_prepend_file= -d expose_php=0 -d display_errors=0 -d log_errors=1 -d error_log=/dev/stderr -d post_max_size=12M -d memory_limit=256M \
   -S "0.0.0.0:$PORT" -t /app/standalone /app/standalone/router.php 2>&1 | grep -vE '(Accepted|Closing)$|\[[0-9]+\]: [A-Z]+ /'

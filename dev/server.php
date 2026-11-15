@@ -22,7 +22,7 @@ if (strpos($uri, '/assets/') === 0) {
   header('Content-Type: ' . (substr($f, -5) === 'woff2' ? 'font/woff2' : (substr($f, -3) === 'css' ? 'text/css' : 'application/javascript')));
   readfile($f); return true;
 }
-if ($uri !== '/api') { http_response_code(404); return true; }
+if ($uri !== '/api' && $uri !== '/wallpaper') { http_response_code(404); return true; }
 
 /* ---------- fake system ---------- */
 if (getenv('UNDASH_DEV_MODE') === 'api') { define('UND_MODE', 'api'); $state .= '-api'; putenv('UNRAID_API_URL=http://tower.test/graphql'); putenv('UNRAID_API_KEY=dev-key'); }
@@ -296,5 +296,6 @@ if (!is_file(UND_DIR . '/config.yaml') && !is_file(UND_DIR . '/config.json')) {
   }
 }
 
+if ($uri === '/wallpaper') { require_once $repo . '/src/include/lib.php'; und_wall_serve(); return true; }
 $_SERVER['REQUEST_METHOD'] = 'POST';
 require $repo . '/src/include/api.php';

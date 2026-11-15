@@ -1,17 +1,17 @@
 <?php
 /*
- * UnDash - where settings live. Two files in the configuration folder (mirrored to the flash drive):
+ * UnDash - where settings live. Two files in the configuration folder:
  *
  *   config.yaml  everything you set up: layout, apps, theme, ignored alerts, custom CSS, the Unraid API address.
  *                It never holds a secret: an app's key, user name or password is a reference such as {{RADARR_API_KEY}}.
  *   .env         the values behind those references, plus the Unraid API key and the Docker version's password hash.
  *
- * Alert history and backups are data, not settings: they go in data/ (not mirrored).
+ * Alert history and backups are data, not settings: they go in data/.
  * Older versions kept config.json, secrets.json, custom.css and ignores.json; they are converted on first use (see
  * und_store_migrate) and moved to data/legacy/.
  */
 
-const UND_ENV_RESERVED = ['UNRAID_API_KEY', 'UNDASH_PASSWORD_HASH', 'UNDASH_AUTH'];
+const UND_ENV_RESERVED = ['UNRAID_API_KEY', 'UNDASH_PASSWORD_HASH', 'UNDASH_AUTH', 'PEXELS_API_KEY', 'NOTIFY_DISCORD_URL', 'NOTIFY_TELEGRAM_TOKEN', 'NOTIFY_TELEGRAM_CHAT', 'NOTIFY_NTFY_URL', 'NOTIFY_NTFY_TOKEN', 'NOTIFY_GOTIFY_URL', 'NOTIFY_GOTIFY_TOKEN', 'UNDASH_GUEST_TOKEN'];
 const UND_CRED_FIELDS = ['key' => 'API_KEY', 'username' => 'USERNAME', 'password' => 'PASSWORD'];
 
 function und_data_dir() { $d = und_store_dir() . '/data'; @mkdir($d, 0700, true); return $d; }
@@ -144,7 +144,7 @@ function und_doc_write(array $parts) {
   $doc = und_doc();
   foreach ($parts as $k => $v) { if ($v === null) unset($doc[$k]); else $doc[$k] = $v; }
   unset($doc['schema']);       // version is the one that is written
-  $order = ['version', 'general', 'appearance', 'dashboard', 'media', 'downloads', 'apps', 'docker', 'vms', 'groups', 'unraid', 'ignored_alerts', 'custom_css'];
+  $order = ['version', 'general', 'appearance', 'dashboard', 'media', 'downloads', 'requests', 'apps', 'docker', 'vms', 'groups', 'presets', 'unraid', 'ignored_alerts', 'notify', 'guest', 'setup', 'custom_css'];
   $sorted = [];
   foreach ($order as $k) if (array_key_exists($k, $doc)) $sorted[$k] = $doc[$k];
   foreach ($doc as $k => $v) if (!array_key_exists($k, $sorted)) $sorted[$k] = $v;
@@ -203,6 +203,30 @@ function und_creds_apply(array $cfg, array $old, array $creds, array &$env) {
   $used = und_cfg_refs($cfg);
   foreach ($oldRefs as $fields) foreach ($fields as $r) if (!isset($used[$r])) unset($env[$r]);
   return $cfg;
+}
+
+/**
+ * A saved key goes only to the address it was saved for. Without this, anyone who can edit an app (or use a dashboard with no
+ * password) could point it at their own server, press Test and read the key there. Returns the name of the first app that
+ * would send a credential somewhere new; typing the value again is fine, and so is a brand new value.
+ */
+function und_creds_moved(array $cfg, array $old, array $creds, array $env) {
+  $host = function ($u) use ($env) { $p = parse_url(und_resolve((string)$u, array_change_key_case($env, CASE_UPPER))); return strtolower(($p['host'] ?? '') . ':' . ($p['port'] ?? '')); };
+  $refs = function ($s) {
+    $out = [];
+    foreach (array_keys(UND_CRED_FIELDS) as $f) if ($r = und_ref_name($s[$f] ?? '')) $out[$r] = $f;
+    $opt = (array)($s['options'] ?? []);        // an empty options set is an object once normalized
+    foreach ((array)($opt['headers'] ?? []) as $v) if (is_string($v) && $r = und_ref_name($v)) $out[$r] = '';
+    return $out;
+  };
+  $seen = [];
+  foreach ($old['groups'] ?? [] as $g) foreach ($g['services'] as $s) foreach ($refs($s) as $r => $f) $seen[$r][$host($s['url'] ?? '')] = 1;
+  foreach ($cfg['groups'] ?? [] as $g) foreach ($g['services'] as $s) foreach ($refs($s) as $r => $f) {
+    if (!isset($seen[$r]) || isset($seen[$r][$host($s['url'] ?? '')])) continue;
+    $in = $f !== '' ? ($creds[$s['id']][$f] ?? UND_KEEP) : UND_KEEP;
+    if ($in === UND_KEEP || und_ref_name($in)) return (string)$s['name'];
+  }
+  return null;
 }
 
 /* ---------- conversion from the old files ---------- */

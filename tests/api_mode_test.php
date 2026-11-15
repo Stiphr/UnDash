@@ -2,7 +2,7 @@
 /* Tests of the Docker version's Unraid API layer (UNDASH_MODE=api) against a fake GraphQL endpoint. php tests/api_mode_test.php */
 error_reporting(E_ALL);
 $SB = sys_get_temp_dir() . '/undash-apitest-' . getmypid();
-define('UND_MODE', 'api'); define('UND_DIR', "$SB/config"); define('UND_TMP', "$SB/tmp"); define('UND_ROOT', dirname(__DIR__) . '/src');
+define('UND_DIR', "$SB/config"); define('UND_TMP', "$SB/tmp"); define('UND_ROOT', dirname(__DIR__) . '/src');
 @mkdir(UND_DIR, 0777, true);
 $GLOBALS['SENT'] = []; $GLOBALS['ANSWER'] = null;
 $GLOBALS['UND_HTTP_MOCK'] = function ($method, $url, $o) {
@@ -18,9 +18,17 @@ function t($n, $c, $d = '') { global $pass, $fail; if ($c) $pass++; else { $fail
 function clear_cache() { foreach (glob(UND_TMP . '/api-*') ?: [] as $f) unlink($f); }
 function clear_cache_keep_none() { foreach (glob(UND_TMP . '/api-*.json') ?: [] as $f) unlink($f); }
 
-t('caps hide what the API cannot do', und_caps()['power'] === false && und_caps()['os_update'] === false && und_caps()['docker_stats'] === false && und_caps()['mode'] === 'api');
+t('caps say what the API offers', und_caps()['docker_stats'] === true && !isset(und_caps()['power']));
 t('settings live in /config (UNDASH_CONFIG)', und_store_dir() === UND_DIR);
-t('the port is not changeable from the UI', isset(und_save_loc(['PORT' => '9100'])['error']));
+$da = 'sha256:' . str_repeat('a', 64); $db = 'sha256:' . str_repeat('b', 64);
+$cs = und_load_config(); $cs['docker']['items'] = ['s' => ['skip_update' => $da]]; und_save_config($cs, false);
+und_write_json(und_tmp('image-digests.json'), ['img/s' => ['d' => $da, 'at' => time()], 'img/n' => ['d' => $db, 'at' => time()]]);
+t('skip: same digest stays skipped', !empty(und_docker_skips([['name' => 's', 'image' => 'img/s', 'update' => 'available']])[0]['skip']));
+und_write_json(und_tmp('image-digests.json'), ['img/s' => ['d' => $db, 'at' => time()]]);
+t('skip: a new digest brings the update back', empty(und_docker_skips([['name' => 's', 'image' => 'img/s', 'update' => 'available']])[0]['skip']));
+und_write_json(und_tmp('image-digests.json'), []);
+t('skip: stands while the registry cannot be read', !empty(und_docker_skips([['name' => 's', 'image' => 'img/s', 'update' => 'available']])[0]['skip']));
+$cs['docker']['items'] = new stdClass(); und_save_config($cs, false); @unlink(und_tmp('image-digests.json'));
 t('no API configured: clear error, no request', isset(und_gql('query { online }')['error']) && !$GLOBALS['SENT']);
 und_save_secrets(['vars' => [], 'svc' => [], 'unraid' => ['url' => 'http://tower.local', 'key' => 'SECRETKEY123']]);
 $GLOBALS['ANSWER'] = ['json' => ['data' => ['online' => true]]];
@@ -77,8 +85,6 @@ t('force stop maps to vm.forceStop', isset(und_vm_action('Win', 'kill')['ok']) &
 t('restart maps to vm.reboot', isset(und_vm_action('Win', 'restart')['ok']) && end($GLOBALS['MUT']) === ['reboot', 'v1']);
 t('starting a running VM refused', isset(und_vm_action('Win', 'start')['error']));
 // power and OS are not offered
-t('server power refused in Docker mode', isset(und_power_prepare('reboot')['error']) && isset(und_power('reboot', 'x', 'y')['error']));
-t('OS update refused in Docker mode', isset(und_os_update()['error']));
 // secrets
 $view = json_encode([und_creds_view(und_load_config()), und_shared_view(und_load_config())]);
 t('the API key is not in the settings view', strpos($view, 'SECRETKEY123') === false);
@@ -92,10 +98,45 @@ t('password set, setup code removed', isset(und_password_set('a long password')[
 t('password checked with a hash', und_password_ok('a long password') && !und_password_ok('wrong') && strpos(file_get_contents(und_store_dir() . '/.env'), 'a long password') === false && !empty(und_env()['UNDASH_PASSWORD_HASH']));
 for ($i = 0; $i < 5; $i++) und_login_failed('10.0.0.9');
 t('5 wrong passwords lock that address out', und_login_throttled('10.0.0.9') && !und_login_throttled('10.0.0.8'));
+foreach (glob(UND_TMP . '/login-*') ?: [] as $f) @unlink($f);
+t('that password is stored at the stronger cost', password_get_info(und_env()['UNDASH_PASSWORD_HASH'])['options']['cost'] === UND_PW_COST);
+und_auth_set(['UNDASH_PASSWORD_HASH' => password_hash('a long password', PASSWORD_DEFAULT, ['cost' => 4])]); und_store_reset();
+t('the right password signs in', und_login_check('10.0.0.5', 'a long password') === 'ok');
+und_store_reset();
+t('an older hash is upgraded at sign-in', password_get_info(und_env()['UNDASH_PASSWORD_HASH'])['options']['cost'] === UND_PW_COST && und_password_ok('a long password'));
+for ($i = 0; $i < 4; $i++) und_login_check('10.0.0.5', 'nope');
+und_login_check('10.0.0.5', 'a long password');
+t('signing in clears the count', count(und_login_read(und_login_file('10.0.0.5'))['fails']) === 0);
+for ($i = 0; $i < 5; $i++) t('wrong ' . ($i + 1), und_login_check('10.0.0.5', 'nope') === 'wrong');
+t('locked: not even the right password', und_login_check('10.0.0.5', 'a long password') === 'locked');
+$al = und_alerts(und_load_config(), null, null);
+t('an alert names the address', (bool)array_filter($al, function ($x) { return $x['cat'] === 'auth.guess' && strpos($x['msg'], '10.0.0.5') !== false; }));
+t('and it cannot be ignored', !isset(und_alert_categories()['auth.guess']));
+foreach (glob(UND_TMP . '/login-*') ?: [] as $f) @unlink($f);
+// read-only keys
+$GLOBALS['UND_HTTP_MOCK_WAS'] = $GLOBALS['UND_HTTP_MOCK'] ?? null;
+foreach (['key-refused.json', 'key-perms.json', 'key-perms.tick'] as $f) @unlink(und_tmp($f));
+t('a key is taken to work until something says otherwise', und_api_can('docker') && und_api_can('vms'));
+$me = function ($body) { $GLOBALS['UND_HTTP_MOCK'] = function ($m, $u, $o) use ($body) { return strpos((string)($o['body'] ?? ''), 'me {') !== false ? ['code' => 200, 'body' => json_encode($body), 'json' => $body, 'err' => '', 'headers' => []] : null; }; @unlink(und_tmp('key-perms.tick')); und_api_perms_tick(); };
+$me(['data' => ['me' => ['roles' => ['VIEWER'], 'permissions' => [['resource' => 'DOCKER', 'actions' => ['READ_ANY']]]]]]);
+t('a viewer key cannot change containers or VMs', !und_api_can('docker') && !und_api_can('vms'));
+t('and the page is told', und_caps()['docker_write'] === false && und_caps()['vm_write'] === false);
+$me(['data' => ['me' => ['roles' => [], 'permissions' => [['resource' => 'DOCKER', 'actions' => ['READ_ANY', 'UPDATE_ANY']]]]]]);
+t('update access to Docker only', und_api_can('docker') && !und_api_can('vms'));
+$me(['data' => ['me' => ['roles' => ['ADMIN'], 'permissions' => null]]]);
+t('an admin key can do both', und_api_can('docker') && und_api_can('vms'));
+$me(['errors' => [['message' => 'Forbidden resource', 'extensions' => ['code' => 'FORBIDDEN']]], 'data' => null]);
+t('a key that may not read me is left alone', und_api_can('docker') && und_api_can('vms'));
+und_api_refused('docker');
+t('a refusal hides the controls of that kind only', !und_api_can('docker') && und_api_can('vms'));
+t('for an hour', und_api_can('docker', time() + UND_KEY_REFUSED_FOR + 1));
+$j = und_read_json(und_tmp('key-refused.json'), []); $j['key'] = 'another-key'; und_write_json(und_tmp('key-refused.json'), $j, true);
+t('a new key starts over', und_api_can('docker'));
+foreach (['key-refused.json', 'key-perms.json', 'key-perms.tick'] as $f) @unlink(und_tmp($f));
+if ($GLOBALS['UND_HTTP_MOCK_WAS']) $GLOBALS['UND_HTTP_MOCK'] = $GLOBALS['UND_HTTP_MOCK_WAS']; else unset($GLOBALS['UND_HTTP_MOCK']);
 putenv('UNDASH_PASSWORD=from-env-password');
 t('UNDASH_PASSWORD takes over', und_auth_kind() === 'env' && und_password_ok('from-env-password') && !und_password_ok('a long password'));
 putenv('UNDASH_PASSWORD');
-t('Unraid sessions and handoff links are ignored in Docker mode', und_unraid_logged_in() === false && und_handoff_use(str_repeat('a', 48)) === false);
 $gl = array_values(array_filter(und_docker_live()['containers'] ?? [], function ($c) { return $c['name'] === 'gluetun'; }));
 t('a restart loop reported as EXITED + "Restarting" is a restart loop', $gl && $gl[0]['state'] === 'restarting', json_encode($gl));
 $ar = und_api_array(['state' => 'STARTED', 'parities' => [['name' => 'parity', 'status' => 'DISK_OK', 'temp' => 38, 'fsSize' => 0, 'numErrors' => 0]],
@@ -108,7 +149,8 @@ t('in Docker mode the title shows the server (here: the API host, as the system 
 $GLOBALS['ANSWER'] = function ($req) {
   $q = $req['query']; $d = [];
   if (strpos($q, 'network {') !== false) $d['metrics'] = ['network' => [['name' => 'br0', 'rxSec' => 1000, 'txSec' => 200]]];
-  if (strpos($q, 'primaryNetwork') !== false) $d['info'] = ['cpu' => ['brand' => 'Test CPU', 'threads' => 8], 'primaryNetwork' => ['name' => 'br0', 'ipAddress' => '10.0.0.9'], 'os' => ['hostname' => 'tower'], 'versions' => ['core' => ['unraid' => '7.3.4']]];
+  if (strpos($q, 'primaryNetwork') !== false) $d['info'] = ['cpu' => ['brand' => 'Test CPU', 'threads' => 8], 'primaryNetwork' => ['name' => 'br0', 'ipAddress' => '10.0.0.9'], 'os' => ['hostname' => 'tower', 'uptime' => '100', 'kernel' => 'k'], 'versions' => ['core' => ['unraid' => '7.3.4']]];
+  if (strpos($q, 'temperature') !== false) $d['metrics'] = ['temperature' => ['sensors' => [['type' => 'CPU_PACKAGE', 'current' => ['value' => 41]]]]];
   if (strpos($q, 'percentTotal') !== false) $d += ['info' => ['os' => ['hostname' => 'tower', 'uptime' => '100', 'kernel' => 'k'], 'versions' => ['core' => ['unraid' => '7.3.4']]],
     'metrics' => ['cpu' => ['percentTotal' => 5, 'cpus' => []], 'memory' => ['total' => 100, 'available' => 50]], 'array' => ['state' => 'STARTED'], 'vars' => ['name' => 'Tower']];
   return ['json' => ['data' => $d]];
@@ -125,11 +167,24 @@ $sys = und_system(und_load_config());
 t('with the poller running a refresh never waits for the slow reads', $slowSent() === 0 && $sys['cpu']['pct'] === 5.0 && $sys['net']['rx'] === null, json_encode([$sys['net'], $slowSent()]));
 und_api_poll_due();
 t('the poller stores both slow reads', $slowSent() === 2 && is_file(UND_TMP . '/api-net.json') && is_file(UND_TMP . '/api-ident.json'));
+t('a refresh asks for neither temperatures nor OS details', !preg_grep('/temperature|uptime/', array_map(function ($x) { return (string)($x['body']['query'] ?? ''); }, array_filter($GLOBALS['SENT'], function ($x) { return strpos((string)($x['body']['query'] ?? ''), 'cpus') !== false; }))));
+t('the poller reads the temperature too', is_file(UND_TMP . '/api-temp.json'));
 und_api_poll_due();
 t('the poller asks again only when a copy is due', $slowSent() === 2);
 @unlink(UND_TMP . '/api-system.json');
 $sys = und_system(und_load_config());
-t('a refresh then shows the poller\'s copies', $sys['net']['rx'] === 1000.0 && $sys['cpu']['model'] === 'Test CPU' && $slowSent() === 2);
+t('a refresh then shows the poller\'s copies', $sys['net']['rx'] === 1000.0 && $sys['cpu']['model'] === 'Test CPU' && $sys['cpu']['temp'] === 41.0 && $sys['name'] === 'tower' && $slowSent() === 2);
+$w = json_decode(file_get_contents(UND_TMP . '/api-temp.json'), true); $w['t'] -= 100; file_put_contents(UND_TMP . '/api-temp.json', json_encode($w));
+$w = json_decode(file_get_contents(UND_TMP . '/api-net.json'), true); $w['t'] -= 100; file_put_contents(UND_TMP . '/api-net.json', json_encode($w));
+und_api_poll_due(); $GLOBALS['SENT'] = []; und_system(und_load_config());
+t('a recent background copy means a refresh asks the API nothing', !$GLOBALS['SENT']);
+$w = json_decode(file_get_contents(UND_TMP . '/api-system.json'), true); $w['t'] -= 40; file_put_contents(UND_TMP . '/api-system.json', json_encode($w));
+$GLOBALS['SENT'] = []; und_system(und_load_config());
+t('a copy older than 30 seconds is not shown as live', count($GLOBALS['SENT']) === 1);
+$w = json_decode(file_get_contents(UND_TMP . '/api-temp.json'), true); $w['t'] -= 100; file_put_contents(UND_TMP . '/api-temp.json', json_encode($w));
+$w = json_decode(file_get_contents(UND_TMP . '/api-net.json'), true); $w['t'] -= 100; file_put_contents(UND_TMP . '/api-net.json', json_encode($w));
+$GLOBALS['SENT'] = []; und_api_poll_due(false); $qs = array_map(function ($x) { return (string)($x['body']['query'] ?? ''); }, $GLOBALS['SENT']);
+t('with no page open the copies stay fresh, but not the network rates', preg_grep('/temperature/', $qs) && !preg_grep('/network \{/', $qs));
 $GLOBALS['SENT'] = [];
 $id = und_server_identity();
 t('the page title comes from the stored identity, without a system read', $id === ['name' => 'tower', 'ip' => '10.0.0.9', 'os' => '7.3.4'] && !$GLOBALS['SENT'], json_encode($id));
@@ -190,6 +245,48 @@ $GLOBALS['ANSWER'] = ['json' => ['data' => []]];
 und_alerts_check();
 t('the background alert check does not count as an open page', !is_file(UND_TMP . '/viewer'));
 
+// a wallpaper named by its path
+$pic = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+file_put_contents(UND_DIR . '/wall.png', $pic); file_put_contents(UND_DIR . '/note.txt', 'secret');
+t('a picture in the config folder is found', (und_wall_local(UND_DIR . '/wall.png')['ext'] ?? '') === 'png');
+t('the appdata path on the server means the same file', (und_wall_local('/mnt/user/appdata/undash-beta/wall.png')['ext'] ?? '') === 'png');
+t('a file outside the allowed folders is refused', isset(und_wall_local('/etc/passwd')['error']));
+t('a file that is not a picture is refused, even in the config folder', isset(und_wall_local(UND_DIR . '/note.txt')['error']));
+t('climbing out of the folder is refused', isset(und_wall_local(UND_DIR . '/../../../../etc/passwd')['error']));
+@symlink('/etc/hosts', UND_DIR . '/link.png');
+t('a link pointing outside is refused', isset(und_wall_local(UND_DIR . '/link.png')['error']));
+t('no path gives a clear message', strpos(und_wall_local('')['error'] ?? '', 'path') !== false);
+t('a local wallpaper is a valid background; the old daily setting is dropped', und_normalize(['appearance' => ['background' => 'local', 'wall_path' => '/config/a.jpg']])['appearance']['background'] === 'local' && !isset(und_normalize(['appearance' => ['daily' => ['on' => true]]])['appearance']['daily']));
+// the OS check of the Docker version
+$saved = $GLOBALS['UND_HTTP_MOCK']; $osv = '99.1.0'; $osu = '';
+$GLOBALS['UND_HTTP_MOCK'] = function ($m, $url, $o) use (&$osv, &$osu, $saved) { if (strpos($url, 'releases.unraid.net') === false) return $saved($m, $url, $o); $osu = $url; $j = ['version' => $osv]; return ['code' => 200, 'body' => json_encode($j), 'json' => $j, 'err' => '', 'headers' => []]; };
+$keep = $GLOBALS['ANSWER']; $GLOBALS['ANSWER'] = ['json' => ['data' => ['info' => ['versions' => ['core' => ['unraid' => '7.3.4']]]]]]; clear_cache();
+$oc = und_os_check();
+t('the OS check asks Unraid\'s release service and sees a newer version', strpos($osu, 'https://releases.unraid.net/os?') === 0 && $oc['latest'] === '99.1.0' && $oc['installed'] !== '' && $oc['available'] === true, json_encode($oc));
+t('what it found is remembered for the header', und_api_os_seen('7.3.4')['available'] === true && und_api_os_seen('99.1.0')['available'] === false);
+$osv = 'bad"version';
+t('a strange answer is refused', isset(und_os_check()['error']));
+@unlink(und_tmp('api-os.json')); $GLOBALS['UND_HTTP_MOCK'] = $saved; $GLOBALS['ANSWER'] = $keep;
+
 exec('rm -rf ' . escapeshellarg($SB));
+
+/* per-container numbers: the API's strings, and the control code `docker stats` can put in front of the first id */
+t('memory strings become bytes', und_api_mem_bytes('18.65MiB / 62.5GiB') === (int)round(18.65 * 1048576) && und_api_mem_bytes('2GiB / 8GiB') === 2147483648 && und_api_mem_bytes('500kB / 1GB') === 500000 && und_api_mem_bytes('12B / 1GB') === 12 && und_api_mem_bytes('nonsense') === null);
+t('a stats id matches the container whatever comes first', und_api_stats_key("aaaa:\x1b[Hbbbb") === 'bbbb' && und_api_stats_key('aaaa:bbbb') === 'bbbb' && und_api_stats_key('bbbb') === 'bbbb');
+und_write_json(und_tmp('docker-stats.json'), ['t' => 1000, 'v' => ['bbbb' => ['cpu' => 1.5, 'mem' => 10]]]);
+t('recent numbers are used, old ones are not', und_api_stats_seen(1010)['bbbb']['cpu'] === 1.5 && und_api_stats_seen(1000 + UND_STATS_OLD) === []);
+@unlink(und_tmp('docker-stats.json'));
+
+
+/* disks and parity: only OK or UNKNOWN comes from the API, and the parity list is not in a promised order */
+list($d, $lost, $seen) = und_api_smart_read([['device' => '/dev/sdb', 'name' => 'WD', 'smartStatus' => 'OK', 'temperature' => 37], ['device' => '/dev/sda', 'name' => 'Flash', 'smartStatus' => 'UNKNOWN', 'temperature' => null]], []);
+t('SMART rows use the short device name', $d['sdb'] === ['smart' => 'ok', 'model' => 'WD'] && $d['sda']['smart'] === 'unknown' && $lost === []);
+t('a disk that was never OK is not news', $seen === ['sdb' => true]);
+t('a disk that was OK and is awake but no longer OK is', und_api_smart_read([['device' => '/dev/sdb', 'smartStatus' => 'UNKNOWN', 'temperature' => 37]], $seen)[1] === ['sdb']);
+t('a sleeping disk is not', und_api_smart_read([['device' => '/dev/sdb', 'smartStatus' => 'UNKNOWN', 'temperature' => null]], $seen)[1] === []);
+$p = und_api_parity_sum([['date' => '2025-01-01T00:00:00.000Z', 'status' => 'COMPLETED', 'errors' => 0, 'duration' => 5], ['date' => '2025-02-01T00:00:00.000Z', 'status' => 'CANCELLED', 'errors' => 9], ['date' => '2024-01-01T00:00:00.000Z', 'status' => 'COMPLETED']]);
+t('the newest check is the last one, and the newest finished one is found', $p['last']['status'] === 'CANCELLED' && $p['last']['errors'] === 9 && $p['ok_at'] === strtotime('2025-01-01T00:00:00Z'));
+t('no history is none on record', und_api_parity_sum([]) === ['last' => null, 'ok_at' => 0]);
+
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

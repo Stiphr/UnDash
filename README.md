@@ -2,31 +2,54 @@
 
 # UnDash
 
-A compact dashboard for Unraid. System health, alerts, media, Arr apps, downloads, requests, containers and VMs on one page, with the controls to manage them.
+A compact dashboard for Unraid and TrueNAS. System health, alerts, media, Arr apps, downloads, requests, containers and VMs on one page, with the controls to manage them.
+
+<p align="center"><img src="docs/screenshots/dashboard.jpg" alt="UnDash dashboard in dark mode"></p>
 
 > [!WARNING]
 > **UnDash is entirely vibe coded (written with AI) and is still a work in progress.** Expect bugs and changes between versions. It can start, stop, restart and update containers and VMs on your server. Use it at your own risk: I am not responsible for anything that happens to your system or your data. Keep backups of your appdata and flash drive.
 
 - **System**: CPU, memory, storage, network, array health, disk temperatures, uptime and UPS, with short history charts.
 - **Alerts**: problems only (unhealthy or restarting containers, disk errors and heat, array state, updates). Each alert can be ignored for a while or for good. A history keeps when each problem started and ended.
+- **Array details**: click Storage or Array health for the last parity check, Mover status, each disk's SMART status and when the array will be full at the current pace.
+- **Push alerts**: Discord, Telegram, ntfy or Gotify, set up in **Settings > Alerts**. Sent when a problem lasts over a minute and when it ends, also with no dashboard open.
+- **History charts**: click CPU, Memory, Network, Storage or Disk temps for the last hour, day, week or month. A reading is kept every minute.
 - **Media**: upcoming and recently added movies and episodes from Radarr and Sonarr.
 - **Arr Stack**, **Downloads** (qBittorrent, [qui](https://github.com/autobrr/qui), SABnzbd), **Now playing** (Plex, Emby, Jellyfin, Tautulli) and **Requests** (Overseerr / Jellyseerr, with approve and decline).
-- **Containers and VMs**: start, stop, restart, update and logs from one gear menu. Click an icon or name to open its web UI.
+- **Containers and VMs**: start, stop, restart, update and logs from one gear menu, with CPU and memory per container. Click an icon or name to open its web UI. A badge shows which containers have an update; update from there, skip that version or ignore that container.
+- **Your own layout**: move and resize every card in place, split the dashboard into pages, and let **Smart arrange** line everything up. Edit mode also has the theme, navbar and other Appearance settings right beside your cards.
+- **Privacy**: **Hide sensitive details** covers names and titles with clean bars, for screenshots or a shared screen. A read-only **guest link** shows family and friends what you choose.
 - **Endpoint health**: HTTP status and latency of every app and container web UI.
 - **Search**: a list under the search box with your apps, containers and VMs, a web search and movies and series to request in Seerr. You choose which in Settings; the dashboard itself is never filtered.
-- Ten themes with light and dark versions, frosted-glass wallpapers, custom CSS. Works on phones too.
+- Ten themes with light and dark versions, frosted-glass wallpapers, custom CSS. Works on phones too, and goes on the home screen with its own icon (full screen on iPhone; on Android that needs HTTPS).
+
+## Screenshots
+
+| | |
+|---|---|
+| ![The dashboard in light mode](docs/screenshots/dashboard-light.jpg) | ![Arr Stack, Downloads, Now playing and Requests](docs/screenshots/arr-stack.jpg) |
+| **Light mode.** Every theme has both | **Arr Stack, Downloads, Now playing and Requests.** Problems open under the app |
+| ![Moving and resizing cards on the dashboard](docs/screenshots/edit-dashboard.jpg) | ![The setup wizard](docs/screenshots/setup-wizard.jpg) |
+| **Edit dashboard.** Move, resize, add and remove cards in place | **Setup wizard.** Picks your layout and connects your apps |
+| ![Quick settings](docs/screenshots/settings.jpg) | ![Settings > Presets](docs/screenshots/presets.jpg) |
+| **Quick settings.** The first page of Settings | **Presets.** Save, share and import your own layouts |
+
+<p align="center"><img src="docs/screenshots/phone.jpg" width="520" alt="UnDash on a phone"></p>
+
+The screenshots use made-up sample data.
 
 ## Install
 
-UnDash comes as a **Docker container** (recommended) or as an Unraid **plugin**.
+UnDash runs as a **Docker container** and reads your server through its official API with a key you create.
 
-| | Docker container | Plugin |
+| | Unraid | TrueNAS (25.04 or newer) |
 |---|---|---|
-| Reads the server through | the official Unraid API (an API key) | Unraid's own files and commands |
-| Sign-in | its own password (optional) | your Unraid login |
-| Not available | container CPU / memory, server restart and shutdown, Unraid OS updates, VM hibernate, NUT UPS | — |
+| Reads the server through | the Unraid API | the TrueNAS API (over HTTPS) |
+| Shows | CPU, memory, storage, network, array, disks, containers, VMs, UPS | CPU, memory, pools, disks, network, apps, VMs, TrueNAS's own alerts |
+| Controls | start, stop, restart, pause and update containers; VMs | start, stop, restart and update apps; VMs |
+| Left to the server itself | server restart and shutdown, OS updates, VM hibernate | server restart and shutdown, OS updates, pausing apps |
 
-### Docker container
+### On Unraid
 
 **1. Create an API key.** In Unraid, go to **Settings > Management Access > API Keys > Create**. Give it read access to *Info, Array, Disk, Docker, VMs* (and *UPS* if Unraid's own UPS service runs yours), and update access to *Docker* and *VMs* if you want the start, stop and update buttons. Copy the key.
 
@@ -57,20 +80,37 @@ docker run -d --name UnDash --restart unless-stopped -p 9099:9099 \
 
 **4. First start.** Open `http://YOUR_SERVER_IP:9099`.
 - **Set a password (recommended):** enter the one-time setup code from the container log (**Docker > UnDash > Logs**) and choose a password of 10+ characters.
-- **Continue without a password:** skips the code. Anyone who can reach the port can then use the dashboard. You can add a password later in **Settings > Connection**.
+- **Continue without a password:** skips the code. Anyone who can reach the port can then use the dashboard. You can add a password later in **Settings > Server connection**.
   Without a password UnDash only answers at the server's IP address or name (`tower`, `tower.local`), so another web page cannot reach it through a host name of its own. Opening it through another name, such as a reverse proxy's, needs a password or that name in `UNDASH_ALLOWED_HOSTS`.
 
 To update, use **Update** in the Docker tab. UnDash shows a badge next to its version when a new release is out.
 
-### Plugin
+**Try the release candidate:** the `ghcr.io/stiphr/undash:beta` image is the next version, now 1.0.0rc. Run it as a second container with its own port and config folder, so your stable dashboard stays as it is.
 
-**Plugins > Install Plugin**, paste the URL below and press **Install** (Unraid 6.12 or later):
+### On TrueNAS
 
+TrueNAS support is new and has so far been tested against a stand-in built from the TrueNAS API reference, not a real server. Please report anything that looks wrong.
+
+**1. Create an API key.** Open your user's menu at the top right, then **My API Keys > Add**. The user needs the *Read-Only Administrator* role to show everything; for the buttons, also give it `APPS_WRITE` and `VM_WRITE`, or use `truenas_admin`. Without them the dashboard still shows everything, and the buttons go away after the first refusal.
+
+**2. Install the container.** Go to **Apps > Discover Apps > ⋮ > Install via YAML**, name it `undash` and paste this, with your own dataset path:
+
+```yaml
+services:
+  undash:
+    image: ghcr.io/stiphr/undash:latest
+    restart: unless-stopped
+    ports:
+      - "9099:9099"
+    volumes:
+      - /mnt/YOUR_POOL/apps/undash:/config
 ```
-https://raw.githubusercontent.com/Stiphr/UnDash/main/undash.plg
-```
 
-Open it from the **UnDash** tab in Unraid's menu, or full-window at `http://YOUR_SERVER_IP:9099` (only for browsers signed in to Unraid).
+The folder must be writable by uid 99, gid 100.
+
+**3. Connect it.** Open `http://YOUR_SERVER_IP:9099`, set a password with the setup code from the app's logs, then choose **TrueNAS** in the setup wizard or **Settings > Server connection**. Enter `https://YOUR_SERVER_IP`, the key and its user name. HTTPS is required, because the key must not travel unencrypted; TrueNAS's own self-signed certificate is fine.
+
+To connect from the container settings instead, set `TRUENAS_API_URL`, `TRUENAS_API_KEY` and `TRUENAS_API_USER`.
 
 ## Set up
 
@@ -78,16 +118,17 @@ Everything is set up in **Settings** (the gear at the top right, or press `,`); 
 
 ### Add apps
 
-1. Go to **Settings > Sections & apps** and press **Add app**.
+1. Go to **Settings > Apps & cards** and press **Add app**.
 2. Pick the app type. Search, or browse by group. Containers UnDash recognises (Radarr, Plex, qBittorrent and so on) are listed first under **Found on your server**, with the name, address and icon already filled in:
 
    | Group | App types |
    |---|---|
    | Arr Stack | Radarr, Sonarr, Lidarr, Readarr, Prowlarr, Bazarr, autobrr, Overseerr / Jellyseerr, Wizarr |
-   | Downloads | qBittorrent, qui, SABnzbd |
-   | Media | Plex, Jellyfin, Emby, Tautulli, Tautulli recently added, Calendar, Tdarr, Unmanic |
-   | Network and tools | AdGuard Home, Pi-hole, Nginx Proxy Manager, Gluetun, Immich, Home Assistant, PeaNUT |
-   | Monitoring | Scrutiny, Uptime Kuma, Speedtest Tracker |
+   | Downloads | qBittorrent, qui, SABnzbd, Deluge, Transmission, NZBGet |
+   | Media | Plex, Jellyfin, Emby, Tautulli, Tautulli recently added, Calendar, Tdarr, Unmanic, Navidrome, Audiobookshelf, Kavita, Komga, RomM, Jellystat, Tube Archivist, Ombi, Frigate |
+   | Files and home | Nextcloud, Paperless-ngx, File Browser, Syncthing, Karakeep, Mealie, Miniflux, FreshRSS, Gitea / Forgejo, Gotify, changedetection.io |
+   | Network and tools | AdGuard Home, Pi-hole, Technitium DNS, Nginx Proxy Manager, Traefik, Caddy, Gluetun, Headscale, UniFi, Immich, Home Assistant, PeaNUT |
+   | Monitoring | Scrutiny, Uptime Kuma, Speedtest Tracker, Healthchecks, Gatus, Beszel, Netdata, Prometheus, Grafana, Glances, Portainer, What's Up Docker, Minecraft server |
    | Server | Storage, Docker summary, VM summary, UPS |
    | Widgets | Weather (Open-Meteo, no key), GitHub releases (with *Add from my containers*), Bookmarks |
    | Other | Custom API (JSON) for most other apps, Link for a plain shortcut |
@@ -102,6 +143,8 @@ Everything is set up in **Settings** (the gear at the top right, or press `,`); 
 4. Press **Test**. It tries the app with what you filled in and shows the numbers it got, or the error. Nothing is saved yet.
 5. Press **Add app**, then **Save**.
 
+**Bulk edit:** the **Bulk edit** button next to **Add app** shows every app's IP, port and key in one table. Change single rows, or replace an address in every app that uses it. A saved key is only sent to the address it was saved for, so an app that moves needs its key typed again. Press **Apply**, then **Save**.
+
 Each app lands in the right section by itself: the Arr apps in **Arr Stack**, download clients in **Downloads**, Calendar and Tautulli recently added in **Media**, Storage, UPS and the Docker / VM summaries in **System**, everything else in **Apps**. Radarr and Sonarr also fill **Media**, Plex, Emby, Jellyfin and Tautulli fill **Now playing**, and Overseerr fills **Requests**. To change an app later, find it under its section (or type its name in **Find an app**) and use edit, hide, star (favorite), drag to reorder, or remove.
 
 Apps in the **Apps** section sit in groups. Open **Apps > Groups and apps** to add, rename and reorder groups, set the number of columns, and choose whether group names are shown.
@@ -110,65 +153,110 @@ Apps in the **Apps** section sit in groups. Open **Apps > Groups and apps** to a
 
 ### Add containers and VMs
 
-Containers and VMs need no setup: UnDash lists everything it finds on the server through the Unraid API (Docker version) or Unraid itself (plugin). Choose which ones the dashboard shows:
+Containers and VMs need no setup: UnDash lists everything it finds on the server through your server's API. On TrueNAS, your apps show here as containers. Choose which ones the dashboard shows:
 
-1. Go to **Settings > Sections & apps**.
-2. Open **Containers > Containers and view** (or **Virtual machines > VMs and view**).
+1. Go to **Settings > Apps & cards**.
+2. Open **Containers** (or **Virtual machines**).
 3. Under **Containers on the dashboard**, tick the ones to show. **Select all**, **Running only** and **None** act on everything the filter box lists, so you can type `arr` and press **Select all** to add every Arr container at once. New containers show until you untick them.
-4. Per container you can also set a **display name**, an **icon**, **favorite** (star, also shown in the **Favorites** section) and whether it is **checked for updates** (arrow).
+4. Per container you can also set a **display name**, an **icon**, **favorite** (star, also shown in the **Favorites** section) and whether it is **checked for updates** (arrow). A display name changes the dashboard only; the container keeps its real name. On a phone this list is the place to rename, because edit mode is for larger screens.
 5. Pick the **layout** (compact grid, table or cards), **sort order**, what each container shows (CPU, memory, uptime, image) and which ones show by default: running, all, or **Selected**.
 6. Press **Save**.
 
-The list stays empty until UnDash can read the server. In the Docker version, check **Settings > Connection** and that the API key has read access to *Docker* and *VMs* (see [Install](#docker-container)).
+With a read-only API key the controls are hidden, and the dashboard stays useful for watching. If Unraid does not tell UnDash what the key may do, they disappear after the first refused action and are tried again an hour later.
+
+The list stays empty until UnDash can read the server. In the Docker version, check **Settings > Server connection** and that the API key has read access to *Docker* and *VMs* (see [Install](#docker-container)).
 
 On the dashboard, the gear on each container or VM has the controls: start, stop, restart, update, logs, **Show in "Selected"** and **Hide from the dashboard**. Click the icon or name to open its web UI.
 
-### Arrange the sections (widgets)
+**Updates:** a container with an update has a small badge on its icon, and the **Updates** filter lists them all. Click the badge to choose:
 
-The dashboard is made of sections: **System**, **Alerts**, **Favorites**, **Media**, **Arr Stack**, **Downloads**, **Now playing**, **Requests**, **Endpoint health**, **Containers**, **Virtual machines** and **Apps**. Each app you add is a widget card inside one of them.
+- **Update now**: pulls the new image and recreates the container, as Unraid's Docker tab does.
+- **Skip this version**: hides this update, and the badge comes back by itself when a newer version comes out. The Docker version checks skipped images with their registry every 6 hours. Images you built yourself have no registry to ask, so use Ignore for those.
+- **Ignore updates for this container**: no badge until you turn it back on.
 
-1. In **Settings > Sections & apps**, under **Sections**:
-   - tick a section to show it, untick to hide it;
-   - drag it to change the order;
-   - set it to **Full width** or **Half width** (two half-width sections sit side by side on wide screens).
-2. Press the button on the right of a section to open its options:
+To hide all update badges, turn off **Show updates** in the container options.
 
-   | Section | Options |
-   |---|---|
-   | System | which tiles to show (CPU, memory, storage, network, health, disks, UPS…) and their order |
-   | Media | which columns (upcoming and recent movies and episodes), items per column, days ahead, which Radarr and Sonarr, posters or text only |
-   | Arr Stack / Downloads | their apps; how many active downloads per client |
-   | Requests | posters or text only |
-   | Apps | columns, groups, group names, shortcut links |
-   | Containers / Virtual machines | see [Add containers and VMs](#add-containers-and-vms) |
+### Arrange the dashboard
 
-3. Press **Save**.
+Press the pencil at the top right to edit the dashboard in place. Nothing changes until you press **Save**, and **Undo** steps back through your changes, on every page. Edit mode needs a screen wider than a phone.
 
-App widgets refresh every 15 seconds and the system every 2 seconds; change both in **Settings > Refresh & display**.
+- **Move and resize:** drag a card, or drag its edges. Click a card for its options: name, which page it is on, and what it shows.
+- **Add** brings back cards you removed and adds new apps. **Pages** adds and names pages. **Appearance** has the theme, accent colour, background, navbar, card style and size beside your cards.
+- **Arrange** has the tools that do the work for you:
+
+  | Tool | What it does |
+  |---|---|
+  | Smart arrange | lays out every card on the page and fits each one to its content, so nothing is cut off |
+  | Smart arrange apps | lines up only the app cards in even rows; the other cards stay where they are |
+  | Fit all to content | keeps the layout and fixes the heights |
+  | Presets | ready-made layouts for the page, or for one set of cards |
+  | Snap up | closes the gaps when you move a card |
+  | Reset the layout | starts the page over |
+
+- **Size an app:** click an app card and choose **Small**, **Medium**, **Large** or **Wide**. **Use for all apps** gives them all that size.
+
+What each card shows is set in **Settings > Apps & cards** as well. Open a card there for its options:
+
+| Card | Options |
+|---|---|
+| System | which tiles to show (CPU, memory, storage, network, health, disks, UPS…) and their order |
+| Media | which columns (upcoming and recent movies and episodes), items per column, days ahead, which Radarr and Sonarr, posters or text only |
+| Arr Stack / Downloads | their apps; how many active downloads per client |
+| Requests | posters or text only |
+| Apps | groups, group names, shortcut links |
+| Containers / Virtual machines | see [Add containers and VMs](#add-containers-and-vms) |
+
+App cards refresh every 15 seconds and the system every 2 seconds; change both in **Settings > General**.
+
+### Setup wizard and presets
+
+A new dashboard opens the setup wizard. It asks for a name, your Unraid connection, a password, what to show, which apps to connect and a look. Run it again from Settings > Presets. Your apps and keys stay, and you can keep your layout.
+
+Presets come in two sizes. Whole dashboards: **Everything**, **Media server**, **Server monitor** and **Essentials**. Each set also has its own choices, such as System tiles (All, Essentials, Performance, Storage), Downloads (Active items, Speeds only, Long list) or Containers (Grid, List, Cards). Use them in the wizard, or in Edit dashboard > Arrange > **Presets**.
+
+**Your own presets:** **Settings > Presets > Save current** keeps your cards, pages and views, and the look if you tick it. **Use** brings them back, and Preview shows the result before you save. **Export** writes a file and **Import** reads one. A file holds no apps, addresses or keys: on another server each card goes to the first app of that type, and a card with no match is left out.
+
+### Pages
+
+Edit dashboard > **Pages** adds and names pages, and **Split my cards** makes a first set from what you have: **Media** gets the media lists, Arr Stack, Downloads, Now playing and Requests, and **Apps** gets your app cards, Containers and VMs. Click a card to send it to another page. Each page keeps its own layout. With one page there are no tabs; with more, press 1 to 9 to switch. On a phone your pages replace the bottom tabs; with no pages the tabs are Home, Media and Apps.
+
+### Without an Unraid API key
+
+The Docker version reads and controls Unraid through its API, so without a key there are no containers, VMs or array details, and UnDash hides them rather than showing buttons that cannot work. Your apps, media, downloads, requests, feeds and push alerts for them work as usual, and everything comes back when you add a key.
+
+If you run [Glances](https://github.com/nicolargo/glances), put its address in **Settings > Server connection** to get CPU, memory, storage, network and uptime back. It needs no key. Network speed only covers the whole server when Glances runs with host networking.
 
 ### Pick a look
 
-**Settings > Theme**: theme, light / dark / system mode, accent colour, spacing and wallpaper. **Settings > Custom CSS** for anything else.
+**Settings > Appearance**: theme, light / dark / system mode, accent colour, spacing and wallpaper. The accent can follow the theme, be a colour of your own, or be taken from the wallpaper: UnDash reads a small copy of the picture in your browser and picks its main colour, toned so buttons and links stay readable. For the background choose the theme's gradient, a plain colour, a picture from an address, or **your own picture** (JPEG, PNG or WebP; it is scaled down in your browser and kept in the configuration folder, never sent anywhere). **Settings > Advanced > Custom CSS** for anything else.
+
+### The navbar
+
+**Settings > Appearance > Navbar**, or Appearance in edit mode: choose the search bar's width (Normal, Wide, Full width or Hidden) and which items to show: logo, dashboard name, Unraid version, UnDash version, clock, alerts and buttons. **Stay on top when scrolling** keeps the bar in view. The browser tab icon follows your accent colour, or uses your own logo if you set one.
 
 ### Start from the example
 
 [`examples/config.yaml`](examples/config.yaml) is a complete working setup: 7 groups, 31 apps, all sections, Default theme, with no keys, passwords or real addresses.
 
-1. Download it, then go to **Settings > Backup & import > Import** and choose the file. You see what it contains before anything changes, and a backup is taken first.
-2. In **Settings > Sections & apps**, change each address (`192.168.1.10` is a placeholder) and add the API keys; apps still missing one are marked. Remove the apps you don't run.
+1. Download it, then go to **Settings > Backup & restore > Import** and choose the file. You see what it contains before anything changes, and a backup is taken first.
+2. In **Settings > Apps & cards**, change each address (`192.168.1.10` is a placeholder) and add the API keys; apps still missing one are marked. Remove the apps you don't run.
 
 ## Settings at a glance
 
 | Where | What |
 |---|---|
-| Settings > Sections & apps | what the dashboard shows: sections, their options and your apps |
-| Settings > Theme / Custom CSS | how it looks |
-| Settings > Refresh & display | refresh interval (default 2 s), what the search box searches, search engine, title |
-| Settings > Ignored alerts | alerts you have ignored |
-| Settings > Connection | Docker: Unraid API and dashboard password. Plugin: settings folder and the 9099 port |
-| Settings > Backup & import | export and import `config.yaml` and `.env`, automatic backups, import from another dashboard |
+| Settings > Quick settings | the first page: mode, theme, density, shortcuts, and how the server is doing |
+| Settings > Apps & cards | what the dashboard shows: sections, their options and your apps |
+| Settings > Presets | your own presets (save, use, export, import), ready-made dashboards, a style per set, the setup wizard |
+| Settings > Appearance | how it looks: theme, accent colour, background and wallpaper, size and spacing; Restore defaults puts the page back |
+| Settings > General | dashboard name and icon, what the search box searches, refresh interval (default 2 s), disk path and UPS |
+| Settings > Alerts | phone alerts, and alerts you have ignored |
+| Settings > Server connection | Unraid or TrueNAS API and dashboard password |
+| Settings > Guest link | a private read-only address for family and friends |
+| Settings > Backup & restore | automatic backups and Back up now, export and import `config.yaml` and `.env`, import from another dashboard, restore all defaults |
+| Settings > Advanced | Custom CSS, and About: version, where the files are, action and alert history |
 
-UnDash keeps two files in its config folder (`/config` in Docker, `/mnt/user/appdata/undash` for the plugin):
+UnDash keeps two files in its config folder (`/config`):
 
 - **`config.yaml`**: everything you set in Settings. It never holds a key or password (apps refer to them by name, like `{{RADARR_API_KEY}}`), so it is safe to share.
 - **`.env`** (mode 600): the API keys, user names and passwords you enter in Settings.
@@ -177,23 +265,33 @@ Both are backed up automatically after every settings save and before an import 
 
 Keyboard: `/` search · `r` refresh · `p` pause · `,` settings · `?` all shortcuts · `g` + a letter jumps to a section.
 
+## Guest link
+
+Settings > **Guest link** makes a private address for family or friends. It is read-only and has its own session, so opening it does not sign you out. Choose what it shows: System, Media, Now playing and each app. New apps stay private until you tick them. It never shows containers, VMs, downloads, requests, alerts, addresses or Settings. **New link** ends the old address at once.
+
+Anyone with the link can open it, so share it like a password. Set a dashboard password as well: without one, the plain address still opens everything.
+
 ## Security
 
 - Every action is a fixed, validated operation on a known container or VM; nothing from the browser is run as a command.
-- The Docker image runs unprivileged as uid 99, with no Docker socket: everything goes through the Unraid API with the key you scope.
-- Sessions are HttpOnly with CSRF protection and a strict Content-Security-Policy; wrong passwords are rate-limited.
-- Port 9099 is plain HTTP. Use it on your LAN, or put a reverse proxy with HTTPS in front.
+- The Docker image runs unprivileged as uid 99, with no Docker socket: everything goes through your server's API with the key you scope.
+- Sessions are HttpOnly with CSRF protection and a strict Content-Security-Policy.
+- Password guessing is slowed down hard: 5 wrong tries lock an address out for 15 minutes, and each lockout after that lasts twice as long, up to a day. Repeated wrong passwords raise an alert with the address. The commonest passwords are refused. If you lock yourself out, restart the container.
+- Keys and passwords stay on the server, and a saved one is only sent to the address it was saved for. Moving an app to a new address asks for its key again.
+- Port 9099 is plain HTTP. Use it on your LAN, or put a reverse proxy with HTTPS in front. Behind a proxy, set `UNDASH_TRUSTED_PROXIES` to its address, so each visitor counts on their own for wrong passwords and sign-in cookies are marked Secure.
+- **Set a dashboard password.** Without one, anyone who can reach the port can use the dashboard and control your containers, and none of the sign-in protection above applies.
+- Certificates of the apps UnDash reads are not checked by default (LAN apps mostly use self-signed ones). Set `UNDASH_TLS_VERIFY=1` in the container settings to check them.
+- Numbers typed into Settings are checked before they can be saved; a value the server still has to bring inside its limits is named after saving, never changed in silence.
 
-More detail: [docs/DOCKER.md](docs/DOCKER.md) (Docker version) · [docs/CONFIG.md](docs/CONFIG.md) (settings file format).
+More detail: [docs/DOCKER.md](docs/DOCKER.md) (the container) · [docs/CONFIG.md](docs/CONFIG.md) (settings file format).
 
 ## Development
 
-Plain PHP 7.4+ with vanilla JS and CSS, no build step for the app. `python3 build.py 0.6.0` writes `undash.plg`; pushing a `vX.Y.Z` tag builds and publishes the Docker image.
+Plain PHP 7.4+ with vanilla JS and CSS, no build step. Pushing a `vX.Y.Z` tag builds and publishes the Docker image.
 
 ```bash
-php tests/run.php && php tests/api_mode_test.php && php tests/router_test.php && php tests/docker_auth_test.php
-php -S 127.0.0.1:8088 dev/server.php                          # local preview with fake data (plugin mode)
-UNDASH_DEV_MODE=api php -S 127.0.0.1:8089 dev/server.php      # the same in Docker mode
+php tests/run.php && php tests/api_mode_test.php && php tests/truenas_test.php && php tests/router_test.php && php tests/docker_auth_test.php
+UNDASH_DEV_MODE=api php -S 127.0.0.1:8089 dev/server.php      # local preview with fake data
 ```
 
 ## License

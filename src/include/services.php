@@ -12,26 +12,69 @@
 
 /* ---------- HTTP ---------- */
 
+const UND_HTTP_MAX = 67108864;       // an answer larger than this is refused: 64 MB of JSON already takes most of a request's memory
+
+/** Certificates of the apps UnDash reads are not checked by default: on a LAN they are mostly self-signed. UNDASH_TLS_VERIFY=1
+ *  turns the check on for every https:// address (apps behind a reverse proxy with real certificates). */
+function und_tls_verify() { static $v = null; if ($v === null) $v = in_array(strtolower((string)getenv('UNDASH_TLS_VERIFY')), ['1', 'true', 'yes', 'on'], true); return $v; }
+
+/** Where a redirect leads, as a full address; '' for anything but a web address. */
+function und_http_next($base, $loc) {
+  $loc = trim((string)$loc);
+  if (preg_match('#^https?://#i', $loc)) return $loc;
+  if ($loc === '' || preg_match('#^[a-z][a-z0-9+.-]*:#i', $loc)) return '';
+  $p = parse_url($base);
+  if (strpos($loc, '//') === 0) return $p['scheme'] . ':' . $loc;
+  $root = $p['scheme'] . '://' . $p['host'] . (isset($p['port']) ? ':' . $p['port'] : '');
+  return $root . ($loc[0] === '/' ? $loc : preg_replace('#/[^/]*$#', '/', $p['path'] ?? '/') . $loc);
+}
+
+/** Does a redirect stay on the same app? Only then do keys, passwords and cookies go along. http to https on the same host counts. */
+function und_http_same($a, $b) {
+  $x = parse_url($a); $y = parse_url($b);
+  if (strtolower((string)($x['host'] ?? '')) !== strtolower((string)($y['host'] ?? ''))) return false;
+  $port = function ($u) { return (int)($u['port'] ?? (strtolower((string)$u['scheme']) === 'https' ? 443 : 80)); };
+  if (strtolower((string)$x['scheme']) === 'https' && strtolower((string)$y['scheme']) === 'http') return false;
+  return $port($x) === $port($y) || ($port($x) === 80 && $port($y) === 443);
+}
+
 function und_http($method, $url, array $o = []) {
-  if (isset($GLOBALS['UND_HTTP_MOCK'])) { $r = call_user_func($GLOBALS['UND_HTTP_MOCK'], $method, $url, $o); if (is_array($r)) return $r; }
+  for ($hop = 0; ; $hop++) {
+    $r = und_http_once($method, $url, $o);
+    $next = in_array($r['code'], [301, 302, 303, 307, 308], true) ? und_http_next($url, $r['headers']['location'][0] ?? '') : '';
+    if ($next === '') return $r;
+    if ($hop >= 3) return ['err' => 'Too many redirects.'] + $r;
+    if (!und_http_same($url, $next)) {            // a key must never follow a redirect to another server
+      unset($o['basic'], $o['cookie']);
+      foreach (array_keys($o['headers'] ?? []) as $k) if (preg_match('/auth|key|token|cookie|session|sid/i', $k)) unset($o['headers'][$k]);
+    }
+    if ($r['code'] === 303 || (in_array($r['code'], [301, 302], true) && $method === 'POST')) { $method = 'GET'; unset($o['body']); }
+    $url = $next;
+  }
+}
+
+function und_http_once($method, $url, array $o) {
+  if (isset($GLOBALS['UND_HTTP_MOCK'])) { $r = call_user_func($GLOBALS['UND_HTTP_MOCK'], $method, $url, $o); if (is_array($r)) return $r + ['code' => 0, 'headers' => []]; }
   if (!preg_match('#^https?://#i', $url)) return ['code' => 0, 'body' => '', 'json' => null, 'err' => 'The URL must start with http:// or https://', 'headers' => []];
   $ch = curl_init($url);
   $headers = [];
   foreach (($o['headers'] ?? []) as $k => $v) $headers[] = $k . ': ' . $v;
   $resp = [];
   curl_setopt_array($ch, [
-    CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
+    CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false,
     CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => (int)($o['timeout'] ?? 10), CURLOPT_HTTPHEADER => $headers,
-    CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => 0,     // LAN apps mostly use self-signed certificates
+    CURLOPT_SSL_VERIFYPEER => und_tls_verify() || !empty($o['verify']), CURLOPT_SSL_VERIFYHOST => und_tls_verify() || !empty($o['verify']) ? 2 : 0,
     CURLOPT_USERAGENT => 'UnDash/' . UND_VERSION, CURLOPT_ENCODING => '',
     CURLOPT_HEADERFUNCTION => function ($c, $h) use (&$resp) { $p = explode(':', $h, 2); if (count($p) === 2) $resp[strtolower(trim($p[0]))][] = trim($p[1]); return strlen($h); },
   ]);
+  if ($method === 'HEAD') curl_setopt($ch, CURLOPT_NOBODY, true);     // or curl waits for a body that never comes
   if (isset($o['body'])) curl_setopt($ch, CURLOPT_POSTFIELDS, $o['body']);
+  $max = (int)($o['max'] ?? UND_HTTP_MAX); curl_setopt($ch, CURLOPT_NOPROGRESS, false); curl_setopt($ch, CURLOPT_XFERINFOFUNCTION, function ($c, $total, $now) use ($max) { return $now > $max ? 1 : 0; });
   if (isset($o['basic'])) curl_setopt($ch, CURLOPT_USERPWD, $o['basic'][0] . ':' . $o['basic'][1]);
   if (isset($o['cookie'])) curl_setopt($ch, CURLOPT_COOKIE, $o['cookie']);
   $body = curl_exec($ch);
   $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-  $err = $body === false ? curl_error($ch) : '';
+  $err = $body === false ? (curl_errno($ch) === CURLE_ABORTED_BY_CALLBACK ? 'The answer was too large to read.' : curl_error($ch)) : '';
   if (PHP_VERSION_ID < 80000) curl_close($ch);      // a no-op since PHP 8.0, deprecated in 8.5
   $body = $body === false ? '' : $body;
   return ['code' => $code, 'body' => $body, 'json' => json_decode($body, true), 'err' => $err, 'headers' => $resp];
@@ -112,33 +155,39 @@ function und_w_link() { return ['native' => true]; }
 
 function und_arr_h($s) { return ['headers' => ['X-Api-Key' => $s['key'], 'Accept' => 'application/json']]; }
 
+/** A number worked out from an app's whole library: too large a read for every refresh. Tied to the address and key, so a changed app is read again. */
+function und_library($s, $ttl, callable $fn) { return und_api_cached('lib-' . $s['type'] . '-' . md5($s['url'] . $s['key']), $ttl, $fn); }
+
 function und_w_radarr($s) {
-  $movies = und_get(und_u($s['url'], '/api/v3/movie'), und_arr_h($s) + ['timeout' => 20]);
+  $lib = und_library($s, 60, function () use ($s) {
+    $movies = und_get(und_u($s['url'], '/api/v3/movie'), und_arr_h($s) + ['timeout' => 20]);
+    $wanted = $missing = 0;
+    foreach ((array)$movies as $m) if (!empty($m['monitored']) && empty($m['hasFile'])) { $missing++; if (!empty($m['isAvailable'])) $wanted++; }
+    return ['wanted' => $wanted, 'missing' => $missing, 'n' => count((array)$movies)];
+  });
   $q = und_get(und_u($s['url'], '/api/v3/queue/status'), und_arr_h($s));
-  $wanted = $missing = 0;
-  foreach ((array)$movies as $m) if (!empty($m['monitored']) && empty($m['hasFile'])) { $missing++; if (!empty($m['isAvailable'])) $wanted++; }
-  return ['blocks' => [und_b('wanted', 'Wanted', $wanted), und_b('missing', 'Missing', $missing), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('movies', 'Movies', count((array)$movies))]];
+  return ['blocks' => [und_b('wanted', 'Wanted', $lib['wanted']), und_b('missing', 'Missing', $lib['missing']), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('movies', 'Movies', $lib['n'])]];
 }
 
 function und_w_sonarr($s) {
   $w = und_get(und_u($s['url'], '/api/v3/wanted/missing?pageSize=1'), und_arr_h($s));
   $q = und_get(und_u($s['url'], '/api/v3/queue?pageSize=1&includeUnknownSeriesItems=false'), und_arr_h($s));
-  $series = und_get(und_u($s['url'], '/api/v3/series'), und_arr_h($s) + ['timeout' => 20]);
-  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalRecords'] ?? 0)), und_b('series', 'Series', count((array)$series))]];
+  $n = und_library($s, 300, function () use ($s) { return ['n' => count((array)und_get(und_u($s['url'], '/api/v3/series'), und_arr_h($s) + ['timeout' => 20]))]; })['n'];
+  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalRecords'] ?? 0)), und_b('series', 'Series', $n)]];
 }
 
 function und_w_lidarr($s) {
   $w = und_get(und_u($s['url'], '/api/v1/wanted/missing?pageSize=1'), und_arr_h($s));
   $q = und_get(und_u($s['url'], '/api/v1/queue/status'), und_arr_h($s));
-  $a = und_get(und_u($s['url'], '/api/v1/artist'), und_arr_h($s) + ['timeout' => 20]);
-  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('artists', 'Artists', count((array)$a))]];
+  $n = und_library($s, 300, function () use ($s) { return ['n' => count((array)und_get(und_u($s['url'], '/api/v1/artist'), und_arr_h($s) + ['timeout' => 20]))]; })['n'];
+  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('artists', 'Artists', $n)]];
 }
 
 function und_w_readarr($s) {
   $w = und_get(und_u($s['url'], '/api/v1/wanted/missing?pageSize=1'), und_arr_h($s));
   $q = und_get(und_u($s['url'], '/api/v1/queue/status'), und_arr_h($s));
-  $b = und_get(und_u($s['url'], '/api/v1/book'), und_arr_h($s) + ['timeout' => 20]);
-  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('books', 'Books', count((array)$b))]];
+  $n = und_library($s, 300, function () use ($s) { return ['n' => count((array)und_get(und_u($s['url'], '/api/v1/book'), und_arr_h($s) + ['timeout' => 20]))]; })['n'];
+  return ['blocks' => [und_b('wanted', 'Wanted', (int)($w['totalRecords'] ?? 0)), und_b('queued', 'Queued', (int)($q['totalCount'] ?? 0)), und_b('books', 'Books', $n)]];
 }
 
 function und_w_bazarr($s) {
@@ -146,12 +195,25 @@ function und_w_bazarr($s) {
   return ['blocks' => [und_b('missingEpisodes', 'Missing episodes', (int)($b['episodes'] ?? 0)), und_b('missingMovies', 'Missing movies', (int)($b['movies'] ?? 0))]];
 }
 
+const UND_PROWLARR_TTL = 1800;
 function und_w_prowlarr($s) {
-  // Prowlarr works these totals out from its whole 30-day history (10 s and more on a busy instance), so they are kept for 10 minutes
-  $st = und_api_cached('prowlarr-' . md5($s['url'] . $s['key']), 600, function () use ($s) { return und_get(und_u($s['url'], '/api/v1/indexerstats'), und_arr_h($s) + ['timeout' => 30]); });
+  // Prowlarr works these totals out from its whole 30-day history (10 s and more on a busy instance, at full CPU), so they are kept for
+  // 30 minutes. An old copy still answers at once while scripts/refresh.php gets a new one: no page waits, however long Prowlarr takes
+  $name = 'prowlarr-' . md5($s['url'] . $s['key']);
+  $old = empty($GLOBALS['UND_FRESH']) ? und_read_json(und_tmp('api-' . $name . '.json'), null) : null;
+  if (is_array($old)) {
+    $st = $old['v'];
+    $mark = und_tmp('refresh-' . $s['id'] . '.mark');
+    if (microtime(true) - (float)$old['t'] >= UND_PROWLARR_TTL && time() - (int)@filemtime($mark) > 120) {
+      @touch($mark);
+      und_spawn([PHP_BINARY ?: 'php', '-d', 'auto_prepend_file=', UND_ROOT . '/scripts/refresh.php', $s['id']], und_tmp('refresh-' . $s['id'] . '.log'));
+    }
+  } else {
+    $st = und_api_cached($name, empty($GLOBALS['UND_FRESH']) ? UND_PROWLARR_TTL : 0, function () use ($s) { return und_get(und_u($s['url'], '/api/v1/indexerstats'), und_arr_h($s) + ['timeout' => 30]); });
+  }
   $t = ['g' => 0, 'q' => 0, 'fg' => 0, 'fq' => 0];
   foreach ((array)($st['indexers'] ?? []) as $i) { $t['g'] += (int)($i['numberOfGrabs'] ?? 0); $t['q'] += (int)($i['numberOfQueries'] ?? 0); $t['fg'] += (int)($i['numberOfFailedGrabs'] ?? 0); $t['fq'] += (int)($i['numberOfFailedQueries'] ?? 0); }
-  return ['blocks' => [und_b('numberOfGrabs', 'Grabs', $t['g']), und_b('numberOfQueries', 'Queries', $t['q']), und_b('numberOfFailGrabs', 'Fail grabs', $t['fg']), und_b('numberOfFailQueries', 'Fail queries', $t['fq'])]];
+  return ['blocks' => [und_b('numberOfGrabs', 'Grabs', $t['g']), und_b('numberOfQueries', 'Queries', $t['q']), und_b('numberOfFailGrabs', 'Failed grabs', $t['fg']), und_b('numberOfFailQueries', 'Failed queries', $t['fq'])]];
 }
 
 function und_w_overseerr($s) {
@@ -253,7 +315,10 @@ function und_tautulli($s, array $q) {
 }
 
 function und_w_tautulli($s) {
-  return ['streams' => und_streams_tautulli(und_tautulli($s, ['cmd' => 'get_activity'])), 'empty' => 'No active streams'];
+  $d = und_tautulli($s, ['cmd' => 'get_activity']);
+  return ['blocks' => [und_b('streams', 'Streams', (int)($d['stream_count'] ?? 0)), und_b('direct', 'Direct', (int)($d['stream_count_direct_play'] ?? 0) + (int)($d['stream_count_direct_stream'] ?? 0)),
+                       und_b('transcode', 'Transcoding', (int)($d['stream_count_transcode'] ?? 0)), und_b('bandwidth', 'Bandwidth', (int)($d['total_bandwidth'] ?? 0) * 125, 'rate')],
+          'streams' => und_streams_tautulli($d), 'empty' => 'No active streams'];
 }
 
 function und_w_tautulli_recent($s) {
@@ -300,7 +365,7 @@ function und_w_npm($s) {
     $tok = ['token' => $j['token'], 'expires' => (string)($j['expires'] ?? '')];
     und_write_json($tf, $tok, true);
   }
-  $hosts = und_get(und_u($s['url'], '/api/nginx/proxy-hosts'), ['headers' => ['Authorization' => 'Bearer ' . $tok['token']]]);
+  $hosts = und_api_cached('npm-hosts-' . $s['id'], 60, function () use ($s, $tok) { return und_get(und_u($s['url'], '/api/nginx/proxy-hosts'), ['headers' => ['Authorization' => 'Bearer ' . $tok['token']]]); });
   $on = 0; foreach ((array)$hosts as $x) if (!empty($x['enabled'])) $on++;
   return ['blocks' => [und_b('enabled', 'Enabled', $on), und_b('disabled', 'Disabled', count((array)$hosts) - $on), und_b('total', 'Total', count((array)$hosts))]];
 }
@@ -570,16 +635,16 @@ function und_github_repo_of($u) {
  */
 function und_container_sources() {
   $rows = [];
-  if (und_api_mode()) {
-    $r = und_gql('query { docker { containers { names image labels } } }', [], 15);
-    $list = (array)($r['data']['docker']['containers'] ?? []);
-    if (!$list) { $r = und_gql('query { docker { containers { names image } } }', [], 15); $list = (array)($r['data']['docker']['containers'] ?? []); }
-    if (!$list && isset($r['error'])) return ['error' => $r['error']];
-    foreach ($list as $c) $rows[] = ['name' => ltrim((string)($c['names'][0] ?? ''), '/'), 'image' => (string)($c['image'] ?? ''), 'source' => (string)(((array)($c['labels'] ?? []))['org.opencontainers.image.source'] ?? '')];
-  } else {
+  if (und_is_truenas()) {
     $dk = und_docker_live();
     if (isset($dk['error'])) return ['error' => $dk['error']];
-    foreach ((array)($dk['containers'] ?? []) as $c) $rows[] = ['name' => $c['name'], 'image' => (string)$c['image'], 'source' => (string)($c['source'] ?? '')];
+    foreach ((array)$dk['containers'] as $c) $rows[] = ['name' => $c['name'], 'image' => $c['image'], 'source' => ''];
+  } else {
+  $r = und_gql('query { docker { containers { names image labels } } }', [], 15);
+  $list = (array)($r['data']['docker']['containers'] ?? []);
+  if (!$list) { $r = und_gql('query { docker { containers { names image } } }', [], 15); $list = (array)($r['data']['docker']['containers'] ?? []); }
+  if (!$list && isset($r['error'])) return ['error' => $r['error']];
+  foreach ($list as $c) $rows[] = ['name' => ltrim((string)($c['names'][0] ?? ''), '/'), 'image' => (string)($c['image'] ?? ''), 'source' => (string)(((array)($c['labels'] ?? []))['org.opencontainers.image.source'] ?? '')];
   }
   $out = [];
   foreach ($rows as $c) {
@@ -590,6 +655,69 @@ function und_container_sources() {
   }
   usort($out, function ($a, $b) { return ($a['repo'] === '') <=> ($b['repo'] === '') ?: strcasecmp($a['name'], $b['name']); });
   return ['containers' => $out];
+}
+
+/* ---------- RSS and Atom ---------- */
+
+const UND_RSS_TTL = 900;
+const UND_RSS_MAX = 3145728;
+const UND_RSS_FEEDS = 10;
+
+function und_rss_text($v) { return trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags((string)$v), ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? ''); }
+
+/** A feed as ['name' => title, 'items' => [[title, href, ts]]]. Reads RSS 2.0, RSS 1.0 and Atom. The network stays off while parsing. */
+function und_rss_parse($body) {
+  if (!function_exists('simplexml_load_string')) throw new Exception('This PHP has no XML reader.');
+  $was = libxml_use_internal_errors(true);
+  $x = simplexml_load_string((string)$body, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOCDATA);
+  libxml_clear_errors(); libxml_use_internal_errors($was);
+  if ($x === false) throw new Exception('The answer was not a feed (is the address right?).');
+  $root = strtolower($x->getName());
+  if ($root === 'feed') { $name = (string)$x->title; $rows = $x->entry; }
+  elseif ($root === 'rss') { $name = (string)$x->channel->title; $rows = $x->channel->item; }
+  elseif ($root === 'rdf') { $name = (string)$x->channel->title; $rows = $x->item; }
+  else throw new Exception('The answer was not a feed (is the address right?).');
+  $items = [];
+  foreach ($rows as $it) {
+    $href = '';
+    if ($root === 'feed') foreach ($it->link as $l) { $a = $l->attributes(); if ($href === '' || (string)($a['rel'] ?? '') === 'alternate') $href = (string)($a['href'] ?? ''); }
+    else $href = (string)$it->link ?: (string)$it->guid;
+    $dc = $it->children('http://purl.org/dc/elements/1.1/');
+    $when = (string)($it->pubDate ?: ($it->published ?: ($it->updated ?: $dc->date)));
+    $t = und_rss_text($it->title);
+    if ($t === '') continue;
+    $items[] = ['title' => und_clip($t, 200), 'href' => preg_match('#^https?://[^\s<>"]+$#i', trim($href)) ? trim($href) : '', 'ts' => $when !== '' ? (strtotime($when) ?: null) : null];
+    if (count($items) >= 50) break;
+  }
+  return ['name' => und_clip(und_rss_text($name), 60), 'items' => $items];
+}
+
+/** The newest stories of one or more feeds: "Name | address" per line, or just the address. Each is read at most every 15 minutes. */
+function und_w_rss($s) {
+  $feeds = [];
+  foreach (preg_split('/\r?\n/', (string)($s['options']['feeds'] ?? '')) as $line) {
+    $p = array_map('trim', explode('|', trim($line), 2));
+    $url = count($p) === 2 ? $p[1] : $p[0];
+    if ($url === '') continue;
+    if (!preg_match('#^https?://[^\s<>"]+$#i', $url)) throw new Exception('Not a web address: ' . und_clip($url, 80));
+    $feeds[$url] = count($p) === 2 ? und_clip($p[0], 60) : '';
+  }
+  if (!$feeds) throw new Exception('Add the address of a feed.');
+  $rows = []; $errs = []; $many = count($feeds) > 1;
+  foreach (array_slice($feeds, 0, UND_RSS_FEEDS, true) as $url => $name) {
+    try {
+      $f = und_cached('rss-' . md5($url) . '.json', UND_RSS_TTL, function () use ($url) {
+        $r = und_http('GET', $url, ['timeout' => 6, 'max' => UND_RSS_MAX, 'headers' => ['Accept' => 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5']]);
+        if ($r['err'] !== '') throw new Exception(und_redact($r['err']));
+        if ($r['code'] >= 400 || $r['code'] === 0) throw new Exception('HTTP ' . $r['code'] . ' from ' . und_clip((string)parse_url($url, PHP_URL_HOST), 80));
+        return und_rss_parse($r['body']);
+      });
+    } catch (Exception $e) { $errs[] = (parse_url($url, PHP_URL_HOST) ?: $url) . ': ' . $e->getMessage(); continue; }
+    foreach ($f['items'] as $it) $rows[] = $it + ($many ? ['sub' => $name !== '' ? $name : $f['name']] : []);
+  }
+  if (!$rows && $errs) throw new Exception($errs[0]);
+  usort($rows, function ($a, $b) { return ($b['ts'] ?? 0) <=> ($a['ts'] ?? 0); });
+  return ['list' => array_slice($rows, 0, max(1, min(50, (int)($s['options']['limit'] ?? 8) ?: 8))), 'empty' => 'No stories yet'];
 }
 
 /** Links you keep on the dashboard: "Title | https://…" per line, or just the address. Nothing is fetched. */
@@ -681,13 +809,51 @@ function und_ts($v) {
   return strtotime((string)$v) ?: null;
 }
 
-function und_w_customapi($s) {
+/** The answer of a custom API, with its key filled in. */
+function und_customapi_get($s) {
   $o = $s['options'];
   $h = isset($o['headers']) && is_array($o['headers']) ? array_map('strval', $o['headers']) : [];
   foreach ($h as $k => $v) $h[$k] = str_replace('{{KEY}}', $s['key'], $v);
   $opts = ['headers' => $h, 'method' => strtoupper((string)($o['method'] ?? 'GET'))];
   if ($s['username'] !== '') $opts['basic'] = [$s['username'], $s['password']];
-  $j = und_get(str_replace('{{KEY}}', rawurlencode($s['key']), $s['url']), $opts);
+  return und_get(str_replace('{{KEY}}', rawurlencode($s['key']), $s['url']), $opts);
+}
+
+/** What is in an answer, for clicking through in the card builder: one row per value, and one per list with the fields of its first item. */
+function und_json_tree($v, $path = '', array &$out = [], $depth = 0, $max = 300) {
+  if (count($out) >= $max) return $out;
+  if (!is_array($v)) {
+    $out[] = ['p' => $path, 't' => is_bool($v) ? 'bool' : (is_numeric($v) ? 'num' : ($v === null ? 'null' : 'str')), 'v' => is_bool($v) ? ($v ? 'yes' : 'no') : und_clip((string)$v, 60)];
+    return $out;
+  }
+  if ($v !== [] && array_keys($v) !== range(0, count($v) - 1)) {
+    if ($depth < 6) foreach ($v as $k => $x) und_json_tree($x, $path === '' ? (string)$k : $path . '.' . $k, $out, $depth + 1, $max);
+    return $out;
+  }
+  $fields = [];
+  if (is_array($v[0] ?? null)) und_json_tree($v[0], '', $fields, 3, 40);
+  $out[] = ['p' => $path, 't' => 'list', 'n' => count($v), 'f' => $fields];
+  return $out;
+}
+
+/** Reads the address of a custom API once and lists what came back. Values are cut short and the key never comes back. */
+function und_customapi_probe(array $cfg, $id) {
+  $s = und_service_full($cfg, $id);
+  if (!$s || $s['type'] !== 'customapi') return ['error' => 'Nothing to read.'];
+  if (trim($s['url']) === '') return ['error' => 'Enter the address first.'];
+  if (und_has($s['url'], '{{') && !und_has($s['url'], '{{KEY}}')) return ['error' => 'Unknown value in the address: ' . und_clip($s['url'], 120)];
+  $hide = [$s['key'] ?? '', $s['password'] ?? ''];
+  try { $j = und_customapi_get($s); }
+  catch (Throwable $e) { return ['error' => und_redact($e->getMessage(), $hide)]; }
+  $tree = und_json_tree($j);
+  foreach ($tree as &$r) if (isset($r['v'])) $r['v'] = und_redact($r['v'], $hide);
+  unset($r);
+  return ['tree' => $tree];
+}
+
+function und_w_customapi($s) {
+  $o = $s['options'];
+  $j = und_customapi_get($s);
   // one row per element of an array, each row written with templates
   if (($o['display'] ?? 'block') === 'items') {
     $arr = trim((string)($o['items'] ?? '')) === '' ? $j : und_jpath($j, $o['items']);

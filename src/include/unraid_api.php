@@ -10,25 +10,70 @@
  *   INFO, ARRAY, DISK, VMS, DOCKER: read            for the dashboard
  *   DOCKER, VMS: update                              for start / stop / restart / pause / update
  * What the API does not offer (so the Docker image does not either): server restart / shutdown, Unraid OS updates,
- * per-container CPU and memory over plain HTTP (only as a WebSocket subscription), VM hibernate, VM vCPU / memory details.
+ * VM hibernate, VM vCPU / memory details. Per-container CPU and memory are a WebSocket subscription only: see und_api_stats_read.
  *
- * Connection settings: UNRAID_API_URL and UNRAID_API_KEY in the environment, or Settings > Connection
+ * Connection settings: UNRAID_API_URL and UNRAID_API_KEY in the environment, or Settings > Server connection
  * (stored in secrets.json). The environment wins when both are set.
  */
 
 function und_api_conf() {
   $sec = und_secrets();
-  $url = getenv('UNRAID_API_URL') ?: (string)($sec['unraid']['url'] ?? '');
-  $key = getenv('UNRAID_API_KEY') ?: (string)($sec['unraid']['key'] ?? '');
+  $env = (bool)getenv('TRUENAS_API_URL');
+  $type = $env || (string)($sec['unraid']['type'] ?? '') === 'truenas' ? 'truenas' : 'unraid';
+  $pre = $type === 'truenas' ? 'TRUENAS' : 'UNRAID';
+  $url = getenv($pre . '_API_URL') ?: (string)($sec['unraid']['url'] ?? '');
+  $key = getenv($pre . '_API_KEY') ?: (string)($sec['unraid']['key'] ?? '');
   $url = rtrim(trim($url), '/');
-  if ($url !== '' && !preg_match('#/graphql$#', $url)) $url .= '/graphql';
-  return ['url' => $url, 'key' => $key, 'from_env' => ['url' => (bool)getenv('UNRAID_API_URL'), 'key' => (bool)getenv('UNRAID_API_KEY')]];
+  if ($type === 'unraid' && $url !== '' && !preg_match('#/graphql$#', $url)) $url .= '/graphql';
+  return ['type' => $type, 'url' => $url, 'key' => $key, 'user' => $type === 'truenas' ? ((getenv('TRUENAS_API_USER') ?: (string)($sec['unraid']['user'] ?? '')) ?: 'truenas_admin') : '',
+          'from_env' => ['url' => (bool)getenv($pre . '_API_URL'), 'key' => (bool)getenv($pre . '_API_KEY'), 'type' => $env]];
+}
+
+/** Without an address and a key there is no Unraid to ask: no containers, VMs or array, so the page does not offer them. */
+function und_api_ready() { $c = und_api_conf(); return $c['url'] !== '' && $c['key'] !== ''; }
+
+/*
+ * Can this key change containers and VMs, or only read them? `me` says so when the key may read it; most keys made for UnDash
+ * may not, and nothing else tells. So the other way to find out is a real refusal: UnDash never tries an action just to see.
+ * After a refusal the buttons stay away for an hour, so a key that gets the permission later works again by itself.
+ */
+const UND_KEY_ME_EVERY = 600;
+const UND_KEY_REFUSED_FOR = 3600;
+function und_api_key_id() { return substr(hash('sha256', (string)und_api_conf()['key']), 0, 16); }
+function und_api_perms_tick($now = null) {
+  if (und_is_truenas()) return;
+  $now = $now ?? time(); $mark = und_tmp('key-perms.tick');
+  if (!und_api_ready() || $now - (int)@filemtime($mark) < UND_KEY_ME_EVERY) return;
+  @touch($mark, $now);
+  $r = und_gql('query { me { roles permissions { resource actions } } }');
+  $out = ['key' => und_api_key_id(), 'docker' => null, 'vms' => null];
+  if (!isset($r['error']) && isset($r['data']['me'])) {
+    $me = $r['data']['me']; $admin = in_array('ADMIN', (array)($me['roles'] ?? []), true);
+    foreach (['docker' => 'DOCKER', 'vms' => 'VMS'] as $k => $res) {
+      $out[$k] = $admin;
+      foreach ((array)($me['permissions'] ?? []) as $p) if (($p['resource'] ?? '') === $res && in_array('UPDATE_ANY', (array)($p['actions'] ?? []), true)) $out[$k] = true;
+    }
+  }
+  und_write_json(und_tmp('key-perms.json'), $out, true);
+}
+function und_api_refused($kind, $now = null) {
+  $f = und_tmp('key-refused.json'); $j = und_read_json($f, []);
+  if (($j['key'] ?? '') !== und_api_key_id()) $j = ['key' => und_api_key_id()];
+  $j[$kind] = $now ?? time();
+  und_write_json($f, $j, true);
+}
+function und_api_can($kind, $now = null) {
+  $id = und_api_key_id(); $now = $now ?? time();
+  $j = und_read_json(und_tmp('key-refused.json'), []);
+  if (($j['key'] ?? '') === $id && $now - (int)($j[$kind] ?? 0) < UND_KEY_REFUSED_FOR) return false;
+  $p = und_read_json(und_tmp('key-perms.json'), []);
+  return !(($p['key'] ?? '') === $id && ($p[$kind] ?? null) === false);
 }
 
 /** Run one GraphQL operation. Returns ['data' => ...] or ['error' => readable message, 'auth' => bool]. */
 function und_gql($query, array $vars = [], $timeout = 10) {
   $c = und_api_conf();
-  if ($c['url'] === '' || $c['key'] === '') return ['error' => 'The Unraid API is not configured (Settings > Connection).', 'auth' => true];
+  if ($c['url'] === '' || $c['key'] === '') return ['error' => 'The Unraid API is not configured (Settings > Server connection).', 'auth' => true];
   if (!preg_match('#^https?://#i', $c['url'])) return ['error' => 'The Unraid API address must start with http:// or https://.'];
   $r = und_http('POST', $c['url'], ['body' => json_encode(['query' => $query, 'variables' => (object)$vars]), 'timeout' => $timeout,
     'headers' => ['Content-Type' => 'application/json', 'Accept' => 'application/json', 'x-api-key' => $c['key']]]);
@@ -51,6 +96,7 @@ function und_gql($query, array $vars = [], $timeout = 10) {
 
 /** Connection test for Settings: who answers, which Unraid / API version, and which parts the key may read. */
 function und_api_test() {
+  if (und_is_truenas()) return und_tn_test();
   $r = und_gql('query { info { versions { core { unraid api } } os { hostname } } }', [], 8);
   if (isset($r['error'])) return ['ok' => false, 'error' => $r['error']];
   $v = $r['data']['info']['versions']['core'] ?? [];
@@ -59,11 +105,19 @@ function und_api_test() {
     $t = und_gql($q, [], 8);
     $out['access'][$k] = isset($t['error']) ? $t['error'] : 'ok';
   }
-  $out['optional'] = ['ups' => 'Not available through the API. Only needed for a UPS that Unraid\'s own UPS service runs; a NUT UPS is read directly.'];
+  $t = und_gql('query { vars { shareMoverActive } }', [], 8);
+  $out['access']['vars'] = isset($t['error']) ? $t['error'] : 'ok';
+  $out['optional'] = ['ups' => 'Not available through the API. Only needed for a UPS that Unraid\'s own UPS service runs; a NUT UPS is read directly.', 'vars' => 'Optional: read access to Vars shows whether Mover is running.'];
   return $out;
 }
 
 /* ---------- reads (cached briefly so several open browsers share one request) ---------- */
+
+/** What the last update check found (Unraid's release service, from the server menu). */
+function und_api_os_seen($cur) {
+  $c = und_read_json(und_tmp('api-os.json'), []); $v = (string)($c['latest'] ?? '');
+  return ['installed' => $cur, 'latest' => $v, 'checked' => (int)($c['checked'] ?? 0), 'error' => '', 'available' => $v !== '' && $cur !== '' && version_compare($v, $cur, '>'), 'job' => 'idle'];
+}
 
 function und_api_cached($name, $ttl, $fn) {
   $f = und_tmp('api-' . $name . '.json');
@@ -86,15 +140,32 @@ function und_api_cached($name, $ttl, $fn) {
  * Every read asks only for what the documented key permissions cover: one refused field fails the whole query when it
  * cannot be null, as vars does, so a key without that permission would leave the whole dashboard empty.
  *
- * Two parts of the API are slow (about 2 s each on a busy server, whatever fields are asked for): the network interface
- * list and the primary interface. In Docker, scripts/apipoll.php keeps them fresh in the background while someone has the
+ * Some parts of the API are slow on a busy server, whatever other fields are asked for: the network interface list and
+ * the primary interface (about 2 s each), the temperature sensors (seen up to 10 s) and the OS details (up to 4 s). The API
+ * answers one request at a time, so while one of these runs even the smallest query waits, and CPU and memory take about
+ * 2 s themselves. A page must not join that queue: one reader asks, and every open page shares its copy. In Docker, scripts/apipoll.php keeps them fresh in the background while someone has the
  * dashboard open, so page loads and refreshes never wait for them. Without it (tests, dev server) they are read inline.
  * name => [refresh every N seconds, oldest copy still shown, query]
  */
 const UND_API_SLOW = [
-  'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname } versions { core { unraid } } } }'],
-  'net'   => [2, 20, 'query { metrics { network { name rxSec txSec } } }'],
+  'system' => [3, 30, 'query {
+    metrics {
+      cpu { percentTotal cpus { percentTotal } }
+      memory { total used available swapTotal swapUsed percentTotal }
+    }
+    array { state capacity { kilobytes { free used total } } parityCheckStatus { running progress status speed duration paused }
+      parities { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
+      disks { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
+      caches { name device status temp numErrors fsSize fsFree fsType color isSpinning type } }
+  }'],
+  'containers' => [3, 30, 'query { docker { containers { id names image state status autoStart iconUrl webUiUrl isUpdateAvailable isRebuildReady ports { privatePort publicPort type } hostConfig { networkMode } } } }'],
+  'vms' => [3, 30, 'query { vms { domains { id name state } } }'],
+  'ident' => [600, PHP_INT_MAX, 'query { info { cpu { brand threads } primaryNetwork { name ipAddress } os { hostname uptime kernel } versions { core { unraid } } } }'],
+  'net'   => [5, 30, 'query { metrics { network { name rxSec txSec } } }'],
+  'temp'  => [30, PHP_INT_MAX, 'query { metrics { temperature { sensors { type current { value } } } } }'],
 ];
+/* with no page open these are still kept this fresh, in seconds: the alert check reads them, and the next page opens at once. The network rates wait for a page. */
+const UND_API_IDLE = ['system' => 20, 'containers' => 20, 'vms' => 20, 'ident' => 600, 'temp' => 60];
 
 function und_api_poller_alive() { clearstatcache(); $b = @filemtime(und_tmp('apipoll.beat')); return $b && time() - $b < 30; }
 
@@ -107,11 +178,13 @@ function und_api_slow($name) {
 }
 
 /** One round of the background poller: refreshes what is due. Errors are not stored, so the last good copy stays. */
-function und_api_poll_due() {
+function und_api_poll_due($viewer = true) {
+  if (und_is_truenas()) return;
   foreach (UND_API_SLOW as $name => $x) {
+    if (!$viewer && !isset(UND_API_IDLE[$name])) continue;
     $f = und_tmp('api-' . $name . '.json');
     $c = und_read_json($f, null);
-    if (is_array($c) && microtime(true) - (float)$c['t'] < $x[0]) continue;
+    if (is_array($c) && microtime(true) - (float)$c['t'] < ($viewer ? $x[0] : UND_API_IDLE[$name])) continue;
     $r = und_gql($x[2]);
     if (!isset($r['error'])) und_write_json($f, ['t' => microtime(true), 'v' => $r]);
   }
@@ -119,9 +192,11 @@ function und_api_poll_due() {
 
 /** Name, address and Unraid version for the page title, without waiting for a full system read. */
 function und_api_identity() {
+  if (und_is_truenas()) return und_tn_identity();
   $id = und_read_json(und_tmp('api-ident.json'), null);
   $d = is_array($id) ? ($id['v']['data'] ?? []) : (und_api_cached('name', 600, function () { return und_gql('query { info { os { hostname } versions { core { unraid } } } }', [], 5); })['data'] ?? []);
   $host = (string)parse_url(und_api_conf()['url'], PHP_URL_HOST);
+  if (!und_api_ready()) $host = (string)parse_url(und_glances_url(und_load_config()), PHP_URL_HOST);
   return ['name' => (string)($d['info']['os']['hostname'] ?? '') ?: $host, 'ip' => (string)($d['info']['primaryNetwork']['ipAddress'] ?? '') ?: $host,
           'os' => (string)($d['info']['versions']['core']['unraid'] ?? '')];
 }
@@ -130,30 +205,21 @@ function und_api_bigint($v) { return is_numeric($v) ? (float)$v : 0.0; }
 
 /** Overview data in the same shape as the plugin's und_system(). */
 function und_api_system(array $cfg) {
-  $q = 'query {
-    info { os { hostname uptime kernel } versions { core { unraid } } }
-    metrics {
-      cpu { percentTotal cpus { percentTotal } }
-      memory { total used available swapTotal swapUsed percentTotal }
-      temperature { sensors { type current { value } } summary { hottest { current { value } } } }
-    }
-    array { state capacity { kilobytes { free used total } } parityCheckStatus { running progress status }
-      parities { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
-      disks { name device status temp numErrors fsSize fsFree fsType color isSpinning type }
-      caches { name device status temp numErrors fsSize fsFree fsType color isSpinning type } }
-  }';
-  $r = und_api_cached('system', 1, function () use ($q) { return und_gql($q); });
+  if (und_is_truenas()) return und_tn_system($cfg);
+  // the background copy while it is recent; a read of its own when the poller is not keeping up, so old numbers never pass for live ones
+  $r = und_api_slow('system') ?: und_api_cached('system', 1, function () { return und_gql(UND_API_SLOW['system'][2]); });
   if (isset($r['error']) && empty($r['data'])) return ['error' => $r['error'], 'auth' => !empty($r['auth'])];
   $d = $r['data']; $now = time();
-  $m = $d['metrics'] ?? []; $info = $d['info'] ?? [];
-  $ident = und_api_slow('ident')['data']['info'] ?? [];
+  $m = $d['metrics'] ?? [];
+  $ident = und_api_slow('ident')['data']['info'] ?? []; $info = $ident;
+  $sensors = (array)(und_api_slow('temp')['data']['metrics']['temperature']['sensors'] ?? []);
   $mem = $m['memory'] ?? null;
   $total = und_api_bigint($mem['total'] ?? 0); $avail = und_api_bigint($mem['available'] ?? 0);
   $memOut = $mem ? ['total' => $total, 'used' => max(0, $total - $avail), 'free' => $avail, 'pct' => $total ? round(100 * ($total - $avail) / $total, 1) : null,
                     'swap_total' => und_api_bigint($mem['swapTotal'] ?? 0), 'swap_used' => und_api_bigint($mem['swapUsed'] ?? 0)] : ['total' => 0, 'used' => 0, 'free' => 0, 'pct' => null, 'swap_total' => 0, 'swap_used' => 0];
   $temp = null;
-  foreach ((array)($m['temperature']['sensors'] ?? []) as $sn) if (($sn['type'] ?? '') === 'CPU_PACKAGE') { $temp = (float)$sn['current']['value']; break; }
-  if ($temp === null) foreach ((array)($m['temperature']['sensors'] ?? []) as $sn) if (($sn['type'] ?? '') === 'CPU_CORE') $temp = max((float)$temp, (float)$sn['current']['value']);
+  foreach ($sensors as $sn) if (($sn['type'] ?? '') === 'CPU_PACKAGE') { $temp = (float)$sn['current']['value']; break; }
+  if ($temp === null) foreach ($sensors as $sn) if (($sn['type'] ?? '') === 'CPU_CORE') $temp = max((float)$temp, (float)$sn['current']['value']);
   // the main interface: Unraid's primary network, else the first bridge / bond / ethernet
   $nets = (array)(und_api_slow('net')['data']['metrics']['network'] ?? []); $want = (string)($ident['primaryNetwork']['name'] ?? ''); $net = null;
   foreach ($nets as $n) if ($n['name'] === $want) $net = $n;
@@ -171,7 +237,7 @@ function und_api_system(array $cfg) {
               'model' => (string)($ident['cpu']['brand'] ?? ''), 'threads' => (int)($ident['cpu']['threads'] ?? 0), 'temp' => $temp, 'load' => null],
     'mem' => $memOut, 'net' => ['rx' => $net ? (float)$net['rxSec'] : null, 'tx' => $net ? (float)$net['txSec'] : null, 'iface' => $net ? $net['name'] : ''],
     'disk' => null, 'uptime' => $up, 'array' => $arr, 'hist' => $hist,
-    'os_update' => ['installed' => (string)($info['versions']['core']['unraid'] ?? ''), 'latest' => '', 'checked' => 0, 'error' => '', 'available' => false, 'staged' => '', 'job' => 'idle'],
+    'os_update' => und_api_os_seen((string)($info['versions']['core']['unraid'] ?? '')),
     'partial' => $r['partial'] ?? null,
   ];
 }
@@ -196,18 +262,84 @@ function und_api_array(array $a) {
   foreach ($data as $x) { $size += $x['size']; $free += $x['free']; }
   $fl = und_disk_flags(array_merge($parity, $data, $pools));
   $pc = $a['parityCheckStatus'] ?? [];
+  $facts = und_read_json(und_tmp('api-facts.json'), []); $sm = (array)($facts['disks'] ?? []); $lost = [];
+  foreach ([&$parity, &$data, &$pools] as &$list) foreach ($list as &$row) {
+    $x = $sm[$row['device']] ?? null;
+    $row['smart'] = $x['smart'] ?? null; $row['model'] = (string)($x['model'] ?? '');
+    if (in_array($row['device'], (array)($facts['lost'] ?? []), true)) $lost[] = $row['name'];
+  }
+  unset($list, $row);
   return ['state' => (string)($a['state'] ?? ''), 'resync' => !empty($pc['running']) ? 1 : 0, 'resync_pct' => !empty($pc['running']) && isset($pc['progress']) ? (float)$pc['progress'] : null,
           'resync_action' => !empty($pc['running']) ? 'Parity check' : '', 'size' => $size, 'free' => $free, 'disks' => count($data), 'parity' => count($parity),
-          'pools' => $pools, 'mover' => false, '_rows' => ['parity' => $parity, 'array' => $data, 'pools' => $pools]] + $fl;
+          'pools' => $pools, 'mover' => false, '_rows' => ['parity' => $parity, 'array' => $data, 'pools' => $pools], 'smart_lost' => $lost, 'parity_checks' => $facts['parity'] ?? null,
+          'resync_speed' => !empty($pc['running']) ? (string)($pc['speed'] ?? '') : '', 'resync_time' => !empty($pc['running']) ? (int)($pc['duration'] ?? 0) : 0, 'resync_paused' => !empty($pc['paused'])] + $fl;
+}
+
+/* ---------- facts that change slowly and take seconds to read (the disk list alone takes about 5 s): the background check keeps a copy ---------- */
+
+const UND_API_FACTS = 600;
+
+/** Newest first: the last check of any kind, and when one last finished. [] history = none on record. */
+function und_api_parity_sum(array $list) {
+  $rows = [];
+  foreach ($list as $p) $rows[] = ['at' => (int)strtotime((string)($p['date'] ?? '')), 'duration' => (int)($p['duration'] ?? 0), 'status' => (string)($p['status'] ?? ''), 'errors' => (int)($p['errors'] ?? 0), 'speed' => (string)($p['speed'] ?? '')];
+  usort($rows, function ($a, $b) { return $b['at'] - $a['at']; });
+  $ok = 0;
+  foreach ($rows as $r) if ($r['status'] === 'COMPLETED') { $ok = $r['at']; break; }
+  return ['last' => $rows[0] ?? null, 'ok_at' => $ok];
+}
+
+/** The API only says OK or UNKNOWN. A disk once OK that is awake (it reports a temperature) and no longer OK is news; one that was never OK, like a USB flash drive, is not. */
+function und_api_smart_read(array $disks, array $seen) {
+  $out = []; $lost = [];
+  foreach ($disks as $d) {
+    $dev = preg_replace('#^/dev/#', '', (string)($d['device'] ?? ''));
+    $ok = ($d['smartStatus'] ?? '') === 'OK';
+    $out[$dev] = ['smart' => $ok ? 'ok' : 'unknown', 'model' => (string)($d['name'] ?? '')];
+    if ($ok) $seen[$dev] = true;
+    elseif (!empty($seen[$dev]) && isset($d['temperature'])) $lost[] = $dev;
+  }
+  return [$out, $lost, $seen];
+}
+
+/** One background round. A part that fails keeps its last good copy. */
+function und_api_facts_refresh($now = null) {
+  if (und_is_truenas()) return;
+  $now = $now ?? time();
+  $f = und_tmp('api-facts.json'); $c = und_read_json($f, []);
+  if ($now - (int)($c['t'] ?? 0) < UND_API_FACTS) return;
+  $d = und_gql('query { disks { device name smartStatus temperature } }', [], 15);
+  if (!isset($d['error'])) {
+    $sf = und_data_dir() . '/smart-seen.json';
+    list($c['disks'], $c['lost'], $seen) = und_api_smart_read((array)($d['data']['disks'] ?? []), und_read_json($sf, []));
+    und_write_json($sf, $seen);
+  }
+  $p = und_gql('query { parityHistory { date duration speed status errors } }', [], 10);
+  if (!isset($p['error'])) $c['parity'] = und_api_parity_sum((array)($p['data']['parityHistory'] ?? []));
+  $c['t'] = $now;
+  und_write_json($f, $c);
+}
+
+/** Whether Mover is running. Needs read access to Vars on the key; a refused read is an error in Unraid's API log, so it is not asked again for 10 minutes. */
+function und_api_mover() {
+  if (und_is_truenas()) return null;
+  $none = und_tmp('api-mover.none');
+  if (time() - (int)@filemtime($none) < 600) return null;
+  $r = und_api_cached('mover', 30, function () { return und_gql('query { vars { shareMoverActive shareMoverSchedule } }'); });
+  if (isset($r['error']) || !isset($r['data']['vars'])) { @touch($none); return null; }
+  return ['active' => !empty($r['data']['vars']['shareMoverActive']), 'schedule' => (string)($r['data']['vars']['shareMoverSchedule'] ?? '')];
 }
 
 function und_api_storage() {
+  if (!und_api_ready()) return und_glances_storage(und_load_config());
+  if (und_is_truenas()) return und_tn_storage();
   $s = und_api_system(und_load_config());
   if (isset($s['error'])) return $s;
   return $s['array']['_rows'];
 }
 
 function und_api_ups() {
+  if (und_is_truenas()) return null;
   // no UPS through the API (a NUT UPS, or no permission): each failed read is an error in Unraid's API log, so it is not asked again for 10 minutes
   $none = und_tmp('api-ups.none');
   if (time() - (int)@filemtime($none) < 600) return null;
@@ -227,14 +359,106 @@ function und_api_ups() {
 /* ---------- Docker ---------- */
 
 function und_api_containers($fresh = false) {
-  $fn = function () { return und_gql('query { docker { containers { id names image state status autoStart iconUrl webUiUrl isUpdateAvailable isRebuildReady ports { privatePort publicPort type } hostConfig { networkMode } } } }', [], 15); };
-  return $fresh ? $fn() : und_api_cached('containers', 1, $fn);
+  // an action always asks; it also removes the copy, so what it changed shows on the next refresh
+  $fn = function () { return und_gql(UND_API_SLOW['containers'][2], [], 15); };
+  return $fresh ? $fn() : (und_api_slow('containers') ?: und_api_cached('containers', 1, $fn));
+}
+
+/* ---------- per-container CPU and memory: the API's dockerContainerStats subscription (graphql-transport-ws) ---------- */
+
+const UND_STATS_EVERY = 15;          // seconds between reads, while a page is open
+const UND_STATS_READ = 6;            // seconds one read may take: the API runs `docker stats` for as long as it is subscribed
+const UND_STATS_OLD = 60;            // older numbers are not shown
+
+/** "18.65MiB / 62.5GiB" -> bytes of the first number. */
+function und_api_mem_bytes($s) {
+  if (!preg_match('/^\s*([\d.]+)\s*([KMGT]?)(i?)B/i', (string)$s, $m)) return null;
+  $p = strpos('KMGT', strtoupper($m[2])); $base = $m[3] !== '' ? 1024 : 1000;
+  return (int)round((float)$m[1] * ($m[2] === '' ? 1 : pow($base, $p + 1)));
+}
+/** The stats name a container by the part after the server id; the first row can carry a terminal control code from `docker stats`. */
+function und_api_stats_key($id) {
+  $id = preg_replace('/\x1b\[[0-9;?]*[A-Za-z]/', '', (string)$id);
+  $p = strrpos($id, ':');
+  return $p === false ? $id : substr($id, $p + 1);
+}
+function und_ws_send($s, $text, $op = 1) {
+  $n = strlen($text); $mask = random_bytes(4); $o = '';
+  for ($i = 0; $i < $n; $i++) $o .= $text[$i] ^ $mask[$i % 4];
+  return fwrite($s, chr(0x80 | $op) . ($n < 126 ? chr(0x80 | $n) : ($n < 65536 ? "\xFE" . pack('n', $n) : "\xFF" . pack('J', $n))) . $mask . $o);
+}
+/** Exactly $n bytes, or null. A frame that has started may take several read timeouts to arrive in full. */
+function und_ws_bytes($s, $n) {
+  $d = ''; $waits = 0;
+  while (strlen($d) < $n) {
+    $p = fread($s, $n - strlen($d));
+    if ($p === false || $p === '') { if (stream_get_meta_data($s)['eof'] || ++$waits > 40) return null; continue; }
+    $d .= $p;
+  }
+  return $d;
+}
+/** One frame: [opcode, payload, last piece of the message], or null when nothing came in time. */
+function und_ws_read($s, $max = 1048576) {
+  $h = fread($s, 2);
+  if ($h === false || $h === '') return null;
+  if (strlen($h) < 2) { $x = und_ws_bytes($s, 1); if ($x === null) return null; $h .= $x; }
+  $n = ord($h[1]) & 127;
+  if ($n === 126) { $x = und_ws_bytes($s, 2); if ($x === null) return null; $n = (int)unpack('n', $x)[1]; }
+  elseif ($n === 127) { $x = und_ws_bytes($s, 8); if ($x === null) return null; $n = (int)unpack('J', $x)[1]; }
+  if ($n > $max) return null;
+  $d = $n ? und_ws_bytes($s, $n) : '';
+  if ($d === null) return null;
+  return [ord($h[0]) & 15, $d, (ord($h[0]) & 128) !== 0];
+}
+/** Listens for a few seconds and leaves the newest numbers of each container in the temp folder. Returns how many it heard, or null. */
+function und_api_stats_read() {
+  if (und_is_truenas()) return null;
+  $c = und_api_conf(); $u = parse_url($c['url']);
+  if ($c['key'] === '' || empty($u['host'])) return null;
+  $tls = ($u['scheme'] ?? '') === 'https'; $port = (int)($u['port'] ?? ($tls ? 443 : 80)); $end = microtime(true) + UND_STATS_READ;
+  $ctx = stream_context_create(['ssl' => ['verify_peer' => und_tls_verify(), 'verify_peer_name' => und_tls_verify(), 'peer_name' => $u['host']]]);
+  $s = @stream_socket_client(($tls ? 'ssl://' : 'tcp://') . $u['host'] . ':' . $port, $en, $es, 4, STREAM_CLIENT_CONNECT, $ctx);
+  if (!$s) return null;
+  stream_set_timeout($s, 5);      // the API can take seconds to answer the upgrade while it is busy
+  fwrite($s, 'GET ' . ($u['path'] ?? '/graphql') . " HTTP/1.1\r\nHost: " . $u['host'] . ':' . $port . "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " . base64_encode(random_bytes(16))
+    . "\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: graphql-transport-ws\r\nx-api-key: " . $c['key'] . "\r\n\r\n");
+  $line = fgets($s);
+  if ($line === false || strpos($line, ' 101') === false) { fclose($s); return null; }
+  while (($l = fgets($s)) !== false && $l !== "\r\n");
+  und_ws_send($s, json_encode(['type' => 'connection_init', 'payload' => ['x-api-key' => $c['key']]]));
+  $seen = []; $out = [];
+  while (microtime(true) < $end) {
+    $f = und_ws_read($s);
+    if ($f === null) { if (stream_get_meta_data($s)['eof']) break; continue; }
+    if ($f[0] === 8) break;
+    $j = json_decode($f[1], true); $type = (string)($j['type'] ?? '');
+    if ($type === 'ping') und_ws_send($s, '{"type":"pong"}');
+    elseif ($type === 'connection_ack') und_ws_send($s, json_encode(['id' => '1', 'type' => 'subscribe', 'payload' => ['query' => 'subscription { dockerContainerStats { id cpuPercent memUsage memPercent } }']]));
+    elseif ($type === 'next' && ($x = $j['payload']['data']['dockerContainerStats'] ?? null)) {
+      $k = und_api_stats_key($x['id']);
+      $seen[$k] = ($seen[$k] ?? 0) + 1;
+      $out[$k] = ['cpu' => round((float)$x['cpuPercent'], 1), 'mem' => und_api_mem_bytes($x['memUsage'])];
+      // the first figure of each container is measured over no time at all, so everyone has to report twice
+      if (count($seen) > 1 && min($seen) >= 3) break;
+    } elseif ($type === 'error') break;
+  }
+  @und_ws_send($s, '{"id":"1","type":"complete"}');
+  fclose($s);
+  if (!$out) return null;
+  und_write_json(und_tmp('docker-stats.json'), ['t' => time(), 'v' => $out]);
+  return count($out);
+}
+/** The numbers for the page: container key => cpu, mem. Empty when none are recent. */
+function und_api_stats_seen($now = null) {
+  $c = und_read_json(und_tmp('docker-stats.json'), []);
+  return ($now ?? time()) - (int)($c['t'] ?? 0) < UND_STATS_OLD ? (array)($c['v'] ?? []) : [];
 }
 
 function und_api_docker_live() {
+  if (und_is_truenas()) return und_tn_docker_live();
   $r = und_api_containers();
   if (isset($r['error']) && empty($r['data']['docker'])) return ['error' => $r['error']];
-  $out = [];
+  $out = []; $stats = und_api_stats_seen();
   foreach ((array)($r['data']['docker']['containers'] ?? []) as $c) {
     $name = ltrim((string)($c['names'][0] ?? ''), '/');
     $status = (string)$c['status'];
@@ -245,7 +469,8 @@ function und_api_docker_live() {
     $ports = [];
     foreach ((array)($c['ports'] ?? []) as $p) if (!empty($p['publicPort'])) $ports[$p['privatePort'] . '/' . strtolower((string)$p['type'])] = (int)$p['publicPort'];
     $job = und_job(und_tmp('docker-update-' . $name . '.log'));
-    $out[] = ['name' => $name, 'id' => (string)$c['id'], 'image' => (string)$c['image'], 'state' => $state, 'status' => $status, 'health' => $health, 'cpu' => null, 'mem' => null,
+    $st = $stats[und_api_stats_key($c['id'])] ?? null;
+    $out[] = ['name' => $name, 'id' => (string)$c['id'], 'image' => (string)$c['image'], 'state' => $state, 'status' => $status, 'health' => $health, 'cpu' => $st['cpu'] ?? null, 'mem' => $st['mem'] ?? null,
       'update' => $c['isUpdateAvailable'] === true || $c['isRebuildReady'] === true ? 'available' : ($c['isUpdateAvailable'] === false ? 'current' : 'unknown'),
       'icon' => preg_match('#^https?://#', (string)$c['iconUrl']) ? (string)$c['iconUrl'] : '', 'webui' => preg_match('#^https?://#', (string)$c['webUiUrl']) ? (string)$c['webUiUrl'] : '',
       'ports' => (object)$ports, 'network' => (string)($c['hostConfig']['networkMode'] ?? ''), 'autostart' => !empty($c['autoStart']), 'managed' => true, 'restarts' => null, 'started' => null,
@@ -253,7 +478,7 @@ function und_api_docker_live() {
       'job' => $job['state'] === 'running' ? 'updating' : ($job['state'] === 'done' && time() - (int)$job['at'] < 600 ? ($job['code'] === 0 ? 'updated' : 'update_failed') : '')];
   }
   usort($out, function ($a, $b) { return strcasecmp($a['name'], $b['name']); });
-  return ['containers' => $out, 'checking' => false, 'checked' => null];
+  return ['containers' => und_docker_skips($out), 'checking' => false, 'checked' => null, 'stats' => (bool)$stats];
 }
 
 function und_api_container_id($name) {
@@ -263,6 +488,7 @@ function und_api_container_id($name) {
 }
 
 function und_api_docker_action($name, $op) {
+  if (und_is_truenas()) return und_tn_docker_action($name, $op);
   $valid = ['start' => ['exited'], 'stop' => ['running', 'paused', 'restarting'], 'restart' => ['running', 'exited', 'restarting'], 'pause' => ['running'], 'unpause' => ['paused'], 'update' => null];
   if (!array_key_exists($op, $valid)) return ['error' => 'Unknown action.'];
   $c = und_api_container_id($name);
@@ -284,11 +510,13 @@ function und_api_docker_action($name, $op) {
   und_unlock($lock);
   @unlink(und_tmp('api-containers.json'));
   $ok = !isset($r['error']);
+  if (!empty($r['auth'])) und_api_refused('docker');
   und_history_add('docker', $name, $op, $ok, $ok ? '' : $r['error']);
   return $ok ? ['ok' => true] : ['error' => $r['error']];
 }
 
 function und_api_docker_logs($name, $lines) {
+  if (und_is_truenas()) return und_tn_docker_logs($name, $lines);
   $c = und_api_container_id($name);
   if (!$c) return ['error' => 'There is no container named ' . $name . '.'];
   if (isset($c['error'])) return $c;
@@ -300,6 +528,7 @@ function und_api_docker_logs($name, $lines) {
 }
 
 function und_api_docker_inspect($name) {
+  if (und_is_truenas()) return und_tn_docker_inspect($name);
   $r = und_gql('query { docker { containers { id names image imageId created state status autoStart ports { ip privatePort publicPort type } hostConfig { networkMode } mounts networkSettings } } }', [], 15);
   if (isset($r['error'])) return ['error' => $r['error']];
   foreach ((array)($r['data']['docker']['containers'] ?? []) as $c) {
@@ -337,18 +566,20 @@ function und_api_vm_ops($state) {
 }
 
 function und_api_vm_live() {
-  $r = und_api_cached('vms', 1, function () { return und_gql('query { vms { domains { id name state } } }'); });
+  if (und_is_truenas()) return und_tn_vm_live();
+  $r = und_api_slow('vms') ?: und_api_cached('vms', 1, function () { return und_gql(UND_API_SLOW['vms'][2]); });
   if (isset($r['error'])) return ['error' => preg_match('/permission/i', $r['error']) ? $r['error'] : 'VMs are not available: ' . $r['error']];
   $out = [];
   foreach ((array)($r['data']['vms']['domains'] ?? []) as $d) {
     $st = und_api_vm_state($d['state']);
-    $out[] = ['name' => (string)$d['name'], 'id' => (string)$d['id'], 'state' => $st, 'ops' => und_api_vm_ops($st), 'cpus' => null, 'memory' => null, 'autostart' => null, 'os' => '', 'icon' => '', 'vnc' => '', 'agent' => false];
+    $out[] = ['name' => (string)$d['name'], 'id' => (string)$d['id'], 'state' => $st, 'ops' => und_api_can('vms') ? und_api_vm_ops($st) : [], 'cpus' => null, 'memory' => null, 'autostart' => null, 'os' => '', 'icon' => '', 'vnc' => '', 'agent' => false];
   }
   usort($out, function ($a, $b) { return strcasecmp($a['name'], $b['name']); });
   return ['vms' => $out];
 }
 
 function und_api_vm_action($name, $op) {
+  if (und_is_truenas()) return und_tn_vm_action($name, $op);
   @unlink(und_tmp('api-vms.json'));
   $l = und_api_vm_live();
   if (isset($l['error'])) return $l;
@@ -361,6 +592,7 @@ function und_api_vm_action($name, $op) {
   $r = und_gql('mutation ($id: PrefixedID!) { vm { ' . $map[$op] . '(id: $id) } }', ['id' => $vm['id']], 90);
   und_unlock($lock);
   @unlink(und_tmp('api-vms.json'));
+  if (!empty($r['auth'])) und_api_refused('vms');
   $ok = !isset($r['error']) && !empty($r['data']['vm'][$map[$op]]);
   $err = $ok ? '' : ($r['error'] ?? 'Unraid did not confirm the action.');
   und_history_add('vm', $name, $op, $ok, $err);

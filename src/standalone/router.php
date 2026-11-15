@@ -31,13 +31,11 @@ function sa_asset($file, $type) {
 
 function sa_deny($code, $msg) { http_response_code($code); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
 
-/** Where Unraid's web UI is: same host, its own port (80/443). nginx redirects http to https when Unraid requires it. */
-function sa_unraid_base() { $h = und_req_host(); return $h === '' ? '' : 'http://' . $h; }
 
 /** The login / setup page (Docker version). Plain HTML, no script, so the strict CSP still applies. */
 function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
   $pre = bin2hex(random_bytes(16));
-  setcookie('undash_pre', $pre, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS'])]);
+  setcookie(und_cookie('undash_pre'), $pre, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => und_https()]);
   $e = function ($x) { return htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8'); };
   header('Content-Type: text/html; charset=utf-8'); header('Cache-Control: no-store');
   echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UnDash · ', $e($title), '</title>',
@@ -50,13 +48,25 @@ function sa_form_page($title, $intro, $fields, $error = '', $skip = false) {
     // a second form, so skipping never needs the code or the password fields
     echo '</form><form class="login card skip" method="post"><input type="hidden" name="pre" value="', $pre, '"><input type="hidden" name="skip" value="1">',
          '<p class="muted"><b>Recommended:</b> set a password. Without one, anyone who can open this address can see and control your containers and VMs. ',
-         'You can add a password later in Settings &gt; Configuration.</p><button class="btn" type="submit">Continue without a password</button>';
+         'You can add a password later in Settings &gt; Server connection.</p><button class="btn" type="submit">Continue without a password</button>';
   }
   echo '</form></div></body></html>';
   exit;
 }
-function sa_pre_ok() { $c = (string)($_COOKIE['undash_pre'] ?? ''); return $c !== '' && hash_equals($c, (string)($_POST['pre'] ?? '')); }
-function sa_ip() { return (string)($_SERVER['REMOTE_ADDR'] ?? ''); }
+/** The dashboard's one page. boot.js says which area it runs in. */
+function sa_page($boot, $app) {
+  $v = (int)@filemtime(UND_ROOT . '/assets/app.js');
+  header('Content-Type: text/html; charset=utf-8');
+  header('Cache-Control: no-store');
+  echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b0c0f">',
+       '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="UnDash"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
+       '<title>UnDash</title><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/assets/app.css?v=', $v, '">',
+       '</head><body class="und-page"><div id="und" class="und"><div class="und-loading">Loading UnDash…</div></div>',
+       '<script src="', $boot, '"></script><script src="', $app, '?v=', $v, '"></script></body></html>';
+  exit;
+}
+function sa_pre_ok() { $c = (string)($_COOKIE[und_cookie('undash_pre')] ?? ''); return $c !== '' && hash_equals($c, (string)($_POST['pre'] ?? '')); }
+function sa_ip() { return und_client_ip(); }
 
 /* ---- health check (Docker HEALTHCHECK): says nothing about the server ---- */
 if ($uri === '/health') { header('Content-Type: text/plain'); header('Cache-Control: no-store'); echo "ok\n"; exit; }
@@ -65,6 +75,14 @@ if ($uri === '/assets/inter.woff2') {
   header('Content-Type: font/woff2'); header('Cache-Control: public, max-age=31536000, immutable');
   readfile(UND_ROOT . '/assets/inter.woff2'); exit;
 }
+// what a phone needs to put UnDash on its home screen; public, because the browser asks for it without the sign-in cookie
+if ($uri === '/manifest.webmanifest') {
+  header('Content-Type: application/manifest+json'); header('Cache-Control: no-cache');
+  echo json_encode(['name' => 'UnDash', 'short_name' => 'UnDash', 'start_url' => '/', 'scope' => '/', 'display' => 'standalone', 'background_color' => '#0b0c0f', 'theme_color' => '#0b0c0f',
+    'icons' => [['src' => '/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'], ['src' => '/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable']]], JSON_UNESCAPED_SLASHES);
+  exit;
+}
+if ($uri === '/icon-192.png' || $uri === '/icon-512.png') sa_asset(UND_ROOT . '/images' . $uri, 'image/png');
 if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
   // needed by the sign-in page too; nothing secret in either
   if ($uri === '/favicon.png') sa_asset(UND_ROOT . '/images/undash.png', 'image/png');
@@ -72,13 +90,45 @@ if ($uri === '/assets/app.css' || $uri === '/favicon.png') {
 }
 
 /* ---- without a password, only known host names (see und_host_allowed: DNS rebinding) ---- */
-if (und_api_mode() && in_array(und_auth_kind(), ['none', 'open'], true) && !und_host_allowed())
+if (in_array(und_auth_kind(), ['none', 'open'], true) && !und_host_allowed())
   sa_deny(421, "UnDash has no password yet, so it only answers at the server's IP address or name (http://<server IP>:<port>).\n"
-    . "To use the name " . (und_req_host() ?: 'in the address bar') . ": set a password in Settings > Connection, or add the name to UNDASH_ALLOWED_HOSTS in the container settings.");
+    . "To use the name " . (und_req_host() ?: 'in the address bar') . ": set a password in Settings > Server connection, or add the name to UNDASH_ALLOWED_HOSTS in the container settings.");
+
+/* ---- the guest view: its own small area with its own session. Nothing here reaches api.php (see include/guest.php) ---- */
+if (strpos($uri, '/guest/') === 0) {
+  if (!und_guest_on()) sa_deny(404, 'Not found');
+  if (preg_match('#^/guest/([a-f0-9]{48})$#', $uri, $m)) {
+    if ($method !== 'GET' || !und_guest_token_ok($m[1])) sa_deny(404, 'Not found');
+    if (!und_guest_sess()) und_guest_sess_new();
+    sa_page('/guest/boot.js', '/guest/app.js');
+  }
+  $g = und_guest_sess();
+  if (!$g) sa_deny(401, 'Open the guest link again.');
+  if ($uri === '/guest/app.js') sa_asset(UND_ROOT . '/assets/app.js', 'application/javascript; charset=utf-8');
+  if ($uri === '/guest/wallpaper') { und_wall_serve(); exit; }
+  if ($uri === '/guest/csrf') { header('Content-Type: application/json'); header('Cache-Control: no-store'); echo json_encode(['csrf' => $g['csrf'], 'version' => UND_VERSION]); exit; }
+  if ($uri === '/guest/boot.js') {
+    header('Content-Type: application/javascript; charset=utf-8'); header('Cache-Control: no-store');
+    echo 'window.UND_API="/guest/api";window.UND_BASE="/guest";window.UND_GUEST=true;window.UND_CSRF=' . json_encode($g['csrf']) . ';window.UND_UNRAID="";window.UND_STANDALONE=true;';
+    exit;
+  }
+  if ($uri === '/guest/api') {
+    if ($method !== 'POST') sa_deny(405, 'POST only.');
+    $origin = (string)($_SERVER['HTTP_ORIGIN'] ?? '');
+    if (!hash_equals($g['csrf'], (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? '')))) sa_deny(403, 'Bad CSRF token. Reload the page.');
+    if ($origin !== '' && strcasecmp(preg_replace('#^https?://#', '', $origin), (string)($_SERVER['HTTP_HOST'] ?? '')) !== 0) sa_deny(403, 'Cross-origin request refused.');
+    header('Content-Type: application/json'); header('Cache-Control: no-store');
+    try { $r = und_guest_api((string)($_POST['action'] ?? ''), $_POST); }
+    catch (Throwable $e) { error_log('undash: guest: ' . $e->getMessage()); $r = ['error' => 'Not available right now.']; }
+    echo json_encode($r, JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+  }
+  sa_deny(404, 'Not found');
+}
 
 /* ---- sign-in ---- */
 $sess = und_sess_get();
-if (!$sess && und_api_mode()) {
+if (!$sess) {
   $kind = und_auth_kind();
   if ($kind === 'none') {
     if ($uri !== '/setup') { if ($method === 'GET' && $uri === '/') { header('Location: /setup', true, 303); exit; } sa_deny(401, 'Not signed in.'); }
@@ -90,7 +140,7 @@ if (!$sess && und_api_mode()) {
     } elseif ($method === 'POST') {
       $code = trim((string)@file_get_contents(und_setup_file()));
       if (!sa_pre_ok()) $err = 'The form expired. Try again.';
-      elseif (und_login_throttled(sa_ip())) $err = 'Too many attempts. Wait 15 minutes.';
+      elseif (und_login_throttled(sa_ip())) $err = und_login_msg(sa_ip());
       elseif ($code === '' || !hash_equals($code, strtoupper(trim((string)($_POST['code'] ?? ''))))) { und_login_failed(sa_ip()); $err = 'The setup code is wrong. It is in the container log.'; }
       elseif ((string)($_POST['password'] ?? '') !== (string)($_POST['password2'] ?? '')) $err = 'The passwords do not match.';
       else { $r = und_password_set((string)$_POST['password']); if (isset($r['error'])) $err = $r['error']; else { und_sess_new('setup'); header('Location: /', true, 303); exit; } }
@@ -104,34 +154,21 @@ if (!$sess && und_api_mode()) {
     $err = '';
     if ($method === 'POST' && $uri === '/login') {
       if (!sa_pre_ok()) $err = 'The form expired. Try again.';
-      elseif (und_login_throttled(sa_ip())) $err = 'Too many wrong passwords. Wait 15 minutes.';
-      elseif (!und_password_ok((string)($_POST['password'] ?? ''))) { und_login_failed(sa_ip()); usleep(400000); $err = 'Wrong password.'; error_log('undash: failed sign-in from ' . sa_ip()); }
-      else { und_sess_new('password'); header('Location: /', true, 303); exit; }
+      else {
+        $tried = und_login_check(sa_ip(), (string)($_POST['password'] ?? ''));
+        if ($tried === 'ok') { und_sess_new('password'); header('Location: /', true, 303); exit; }
+        if ($tried === 'locked') $err = und_login_msg(sa_ip());
+        else { usleep(400000); $err = und_login_throttled(sa_ip()) ? und_login_msg(sa_ip()) : 'Wrong password.'; error_log('undash: failed sign-in from ' . sa_ip()); }
+      }
     } elseif ($uri === '/') { header('Location: /login', true, 303); exit; }
     sa_form_page('UnDash', 'Sign in to the dashboard.', [['password', 'Password', 'password', 'current-password']], $err);
   }
   sa_deny(401, 'Not signed in.');
   }
 }
-if (!$sess && $method === 'GET' && isset($_GET['t'])) {
-  if (und_handoff_use((string)$_GET['t'])) { und_sess_new('handoff'); header('Location: /', true, 303); exit; }
-  sa_deny(403, 'That sign-in link expired. Open UnDash from Unraid again.');
-}
-if (!$sess && und_unraid_logged_in()) $sess = und_sess_new('unraid');
-if (!$sess) {
-  if ($method === 'GET' && ($uri === '/' || $uri === '/index.html')) {
-    $base = sa_unraid_base();
-    if ($base === '') sa_deny(400, 'Bad host name.');
-    // behind Unraid's login: it creates a one-time token and sends the browser back here
-    header('Location: ' . $base . '/plugins/undash/handoff.php', true, 303);
-    exit;
-  }
-  sa_deny(401, 'Not signed in. Open UnDash from Unraid first.');
-}
-
 /* ---- routes ---- */
 if ($sess && $method === 'GET' && ($uri === '/setup' || $uri === '/login')) { header('Location: /', true, 303); exit; }
-if ($uri === '/logout') { und_sess_end(); header('Location: ' . (und_api_mode() ? '/login' : sa_unraid_base() . '/'), true, 303); exit; }
+if ($uri === '/logout') { und_sess_end(); header('Location: /login', true, 303); exit; }
 
 if ($uri === '/api') {
   if ($method !== 'POST') sa_deny(405, 'POST only.');
@@ -147,15 +184,19 @@ if ($uri === '/api') {
 }
 
 if ($uri === '/assets/app.js') sa_asset(UND_ROOT . $uri, 'application/javascript; charset=utf-8');
+// the page asks again when its token no longer matches (UnDash restarted, say), so it can carry on without reloading
+if ($uri === '/csrf') { header('Content-Type: application/json'); header('Cache-Control: no-store'); echo json_encode(['csrf' => $sess['csrf'], 'version' => UND_VERSION]); exit; }
 if ($uri === '/assets/boot.js') {
   // page settings as a script file, so the page needs no inline script (the CSP forbids it)
   header('Content-Type: application/javascript; charset=utf-8');
   header('Cache-Control: no-store');
-  $unraid = und_api_mode() ? preg_replace('#/graphql$#', '', und_api_conf()['url']) : sa_unraid_base();
+  $unraid = preg_replace('#/graphql$#', '', und_api_conf()['url']);
   echo 'window.UND_API="/api";window.UND_CSRF=' . json_encode($sess['csrf']) . ';window.UND_UNRAID=' . json_encode($unraid) . ';window.UND_STANDALONE=true;';
   exit;
 }
 if ($uri === '/images/undash.png') { header('Content-Type: image/png'); header('Cache-Control: max-age=86400'); readfile(UND_ROOT . '/images/undash.png'); exit; }
+// the wallpaper uploaded in Settings > Appearance (signed-in browsers only: it is above this line's session check)
+if ($uri === '/wallpaper') { und_wall_serve(); exit; }
 
 // container and VM icons that Unraid itself serves from these two folders
 $icons = ['/state/plugins/dynamix.docker.manager/images/' => '/usr/local/emhttp/state/plugins/dynamix.docker.manager/images/',
@@ -171,14 +212,5 @@ foreach ($icons as $prefix => $dir) {
   readfile($dir . $name); exit;
 }
 
-if ($uri === '/' || $uri === '/index.html') {
-  $v = (int)@filemtime(UND_ROOT . '/assets/app.js');
-  header('Content-Type: text/html; charset=utf-8');
-  header('Cache-Control: no-store');
-  echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
-       '<title>UnDash</title><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/assets/app.css?v=', $v, '">',
-       '</head><body class="und-page"><div id="und" class="und"><div class="und-loading">Loading UnDash…</div></div>',
-       '<script src="/assets/boot.js"></script><script src="/assets/app.js?v=', $v, '"></script></body></html>';
-  exit;
-}
+if ($uri === '/' || $uri === '/index.html') sa_page('/assets/boot.js', '/assets/app.js');
 sa_deny(404, 'Not found');

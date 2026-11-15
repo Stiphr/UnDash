@@ -5,7 +5,7 @@ $SB = sys_get_temp_dir() . '/undash-da-' . getmypid();
 foreach (["$SB/flash", "$SB/tmp", "$SB/php", "$SB/fs/var/local/emhttp"] as $d) @mkdir($d, 0777, true);
 $port = 9800 + getmypid() % 150;
 $proc = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/router_harness.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, null,
-  ['UND_SANDBOX' => $SB, 'UNDASH_MODE' => 'api', 'HOST_HOSTNAME' => 'nas', 'UNDASH_ALLOWED_HOSTS' => 'dash.example.com, *.home.example.net', 'PATH' => getenv('PATH')]);
+  ['UND_SANDBOX' => $SB, 'HOST_HOSTNAME' => 'nas', 'UNDASH_ALLOWED_HOSTS' => 'dash.example.com, *.home.example.net', 'PATH' => getenv('PATH')]);
 usleep(600000);
 $pass = 0; $fail = 0;
 function t($n, $c, $d = '') { global $pass, $fail; if ($c) $pass++; else { $fail++; echo "FAIL $n" . ($d !== '' ? " -- $d" : '') . "\n"; } }
@@ -30,7 +30,6 @@ function pre($html) { return preg_match('/name="pre" value="([a-f0-9]+)"/', $htm
 function csrf() { $r = req('GET', '/assets/boot.js'); return preg_match('/UND_CSRF="([a-f0-9]+)"/', $r['body'], $m) ? $m[1] : ''; }
 function apicall($action, $data = []) { $c = csrf(); $r = req('POST', '/api', ['action' => $action, 'csrf_token' => $c] + $data, ["X-CSRF-Token: $c"]); return ['code' => $r['code'], 'j' => json_decode($r['body'], true)]; }
 define('UND_DIR', "$SB/flash"); define('UND_TMP', "$SB/tmp"); define('UND_ROOT', dirname(__DIR__) . '/src');
-putenv('UNDASH_MODE=api');
 require UND_ROOT . '/include/lib.php'; require UND_ROOT . '/include/auth.php';
 und_setup_code_ensure();
 $code = trim(file_get_contents(und_setup_file()));
@@ -86,6 +85,47 @@ t('wrong current passwords are throttled', (function () { apicall('password_set'
   for ($i = 0; $i < 5; $i++) apicall('password_remove', ['current' => 'wrong', 'confirm' => 'yes']);
   return apicall('password_remove', ['current' => 'third long password', 'confirm' => 'yes'])['code'] === 429 && und_auth_kind() === 'file'; })());
 
+// the real Save, through the whole API: settings come back the way the page sends them
+$cfg = apicall('settings')['j']['config'];
+t('settings as the page sees them save unchanged', apicall('save', ['config' => json_encode($cfg), 'creds' => '{}'])['code'] === 200);
+$cfg['groups'][] = ['id' => 'abcd0001', 'name' => 'Test', 'columns' => 3, 'header' => true, 'section' => false, 'services' => [['id' => 'abcd1234', 'name' => 'Radarr', 'type' => 'radarr', 'url' => 'http://10.0.0.2:7878', 'href' => '', 'icon' => '', 'zone' => 'arr', 'options' => (object)[]]]];
+$r = apicall('save', ['config' => json_encode($cfg), 'creds' => json_encode(['abcd1234' => ['key' => 'first-key-value']])]);
+t('an app and its key save', $r['code'] === 200, json_encode($r['j']));
+$cfg = apicall('settings')['j']['config'];
+t('saving again with the key kept works', apicall('save', ['config' => json_encode($cfg), 'creds' => '{}'])['code'] === 200);
+foreach ($cfg['groups'] as &$g) foreach ($g['services'] as &$sv) if ($sv['id'] === 'abcd1234') $sv['url'] = 'http://198.51.100.1:7878';
+unset($g, $sv);
+$r = apicall('save', ['config' => json_encode($cfg), 'creds' => '{}']);
+t('a new address with the kept key is refused', $r['code'] === 400 && strpos((string)$r['j']['error'], 'Radarr') !== false, json_encode($r['j']));
+t('so is Test, which would send it there', apicall('test', ['id' => 'abcd1234', 'config' => json_encode($cfg), 'creds' => '{}'])['code'] === 400);
+t('and the card builder', apicall('probe', ['id' => 'abcd1234', 'config' => json_encode($cfg), 'creds' => '{}'])['code'] === 400);
+t('typing the key again moves it', apicall('save', ['config' => json_encode($cfg), 'creds' => json_encode(['abcd1234' => ['key' => 'second-key-value']])])['code'] === 200);
+
+/* ---- a VM's console address ---- */
+$u = apicall('prefs', ['kind' => 'vms', 'key' => 'Automation', 'value' => json_encode(['console' => 'http://192.168.88.50/plugins/dynamix.vm.manager/vnc.html?autoconnect=true&host=192.168.88.50&port=&path=/wsproxy/5701/'])]);
+t('a pasted console address is saved as its path', ($u['j']['layout']['vms']['items']['Automation']['console'] ?? '') === '/wsproxy/5701/', json_encode($u['j']['layout']['vms']['items'] ?? $u));
+$u = apicall('prefs', ['kind' => 'vms', 'key' => 'Automation', 'value' => json_encode(['console' => 'javascript:alert(1)'])]);
+t('anything else is refused', $u['code'] !== 200 && strpos((string)($u['j']['error'] ?? ''), 'console address') !== false);
+$u = apicall('prefs', ['kind' => 'docker', 'key' => 'plex', 'value' => json_encode(['console' => '/wsproxy/5701/'])]);
+t('containers have no console address', !isset($u['j']['layout']['docker']['items']['plex']['console']));
+$u = apicall('prefs', ['kind' => 'vms', 'key' => 'Automation', 'value' => json_encode(['console' => ''])]);
+t('it can be forgotten', !isset($u['j']['layout']['vms']['items']['Automation']));
+/* ---- connecting a TrueNAS server through Settings ---- */
+$u = apicall('unraid_save', ['url' => 'http://nas.test', 'key' => 'tn-secret-key', 'type' => 'truenas', 'user' => 'dash']);
+t('a TrueNAS address without https is refused', $u['code'] !== 200 && strpos((string)($u['j']['error'] ?? ''), 'https://') !== false, json_encode($u));
+$u = apicall('unraid_save', ['url' => 'https://nas.test', 'key' => 'tn-secret-key', 'type' => 'truenas', 'user' => 'bad name;']);
+t('an odd user name is refused', $u['code'] !== 200);
+$u = apicall('unraid_save', ['url' => 'https://nas.test', 'key' => 'tn-secret-key', 'type' => 'truenas', 'user' => 'dash']);
+t('a TrueNAS connection saves', !empty($u['j']['ok']), json_encode($u));
+$v = apicall('unraid_conf');
+t('it comes back without its key', ($v['j']['type'] ?? '') === 'truenas' && ($v['j']['user'] ?? '') === 'dash' && ($v['j']['url'] ?? '') === 'https://nas.test' && !empty($v['j']['key_set']) && strpos(json_encode($v['j']), 'tn-secret-key') === false, json_encode($v));
+t('the page is told what it is talking to', (apicall('boot')['j']['caps']['platform'] ?? '') === 'truenas');
+$u = apicall('unraid_save', ['url' => 'https://nas.test/graphql', 'key' => '__KEEP__', 'type' => 'unraid', 'user' => '']);
+t('the saved key is not handed to another kind of server', $u['code'] !== 200 && strpos((string)($u['j']['error'] ?? ''), 'Enter the API key again') !== false, json_encode($u));
+$u = apicall('unraid_save', ['url' => 'https://other.test', 'key' => '__KEEP__', 'type' => 'truenas', 'user' => 'dash']);
+t('nor to another address', $u['code'] !== 200);
+$u = apicall('unraid_save', ['url' => '', 'key' => '', 'type' => 'unraid', 'user' => '']);
+t('the connection can be cleared', !empty($u['j']['ok']) && (apicall('boot')['j']['caps']['platform'] ?? '') === 'unraid', json_encode($u));
 proc_terminate($proc);
 exec('rm -rf ' . escapeshellarg($SB));
 echo "\n$pass passed, $fail failed\n";

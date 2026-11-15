@@ -11,13 +11,15 @@
  */
 
 function und_export($kind) {
-  if ($kind === 'env') return ['name' => 'undash.env', 'type' => 'text/plain', 'text' => und_env_text(und_secrets()['vars'] + array_intersect_key(und_env(), ['UNRAID_API_KEY' => 1]))];
+  if ($kind === 'env') return ['name' => 'undash.env', 'type' => 'text/plain', 'text' => und_env_text(und_secrets()['vars'] + array_intersect_key(und_env(), array_flip(array_diff(UND_ENV_RESERVED, ['UNDASH_PASSWORD_HASH', 'UNDASH_AUTH', 'PEXELS_API_KEY', 'UNDASH_GUEST_TOKEN']))))];
   $doc = und_doc();
   if (isset($doc['groups'])) foreach ($doc['groups'] as &$g) foreach ((array)($g['services'] ?? []) as $i => $sv) {
     $g['services'][$i]['url'] = und_redact_url((string)($sv['url'] ?? '')); $g['services'][$i]['href'] = und_redact_url((string)($sv['href'] ?? ''));
     // custom API headers may hold a key written in clear text
     if (isset($sv['options']['headers']) && is_array($sv['options']['headers'])) foreach ($sv['options']['headers'] as $hk => $hv)
       if (!und_ref_name($hv)) $g['services'][$i]['options']['headers'][$hk] = '{{REDACTED}}';
+    // a private feed carries its passkey in the address
+    if (is_string($sv['options']['feeds'] ?? null)) $g['services'][$i]['options']['feeds'] = implode("\n", array_map('und_redact_url', explode("\n", $sv['options']['feeds'])));
   }
   unset($g);
   if (!isset($doc['groups'])) { $full = json_decode(json_encode(und_load_config()), true); unset($full['schema']); $doc = ['version' => UND_SCHEMA] + $full + array_intersect_key($doc, ['unraid' => 1, 'ignored_alerts' => 1, 'custom_css' => 1]); }
@@ -45,7 +47,8 @@ function und_import_parse($raw) {
   // .env: only NAME=value lines (and comments)
   $lines = array_filter(preg_split('/\r\n|\r|\n/', $raw), function ($l) { return trim($l) !== '' && trim($l)[0] !== '#'; });
   if ($lines && count(array_filter($lines, function ($l) { return preg_match('/^\s*(export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/', $l); })) === count($lines)) {
-    $env = und_env_read($raw);
+    // what decides who gets in is never taken from a file: the password and the guest link are set in Settings
+    $env = array_diff_key(und_env_read($raw), array_flip(['UNDASH_PASSWORD_HASH', 'UNDASH_AUTH', 'UNDASH_GUEST_TOKEN']));
     return ['kind' => 'env', 'env' => $env, 'summary' => ['kind' => 'env', 'values' => count($env), 'names' => array_slice(array_keys($env), 0, 60)]];
   }
   $doc = und_yaml_read($raw);
@@ -54,7 +57,7 @@ function und_import_parse($raw) {
   $cfg = $doc; $cfg['schema'] = (int)($doc['version'] ?? UND_SCHEMA);
   $cfg = und_normalize(und_migrate($cfg));
   return und_import_summary(['kind' => 'config', 'config' => $cfg, 'css' => is_string($doc['custom_css'] ?? null) ? $doc['custom_css'] : null,
-    'ignored' => is_array($doc['ignored_alerts'] ?? null) ? $doc['ignored_alerts'] : null, 'unraid_url' => (string)($doc['unraid']['url'] ?? ''), 'env' => []], $doc['groups']);
+    'ignored' => is_array($doc['ignored_alerts'] ?? null) ? $doc['ignored_alerts'] : null, 'unraid_url' => (string)($doc['unraid']['url'] ?? ''), 'unraid_type' => (string)($doc['unraid']['type'] ?? ''), 'unraid_user' => (string)($doc['unraid']['user'] ?? ''), 'env' => [], 'presets_in' => isset($doc['presets'])], $doc['groups']);
 }
 
 /** An export of an older UnDash (JSON with config, vars and per-widget credentials): converted like the old files. */
@@ -96,19 +99,20 @@ function und_import_apply($raw) {
   if ($f['kind'] === 'env') {
     $env = und_env();
     foreach ($f['env'] as $k => $v) $env[$k] = $v;
-    und_env_write($env);
+    if (!und_env_write($env)) return ['error' => 'The .env file could not be written. Check that ' . und_store_dir() . ' is writable.'];
     return ['ok' => true, 'backup' => $bk];
   }
+  if (empty($f['presets_in'])) $f['config']['presets'] = und_load_config()['presets'];        // a file without presets leaves yours alone
   if (!und_save_config($f['config'], false)) return ['error' => 'Could not write the configuration directory.'];
   $parts = [];
   if ($f['css'] !== null) $parts['custom_css'] = trim(und_sanitize_css($f['css'])) === '' ? null : und_sanitize_css($f['css']);
   if ($f['ignored'] !== null) $parts['ignored_alerts'] = $f['ignored'] ? und_ignore_clean($f['ignored']) : null;
-  if ($f['unraid_url'] !== '' && preg_match('#^https?://#i', $f['unraid_url']) && (string)(und_doc()['unraid']['url'] ?? '') === '') $parts['unraid'] = ['url' => und_clip($f['unraid_url'], 300)];
+  if ($f['unraid_url'] !== '' && preg_match('#^https?://#i', $f['unraid_url']) && (string)(und_doc()['unraid']['url'] ?? '') === '') $parts['unraid'] = array_filter(['url' => und_clip($f['unraid_url'], 300), 'type' => ($f['unraid_type'] ?? '') === 'truenas' ? 'truenas' : '', 'user' => und_clip((string)($f['unraid_user'] ?? ''), 100)]);
   if ($parts) und_doc_write($parts);
   // values from the file fill empty ones; a {{NAME}} the config uses but .env lacks gets an empty entry, so Settings lists it to fill in
   $env = und_env(); $before = $env;
   foreach ($f['env'] as $k => $v) if (!isset($env[$k]) || $env[$k] === '') $env[$k] = $v;
   foreach (array_keys(und_cfg_refs($f['config'])) as $n) if (!isset($env[$n]) && $n !== 'UNRAID_IP') $env[$n] = '';
-  if ($env !== $before) und_env_write($env);
+  if ($env !== $before && !und_env_write($env)) return ['error' => 'The settings were imported, but the .env file could not be written. Check that ' . und_store_dir() . ' is writable.', 'backup' => $bk];
   return ['ok' => true, 'backup' => $bk];
 }
